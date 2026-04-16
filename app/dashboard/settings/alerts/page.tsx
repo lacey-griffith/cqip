@@ -20,9 +20,10 @@ interface AlertRule {
   rule_name: string;
   rule_type: string;
   config: any;
-  enabled: boolean;
+  is_active: boolean;
+  notification_channels: string[];
   created_at: string;
-  updated_at: string;
+  updated_at?: string;
 }
 
 export default function AlertRulesPage() {
@@ -60,13 +61,13 @@ export default function AlertRulesPage() {
     try {
       const { error } = await supabase
         .from('alert_rules')
-        .update({ enabled, updated_at: new Date().toISOString() })
+        .update({ is_active: enabled })
         .eq('id', ruleId);
 
       if (error) throw error;
 
       setRules(rules.map(rule =>
-        rule.id === ruleId ? { ...rule, enabled } : rule
+        rule.id === ruleId ? { ...rule, is_active: enabled } : rule
       ));
     } catch (err) {
       console.error('Error updating rule:', err);
@@ -78,7 +79,7 @@ export default function AlertRulesPage() {
     try {
       const { error } = await supabase
         .from('alert_rules')
-        .update({ config, updated_at: new Date().toISOString() })
+        .update({ config })
         .eq('id', ruleId);
 
       if (error) throw error;
@@ -336,9 +337,9 @@ export default function AlertRulesPage() {
                   </Badge>
                   <Badge
                     variant="default"
-                    className={`text-xs ${rule.enabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}
+                    className={`text-xs ${rule.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}
                   >
-                    {rule.enabled ? 'Enabled' : 'Disabled'}
+                    {rule.is_active ? 'Enabled' : 'Disabled'}
                   </Badge>
                 </div>
                 <p className="text-sm text-gray-600 mb-4">
@@ -358,11 +359,11 @@ export default function AlertRulesPage() {
                 <div className="flex items-center space-x-2">
                   <Switch
                     id={`enabled-${rule.id}`}
-                    checked={rule.enabled}
+                    checked={rule.is_active}
                     onCheckedChange={(checked) => toggleRuleEnabled(rule.id, checked)}
                   />
                   <Label htmlFor={`enabled-${rule.id}`} className="text-sm">
-                    {rule.enabled ? 'Enabled' : 'Disabled'}
+                    {rule.is_active ? 'Enabled' : 'Disabled'}
                   </Label>
                 </div>
 
