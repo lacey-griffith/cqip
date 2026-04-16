@@ -1,11 +1,15 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { getIssue } from '../../../lib/jira/client.ts';
-import { JIRA_FIELD_MAP } from '../../../lib/jira/field-map.ts';
+import { createClient } from '@supabase/supabase-js';
+import { getIssue } from '../../../lib/jira/client';
+import { JIRA_FIELD_MAP } from '../../../lib/jira/field-map';
 
-const supabaseUrl = Deno.env.get('NEXT_PUBLIC_SUPABASE_URL')!;
-const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const webhookSecret = Deno.env.get('WEBHOOK_SECRET')!;
-const baseUrl = Deno.env.get('JIRA_BASE_URL')!;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const webhookSecret = process.env.WEBHOOK_SECRET;
+const baseUrl = process.env.JIRA_BASE_URL;
+
+if (!supabaseUrl || !serviceRoleKey || !webhookSecret || !baseUrl) {
+  throw new Error('Missing required environment variables for Jira webhook function');
+}
 
 const supabase = createClient(supabaseUrl, serviceRoleKey);
 

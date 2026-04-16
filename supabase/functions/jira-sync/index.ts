@@ -1,9 +1,13 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { getIssue } from '../../../lib/jira/client.ts';
-import { JIRA_FIELD_MAP } from '../../../lib/jira/field-map.ts';
+import { createClient } from '@supabase/supabase-js';
+import { getIssue } from '../../../lib/jira/client';
+import { JIRA_FIELD_MAP } from '../../../lib/jira/field-map';
 
-const supabaseUrl = Deno.env.get('NEXT_PUBLIC_SUPABASE_URL')!;
-const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!supabaseUrl || !serviceRoleKey) {
+  throw new Error('Missing required environment variables for Jira sync function');
+}
 
 const supabase = createClient(supabaseUrl, serviceRoleKey);
 
