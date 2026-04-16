@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface LogEntry {
   id: string;
@@ -126,32 +126,45 @@ export default function LogsPage() {
           </div>
           <div className="lg:col-span-2">
             <Label htmlFor="clientBrand">Client brand</Label>
-            <Select id="clientBrand" value={clientBrand} onChange={e => setClientBrand(e.target.value)}>
-              <option value="">All brands</option>
-              {clientBrands.map(brand => (
-                <option key={brand} value={brand}>{brand}</option>
-              ))}
+            <Select value={clientBrand} onValueChange={setClientBrand}>
+              <SelectTrigger>
+                <SelectValue placeholder="All brands" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">All brands</SelectItem>
+                {clientBrands.map(brand => (
+                  <SelectItem key={brand} value={brand}>{brand}</SelectItem>
+                ))}
+              </SelectContent>
             </Select>
           </div>
           <div className="lg:col-span-2">
             <Label htmlFor="severity">Severity</Label>
-            <Select id="severity" value={severity} onChange={e => setSeverity(e.target.value)}>
-              <option value="">All severities</option>
-              <option value="Critical">Critical</option>
-              <option value="High">High</option>
-              <option value="Medium">Medium</option>
-              <option value="Low">Low</option>
+            <Select value={severity} onValueChange={setSeverity}>
+              <SelectTrigger>
+                <SelectValue placeholder="All severities" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">All severities</SelectItem>
+                <SelectItem value="Critical">Critical</SelectItem>
+                <SelectItem value="High">High</SelectItem>
+                <SelectItem value="Medium">Medium</SelectItem>
+                <SelectItem value="Low">Low</SelectItem>
+              </SelectContent>
             </Select>
           </div>
           <div className="lg:col-span-2">
             <Label htmlFor="status">Status</Label>
-            <Select id="status" value={status} onChange={e => setStatus(e.target.value)}>
-              <option value="">All statuses</option>
-              <option value="Open">Open</option>
-              <option value="In Progress">In Progress</option>
-              <option value="Blocked">Blocked</option>
-              <option value="Pending Verification">Pending Verification</option>
-              <option value="Resolved">Resolved</option>
+            <Select value={status} onValueChange={setStatus}>
+              <SelectTrigger>
+                <SelectValue placeholder="All statuses" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">All statuses</SelectItem>
+                <SelectItem value="Open">Open</SelectItem>
+                <SelectItem value="In Progress">In Progress</SelectItem>
+                <SelectItem value="Closed">Closed</SelectItem>
+              </SelectContent>
             </Select>
           </div>
           <div className="lg:col-span-2">

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Card } from '@/components/ui/card';
+import { ActiveAlertsPanel } from '@/components/dashboard/active-alerts-panel';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -89,10 +90,11 @@ export default function DashboardPage() {
           }
         });
 
-        const mostFrequentRootCause = Object.keys(rootCauseCounts).reduce((a, b) =>
-          rootCauseCounts[a] > rootCauseCounts[b] ? a : b,
-          null
-        ) || null;
+        const mostFrequentRootCause = Object.keys(rootCauseCounts).length > 0
+          ? Object.keys(rootCauseCounts).reduce((a, b) =>
+              rootCauseCounts[a] > rootCauseCounts[b] ? a : b
+            )
+          : null;
 
         setKpi({
           totalLogsThisMonth: monthLogs?.length || 0,
@@ -118,7 +120,7 @@ export default function DashboardPage() {
             ...prev,
             volumeByWeek: Object.entries(volumeByWeek)
               .map(([week, count]) => ({ week, count }))
-              .sort((a, b) => new Date(a.week) - (new Date(b.week) as any)),
+              .sort((a, b) => new Date(a.week).getTime() - new Date(b.week).getTime()),
           }));
 
           // Issue category breakdown
@@ -269,6 +271,9 @@ export default function DashboardPage() {
           <p className="mt-2 text-xs text-[color:var(--f92-gray)]">This month</p>
         </Card>
       </div>
+
+      {/* Active Alerts Panel */}
+      <ActiveAlertsPanel />
 
       {/* Charts Grid */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
