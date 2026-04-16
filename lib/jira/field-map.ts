@@ -1,0 +1,16 @@
+export const JIRA_FIELD_MAP = {
+  who_owns_fix:               'customfield_13120',
+  detected_by:                'customfield_12910',
+  documentation_updated:      'customfield_12914',
+  experiment_paused:          'customfield_12912',
+  issue_category:             'customfield_12871',
+  issue_subtype:              'customfield_12904',
+  preventable:                'customfield_12911',
+  process_improvement_needed: 'customfield_12913',
+  reproducibility:            'customfield_12907',
+  resolution_type:            'customfield_12908',
+  root_cause:                 'customfield_12905',
+  root_cause_description:     'customfield_12909',
+  severity:                   'customfield_12906',
+  nbly_brand:                 'PENDING',
+} as const;

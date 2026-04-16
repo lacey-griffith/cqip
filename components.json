@@ -1,0 +1,11 @@
+{
+  "name": "cqip",
+  "version": "0.1.0",
+  "template": "next",
+  "base": "radix",
+  "style": "css",
+  "css": {
+    "variables": true
+  },
+  "components": {}
+}
