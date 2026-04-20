@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
@@ -11,6 +11,10 @@ import { Label } from '@/components/ui/label';
 import { PasswordInput } from '@/components/ui/password-input';
 
 const LOCAL_SUFFIX = '@cqip.local';
+const RATE_LIMIT_KEY = 'cqip-login-attempts';
+const MAX_ATTEMPTS = 5;
+const LOCKOUT_MS = 5 * 60 * 1000;
+const WARN_AFTER = 3;
 
 function normalizeUsername(raw: string): string {
   return raw.trim().toLowerCase();
@@ -18,6 +22,44 @@ function normalizeUsername(raw: string): string {
 
 function toEmail(username: string): string {
   return `${normalizeUsername(username)}${LOCAL_SUFFIX}`;
+}
+
+interface AttemptState {
+  count: number;
+  lockedUntil: number | null;
+}
+
+function readAttempts(): AttemptState {
+  if (typeof window === 'undefined') return { count: 0, lockedUntil: null };
+  try {
+    const raw = window.localStorage.getItem(RATE_LIMIT_KEY);
+    if (!raw) return { count: 0, lockedUntil: null };
+    const parsed = JSON.parse(raw);
+    if (typeof parsed?.count === 'number' && (parsed.lockedUntil === null || typeof parsed.lockedUntil === 'number')) {
+      return parsed as AttemptState;
+    }
+  } catch {
+    /* fall through */
+  }
+  return { count: 0, lockedUntil: null };
+}
+
+function writeAttempts(state: AttemptState) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(RATE_LIMIT_KEY, JSON.stringify(state));
+  } catch {
+    /* storage unavailable; ignore */
+  }
+}
+
+function clearAttempts() {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.removeItem(RATE_LIMIT_KEY);
+  } catch {
+    /* ignore */
+  }
 }
 
 export default function LoginPage() {
@@ -41,9 +83,38 @@ function LoginView() {
   const [resetUsername, setResetUsername] = useState('');
   const [resetMessage, setResetMessage] = useState<string | null>(null);
   const [resetLoading, setResetLoading] = useState(false);
+  const [attempts, setAttempts] = useState<AttemptState>({ count: 0, lockedUntil: null });
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    setAttempts(readAttempts());
+  }, []);
+
+  const isLockedRaw = attempts.lockedUntil !== null && attempts.lockedUntil > now;
+
+  // Tick once per second while locked so the countdown refreshes.
+  useEffect(() => {
+    if (!isLockedRaw) return;
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [isLockedRaw]);
+
+  const locked = attempts.lockedUntil !== null && attempts.lockedUntil > now;
+  const minutesRemaining = locked
+    ? Math.max(1, Math.ceil((attempts.lockedUntil! - now) / 60000))
+    : 0;
+  const remaining = Math.max(0, MAX_ATTEMPTS - attempts.count);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    const current = readAttempts();
+    if (current.lockedUntil && current.lockedUntil > Date.now()) {
+      setAttempts(current);
+      setNow(Date.now());
+      return;
+    }
+
     setLoading(true);
     setMessage(null);
 
@@ -54,16 +125,22 @@ function LoginView() {
 
     setLoading(false);
 
-    if (error) {
-      setMessage(error.message);
+    if (error || !data?.session) {
+      const nextCount = current.count + 1;
+      const next: AttemptState =
+        nextCount >= MAX_ATTEMPTS
+          ? { count: nextCount, lockedUntil: Date.now() + LOCKOUT_MS }
+          : { count: nextCount, lockedUntil: null };
+      writeAttempts(next);
+      setAttempts(next);
+      setNow(Date.now());
+      setMessage(error?.message ?? 'Please check your credentials and try again.');
       return;
     }
 
-    if (data?.session) {
-      router.push(redirectTarget);
-    } else {
-      setMessage('Please check your credentials and try again.');
-    }
+    clearAttempts();
+    setAttempts({ count: 0, lockedUntil: null });
+    router.push(redirectTarget);
   }
 
   async function handlePasswordReset(event: React.FormEvent<HTMLFormElement>) {
@@ -159,7 +236,7 @@ function LoginView() {
                 id="username"
                 type="text"
                 autoComplete="username"
-                placeholder="e.g. lacey"
+                placeholder="username"
                 value={username}
                 onChange={event => setUsername(event.target.value)}
                 required
@@ -178,8 +255,17 @@ function LoginView() {
               />
             </div>
             {message ? <p className="text-sm text-[color:var(--f92-orange)]">{message}</p> : null}
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'Signing in...' : 'Sign in'}
+            {locked ? (
+              <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                Too many failed attempts. Try again in {minutesRemaining} minute{minutesRemaining === 1 ? '' : 's'}.
+              </p>
+            ) : attempts.count >= WARN_AFTER ? (
+              <p className="text-xs text-[color:var(--f92-gray)]">
+                {remaining} attempt{remaining === 1 ? '' : 's'} remaining before the form is locked for 5 minutes.
+              </p>
+            ) : null}
+            <Button type="submit" className="w-full" disabled={loading || locked}>
+              {loading ? 'Signing in...' : locked ? 'Locked' : 'Sign in'}
             </Button>
             <button
               type="button"

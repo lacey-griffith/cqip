@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { createClient } from '@supabase/supabase-js';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -9,11 +8,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+import { supabase } from '@/lib/supabase/client';
 
 interface AlertRule {
   id: string;
@@ -32,9 +27,30 @@ export default function AlertRulesPage() {
   const [error, setError] = useState<string | null>(null);
   const [editingRule, setEditingRule] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<any>({});
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
 
   useEffect(() => {
-    fetchAlertRules();
+    async function init() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) {
+        setIsAdmin(false);
+        setLoading(false);
+        return;
+      }
+      const { data } = await supabase
+        .from('user_profiles')
+        .select('role')
+        .eq('id', session.user.id)
+        .maybeSingle();
+      const admin = data?.role === 'admin';
+      setIsAdmin(admin);
+      if (admin) {
+        fetchAlertRules();
+      } else {
+        setLoading(false);
+      }
+    }
+    init();
   }, []);
 
   async function fetchAlertRules() {
@@ -290,6 +306,15 @@ export default function AlertRulesPage() {
         );
     }
   };
+
+  if (isAdmin === false) {
+    return (
+      <div className="rounded-3xl border border-[color:var(--f92-border)] bg-white p-8 shadow-sm">
+        <h1 className="text-2xl font-semibold text-[color:var(--f92-dark)]">Admin access required</h1>
+        <p className="mt-2 text-sm text-[color:var(--f92-gray)]">You do not have permission to manage alert rules.</p>
+      </div>
+    );
+  }
 
   if (loading) {
     return (

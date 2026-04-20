@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import { Nav } from '@/components/layout/nav';
+import { IdleTimeout } from '@/components/layout/idle-timeout';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -33,6 +34,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <div className="min-h-screen flex bg-[color:var(--f92-warm)]">
       <Nav />
       <main className="flex-1 p-6">{children}</main>
+      <IdleTimeout />
     </div>
   );
 }

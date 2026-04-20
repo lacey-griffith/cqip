@@ -8,6 +8,8 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Combobox } from '@/components/ui/combobox';
+import { EditLogDialog, type EditableLog } from '@/components/logs/edit-log-dialog';
 
 const ALL = '__all__';
 
@@ -23,6 +25,8 @@ interface LogEntry {
   root_cause_final: string[] | null;
   who_owns_fix: string | null;
   log_number: number;
+  notes: string | null;
+  resolution_notes: string | null;
 }
 
 interface UserProfile {
@@ -73,11 +77,14 @@ export default function LogsPage() {
   const [severity, setSeverity] = useState('');
   const [status, setStatus] = useState('');
 
+  const [editingLog, setEditingLog] = useState<EditableLog | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+
   useEffect(() => {
     async function loadData() {
       const { data: logsData } = await supabase
         .from('quality_logs')
-        .select('id, triggered_at, jira_ticket_id, jira_ticket_url, client_brand, severity, log_status, issue_category, root_cause_final, who_owns_fix, log_number')
+        .select('id, triggered_at, jira_ticket_id, jira_ticket_url, client_brand, severity, log_status, issue_category, root_cause_final, who_owns_fix, log_number, notes, resolution_notes')
         .eq('is_deleted', false)
         .order('triggered_at', { ascending: false });
 
@@ -99,8 +106,16 @@ export default function LogsPage() {
   }, []);
 
   const clientBrands = useMemo(
-    () => Array.from(new Set(logs.map(log => log.client_brand ?? '').filter(Boolean))),
+    () => Array.from(new Set(logs.map(log => log.client_brand ?? '').filter(Boolean))).sort(),
     [logs],
+  );
+
+  const clientBrandOptions = useMemo(
+    () => [
+      { value: ALL, label: 'All brands' },
+      ...clientBrands.map(b => ({ value: b, label: b })),
+    ],
+    [clientBrands],
   );
 
   const filteredLogs = useMemo(() => {
@@ -114,12 +129,44 @@ export default function LogsPage() {
     });
   }, [logs, clientBrand, severity, status, startDate, endDate]);
 
+  function openEditDialog(log: LogEntry) {
+    setEditingLog({
+      id: log.id,
+      jira_ticket_id: log.jira_ticket_id,
+      log_status: log.log_status,
+      severity: log.severity,
+      who_owns_fix: log.who_owns_fix,
+      root_cause_final: log.root_cause_final,
+      resolution_notes: log.resolution_notes,
+      notes: log.notes,
+    });
+    setEditOpen(true);
+  }
+
+  function applyEditedLog(updated: EditableLog) {
+    setLogs(prev =>
+      prev.map(l =>
+        l.id === updated.id
+          ? {
+              ...l,
+              log_status: updated.log_status,
+              severity: updated.severity,
+              who_owns_fix: updated.who_owns_fix,
+              root_cause_final: updated.root_cause_final,
+              resolution_notes: updated.resolution_notes,
+              notes: updated.notes,
+            }
+          : l,
+      ),
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
           <p className="text-sm uppercase tracking-[0.3em] text-[color:var(--f92-navy)]">Logs</p>
-          <h1 className="mt-2 text-3xl font-semibold text-[color:var(--f92-dark)]">Rework event log</h1>
+          <h1 className="mt-2 text-3xl font-semibold text-[color:var(--f92-dark)]">Quality Logs</h1>
         </div>
       </div>
 
@@ -135,17 +182,13 @@ export default function LogsPage() {
           </div>
           <div className="lg:col-span-2">
             <Label htmlFor="clientBrand">Client brand</Label>
-            <Select value={clientBrand || ALL} onValueChange={value => setClientBrand(value === ALL ? '' : value)}>
-              <SelectTrigger>
-                <SelectValue placeholder="All brands" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL}>All brands</SelectItem>
-                {clientBrands.map(brand => (
-                  <SelectItem key={brand} value={brand}>{brand}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Combobox
+              value={clientBrand || ALL}
+              onChange={v => setClientBrand(v === ALL ? '' : v)}
+              options={clientBrandOptions}
+              placeholder="All brands"
+              emptyLabel="No matching brand"
+            />
           </div>
           <div className="lg:col-span-2">
             <Label htmlFor="severity">Severity</Label>
@@ -247,8 +290,7 @@ export default function LogsPage() {
                     <td className="px-4 py-3 align-top">{log.log_number}</td>
                     {profile?.role === 'admin' ? (
                       <td className="px-4 py-3 align-top space-x-2">
-                        <Button variant="secondary" size="sm">Edit</Button>
-                        <Button variant="outline" size="sm">Delete</Button>
+                        <Button variant="secondary" size="sm" onClick={() => openEditDialog(log)}>Edit</Button>
                       </td>
                     ) : null}
                   </tr>
@@ -258,6 +300,13 @@ export default function LogsPage() {
           </table>
         </div>
       </Card>
+
+      <EditLogDialog
+        log={editingLog}
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        onSaved={applyEditedLog}
+      />
     </div>
   );
 }

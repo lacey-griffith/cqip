@@ -1,15 +1,30 @@
 @import "tailwindcss";
 
 :root {
+  /* Brand accents */
   --f92-orange: #F47920;
   --f92-navy: #1E2D6B;
+
+  /* Text */
   --f92-dark: #1A1A2E;
   --f92-gray: #6B7280;
   --f92-lgray: #9CA3AF;
-  --f92-warm: #FEF6EE;
-  --f92-border: #E8D5C4;
-  --f92-white: #FFFFFF;
 
+  /* Surfaces — warm-cream light theme (original brand feel) */
+  --f92-bg: #FEF6EE;         /* warm cream page background */
+  --f92-surface: #FFFFFF;    /* cards */
+  --f92-sidebar: #FFFFFF;    /* sidebar */
+  --f92-tint: #FEF6EE;       /* inner tint inside cards/sidebar (cream on white) */
+  --f92-border: #E8D5C4;     /* warm cream border */
+
+  /* Active-state border on nav + focused chips */
+  --f92-active-border: #F47920;
+
+  /* Back-compat aliases */
+  --f92-warm: var(--f92-bg);
+  --f92-white: var(--f92-surface);
+
+  /* Severity + status */
   --severity-critical: #DC2626;
   --severity-high: #F97316;
   --severity-medium: #EAB308;
@@ -24,32 +39,30 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --f92-dark: #F1F5F9;
+
+  /* Tone orange down — #D4681A reads warmer and less harsh on dark bg
+     while still satisfying WCAG AA against #0F1117 (ratio ~6.2:1) */
+  --f92-orange: #D4681A;
+  --f92-navy: #4A5AB9;
+
+  /* Text hierarchy: headings ≈ main text #E2E8F0, body slightly dimmer via
+     helper classes; muted stays #94A3B8. */
+  --f92-dark: #E2E8F0;
   --f92-gray: #94A3B8;
   --f92-lgray: #64748B;
-  --f92-warm: #0F1117;
-  --f92-border: #334155;
-  --f92-white: #1A1D2E;
-}
 
-:root[data-theme="dark"] body {
-  background: var(--f92-warm);
-  color: var(--f92-dark);
-}
+  --f92-bg: #0F1117;
+  --f92-surface: #1E2235;    /* card background — lifted a notch from sidebar */
+  --f92-sidebar: #13151F;
+  --f92-tint: #2A2F45;       /* inner/hover tint, more elevated than surface */
+  --f92-border: #2D3148;
 
-/* Re-map the Tailwind literal `bg-white` in dark mode to our surface color */
-:root[data-theme="dark"] .bg-white {
-  background-color: var(--f92-white);
-}
+  /* Active border: toned orange at 80% opacity */
+  --f92-active-border: rgba(212, 104, 26, 0.8);
 
-/* Preserve the Fusion92 warm background for the dashboard shell in dark mode */
-:root[data-theme="dark"] .recharts-cartesian-grid line,
-:root[data-theme="dark"] .recharts-cartesian-axis-tick-line {
-  stroke: var(--f92-border);
-}
-
-:root[data-theme="dark"] .recharts-text {
-  fill: var(--f92-dark);
+  /* Soften the "open"/admin-badge blue in dark */
+  --status-open: #3E68CC;
+  --status-in-progress: #5B6BE0;
 }
 
 @theme inline {
@@ -69,7 +82,12 @@ body {
   min-height: 100%;
   margin: 0;
   font-family: var(--font-sans), system-ui, sans-serif;
-  background: var(--f92-warm);
+  background: var(--f92-bg);
+  color: var(--f92-dark);
+}
+
+:root[data-theme="dark"] body {
+  background: var(--f92-bg);
   color: var(--f92-dark);
 }
 
@@ -89,6 +107,54 @@ textarea {
   font: inherit;
 }
 
+/* Tailwind's literal `bg-white` → theme-aware surface */
+:root[data-theme="dark"] .bg-white {
+  background-color: var(--f92-surface);
+}
+
+/* Recharts dark-mode styling — labels, ticks, tooltips use body color #CBD5E1 */
+:root[data-theme="dark"] .recharts-cartesian-grid line,
+:root[data-theme="dark"] .recharts-cartesian-axis-tick-line {
+  stroke: var(--f92-border);
+}
+
+:root[data-theme="dark"] .recharts-text,
+:root[data-theme="dark"] .recharts-cartesian-axis-tick-value,
+:root[data-theme="dark"] .recharts-legend-item-text,
+:root[data-theme="dark"] .recharts-label {
+  fill: #CBD5E1 !important;
+  color: #CBD5E1 !important;
+}
+
+:root[data-theme="dark"] .recharts-tooltip-wrapper .recharts-default-tooltip {
+  background: var(--f92-surface) !important;
+  border-color: var(--f92-border) !important;
+  color: #CBD5E1 !important;
+}
+
+:root[data-theme="dark"] .recharts-tooltip-wrapper .recharts-default-tooltip .recharts-tooltip-label,
+:root[data-theme="dark"] .recharts-tooltip-wrapper .recharts-default-tooltip .recharts-tooltip-item {
+  color: #CBD5E1 !important;
+}
+
+/* Body-weight text helper — any element that should sit between heading and
+   muted intensity can opt into this class. Not required; without it text
+   inherits --f92-dark (#E2E8F0 in dark, #1A1A2E in light). */
+:root[data-theme="dark"] .text-body {
+  color: #CBD5E1;
+}
+
+/* Subtle fade-in for swapped panels (e.g. alerts empty vs populated state) */
+@keyframes cqip-fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.cqip-fade-in {
+  animation: cqip-fade-in 220ms ease-out both;
+}
+
+/* Donut chart focus suppression (explode effect carry-over) */
 .donut-chart .recharts-sector:focus,
 .donut-chart .recharts-sector:focus-visible,
 .donut-chart .recharts-pie-sector:focus,

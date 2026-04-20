@@ -16,7 +16,8 @@ import {
   type AvatarPattern,
 } from '@/components/layout/user-avatar';
 import { useTheme, type Theme } from '@/components/layout/theme-provider';
-import { cn } from '@/lib/utils';
+import { capitalizeName, cn } from '@/lib/utils';
+import { Moon, Sun } from 'lucide-react';
 
 interface ProfileData {
   id: string;
@@ -48,23 +49,35 @@ export default function ProfileSettingsPage() {
   useEffect(() => {
     async function load() {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
+      if (!session?.user?.id) {
         setLoading(false);
         return;
       }
-      const { data } = await supabase
+
+      const { data, error } = await supabase
         .from('user_profiles')
-        .select('id, email, display_name, color_preference, pattern_preference, theme_preference, role')
+        .select('*')
         .eq('id', session.user.id)
-        .single();
-      if (data) {
-        const p = data as ProfileData;
-        setProfile(p);
-        setColor(p.color_preference || DEFAULT_AVATAR_COLOR);
-        setPattern((p.pattern_preference as AvatarPattern) || DEFAULT_AVATAR_PATTERN);
-        if (p.theme_preference === 'dark' || p.theme_preference === 'light') {
-          setTheme(p.theme_preference);
-        }
+        .maybeSingle();
+
+      if (error) {
+        console.error('[profile] failed to load user_profiles for', session.user.id, error);
+        setLoading(false);
+        return;
+      }
+
+      if (!data) {
+        console.warn('[profile] no user_profiles row for auth id', session.user.id);
+        setLoading(false);
+        return;
+      }
+
+      const p = data as ProfileData;
+      setProfile(p);
+      setColor(p.color_preference || DEFAULT_AVATAR_COLOR);
+      setPattern((p.pattern_preference as AvatarPattern) || DEFAULT_AVATAR_PATTERN);
+      if (p.theme_preference === 'dark' || p.theme_preference === 'light') {
+        setTheme(p.theme_preference);
       }
       setLoading(false);
     }
@@ -172,13 +185,13 @@ export default function ProfileSettingsPage() {
         <div className="grid gap-6 lg:grid-cols-[auto_1fr]">
           <div className="flex items-center gap-4">
             <UserAvatar
-              displayName={profile.display_name}
+              displayName={capitalizeName(profile.display_name)}
               color={color}
               pattern={pattern}
               size="lg"
             />
             <div>
-              <h2 className="text-lg font-semibold text-[color:var(--f92-navy)]">{profile.display_name}</h2>
+              <h2 className="text-lg font-semibold text-[color:var(--f92-navy)]">{capitalizeName(profile.display_name)}</h2>
               <p className="mt-1 text-xs uppercase tracking-[0.2em] text-[color:var(--f92-gray)]">
                 {profile.role === 'admin' ? 'Administrator' : 'Viewer'}
               </p>
@@ -229,7 +242,7 @@ export default function ProfileSettingsPage() {
                     aria-label={AVATAR_PATTERN_LABELS[p]}
                   >
                     <UserAvatar
-                      displayName={profile.display_name}
+                      displayName={capitalizeName(profile.display_name)}
                       color={color}
                       pattern={p}
                       size="sm"
@@ -250,60 +263,92 @@ export default function ProfileSettingsPage() {
           <h2 className="text-lg font-semibold text-[color:var(--f92-navy)]">Theme</h2>
           <p className="text-sm text-[color:var(--f92-gray)]">Applies globally, persists per user, and remembers your last choice locally.</p>
         </div>
-        <div className="flex flex-wrap gap-3">
-          {(['light', 'dark'] as const).map(t => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => handleTheme(t)}
-              disabled={savingAppearance}
-              className={cn(
-                'flex w-40 flex-col gap-2 rounded-2xl border-2 p-3 text-left transition',
-                theme === t
-                  ? 'border-[color:var(--f92-orange)]'
-                  : 'border-[color:var(--f92-border)] hover:border-[color:var(--f92-gray)]',
-              )}
-              aria-label={`Use ${t} theme`}
-            >
-              <div
-                className="h-16 w-full rounded-xl border"
-                style={
-                  t === 'light'
-                    ? {
-                        background: 'linear-gradient(135deg, #FEF6EE 0%, #FFFFFF 100%)',
-                        borderColor: '#E8D5C4',
-                      }
-                    : {
-                        background: 'linear-gradient(135deg, #0F1117 0%, #1A1D2E 100%)',
-                        borderColor: '#334155',
-                      }
-                }
+        <div className="grid gap-4 sm:grid-cols-2">
+          {(['light', 'dark'] as const).map(t => {
+            const isLight = t === 'light';
+            const Icon = isLight ? Sun : Moon;
+            const previewBg = isLight ? '#FAFAFA' : '#0F1117';
+            const previewSurface = isLight ? '#FFFFFF' : '#1A1D2E';
+            const previewText = isLight ? '#1A1A2E' : '#F1F5F9';
+            const previewBorder = isLight ? '#E5E7EB' : '#2D3148';
+            return (
+              <button
+                key={t}
+                type="button"
+                onClick={() => handleTheme(t)}
+                disabled={savingAppearance}
+                className={cn(
+                  'flex flex-col gap-3 rounded-2xl border-2 p-4 text-left transition',
+                  theme === t
+                    ? 'border-[color:var(--f92-orange)]'
+                    : 'border-[color:var(--f92-border)] hover:border-[color:var(--f92-gray)]',
+                )}
+                aria-label={`Use ${t} theme`}
+                aria-pressed={theme === t}
               >
-                <div className="flex h-full items-center gap-2 px-3">
-                  <span
-                    className="h-2 w-2 rounded-full"
-                    style={{ background: '#F47920' }}
-                  />
-                  <span
-                    className="h-2 w-2 rounded-full"
-                    style={{ background: '#1E2D6B' }}
-                  />
-                  <span
-                    className="h-2 w-8 rounded-full"
-                    style={{ background: t === 'light' ? '#1A1A2E' : '#F1F5F9' }}
-                  />
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={cn(
+                        'flex h-8 w-8 items-center justify-center rounded-full',
+                        isLight
+                          ? 'bg-[color:var(--f92-tint)] text-[color:var(--f92-orange)]'
+                          : 'bg-[color:var(--f92-tint)] text-[color:var(--f92-navy)]',
+                      )}
+                    >
+                      <Icon className="h-4 w-4" />
+                    </span>
+                    <span className="text-base font-semibold text-[color:var(--f92-dark)]">
+                      {isLight ? 'Light' : 'Dark'}
+                    </span>
+                  </div>
+                  {theme === t ? (
+                    <span className="text-xs font-semibold uppercase tracking-widest text-[color:var(--f92-orange)]">
+                      Active
+                    </span>
+                  ) : null}
                 </div>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold text-[color:var(--f92-dark)]">
-                  {t === 'light' ? 'Light' : 'Dark'}
-                </span>
-                {theme === t ? (
-                  <span className="text-xs text-[color:var(--f92-orange)]">Active</span>
-                ) : null}
-              </div>
-            </button>
-          ))}
+
+                <div
+                  className="h-24 w-full overflow-hidden rounded-xl border"
+                  style={{ background: previewBg, borderColor: previewBorder }}
+                >
+                  <div className="flex h-full gap-2 p-3">
+                    <div
+                      className="flex w-16 flex-col justify-between rounded-md border p-2"
+                      style={{ background: previewSurface, borderColor: previewBorder }}
+                    >
+                      <span
+                        className="h-2 w-8 rounded-full"
+                        style={{ background: '#F47920' }}
+                      />
+                      <span
+                        className="h-1.5 w-6 rounded-full"
+                        style={{ background: previewText, opacity: 0.5 }}
+                      />
+                    </div>
+                    <div
+                      className="flex flex-1 flex-col justify-center gap-1.5 rounded-md border p-2"
+                      style={{ background: previewSurface, borderColor: previewBorder }}
+                    >
+                      <span
+                        className="h-1.5 w-full rounded-full"
+                        style={{ background: previewText, opacity: 0.8 }}
+                      />
+                      <span
+                        className="h-1.5 w-3/4 rounded-full"
+                        style={{ background: previewText, opacity: 0.4 }}
+                      />
+                      <span
+                        className="h-1.5 w-1/2 rounded-full"
+                        style={{ background: '#F47920' }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
         </div>
       </Card>
 

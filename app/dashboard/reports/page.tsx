@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/lib/supabase/client';
+import { capitalizeName } from '@/lib/utils';
 import * as XLSX from 'xlsx';
 
 const ALL = '__all__';
@@ -52,6 +53,7 @@ export default function ReportsPage() {
   const [filters, setFilters] = useState(initialFilters);
   const [logs, setLogs] = useState<QualityLog[]>([]);
   const [savedReports, setSavedReports] = useState<SavedReport[]>([]);
+  const [creatorNames, setCreatorNames] = useState<Record<string, string>>({});
   const [filterOptions, setFilterOptions] = useState({
     clientBrands: [] as string[],
     severities: [] as string[],
@@ -272,18 +274,11 @@ export default function ReportsPage() {
       return;
     }
 
-    const { data: profileData } = await supabase
-      .from('user_profiles')
-      .select('display_name, email')
-      .eq('id', session.user.id)
-      .single();
-
-    const createdBy = profileData?.display_name || session.user.email || 'Unknown user';
-
+    // RLS on saved_reports (migration 005) requires created_by = auth.uid()::text.
     const { error: saveError } = await supabase.from('saved_reports').insert({
       name: saveName,
       filters,
-      created_by: createdBy,
+      created_by: session.user.id,
     });
 
     if (saveError) {
@@ -308,7 +303,25 @@ export default function ReportsPage() {
       return;
     }
 
-    setSavedReports((data as SavedReport[]) || []);
+    const reports = (data as SavedReport[]) || [];
+    setSavedReports(reports);
+
+    // created_by is now a UUID — resolve display names so the UI stays friendly.
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const uuids = Array.from(
+      new Set(reports.map(r => r.created_by).filter((v): v is string => !!v && uuidRe.test(v))),
+    );
+    if (uuids.length > 0) {
+      const { data: profiles } = await supabase
+        .from('user_profiles')
+        .select('id, display_name')
+        .in('id', uuids);
+      const map: Record<string, string> = {};
+      (profiles || []).forEach((p: { id: string; display_name: string }) => {
+        map[p.id] = p.display_name;
+      });
+      setCreatorNames(map);
+    }
   };
 
   const recallReport = async (report: SavedReport) => {
@@ -555,7 +568,7 @@ export default function ReportsPage() {
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <p className="font-semibold text-[color:var(--f92-dark)]">{report.name}</p>
-                        <p className="text-xs text-[color:var(--f92-gray)]">Saved by {report.created_by} • {new Date(report.created_at).toLocaleString()}</p>
+                        <p className="text-xs text-[color:var(--f92-gray)]">Saved by {capitalizeName(creatorNames[report.created_by]) || capitalizeName(report.created_by) || report.created_by} • {new Date(report.created_at).toLocaleString()}</p>
                       </div>
                       <Button size="sm" variant="outline" onClick={() => recallReport(report)}>Recall</Button>
                     </div>

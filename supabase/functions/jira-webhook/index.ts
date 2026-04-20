@@ -34,9 +34,29 @@ interface WebhookPayload {
   };
 }
 
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
 function validateWebhookSecret(request: Request): boolean {
   const secret = request.headers.get('X-Webhook-Secret');
-  return secret === webhookSecret;
+  if (!secret || !webhookSecret) return false;
+  return timingSafeEqual(secret, webhookSecret);
+}
+
+function clientDescriptor(request: Request): string {
+  const ip =
+    request.headers.get('cf-connecting-ip') ||
+    request.headers.get('x-forwarded-for') ||
+    request.headers.get('x-real-ip') ||
+    'unknown';
+  const ua = request.headers.get('user-agent') || 'unknown';
+  return `${ip} | ${ua}`;
 }
 
 function isValidTransition(fromStatus: string, toStatus: string): boolean {
@@ -104,6 +124,14 @@ export async function onRequest(context: { request: Request }) {
   }
 
   if (!validateWebhookSecret(request)) {
+    console.warn(
+      '[jira-webhook] rejected unauthenticated request',
+      JSON.stringify({
+        at: new Date().toISOString(),
+        client: clientDescriptor(request),
+        headerPresent: Boolean(request.headers.get('X-Webhook-Secret')),
+      }),
+    );
     return new Response('Unauthorized', { status: 401 });
   }
 

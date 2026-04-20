@@ -1,15 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { createClient } from '@supabase/supabase-js';
 import { BarChart, Bar, PieChart, Pie, Cell, Sector, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Card } from '@/components/ui/card';
 import { ActiveAlertsPanel } from '@/components/dashboard/active-alerts-panel';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+import { CollapsibleCard } from '@/components/dashboard/collapsible-card';
+import { supabase } from '@/lib/supabase/client';
 
 interface KPIData {
   totalLogsThisMonth: number;
@@ -307,10 +303,9 @@ export default function DashboardPage() {
       {/* Charts Grid */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Rework Volume by Week */}
-        <Card className="border-[color:var(--f92-border)] bg-white p-6 shadow-sm">
-          <h3 className="text-sm font-semibold text-[color:var(--f92-navy)]">Rework Volume (Weekly)</h3>
+        <CollapsibleCard title="Rework Volume (Weekly)">
           {charts.volumeByWeek.length > 0 ? (
-            <ResponsiveContainer width="100%" height={240} className="mt-4">
+            <ResponsiveContainer width="100%" height={240}>
               <BarChart data={charts.volumeByWeek}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#E8D5C4" />
                 <XAxis dataKey="week" fontSize={12} />
@@ -320,15 +315,14 @@ export default function DashboardPage() {
               </BarChart>
             </ResponsiveContainer>
           ) : (
-            <p className="mt-4 text-sm text-gray-500">No data available</p>
+            <p className="text-sm text-gray-500">No data available</p>
           )}
-        </Card>
+        </CollapsibleCard>
 
         {/* Issue Category Breakdown */}
-        <Card className="border-[color:var(--f92-border)] bg-white p-6 shadow-sm">
-          <h3 className="text-sm font-semibold text-[color:var(--f92-navy)]">Issue Category Breakdown</h3>
+        <CollapsibleCard title="Issue Category Breakdown">
           {charts.issueCategory.length > 0 ? (
-            <ResponsiveContainer width="100%" height={240} className="mt-4 donut-chart">
+            <ResponsiveContainer width="100%" height={240} className="donut-chart">
               <PieChart>
                 <Pie
                   data={charts.issueCategory}
@@ -354,15 +348,14 @@ export default function DashboardPage() {
               </PieChart>
             </ResponsiveContainer>
           ) : (
-            <p className="mt-4 text-sm text-gray-500">No data available</p>
+            <p className="text-sm text-gray-500">No data available</p>
           )}
-        </Card>
+        </CollapsibleCard>
 
         {/* Severity Distribution */}
-        <Card className="border-[color:var(--f92-border)] bg-white p-6 shadow-sm">
-          <h3 className="text-sm font-semibold text-[color:var(--f92-navy)]">Severity Distribution</h3>
+        <CollapsibleCard title="Severity Distribution">
           {charts.severityDistribution.length > 0 ? (
-            <ResponsiveContainer width="100%" height={240} className="mt-4">
+            <ResponsiveContainer width="100%" height={240}>
               <BarChart data={charts.severityDistribution}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#E8D5C4" />
                 <XAxis dataKey="severity" fontSize={12} />
@@ -383,15 +376,14 @@ export default function DashboardPage() {
               </BarChart>
             </ResponsiveContainer>
           ) : (
-            <p className="mt-4 text-sm text-gray-500">No data available</p>
+            <p className="text-sm text-gray-500">No data available</p>
           )}
-        </Card>
+        </CollapsibleCard>
 
         {/* Root Cause Frequency */}
-        <Card className="border-[color:var(--f92-border)] bg-white p-6 shadow-sm">
-          <h3 className="text-sm font-semibold text-[color:var(--f92-navy)]">Top Root Causes</h3>
+        <CollapsibleCard title="Top Root Causes">
           {charts.rootCauseFrequency.length > 0 ? (
-            <ResponsiveContainer width="100%" height={240} className="mt-4">
+            <ResponsiveContainer width="100%" height={240}>
               <BarChart
                 data={charts.rootCauseFrequency}
                 layout="vertical"
@@ -405,9 +397,9 @@ export default function DashboardPage() {
               </BarChart>
             </ResponsiveContainer>
           ) : (
-            <p className="mt-4 text-sm text-gray-500">No data available</p>
+            <p className="text-sm text-gray-500">No data available</p>
           )}
-        </Card>
+        </CollapsibleCard>
       </div>
     </div>
   );

@@ -118,6 +118,7 @@ export default function LogDetailPage({ params }: { params: { id: string } }) {
           .from('quality_logs')
           .select('*')
           .eq('jira_ticket_id', logData.jira_ticket_id)
+          .eq('is_deleted', false)
           .order('log_number', { ascending: true }),
       ]);
 

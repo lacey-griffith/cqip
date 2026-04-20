@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -10,6 +10,7 @@ import { PasswordInput } from '@/components/ui/password-input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
+import { capitalizeName } from '@/lib/utils';
 
 interface UserProfile {
   id: string;
@@ -32,7 +33,10 @@ export default function UsersSettingsPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [resettingId, setResettingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [showInactive, setShowInactive] = useState(false);
 
   useEffect(() => {
     async function init() {
@@ -42,6 +46,7 @@ export default function UsersSettingsPage() {
         setLoading(false);
         return;
       }
+      setCurrentUserId(session.user.id);
       const { data } = await supabase
         .from('user_profiles')
         .select('role')
@@ -99,7 +104,7 @@ export default function UsersSettingsPage() {
           account_type: 'local',
           username: normalized,
           password,
-          display_name: normalized,
+          display_name: capitalizeName(normalized),
           role,
         }),
       });
@@ -109,10 +114,25 @@ export default function UsersSettingsPage() {
         throw new Error(result.error || 'Unable to create user.');
       }
 
+      // Optimistic insert so the new row shows up immediately.
+      if (result.user) {
+        const optimistic: UserProfile = {
+          id: result.user,
+          email: `${normalized}${LOCAL_SUFFIX}`,
+          display_name: capitalizeName(normalized),
+          role,
+          is_active: true,
+          created_at: new Date().toISOString(),
+        };
+        setUsers(prev => [optimistic, ...prev.filter(u => u.id !== optimistic.id)]);
+      }
+
       setMessage(`Account created. ${normalized} can now sign in with the password you set.`);
       setUsername('');
       setPassword('');
       setRole('read_only');
+
+      // Reconcile with the server so we pick up any fields the server sets.
       loadUsers();
     } catch (err) {
       console.error(err);
@@ -168,6 +188,44 @@ export default function UsersSettingsPage() {
     }
   }
 
+  async function deleteUser(user: UserProfile) {
+    if (user.id === currentUserId) {
+      setError('You cannot deactivate your own account.');
+      return;
+    }
+    if (!window.confirm(`Deactivate ${user.display_name}? They will be signed out and blocked from signing in.`)) {
+      return;
+    }
+    try {
+      setDeletingId(user.id);
+      setMessage(null);
+      setError(null);
+      const response = await fetch('/api/admin/users', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: user.id }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || 'Unable to deactivate user.');
+      }
+      setUsers(prev => prev.map(u => u.id === user.id ? { ...u, is_active: false } : u));
+      setMessage(`${user.display_name} deactivated.`);
+    } catch (err) {
+      console.error(err);
+      setError(err instanceof Error ? err.message : 'Unable to deactivate user.');
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  const visibleUsers = useMemo(
+    () => (showInactive ? users : users.filter(u => u.is_active)),
+    [users, showInactive],
+  );
+
+  const inactiveCount = users.filter(u => !u.is_active).length;
+
   if (isAdmin === false) {
     return (
       <div className="rounded-3xl border border-[color:var(--f92-border)] bg-white p-8 shadow-sm">
@@ -202,7 +260,7 @@ export default function UsersSettingsPage() {
               id="inviteUsername"
               value={username}
               onChange={e => setUsername(e.target.value)}
-              placeholder="lacey"
+              placeholder="username"
             />
           </div>
           <div>
@@ -238,12 +296,24 @@ export default function UsersSettingsPage() {
       </Card>
 
       <Card className="border-[color:var(--f92-border)] bg-white p-6 shadow-sm">
-        <div className="flex items-center justify-between mb-4">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold text-[color:var(--f92-navy)]">Users</h2>
             <p className="text-sm text-[color:var(--f92-gray)]">Active accounts and access control for authenticated users.</p>
           </div>
-          <Badge variant="default" className="text-sm">{users.length} users</Badge>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Switch
+                id="showInactive"
+                checked={showInactive}
+                onCheckedChange={setShowInactive}
+              />
+              <Label htmlFor="showInactive" className="text-xs">
+                Show inactive ({inactiveCount})
+              </Label>
+            </div>
+            <Badge variant="default" className="text-sm">{visibleUsers.length} users</Badge>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -262,15 +332,16 @@ export default function UsersSettingsPage() {
                 <tr>
                   <td colSpan={5} className="px-3 py-6 text-center text-[color:var(--f92-gray)]">Loading users...</td>
                 </tr>
-              ) : users.length === 0 ? (
+              ) : visibleUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-3 py-6 text-center text-[color:var(--f92-gray)]">No users found.</td>
+                  <td colSpan={5} className="px-3 py-6 text-center text-[color:var(--f92-gray)]">No users to show.</td>
                 </tr>
-              ) : users.map(user => {
+              ) : visibleUsers.map(user => {
                 const isLocal = user.email.endsWith(LOCAL_SUFFIX);
+                const isSelf = user.id === currentUserId;
                 return (
-                  <tr key={user.id} className="hover:bg-[color:var(--f92-warm)]">
-                    <td className="px-3 py-3 font-medium">{user.display_name}</td>
+                  <tr key={user.id} className={cnRow(user)}>
+                    <td className="px-3 py-3 font-medium">{capitalizeName(user.display_name)}</td>
                     <td className="px-3 py-3">
                       <Select value={user.role} onValueChange={(value: 'admin' | 'read_only') => updateUser(user.id, { role: value })}>
                         <SelectTrigger>
@@ -296,15 +367,27 @@ export default function UsersSettingsPage() {
                     </td>
                     <td className="px-3 py-3 text-xs text-[color:var(--f92-gray)]">{new Date(user.created_at).toLocaleDateString()}</td>
                     <td className="px-3 py-3">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => resetPassword(user.id)}
-                        disabled={isLocal || resettingId === user.id}
-                        title={isLocal ? 'Local accounts cannot receive reset emails' : 'Send password reset email'}
-                      >
-                        {resettingId === user.id ? 'Sending...' : 'Reset password'}
-                      </Button>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => resetPassword(user.id)}
+                          disabled={isLocal || resettingId === user.id}
+                          title={isLocal ? 'Local accounts cannot receive reset emails' : 'Send password reset email'}
+                        >
+                          {resettingId === user.id ? 'Sending...' : 'Reset password'}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => deleteUser(user)}
+                          disabled={isSelf || deletingId === user.id || !user.is_active}
+                          title={isSelf ? 'You cannot deactivate your own account' : 'Deactivate account'}
+                          className="text-red-600 hover:text-red-700"
+                        >
+                          {deletingId === user.id ? 'Deactivating...' : 'Delete'}
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -315,4 +398,10 @@ export default function UsersSettingsPage() {
       </Card>
     </div>
   );
+}
+
+function cnRow(user: UserProfile): string {
+  return user.is_active
+    ? 'hover:bg-[color:var(--f92-warm)]'
+    : 'bg-[color:var(--f92-tint)] opacity-60 hover:opacity-80';
 }
