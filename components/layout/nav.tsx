@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
@@ -8,11 +9,9 @@ import { UserAvatar } from '@/components/layout/user-avatar';
 import { supabase } from '@/lib/supabase/client';
 
 interface NavProps {
-  email?: string | null;
   displayName?: string | null;
   colorPreference?: string | null;
   role?: 'admin' | 'read_only' | null;
-  isLocalAccount?: boolean;
 }
 
 const navLinks = [
@@ -21,7 +20,7 @@ const navLinks = [
   { href: '/dashboard/reports', label: 'Reports' },
 ];
 
-export function Nav({ email, displayName, colorPreference, role, isLocalAccount }: NavProps) {
+export function Nav({ displayName, colorPreference, role }: NavProps) {
   const router = useRouter();
 
   async function handleSignOut() {
@@ -29,14 +28,13 @@ export function Nav({ email, displayName, colorPreference, role, isLocalAccount 
     router.replace('/login');
   }
 
-  const primaryLabel = displayName || (isLocalAccount ? 'User' : email) || 'Unknown user';
-  const secondaryLabel = !isLocalAccount && email && displayName && email !== displayName ? email : null;
+  const primaryLabel = displayName || 'User';
 
   return (
     <aside className="flex min-h-screen w-72 flex-col border-r border-[color:var(--f92-border)] bg-white px-6 py-8">
       <div className="mb-10">
         <div className="mb-4 inline-flex items-center gap-3 rounded-2xl bg-[color:var(--f92-warm)] px-4 py-3">
-          <div className="h-10 w-10 rounded-2xl bg-[color:var(--f92-orange)]" />
+          <Image src="/cqip-logo.svg" alt="CQIP logo" width={40} height={40} priority />
           <div>
             <p className="text-sm font-semibold text-[color:var(--f92-dark)]">Fusion92 CQIP</p>
             <p className="text-xs text-[color:var(--f92-gray)]">CRO Quality Intelligence</p>
@@ -74,9 +72,6 @@ export function Nav({ email, displayName, colorPreference, role, isLocalAccount 
           <UserAvatar displayName={displayName} color={colorPreference} size="md" />
           <div className="min-w-0 flex-1">
             <p className="truncate font-semibold text-[color:var(--f92-dark)]">{primaryLabel}</p>
-            {secondaryLabel ? (
-              <p className="truncate text-xs text-[color:var(--f92-gray)]">{secondaryLabel}</p>
-            ) : null}
           </div>
         </div>
         <div className="mt-3 flex items-center justify-between gap-2">

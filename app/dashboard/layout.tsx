@@ -48,16 +48,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return <div className="min-h-screen flex items-center justify-center text-[color:var(--f92-dark)]">Loading dashboard...</div>;
   }
 
-  const isLocalAccount = profile?.email?.endsWith('@cqip.local') ?? false;
-
   return (
     <div className="min-h-screen flex bg-[color:var(--f92-warm)]">
       <Nav
-        email={profile?.email ?? null}
         displayName={profile?.display_name ?? null}
         colorPreference={profile?.color_preference ?? null}
         role={profile?.role ?? 'read_only'}
-        isLocalAccount={isLocalAccount}
       />
       <main className="flex-1 p-6">{children}</main>
     </div>

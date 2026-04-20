@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="CQIP logo">
+  <defs>
+    <linearGradient id="cqipHexFill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#F47920"/>
+      <stop offset="100%" stop-color="#D65F0D"/>
+    </linearGradient>
+  </defs>
+  <polygon points="32,2 58,16 58,48 32,62 6,48 6,16"
+           fill="url(#cqipHexFill)"
+           stroke="#1E2D6B"
+           stroke-width="2.5"
+           stroke-linejoin="round"/>
+  <polygon points="32,10 50,20 50,44 32,54 14,44 14,20"
+           fill="none"
+           stroke="#1E2D6B"
+           stroke-width="1"
+           stroke-opacity="0.35"/>
+  <text x="32" y="40"
+        text-anchor="middle"
+        font-family="ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, Consolas, monospace"
+        font-size="22"
+        font-weight="700"
+        fill="#FFFFFF"
+        letter-spacing="1">CQ</text>
+</svg>

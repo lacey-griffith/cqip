@@ -126,8 +126,6 @@ export default function ProfileSettingsPage() {
     );
   }
 
-  const isLocalAccount = profile.email.endsWith('@cqip.local');
-
   return (
     <div className="space-y-6">
       <div className="rounded-3xl border border-[color:var(--f92-border)] bg-white p-8 shadow-sm">
@@ -142,9 +140,6 @@ export default function ProfileSettingsPage() {
             <UserAvatar displayName={profile.display_name} color={color} size="lg" />
             <div>
               <h2 className="text-lg font-semibold text-[color:var(--f92-navy)]">{profile.display_name}</h2>
-              {!isLocalAccount ? (
-                <p className="text-sm text-[color:var(--f92-gray)]">{profile.email}</p>
-              ) : null}
               <p className="mt-1 text-xs uppercase tracking-[0.2em] text-[color:var(--f92-gray)]">
                 {profile.role === 'admin' ? 'Administrator' : 'Read only'}
               </p>

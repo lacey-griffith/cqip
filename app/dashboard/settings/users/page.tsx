@@ -23,11 +23,8 @@ const LOCAL_SUFFIX = '@cqip.local';
 
 export default function UsersSettingsPage() {
   const [users, setUsers] = useState<UserProfile[]>([]);
-  const [accountType, setAccountType] = useState<'email' | 'local'>('email');
-  const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [displayName, setDisplayName] = useState('');
   const [role, setRole] = useState<'admin' | 'read_only'>('read_only');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -79,25 +76,14 @@ export default function UsersSettingsPage() {
   }
 
   async function createUser() {
-    if (!displayName.trim()) {
-      setMessage('Display name is required.');
+    const normalized = username.trim().toLowerCase();
+    if (!normalized || !/^[a-z0-9._-]+$/.test(normalized)) {
+      setMessage('Username must be lowercase letters, numbers, or . _ - only.');
       return;
     }
-
-    if (accountType === 'email' && !email.trim()) {
-      setMessage('Email is required for email accounts.');
+    if (password.length < 8) {
+      setMessage('Password must be at least 8 characters.');
       return;
-    }
-
-    if (accountType === 'local') {
-      if (!username.trim()) {
-        setMessage('Username is required for local accounts.');
-        return;
-      }
-      if (password.length < 8) {
-        setMessage('Password must be at least 8 characters.');
-        return;
-      }
     }
 
     try {
@@ -105,23 +91,16 @@ export default function UsersSettingsPage() {
       setMessage(null);
       setError(null);
 
-      const payload: Record<string, unknown> = {
-        display_name: displayName,
-        role,
-        account_type: accountType,
-      };
-
-      if (accountType === 'email') {
-        payload.email = email;
-      } else {
-        payload.username = username;
-        payload.password = password;
-      }
-
       const response = await fetch('/api/admin/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          account_type: 'local',
+          username: normalized,
+          password,
+          display_name: normalized,
+          role,
+        }),
       });
 
       const result = await response.json();
@@ -129,15 +108,9 @@ export default function UsersSettingsPage() {
         throw new Error(result.error || 'Unable to create user.');
       }
 
-      setMessage(
-        accountType === 'email'
-          ? 'User created. A password reset link was emailed to them.'
-          : 'Local account created successfully.',
-      );
-      setEmail('');
+      setMessage(`Account created. ${normalized} can now sign in with the password you set.`);
       setUsername('');
       setPassword('');
-      setDisplayName('');
       setRole('read_only');
       loadUsers();
     } catch (err) {
@@ -194,12 +167,6 @@ export default function UsersSettingsPage() {
     }
   }
 
-  function formatAccount(user: UserProfile): string {
-    return user.email.endsWith(LOCAL_SUFFIX)
-      ? `${user.email.slice(0, -LOCAL_SUFFIX.length)} (local)`
-      : user.email;
-  }
-
   if (isAdmin === false) {
     return (
       <div className="rounded-3xl border border-[color:var(--f92-border)] bg-white p-8 shadow-sm">
@@ -214,69 +181,38 @@ export default function UsersSettingsPage() {
       <div className="rounded-3xl border border-[color:var(--f92-border)] bg-white p-8 shadow-sm">
         <p className="text-sm uppercase tracking-[0.3em] text-[color:var(--f92-navy)]">Settings</p>
         <h1 className="mt-3 text-3xl font-semibold text-[color:var(--f92-dark)]">User Management</h1>
-        <p className="mt-2 text-sm text-[color:var(--f92-gray)]">Create users, assign roles, and manage account access for your CRO team.</p>
+        <p className="mt-2 text-sm text-[color:var(--f92-gray)]">
+          Create username/password accounts for your CRO team. Users sign in with their username only.
+        </p>
       </div>
 
       <Card className="border-[color:var(--f92-border)] bg-white p-6 shadow-sm">
         <div className="mb-6">
           <h2 className="text-lg font-semibold text-[color:var(--f92-navy)]">Create account</h2>
           <p className="text-sm text-[color:var(--f92-gray)]">
-            Invite via email (recommended) or create a local username/password account for users without email.
+            Usernames are lowercase first names (e.g. <code>lacey</code>, <code>xandor</code>).
           </p>
         </div>
 
-        <div className="mb-5">
-          <Label>Account type</Label>
-          <div className="mt-2 flex gap-2">
-            <Button
-              type="button"
-              variant={accountType === 'email' ? 'default' : 'outline'}
-              onClick={() => setAccountType('email')}
-            >
-              Email invite
-            </Button>
-            <Button
-              type="button"
-              variant={accountType === 'local' ? 'default' : 'outline'}
-              onClick={() => setAccountType('local')}
-            >
-              Local (username + password)
-            </Button>
-          </div>
-        </div>
-
         <div className="grid gap-4 lg:grid-cols-3">
-          {accountType === 'email' ? (
-            <div>
-              <Label htmlFor="inviteEmail">Email</Label>
-              <Input id="inviteEmail" type="email" value={email} onChange={e => setEmail(e.target.value)} />
-            </div>
-          ) : (
-            <>
-              <div>
-                <Label htmlFor="inviteUsername">Username</Label>
-                <Input
-                  id="inviteUsername"
-                  value={username}
-                  onChange={e => setUsername(e.target.value)}
-                  placeholder="lowercase letters, numbers, . _ -"
-                />
-              </div>
-              <div>
-                <Label htmlFor="invitePassword">Password</Label>
-                <Input
-                  id="invitePassword"
-                  type="password"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  placeholder="8+ characters"
-                />
-              </div>
-            </>
-          )}
           <div>
-            <Label htmlFor="inviteName">Display name</Label>
-            <Input id="inviteName" value={displayName} onChange={e => setDisplayName(e.target.value)} />
+            <Label htmlFor="inviteUsername">Username</Label>
+            <Input
+              id="inviteUsername"
+              value={username}
+              onChange={e => setUsername(e.target.value)}
+              placeholder="lacey"
+            />
+          </div>
+          <div>
+            <Label htmlFor="invitePassword">Password</Label>
+            <Input
+              id="invitePassword"
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="8+ characters"
+            />
           </div>
           <div>
             <Label htmlFor="inviteRole">Role</Label>
@@ -293,7 +229,7 @@ export default function UsersSettingsPage() {
         </div>
         <div className="mt-6 flex flex-wrap gap-3">
           <Button onClick={createUser} disabled={saving}>
-            {saving ? 'Creating...' : accountType === 'email' ? 'Send invite' : 'Create local account'}
+            {saving ? 'Creating...' : 'Create account'}
           </Button>
           {message && <p className="text-sm text-[color:var(--f92-dark)]">{message}</p>}
           {error && <p className="text-sm text-red-600">{error}</p>}
@@ -313,8 +249,7 @@ export default function UsersSettingsPage() {
           <table className="min-w-full divide-y divide-[color:var(--f92-border)] text-left text-sm">
             <thead className="bg-[color:var(--f92-warm)] text-[color:var(--f92-dark)]">
               <tr>
-                <th className="px-3 py-3 font-semibold">Name</th>
-                <th className="px-3 py-3 font-semibold">Account</th>
+                <th className="px-3 py-3 font-semibold">Username</th>
                 <th className="px-3 py-3 font-semibold">Role</th>
                 <th className="px-3 py-3 font-semibold">Active</th>
                 <th className="px-3 py-3 font-semibold">Created</th>
@@ -324,18 +259,17 @@ export default function UsersSettingsPage() {
             <tbody className="divide-y divide-[color:var(--f92-border)]">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-3 py-6 text-center text-[color:var(--f92-gray)]">Loading users...</td>
+                  <td colSpan={5} className="px-3 py-6 text-center text-[color:var(--f92-gray)]">Loading users...</td>
                 </tr>
               ) : users.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-3 py-6 text-center text-[color:var(--f92-gray)]">No users found.</td>
+                  <td colSpan={5} className="px-3 py-6 text-center text-[color:var(--f92-gray)]">No users found.</td>
                 </tr>
               ) : users.map(user => {
                 const isLocal = user.email.endsWith(LOCAL_SUFFIX);
                 return (
                   <tr key={user.id} className="hover:bg-[color:var(--f92-warm)]">
-                    <td className="px-3 py-3">{user.display_name}</td>
-                    <td className="px-3 py-3 text-xs">{formatAccount(user)}</td>
+                    <td className="px-3 py-3 font-medium">{user.display_name}</td>
                     <td className="px-3 py-3">
                       <Select value={user.role} onValueChange={(value: 'admin' | 'read_only') => updateUser(user.id, { role: value })}>
                         <SelectTrigger>
