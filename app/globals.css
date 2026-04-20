@@ -22,6 +22,36 @@
   --status-resolved: #22C55E;
 }
 
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --f92-dark: #F1F5F9;
+  --f92-gray: #94A3B8;
+  --f92-lgray: #64748B;
+  --f92-warm: #0F1117;
+  --f92-border: #334155;
+  --f92-white: #1A1D2E;
+}
+
+:root[data-theme="dark"] body {
+  background: var(--f92-warm);
+  color: var(--f92-dark);
+}
+
+/* Re-map the Tailwind literal `bg-white` in dark mode to our surface color */
+:root[data-theme="dark"] .bg-white {
+  background-color: var(--f92-white);
+}
+
+/* Preserve the Fusion92 warm background for the dashboard shell in dark mode */
+:root[data-theme="dark"] .recharts-cartesian-grid line,
+:root[data-theme="dark"] .recharts-cartesian-axis-tick-line {
+  stroke: var(--f92-border);
+}
+
+:root[data-theme="dark"] .recharts-text {
+  fill: var(--f92-dark);
+}
+
 @theme inline {
   --color-background: var(--f92-white);
   --color-foreground: var(--f92-dark);

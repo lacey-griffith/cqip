@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { PasswordInput } from '@/components/ui/password-input';
 
 const LOCAL_SUFFIX = '@cqip.local';
 
@@ -125,7 +126,7 @@ function LoginView() {
         </div>
 
         {showReset ? (
-          <form onSubmit={handlePasswordReset} className="space-y-5">
+          <form onSubmit={handlePasswordReset} className="space-y-5" suppressHydrationWarning>
             <div>
               <Label htmlFor="resetUsername">Username</Label>
               <Input
@@ -135,6 +136,7 @@ function LoginView() {
                 value={resetUsername}
                 onChange={event => setResetUsername(event.target.value)}
                 required
+                suppressHydrationWarning
               />
             </div>
             {resetMessage ? <p className="text-sm text-[color:var(--f92-navy)]">{resetMessage}</p> : null}
@@ -150,7 +152,7 @@ function LoginView() {
             </button>
           </form>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-5" suppressHydrationWarning>
             <div>
               <Label htmlFor="username">Username</Label>
               <Input
@@ -161,17 +163,18 @@ function LoginView() {
                 value={username}
                 onChange={event => setUsername(event.target.value)}
                 required
+                suppressHydrationWarning
               />
             </div>
             <div>
               <Label htmlFor="password">Password</Label>
-              <Input
+              <PasswordInput
                 id="password"
-                type="password"
                 autoComplete="current-password"
                 value={password}
                 onChange={event => setPassword(event.target.value)}
                 required
+                suppressHydrationWarning
               />
             </div>
             {message ? <p className="text-sm text-[color:var(--f92-orange)]">{message}</p> : null}
