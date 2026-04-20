@@ -267,15 +267,23 @@ export default function ReportsPage() {
       data: { session },
       error: sessionError,
     } = await supabase.auth.getSession();
-    if (sessionError || !session?.user?.email) {
+    if (sessionError || !session?.user?.id) {
       setError('Unable to save report without a valid user session.');
       return;
     }
 
+    const { data: profileData } = await supabase
+      .from('user_profiles')
+      .select('display_name, email')
+      .eq('id', session.user.id)
+      .single();
+
+    const createdBy = profileData?.display_name || session.user.email || 'Unknown user';
+
     const { error: saveError } = await supabase.from('saved_reports').insert({
       name: saveName,
       filters,
-      created_by: session.user.email,
+      created_by: createdBy,
     });
 
     if (saveError) {

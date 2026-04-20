@@ -19,9 +19,14 @@ interface UserProfile {
   created_at: string;
 }
 
+const LOCAL_SUFFIX = '@cqip.local';
+
 export default function UsersSettingsPage() {
   const [users, setUsers] = useState<UserProfile[]>([]);
+  const [accountType, setAccountType] = useState<'email' | 'local'>('email');
   const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [role, setRole] = useState<'admin' | 'read_only'>('read_only');
   const [loading, setLoading] = useState(true);
@@ -29,6 +34,7 @@ export default function UsersSettingsPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+  const [resettingId, setResettingId] = useState<string | null>(null);
 
   useEffect(() => {
     async function init() {
@@ -72,10 +78,26 @@ export default function UsersSettingsPage() {
     }
   }
 
-  async function inviteUser() {
-    if (!email.trim() || !displayName.trim()) {
-      setMessage('Email and display name are required.');
+  async function createUser() {
+    if (!displayName.trim()) {
+      setMessage('Display name is required.');
       return;
+    }
+
+    if (accountType === 'email' && !email.trim()) {
+      setMessage('Email is required for email accounts.');
+      return;
+    }
+
+    if (accountType === 'local') {
+      if (!username.trim()) {
+        setMessage('Username is required for local accounts.');
+        return;
+      }
+      if (password.length < 8) {
+        setMessage('Password must be at least 8 characters.');
+        return;
+      }
     }
 
     try {
@@ -83,25 +105,44 @@ export default function UsersSettingsPage() {
       setMessage(null);
       setError(null);
 
+      const payload: Record<string, unknown> = {
+        display_name: displayName,
+        role,
+        account_type: accountType,
+      };
+
+      if (accountType === 'email') {
+        payload.email = email;
+      } else {
+        payload.username = username;
+        payload.password = password;
+      }
+
       const response = await fetch('/api/admin/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, display_name: displayName, role }),
+        body: JSON.stringify(payload),
       });
 
       const result = await response.json();
       if (!response.ok) {
-        throw new Error(result.error || 'Unable to invite user.');
+        throw new Error(result.error || 'Unable to create user.');
       }
 
-      setMessage('Invitation sent and user created successfully.');
+      setMessage(
+        accountType === 'email'
+          ? 'User created. A password reset link was emailed to them.'
+          : 'Local account created successfully.',
+      );
       setEmail('');
+      setUsername('');
+      setPassword('');
       setDisplayName('');
       setRole('read_only');
       loadUsers();
     } catch (err) {
       console.error(err);
-      setError(err instanceof Error ? err.message : 'Unable to invite user.');
+      setError(err instanceof Error ? err.message : 'Unable to create user.');
     } finally {
       setSaving(false);
     }
@@ -130,6 +171,35 @@ export default function UsersSettingsPage() {
     }
   }
 
+  async function resetPassword(id: string) {
+    try {
+      setResettingId(id);
+      setMessage(null);
+      setError(null);
+      const response = await fetch('/api/admin/users', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, action: 'reset_password' }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || 'Unable to send reset link.');
+      }
+      setMessage('Password reset email sent.');
+    } catch (err) {
+      console.error(err);
+      setError(err instanceof Error ? err.message : 'Unable to send reset link.');
+    } finally {
+      setResettingId(null);
+    }
+  }
+
+  function formatAccount(user: UserProfile): string {
+    return user.email.endsWith(LOCAL_SUFFIX)
+      ? `${user.email.slice(0, -LOCAL_SUFFIX.length)} (local)`
+      : user.email;
+  }
+
   if (isAdmin === false) {
     return (
       <div className="rounded-3xl border border-[color:var(--f92-border)] bg-white p-8 shadow-sm">
@@ -149,14 +219,61 @@ export default function UsersSettingsPage() {
 
       <Card className="border-[color:var(--f92-border)] bg-white p-6 shadow-sm">
         <div className="mb-6">
-          <h2 className="text-lg font-semibold text-[color:var(--f92-navy)]">Invite new user</h2>
-          <p className="text-sm text-[color:var(--f92-gray)]">Send a new account invite with role assignment.</p>
+          <h2 className="text-lg font-semibold text-[color:var(--f92-navy)]">Create account</h2>
+          <p className="text-sm text-[color:var(--f92-gray)]">
+            Invite via email (recommended) or create a local username/password account for users without email.
+          </p>
         </div>
-        <div className="grid gap-4 lg:grid-cols-3">
-          <div>
-            <Label htmlFor="inviteEmail">Email</Label>
-            <Input id="inviteEmail" type="email" value={email} onChange={e => setEmail(e.target.value)} />
+
+        <div className="mb-5">
+          <Label>Account type</Label>
+          <div className="mt-2 flex gap-2">
+            <Button
+              type="button"
+              variant={accountType === 'email' ? 'default' : 'outline'}
+              onClick={() => setAccountType('email')}
+            >
+              Email invite
+            </Button>
+            <Button
+              type="button"
+              variant={accountType === 'local' ? 'default' : 'outline'}
+              onClick={() => setAccountType('local')}
+            >
+              Local (username + password)
+            </Button>
           </div>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-3">
+          {accountType === 'email' ? (
+            <div>
+              <Label htmlFor="inviteEmail">Email</Label>
+              <Input id="inviteEmail" type="email" value={email} onChange={e => setEmail(e.target.value)} />
+            </div>
+          ) : (
+            <>
+              <div>
+                <Label htmlFor="inviteUsername">Username</Label>
+                <Input
+                  id="inviteUsername"
+                  value={username}
+                  onChange={e => setUsername(e.target.value)}
+                  placeholder="lowercase letters, numbers, . _ -"
+                />
+              </div>
+              <div>
+                <Label htmlFor="invitePassword">Password</Label>
+                <Input
+                  id="invitePassword"
+                  type="password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="8+ characters"
+                />
+              </div>
+            </>
+          )}
           <div>
             <Label htmlFor="inviteName">Display name</Label>
             <Input id="inviteName" value={displayName} onChange={e => setDisplayName(e.target.value)} />
@@ -175,7 +292,9 @@ export default function UsersSettingsPage() {
           </div>
         </div>
         <div className="mt-6 flex flex-wrap gap-3">
-          <Button onClick={inviteUser} disabled={saving}>{saving ? 'Inviting...' : 'Invite user'}</Button>
+          <Button onClick={createUser} disabled={saving}>
+            {saving ? 'Creating...' : accountType === 'email' ? 'Send invite' : 'Create local account'}
+          </Button>
           {message && <p className="text-sm text-[color:var(--f92-dark)]">{message}</p>}
           {error && <p className="text-sm text-red-600">{error}</p>}
         </div>
@@ -195,51 +314,66 @@ export default function UsersSettingsPage() {
             <thead className="bg-[color:var(--f92-warm)] text-[color:var(--f92-dark)]">
               <tr>
                 <th className="px-3 py-3 font-semibold">Name</th>
-                <th className="px-3 py-3 font-semibold">Email</th>
+                <th className="px-3 py-3 font-semibold">Account</th>
                 <th className="px-3 py-3 font-semibold">Role</th>
                 <th className="px-3 py-3 font-semibold">Active</th>
                 <th className="px-3 py-3 font-semibold">Created</th>
+                <th className="px-3 py-3 font-semibold">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[color:var(--f92-border)]">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-3 py-6 text-center text-[color:var(--f92-gray)]">Loading users...</td>
+                  <td colSpan={6} className="px-3 py-6 text-center text-[color:var(--f92-gray)]">Loading users...</td>
                 </tr>
               ) : users.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-3 py-6 text-center text-[color:var(--f92-gray)]">No users found.</td>
+                  <td colSpan={6} className="px-3 py-6 text-center text-[color:var(--f92-gray)]">No users found.</td>
                 </tr>
-              ) : users.map(user => (
-                <tr key={user.id} className="hover:bg-[color:var(--f92-warm)]">
-                  <td className="px-3 py-3">{user.display_name}</td>
-                  <td className="px-3 py-3">{user.email}</td>
-                  <td className="px-3 py-3">
-                    <Select value={user.role} onValueChange={(value: 'admin' | 'read_only') => updateUser(user.id, { role: value })}>
-                      <SelectTrigger>
-                        <SelectValue placeholder={user.role} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="admin">Admin</SelectItem>
-                        <SelectItem value="read_only">Read only</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </td>
-                  <td className="px-3 py-3">
-                    <div className="flex items-center gap-2">
-                      <Switch
-                        id={`active-${user.id}`}
-                        checked={user.is_active}
-                        onCheckedChange={(checked) => updateUser(user.id, { is_active: checked })}
-                      />
-                      <Label htmlFor={`active-${user.id}`} className="text-xs">
-                        {user.is_active ? 'Active' : 'Inactive'}
-                      </Label>
-                    </div>
-                  </td>
-                  <td className="px-3 py-3 text-xs text-[color:var(--f92-gray)]">{new Date(user.created_at).toLocaleDateString()}</td>
-                </tr>
-              ))}
+              ) : users.map(user => {
+                const isLocal = user.email.endsWith(LOCAL_SUFFIX);
+                return (
+                  <tr key={user.id} className="hover:bg-[color:var(--f92-warm)]">
+                    <td className="px-3 py-3">{user.display_name}</td>
+                    <td className="px-3 py-3 text-xs">{formatAccount(user)}</td>
+                    <td className="px-3 py-3">
+                      <Select value={user.role} onValueChange={(value: 'admin' | 'read_only') => updateUser(user.id, { role: value })}>
+                        <SelectTrigger>
+                          <SelectValue placeholder={user.role} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="admin">Admin</SelectItem>
+                          <SelectItem value="read_only">Read only</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </td>
+                    <td className="px-3 py-3">
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          id={`active-${user.id}`}
+                          checked={user.is_active}
+                          onCheckedChange={(checked) => updateUser(user.id, { is_active: checked })}
+                        />
+                        <Label htmlFor={`active-${user.id}`} className="text-xs">
+                          {user.is_active ? 'Active' : 'Inactive'}
+                        </Label>
+                      </div>
+                    </td>
+                    <td className="px-3 py-3 text-xs text-[color:var(--f92-gray)]">{new Date(user.created_at).toLocaleDateString()}</td>
+                    <td className="px-3 py-3">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => resetPassword(user.id)}
+                        disabled={isLocal || resettingId === user.id}
+                        title={isLocal ? 'Local accounts cannot receive reset emails' : 'Send password reset email'}
+                      >
+                        {resettingId === user.id ? 'Sending...' : 'Reset password'}
+                      </Button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

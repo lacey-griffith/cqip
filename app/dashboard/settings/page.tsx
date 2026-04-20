@@ -5,6 +5,12 @@ import { Card } from '@/components/ui/card';
 
 const settingsSections = [
   {
+    title: 'Profile',
+    description: 'Update your avatar color and change your password.',
+    href: '/dashboard/settings/profile',
+    icon: '👤',
+  },
+  {
     title: 'Alert Rules',
     description: 'Configure automated alerts for quality monitoring and issue detection.',
     href: '/dashboard/settings/alerts',

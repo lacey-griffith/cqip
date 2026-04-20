@@ -58,3 +58,18 @@ select,
 textarea {
   font: inherit;
 }
+
+.donut-chart .recharts-sector:focus,
+.donut-chart .recharts-sector:focus-visible,
+.donut-chart .recharts-pie-sector:focus,
+.donut-chart .recharts-pie-sector:focus-visible,
+.donut-chart .recharts-wrapper:focus,
+.donut-chart .recharts-surface:focus {
+  outline: none;
+}
+
+.donut-chart .recharts-pie-sector path,
+.donut-chart .recharts-sector {
+  transition: transform 200ms ease-out;
+  cursor: pointer;
+}

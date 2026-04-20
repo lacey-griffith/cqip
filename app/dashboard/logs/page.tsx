@@ -9,6 +9,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
+const ALL = '__all__';
+
 interface LogEntry {
   id: string;
   triggered_at: string;
@@ -52,6 +54,13 @@ function getSeverityVariant(severity: string): SeverityVariant {
 
 function getStatusVariant(status: string): StatusVariant {
   return (statusVariant as Record<string, StatusVariant>)[status] ?? 'default';
+}
+
+function formatTriggeredDate(value: string | null | undefined): string {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
 }
 
 export default function LogsPage() {
@@ -126,12 +135,12 @@ export default function LogsPage() {
           </div>
           <div className="lg:col-span-2">
             <Label htmlFor="clientBrand">Client brand</Label>
-            <Select value={clientBrand} onValueChange={setClientBrand}>
+            <Select value={clientBrand || ALL} onValueChange={value => setClientBrand(value === ALL ? '' : value)}>
               <SelectTrigger>
                 <SelectValue placeholder="All brands" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All brands</SelectItem>
+                <SelectItem value={ALL}>All brands</SelectItem>
                 {clientBrands.map(brand => (
                   <SelectItem key={brand} value={brand}>{brand}</SelectItem>
                 ))}
@@ -140,12 +149,12 @@ export default function LogsPage() {
           </div>
           <div className="lg:col-span-2">
             <Label htmlFor="severity">Severity</Label>
-            <Select value={severity} onValueChange={setSeverity}>
+            <Select value={severity || ALL} onValueChange={value => setSeverity(value === ALL ? '' : value)}>
               <SelectTrigger>
                 <SelectValue placeholder="All severities" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All severities</SelectItem>
+                <SelectItem value={ALL}>All severities</SelectItem>
                 <SelectItem value="Critical">Critical</SelectItem>
                 <SelectItem value="High">High</SelectItem>
                 <SelectItem value="Medium">Medium</SelectItem>
@@ -155,15 +164,17 @@ export default function LogsPage() {
           </div>
           <div className="lg:col-span-2">
             <Label htmlFor="status">Status</Label>
-            <Select value={status} onValueChange={setStatus}>
+            <Select value={status || ALL} onValueChange={value => setStatus(value === ALL ? '' : value)}>
               <SelectTrigger>
                 <SelectValue placeholder="All statuses" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All statuses</SelectItem>
+                <SelectItem value={ALL}>All statuses</SelectItem>
                 <SelectItem value="Open">Open</SelectItem>
                 <SelectItem value="In Progress">In Progress</SelectItem>
-                <SelectItem value="Closed">Closed</SelectItem>
+                <SelectItem value="Blocked">Blocked</SelectItem>
+                <SelectItem value="Pending Verification">Pending Verification</SelectItem>
+                <SelectItem value="Resolved">Resolved</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -215,7 +226,7 @@ export default function LogsPage() {
               ) : (
                 filteredLogs.map(log => (
                   <tr key={log.id} className="rounded-3xl border border-[color:var(--f92-border)] bg-[color:var(--f92-warm)]">
-                    <td className="px-4 py-3 align-top">{new Date(log.triggered_at).toLocaleDateString()}</td>
+                    <td className="px-4 py-3 align-top">{formatTriggeredDate(log.triggered_at)}</td>
                     <td className="px-4 py-3 align-top">
                       <a href={log.jira_ticket_url} target="_blank" rel="noreferrer" className="font-medium text-[color:var(--f92-navy)] hover:underline">
                         {log.jira_ticket_id}

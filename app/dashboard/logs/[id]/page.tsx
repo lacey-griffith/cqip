@@ -70,6 +70,22 @@ function getStatusVariant(status: string): StatusVariant {
   return (statusVariant as Record<string, StatusVariant>)[status] ?? 'default';
 }
 
+function formatShortDate(value: string | null | undefined): string {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
+}
+
+function formatDateTime(value: string | null | undefined): string {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  const datePart = date.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
+  const timePart = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  return `${datePart}, ${timePart}`;
+}
+
 export default function LogDetailPage({ params }: { params: { id: string } }) {
   const { id } = params;
   const [log, setLog] = useState<LogEntry | null>(null);
@@ -123,7 +139,7 @@ export default function LogDetailPage({ params }: { params: { id: string } }) {
       ['Client brand', log.client_brand ?? '—'],
       ['Trigger from', log.trigger_from_status],
       ['Trigger to', log.trigger_to_status],
-      ['Triggered at', log.triggered_at ? new Date(log.triggered_at).toLocaleString() : '—'],
+      ['Triggered at', formatShortDate(log.triggered_at)],
       ['Status', log.log_status],
       ['Severity', log.severity ?? '—'],
       ['Log number', String(log.log_number)],
@@ -143,10 +159,10 @@ export default function LogDetailPage({ params }: { params: { id: string } }) {
       ['Root cause description', log.root_cause_description ?? '—'],
       ['Resolution notes', log.resolution_notes ?? '—'],
       ['Affected URL', log.affected_url ?? '—'],
-      ['Jira created at', log.jira_created_at ? new Date(log.jira_created_at).toLocaleString() : '—'],
-      ['Resolved at', log.resolved_at ? new Date(log.resolved_at).toLocaleString() : '—'],
+      ['Jira created at', formatDateTime(log.jira_created_at)],
+      ['Resolved at', formatDateTime(log.resolved_at)],
       ['Created by', log.created_by],
-      ['Updated at', log.updated_at ? new Date(log.updated_at).toLocaleString() : '—'],
+      ['Updated at', formatDateTime(log.updated_at)],
       ['Notes', log.notes ?? '—'],
     ];
   }, [log]);
@@ -248,7 +264,7 @@ export default function LogDetailPage({ params }: { params: { id: string } }) {
                 {history.map(entry => (
                   <tr key={entry.id} className="border-t border-[color:var(--f92-border)]">
                     <td className="px-3 py-3">{entry.log_number}</td>
-                    <td className="px-3 py-3">{new Date(entry.triggered_at).toLocaleDateString()}</td>
+                    <td className="px-3 py-3">{formatShortDate(entry.triggered_at)}</td>
                     <td className="px-3 py-3">
                       <Badge variant={getStatusVariant(entry.log_status)}>{entry.log_status}</Badge>
                     </td>

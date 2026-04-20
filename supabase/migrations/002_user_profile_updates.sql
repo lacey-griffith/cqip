@@ -1,0 +1,2 @@
+ALTER TABLE user_profiles
+  ADD COLUMN IF NOT EXISTS color_preference TEXT NOT NULL DEFAULT '#F47920';

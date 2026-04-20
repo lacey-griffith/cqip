@@ -1,12 +1,18 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { UserAvatar } from '@/components/layout/user-avatar';
+import { supabase } from '@/lib/supabase/client';
 
 interface NavProps {
   email?: string | null;
+  displayName?: string | null;
+  colorPreference?: string | null;
   role?: 'admin' | 'read_only' | null;
+  isLocalAccount?: boolean;
 }
 
 const navLinks = [
@@ -15,7 +21,17 @@ const navLinks = [
   { href: '/dashboard/reports', label: 'Reports' },
 ];
 
-export function Nav({ email, role }: NavProps) {
+export function Nav({ email, displayName, colorPreference, role, isLocalAccount }: NavProps) {
+  const router = useRouter();
+
+  async function handleSignOut() {
+    await supabase.auth.signOut();
+    router.replace('/login');
+  }
+
+  const primaryLabel = displayName || (isLocalAccount ? 'User' : email) || 'Unknown user';
+  const secondaryLabel = !isLocalAccount && email && displayName && email !== displayName ? email : null;
+
   return (
     <aside className="flex min-h-screen w-72 flex-col border-r border-[color:var(--f92-border)] bg-white px-6 py-8">
       <div className="mb-10">
@@ -36,6 +52,12 @@ export function Nav({ email, role }: NavProps) {
               {link.label}
             </Link>
           ))}
+          <Link
+            href="/dashboard/settings/profile"
+            className="block rounded-2xl px-4 py-3 text-sm font-medium text-[color:var(--f92-dark)] transition hover:bg-[color:var(--f92-warm)]"
+          >
+            Profile
+          </Link>
           {role === 'admin' ? (
             <Link
               href="/dashboard/settings"
@@ -48,13 +70,20 @@ export function Nav({ email, role }: NavProps) {
       </div>
 
       <div className="mt-auto rounded-3xl bg-[color:var(--f92-warm)] p-4 text-sm">
-        <p className="font-semibold text-[color:var(--f92-dark)]">Signed in as</p>
-        <p className="truncate text-[color:var(--f92-dark)]">{email ?? 'Unknown user'}</p>
+        <div className="flex items-center gap-3">
+          <UserAvatar displayName={displayName} color={colorPreference} size="md" />
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-semibold text-[color:var(--f92-dark)]">{primaryLabel}</p>
+            {secondaryLabel ? (
+              <p className="truncate text-xs text-[color:var(--f92-gray)]">{secondaryLabel}</p>
+            ) : null}
+          </div>
+        </div>
         <div className="mt-3 flex items-center justify-between gap-2">
           <Badge variant={role === 'admin' ? 'open' : 'default'}>
             {role === 'admin' ? 'Admin' : 'Read Only'}
           </Badge>
-          <Button variant="ghost" size="sm">
+          <Button variant="ghost" size="sm" onClick={handleSignOut}>
             Sign out
           </Button>
         </div>

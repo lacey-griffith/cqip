@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, PieChart, Pie, Cell, Sector, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Card } from '@/components/ui/card';
 import { ActiveAlertsPanel } from '@/components/dashboard/active-alerts-panel';
 
@@ -145,12 +145,17 @@ export default function DashboardPage() {
             severityCount[severity] = (severityCount[severity] || 0) + 1;
           });
 
+          const severityOrder = ['Low', 'Medium', 'High', 'Critical'];
+          const severityRows = severityOrder
+            .filter(s => severityCount[s] !== undefined)
+            .map(s => ({ severity: s, count: severityCount[s] }));
+          const unknownExtras = Object.entries(severityCount)
+            .filter(([s]) => !severityOrder.includes(s))
+            .map(([severity, count]) => ({ severity, count }));
+
           setCharts(prev => ({
             ...prev,
-            severityDistribution: Object.entries(severityCount).map(([severity, count]) => ({
-              severity,
-              count,
-            })),
+            severityDistribution: [...severityRows, ...unknownExtras],
           }));
 
           // Root cause frequency
@@ -188,6 +193,30 @@ export default function DashboardPage() {
     Medium: '#EAB308',
     Low: '#9CA3AF',
     Unknown: '#6B7280',
+  };
+
+  const renderActiveCategory = (props: any) => {
+    const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill, midAngle } = props;
+    const RAD = Math.PI / 180;
+    const offset = 10;
+    const dx = Math.cos(-RAD * midAngle) * offset;
+    const dy = Math.sin(-RAD * midAngle) * offset;
+    return (
+      <g
+        style={{ transition: 'transform 200ms ease-out' }}
+        transform={`translate(${dx}, ${dy})`}
+      >
+        <Sector
+          cx={cx}
+          cy={cy}
+          innerRadius={innerRadius}
+          outerRadius={outerRadius + 6}
+          startAngle={startAngle}
+          endAngle={endAngle}
+          fill={fill}
+        />
+      </g>
+    );
   };
 
   const categoryColors = [
@@ -299,19 +328,26 @@ export default function DashboardPage() {
         <Card className="border-[color:var(--f92-border)] bg-white p-6 shadow-sm">
           <h3 className="text-sm font-semibold text-[color:var(--f92-navy)]">Issue Category Breakdown</h3>
           {charts.issueCategory.length > 0 ? (
-            <ResponsiveContainer width="100%" height={240} className="mt-4">
+            <ResponsiveContainer width="100%" height={240} className="mt-4 donut-chart">
               <PieChart>
                 <Pie
                   data={charts.issueCategory}
                   cx="50%"
                   cy="50%"
                   labelLine={false}
+                  innerRadius={50}
                   outerRadius={80}
-                  fill="#8884d8"
+                  paddingAngle={2}
                   dataKey="value"
+                  activeShape={renderActiveCategory}
+                  isAnimationActive={false}
                 >
                   {charts.issueCategory.map((_, index) => (
-                    <Cell key={`cell-${index}`} fill={categoryColors[index % categoryColors.length]} />
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={categoryColors[index % categoryColors.length]}
+                      stroke="none"
+                    />
                   ))}
                 </Pie>
                 <Tooltip />

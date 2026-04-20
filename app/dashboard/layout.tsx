@@ -7,6 +7,8 @@ import { Nav } from '@/components/layout/nav';
 
 interface UserProfile {
   email: string;
+  display_name: string;
+  color_preference: string | null;
   role: 'admin' | 'read_only';
 }
 
@@ -28,7 +30,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       const { data, error } = await supabase
         .from('user_profiles')
-        .select('email, role')
+        .select('email, display_name, color_preference, role')
         .eq('id', session.user.id)
         .single();
 
@@ -46,9 +48,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return <div className="min-h-screen flex items-center justify-center text-[color:var(--f92-dark)]">Loading dashboard...</div>;
   }
 
+  const isLocalAccount = profile?.email?.endsWith('@cqip.local') ?? false;
+
   return (
     <div className="min-h-screen flex bg-[color:var(--f92-warm)]">
-      <Nav email={profile?.email ?? null} role={profile?.role ?? 'read_only'} />
+      <Nav
+        email={profile?.email ?? null}
+        displayName={profile?.display_name ?? null}
+        colorPreference={profile?.color_preference ?? null}
+        role={profile?.role ?? 'read_only'}
+        isLocalAccount={isLocalAccount}
+      />
       <main className="flex-1 p-6">{children}</main>
     </div>
   );
