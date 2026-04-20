@@ -12,5 +12,5 @@ export const JIRA_FIELD_MAP = {
   root_cause:                 'customfield_12905',
   root_cause_description:     'customfield_12909',
   severity:                   'customfield_12906',
-  nbly_brand:                 'PENDING',
+  nbly_brand:                 'customfield_12220',
 } as const;

@@ -4,7 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { Moon, Sun } from 'lucide-react';
+import { Menu, Moon, Sun, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { UserAvatar, type AvatarPattern } from '@/components/layout/user-avatar';
 import { useTheme } from '@/components/layout/theme-provider';
@@ -48,6 +48,21 @@ export function Nav() {
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
   const [profile, setProfile] = useState<NavProfile | null>(null);
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Close the mobile drawer whenever the route changes.
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
+
+  // Lock body scroll while the drawer is open.
+  useEffect(() => {
+    if (mobileOpen) {
+      const previous = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => { document.body.style.overflow = previous; };
+    }
+  }, [mobileOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -135,90 +150,143 @@ export function Nav() {
   const primaryLabel = capitalizeName(profile?.display_name) || 'User';
   const role = profile?.role ?? 'read_only';
   const isDark = theme === 'dark';
+  const activeHref = findActiveHref(pathname || '', links.map(l => l.href));
 
   return (
-    <aside className="flex min-h-screen w-72 flex-col border-r border-[color:var(--f92-border)] bg-[color:var(--f92-sidebar)] px-6 py-8">
-      <div className="mb-6 inline-flex items-center gap-3 rounded-2xl bg-[color:var(--f92-tint)] px-4 py-3">
-        <Image src="/cqip-logo.svg" alt="CQIP logo" width={40} height={40} priority />
-        <div>
-          <p className="text-sm font-semibold text-[color:var(--f92-dark)]">Fusion92 CQIP</p>
-          <p className="text-xs text-[color:var(--f92-gray)]">CRO Quality Intelligence</p>
-        </div>
-      </div>
-
-      <div className="mb-6 px-1 text-sm">
-        <div className="flex items-center gap-3">
-          <UserAvatar
-            displayName={capitalizeName(profile?.display_name)}
-            color={profile?.color_preference}
-            pattern={profile?.pattern_preference}
-            size="md"
-          />
-          <div className="min-w-0 flex-1">
-            <p className="truncate font-semibold text-[color:var(--f92-dark)]">{primaryLabel}</p>
-            <Badge
-              variant={role === 'admin' ? 'open' : 'default'}
-              className="mt-1 text-[10px] uppercase tracking-widest"
-            >
-              {role === 'admin' ? 'Admin' : 'Viewer'}
-            </Badge>
-          </div>
-          <div
-            role="group"
-            aria-label="Theme"
-            className="flex items-center gap-0.5 rounded-full bg-[color:var(--f92-tint)] p-0.5"
-          >
-            <button
-              type="button"
-              onClick={() => { if (isDark) handleToggleTheme(); }}
-              aria-pressed={!isDark}
-              aria-label="Light theme"
-              className={cn(
-                'flex h-6 w-6 items-center justify-center rounded-full transition',
-                !isDark
-                  ? 'bg-[color:var(--f92-orange)] text-white'
-                  : 'text-[color:var(--f92-gray)] hover:text-[color:var(--f92-dark)]',
-              )}
-            >
-              <Sun className="h-3 w-3" />
-            </button>
-            <button
-              type="button"
-              onClick={() => { if (!isDark) handleToggleTheme(); }}
-              aria-pressed={isDark}
-              aria-label="Dark theme"
-              className={cn(
-                'flex h-6 w-6 items-center justify-center rounded-full transition',
-                isDark
-                  ? 'bg-[color:var(--f92-orange)] text-white'
-                  : 'text-[color:var(--f92-gray)] hover:text-[color:var(--f92-dark)]',
-              )}
-            >
-              <Moon className="h-3 w-3" />
-            </button>
-          </div>
-        </div>
-
+    <>
+      {/* Mobile top bar */}
+      <header className="flex items-center justify-between border-b border-[color:var(--f92-border)] bg-[color:var(--f92-sidebar)] px-4 py-3 md:hidden">
         <button
           type="button"
-          onClick={handleSignOut}
-          className="mt-3 text-xs text-[color:var(--f92-gray)] transition hover:text-[color:var(--f92-orange)]"
+          onClick={() => setMobileOpen(true)}
+          aria-label="Open navigation menu"
+          aria-expanded={mobileOpen}
+          aria-controls="cqip-mobile-nav"
+          className="flex h-10 w-10 items-center justify-center rounded-xl text-[color:var(--f92-dark)] hover:bg-[color:var(--f92-tint)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)]"
         >
-          Sign out
+          <Menu className="h-5 w-5" aria-hidden="true" />
         </button>
-      </div>
+        <div className="flex items-center gap-2">
+          <Image src="/cqip-logo.svg" alt="CQIP logo" width={28} height={28} priority />
+          <span className="text-sm font-semibold text-[color:var(--f92-dark)]">CQIP</span>
+        </div>
+        <UserAvatar
+          displayName={capitalizeName(profile?.display_name)}
+          color={profile?.color_preference}
+          pattern={profile?.pattern_preference}
+          size="sm"
+        />
+      </header>
 
-      <div className="space-y-1">
-        {(() => {
-          const activeHref = findActiveHref(pathname || '', links.map(l => l.href));
-          return links.map(link => {
+      {/* Mobile overlay */}
+      {mobileOpen ? (
+        <button
+          type="button"
+          onClick={() => setMobileOpen(false)}
+          aria-label="Close navigation menu"
+          className="fixed inset-0 z-40 bg-black/50 md:hidden"
+        />
+      ) : null}
+
+      {/* Sidebar — always rendered, fixed on mobile, in-flow on md+ */}
+      <aside
+        id="cqip-mobile-nav"
+        className={cn(
+          'fixed inset-y-0 left-0 z-50 flex w-72 flex-col border-r border-[color:var(--f92-border)] bg-[color:var(--f92-sidebar)] px-6 py-8 transition-transform md:static md:translate-x-0',
+          mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
+        )}
+        aria-label="Primary"
+      >
+        <div className="mb-6 flex items-center justify-between">
+          <div className="inline-flex items-center gap-3 rounded-2xl bg-[color:var(--f92-tint)] px-4 py-3">
+            <Image src="/cqip-logo.svg" alt="CQIP logo" width={40} height={40} priority />
+            <div>
+              <p className="text-sm font-semibold text-[color:var(--f92-dark)]">Fusion92 CQIP</p>
+              <p className="text-xs text-[color:var(--f92-gray)]">CRO Quality Intelligence</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setMobileOpen(false)}
+            aria-label="Close navigation menu"
+            className="ml-2 flex h-10 w-10 items-center justify-center rounded-xl text-[color:var(--f92-dark)] hover:bg-[color:var(--f92-tint)] md:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)]"
+          >
+            <X className="h-5 w-5" aria-hidden="true" />
+          </button>
+        </div>
+
+        <div className="mb-6 px-1 text-sm">
+          <div className="flex items-center gap-3">
+            <UserAvatar
+              displayName={capitalizeName(profile?.display_name)}
+              color={profile?.color_preference}
+              pattern={profile?.pattern_preference}
+              size="md"
+            />
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-semibold text-[color:var(--f92-dark)]">{primaryLabel}</p>
+              <Badge
+                variant={role === 'admin' ? 'open' : 'default'}
+                className="mt-1 text-[10px] uppercase tracking-widest"
+              >
+                {role === 'admin' ? 'Admin' : 'Viewer'}
+              </Badge>
+            </div>
+            <div
+              role="group"
+              aria-label="Theme"
+              className="flex items-center gap-0.5 rounded-full bg-[color:var(--f92-tint)] p-0.5"
+            >
+              <button
+                type="button"
+                onClick={() => { if (isDark) handleToggleTheme(); }}
+                aria-pressed={!isDark}
+                aria-label="Light theme"
+                className={cn(
+                  'flex h-7 w-7 items-center justify-center rounded-full transition',
+                  !isDark
+                    ? 'bg-[color:var(--f92-orange)] text-white'
+                    : 'text-[color:var(--f92-gray)] hover:text-[color:var(--f92-dark)]',
+                )}
+              >
+                <Sun className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                onClick={() => { if (!isDark) handleToggleTheme(); }}
+                aria-pressed={isDark}
+                aria-label="Dark theme"
+                className={cn(
+                  'flex h-7 w-7 items-center justify-center rounded-full transition',
+                  isDark
+                    ? 'bg-[color:var(--f92-orange)] text-white'
+                    : 'text-[color:var(--f92-gray)] hover:text-[color:var(--f92-dark)]',
+                )}
+              >
+                <Moon className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleSignOut}
+            className="mt-3 text-xs text-[color:var(--f92-gray)] transition hover:text-[color:var(--f92-orange)] focus-visible:outline-none focus-visible:underline"
+          >
+            Sign out
+          </button>
+        </div>
+
+        <nav aria-label="Sections" className="space-y-1">
+          {links.map(link => {
             const active = link.href === activeHref;
             return (
               <Link
                 key={link.href}
                 href={link.href}
+                aria-current={active ? 'page' : undefined}
                 className={cn(
-                  'block rounded-2xl py-3 pr-4 text-sm font-medium transition',
+                  'block rounded-2xl py-3 pr-4 text-sm font-medium transition min-h-[44px]',
                   active
                     ? 'border-l-4 border-[color:var(--f92-active-border)] bg-[color:var(--f92-tint)] pl-3 text-[color:var(--f92-navy)]'
                     : 'pl-4 text-[color:var(--f92-dark)] hover:bg-[color:var(--f92-tint)]',
@@ -227,9 +295,9 @@ export function Nav() {
                 {link.label}
               </Link>
             );
-          });
-        })()}
-      </div>
-    </aside>
+          })}
+        </nav>
+      </aside>
+    </>
   );
 }

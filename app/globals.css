@@ -84,6 +84,28 @@ body {
   font-family: var(--font-sans), system-ui, sans-serif;
   background: var(--f92-bg);
   color: var(--f92-dark);
+  transition: background-color 300ms ease, color 300ms ease;
+}
+
+/* Cross-fade theme color changes on chrome elements without animating
+   layout-affecting transitions on every component. */
+body, body * {
+  transition-property: background-color, color, border-color, fill, stroke;
+  transition-duration: 300ms;
+  transition-timing-function: ease;
+}
+
+/* Don't theme-animate transient hover/focus visuals — let those snap. */
+button, a, [role="button"] {
+  transition-property: background-color, color, border-color, transform, opacity;
+}
+
+/* Visible focus ring for keyboard users on any focusable element that
+   doesn't already declare its own focus-visible style. */
+:focus-visible {
+  outline: 2px solid var(--f92-orange);
+  outline-offset: 2px;
+  border-radius: 6px;
 }
 
 :root[data-theme="dark"] body {

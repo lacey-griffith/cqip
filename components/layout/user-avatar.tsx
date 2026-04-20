@@ -19,14 +19,25 @@ export const AVATAR_PALETTE = [
 
 export const DEFAULT_AVATAR_COLOR = AVATAR_PALETTE[0];
 
-export const AVATAR_PATTERNS = ['none', 'flowers', 'polka_dots', 'stripes'] as const;
+export const AVATAR_PATTERNS = [
+  'none',
+  'polka_dots',
+  'stripes',
+  'squiggles',
+  'checkered',
+  'spirals',
+  'cheetah',
+] as const;
 export type AvatarPattern = (typeof AVATAR_PATTERNS)[number];
 
 export const AVATAR_PATTERN_LABELS: Record<AvatarPattern, string> = {
   none: 'None',
-  flowers: 'Flowers',
   polka_dots: 'Polka Dots',
   stripes: 'Diagonal Stripes',
+  squiggles: 'Squiggles',
+  checkered: 'Checkered',
+  spirals: 'Spirals',
+  cheetah: 'Cheetah',
 };
 
 export const DEFAULT_AVATAR_PATTERN: AvatarPattern = 'none';
@@ -76,16 +87,55 @@ function PatternDef({ id, pattern }: { id: string; pattern: AvatarPattern }) {
       </pattern>
     );
   }
-  if (pattern === 'flowers') {
+  if (pattern === 'squiggles') {
     return (
-      <pattern id={id} x="0" y="0" width="22" height="22" patternUnits="userSpaceOnUse">
-        <g fill="rgba(255,255,255,0.38)">
-          <circle cx="11" cy="4" r="2.2" />
-          <circle cx="11" cy="18" r="2.2" />
-          <circle cx="4" cy="11" r="2.2" />
-          <circle cx="18" cy="11" r="2.2" />
+      <pattern id={id} x="0" y="0" width="20" height="14" patternUnits="userSpaceOnUse">
+        <path
+          d="M0 7 Q 5 0, 10 7 T 20 7"
+          fill="none"
+          stroke="rgba(255,255,255,0.45)"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+        />
+      </pattern>
+    );
+  }
+  if (pattern === 'checkered') {
+    return (
+      <pattern id={id} x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
+        <rect x="0" y="0" width="7" height="7" fill="rgba(255,255,255,0.32)" />
+        <rect x="7" y="7" width="7" height="7" fill="rgba(255,255,255,0.32)" />
+      </pattern>
+    );
+  }
+  if (pattern === 'spirals') {
+    return (
+      <pattern id={id} x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse">
+        <path
+          d="M12 12 m-6 0 a6 6 0 1 1 12 0 a6 6 0 1 1 -10 0 a4 4 0 1 1 8 0 a4 4 0 1 1 -6 0"
+          fill="none"
+          stroke="rgba(255,255,255,0.42)"
+          strokeWidth="1.4"
+          strokeLinecap="round"
+        />
+      </pattern>
+    );
+  }
+  if (pattern === 'cheetah') {
+    return (
+      <pattern id={id} x="0" y="0" width="28" height="28" patternUnits="userSpaceOnUse">
+        <g fill="rgba(0,0,0,0.32)">
+          <ellipse cx="6" cy="6" rx="2.6" ry="2" />
+          <ellipse cx="20" cy="10" rx="2.4" ry="1.8" />
+          <ellipse cx="11" cy="18" rx="2.6" ry="2" />
+          <ellipse cx="24" cy="22" rx="2.2" ry="1.6" />
         </g>
-        <circle cx="11" cy="11" r="1.6" fill="rgba(255,255,255,0.7)" />
+        <g fill="rgba(255,255,255,0.16)">
+          <circle cx="6" cy="6" r="0.9" />
+          <circle cx="20" cy="10" r="0.9" />
+          <circle cx="11" cy="18" r="0.9" />
+          <circle cx="24" cy="22" r="0.9" />
+        </g>
       </pattern>
     );
   }

@@ -139,6 +139,8 @@ export function ActiveAlertsPanel() {
     return (
       <div
         key="empty"
+        role="status"
+        aria-live="polite"
         className="flex items-center gap-3 rounded-2xl border border-[color:var(--f92-border)] bg-white px-5 py-3 shadow-sm cqip-fade-in"
       >
         <span className="flex h-6 w-6 items-center justify-center rounded-full bg-green-100 text-green-700">
@@ -157,7 +159,13 @@ export function ActiveAlertsPanel() {
   }
 
   return (
-    <Card key="populated" className="border-[color:var(--f92-border)] bg-white p-6 shadow-sm cqip-fade-in">
+    <Card
+      key="populated"
+      role="region"
+      aria-label="Active alerts"
+      aria-live="polite"
+      className="border-[color:var(--f92-border)] bg-white p-6 shadow-sm cqip-fade-in"
+    >
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold text-[color:var(--f92-navy)]">Active Alerts</h3>
         <Link

@@ -5,6 +5,7 @@ import { BarChart, Bar, PieChart, Pie, Cell, Sector, XAxis, YAxis, CartesianGrid
 import { Card } from '@/components/ui/card';
 import { ActiveAlertsPanel } from '@/components/dashboard/active-alerts-panel';
 import { CollapsibleCard } from '@/components/dashboard/collapsible-card';
+import { useTheme } from '@/components/layout/theme-provider';
 import { supabase } from '@/lib/supabase/client';
 
 interface KPIData {
@@ -40,6 +41,28 @@ export default function DashboardPage() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
+
+  const gridStroke = isDark ? '#2D3148' : '#E8D5C4';
+  const axisColor = isDark ? '#94A3B8' : '#6B7280';
+  const cursorFill = isDark ? 'rgba(42,47,69,0.6)' : '#FEF6EE';
+  const tooltipContentStyle = {
+    background: isDark ? '#1E2235' : '#FFFFFF',
+    border: `1px solid ${isDark ? '#2D3148' : '#E8D5C4'}`,
+    borderRadius: 12,
+    color: isDark ? '#E2E8F0' : '#1A1A2E',
+    padding: '8px 12px',
+  } as const;
+  const tooltipLabelStyle = {
+    color: isDark ? '#E2E8F0' : '#1A1A2E',
+    fontWeight: 600,
+  } as const;
+  const tooltipItemStyle = {
+    color: isDark ? '#CBD5E1' : '#1A1A2E',
+  } as const;
+
+  const [pieHover, setPieHover] = useState<{ name: string; value: number } | null>(null);
 
   useEffect(() => {
     async function fetchDashboardData() {
@@ -307,48 +330,73 @@ export default function DashboardPage() {
           {charts.volumeByWeek.length > 0 ? (
             <ResponsiveContainer width="100%" height={240}>
               <BarChart data={charts.volumeByWeek}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#E8D5C4" />
-                <XAxis dataKey="week" fontSize={12} />
-                <YAxis fontSize={12} />
-                <Tooltip cursor={{ fill: '#FEF6EE' }} />
+                <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                <XAxis dataKey="week" fontSize={12} stroke={axisColor} tick={{ fill: axisColor }} />
+                <YAxis fontSize={12} stroke={axisColor} tick={{ fill: axisColor }} />
+                <Tooltip
+                  cursor={{ fill: cursorFill }}
+                  contentStyle={tooltipContentStyle}
+                  labelStyle={tooltipLabelStyle}
+                  itemStyle={tooltipItemStyle}
+                />
                 <Bar dataKey="count" fill="#F47920" radius={[8, 8, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : (
-            <p className="text-sm text-gray-500">No data available</p>
+            <p className="text-sm text-[color:var(--f92-gray)]">No data available</p>
           )}
         </CollapsibleCard>
 
         {/* Issue Category Breakdown */}
         <CollapsibleCard title="Issue Category Breakdown">
           {charts.issueCategory.length > 0 ? (
-            <ResponsiveContainer width="100%" height={240} className="donut-chart">
-              <PieChart>
-                <Pie
-                  data={charts.issueCategory}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  innerRadius={50}
-                  outerRadius={80}
-                  paddingAngle={2}
-                  dataKey="value"
-                  activeShape={renderActiveCategory}
-                  isAnimationActive={false}
+            <div className="relative">
+              {pieHover ? (
+                <div
+                  className="absolute right-2 top-2 z-10 rounded-xl border border-[color:var(--f92-border)] bg-[color:var(--f92-surface)] px-3 py-2 text-xs shadow-md"
+                  role="status"
+                  aria-live="polite"
                 >
-                  {charts.issueCategory.map((_, index) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={categoryColors[index % categoryColors.length]}
-                      stroke="none"
-                    />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
+                  <p className="font-semibold text-[color:var(--f92-navy)]">{pieHover.name}</p>
+                  <p className="mt-0.5 text-[color:var(--f92-dark)]">
+                    {pieHover.value}{' '}
+                    <span className="text-[color:var(--f92-gray)]">
+                      ({((pieHover.value / charts.issueCategory.reduce((s, c) => s + c.value, 0)) * 100).toFixed(1)}%)
+                    </span>
+                  </p>
+                </div>
+              ) : null}
+              <ResponsiveContainer width="100%" height={240} className="donut-chart">
+                <PieChart>
+                  <Pie
+                    data={charts.issueCategory}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    innerRadius={50}
+                    outerRadius={80}
+                    paddingAngle={2}
+                    dataKey="value"
+                    activeShape={renderActiveCategory}
+                    isAnimationActive={false}
+                    onMouseEnter={(slice: { name?: string; value?: number }) =>
+                      setPieHover({ name: slice.name ?? '', value: slice.value ?? 0 })
+                    }
+                    onMouseLeave={() => setPieHover(null)}
+                  >
+                    {charts.issueCategory.map((_, index) => (
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={categoryColors[index % categoryColors.length]}
+                        stroke="none"
+                      />
+                    ))}
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
           ) : (
-            <p className="text-sm text-gray-500">No data available</p>
+            <p className="text-sm text-[color:var(--f92-gray)]">No data available</p>
           )}
         </CollapsibleCard>
 
@@ -357,15 +405,16 @@ export default function DashboardPage() {
           {charts.severityDistribution.length > 0 ? (
             <ResponsiveContainer width="100%" height={240}>
               <BarChart data={charts.severityDistribution}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#E8D5C4" />
-                <XAxis dataKey="severity" fontSize={12} />
-                <YAxis fontSize={12} />
-                <Tooltip cursor={{ fill: '#FEF6EE' }} />
-                <Bar
-                  dataKey="count"
-                  fill="#1E2D6B"
-                  radius={[8, 8, 0, 0]}
-                >
+                <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                <XAxis dataKey="severity" fontSize={12} stroke={axisColor} tick={{ fill: axisColor }} />
+                <YAxis fontSize={12} stroke={axisColor} tick={{ fill: axisColor }} />
+                <Tooltip
+                  cursor={{ fill: cursorFill }}
+                  contentStyle={tooltipContentStyle}
+                  labelStyle={tooltipLabelStyle}
+                  itemStyle={tooltipItemStyle}
+                />
+                <Bar dataKey="count" fill="#1E2D6B" radius={[8, 8, 0, 0]}>
                   {charts.severityDistribution.map((item, index) => (
                     <Cell
                       key={`cell-${index}`}
@@ -376,7 +425,7 @@ export default function DashboardPage() {
               </BarChart>
             </ResponsiveContainer>
           ) : (
-            <p className="text-sm text-gray-500">No data available</p>
+            <p className="text-sm text-[color:var(--f92-gray)]">No data available</p>
           )}
         </CollapsibleCard>
 
@@ -389,15 +438,20 @@ export default function DashboardPage() {
                 layout="vertical"
                 margin={{ top: 5, right: 30, left: 200, bottom: 5 }}
               >
-                <CartesianGrid strokeDasharray="3 3" stroke="#E8D5C4" />
-                <XAxis type="number" fontSize={12} />
-                <YAxis dataKey="cause" type="category" fontSize={11} width={195} />
-                <Tooltip cursor={{ fill: '#FEF6EE' }} />
+                <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                <XAxis type="number" fontSize={12} stroke={axisColor} tick={{ fill: axisColor }} />
+                <YAxis dataKey="cause" type="category" fontSize={11} width={195} stroke={axisColor} tick={{ fill: axisColor }} />
+                <Tooltip
+                  cursor={{ fill: cursorFill }}
+                  contentStyle={tooltipContentStyle}
+                  labelStyle={tooltipLabelStyle}
+                  itemStyle={tooltipItemStyle}
+                />
                 <Bar dataKey="count" fill="#F47920" radius={[0, 8, 8, 0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : (
-            <p className="text-sm text-gray-500">No data available</p>
+            <p className="text-sm text-[color:var(--f92-gray)]">No data available</p>
           )}
         </CollapsibleCard>
       </div>

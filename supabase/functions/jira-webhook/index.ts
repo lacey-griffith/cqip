@@ -1,18 +1,91 @@
-import { createClient } from '@supabase/supabase-js';
-import { getIssue } from '../../../lib/jira/client';
-import { JIRA_FIELD_MAP } from '../../../lib/jira/field-map';
+// Deno / Supabase Edge Function — Jira webhook receiver.
+// Self-contained: all shared code (Jira client, field map) inlined here so
+// the function has no dependencies outside its own directory.
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const webhookSecret = process.env.WEBHOOK_SECRET;
-const baseUrl = process.env.JIRA_BASE_URL;
+import { createClient } from 'npm:@supabase/supabase-js@2';
 
-if (!supabaseUrl || !serviceRoleKey || !webhookSecret || !baseUrl) {
-  throw new Error('Missing required environment variables for Jira webhook function');
+// -------------------------------------------------------------------------
+// Env
+// -------------------------------------------------------------------------
+const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? Deno.env.get('NEXT_PUBLIC_SUPABASE_URL');
+const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+const webhookSecret = Deno.env.get('WEBHOOK_SECRET');
+const jiraBaseUrl = Deno.env.get('JIRA_BASE_URL');
+const jiraEmail = Deno.env.get('JIRA_EMAIL');
+const jiraApiToken = Deno.env.get('JIRA_API_TOKEN');
+
+if (!supabaseUrl || !serviceRoleKey || !webhookSecret || !jiraBaseUrl || !jiraEmail || !jiraApiToken) {
+  throw new Error('Missing required environment variables for jira-webhook function');
 }
 
 const supabase = createClient(supabaseUrl, serviceRoleKey);
 
+// -------------------------------------------------------------------------
+// Inlined: lib/jira/field-map.ts
+// -------------------------------------------------------------------------
+const JIRA_FIELD_MAP = {
+  who_owns_fix:               'customfield_13120',
+  detected_by:                'customfield_12910',
+  documentation_updated:      'customfield_12914',
+  experiment_paused:          'customfield_12912',
+  issue_category:             'customfield_12871',
+  issue_subtype:              'customfield_12904',
+  preventable:                'customfield_12911',
+  process_improvement_needed: 'customfield_12913',
+  reproducibility:            'customfield_12907',
+  resolution_type:            'customfield_12908',
+  root_cause:                 'customfield_12905',
+  root_cause_description:     'customfield_12909',
+  severity:                   'customfield_12906',
+  nbly_brand:                 'customfield_12220',
+} as const;
+
+// The NBLY brand field can come back as a string, a single-select { value },
+// a cascading select { value, child: { value } }, or an array of those.
+// Resolve the string in any of those shapes; log when it's a surprise type.
+function extractBrand(raw: unknown, ticketId: string): string | null {
+  if (raw == null) return null;
+  if (typeof raw === 'string') return raw.trim() || null;
+  if (Array.isArray(raw)) {
+    const first = raw[0];
+    if (!first) return null;
+    return extractBrand(first, ticketId);
+  }
+  if (typeof raw === 'object') {
+    const obj = raw as Record<string, unknown>;
+    if (typeof obj.value === 'string') return (obj.value as string).trim() || null;
+    if (obj.child && typeof (obj.child as any).value === 'string') return ((obj.child as any).value as string).trim() || null;
+    if (typeof obj.name === 'string') return (obj.name as string).trim() || null;
+    console.warn(
+      `[jira-webhook] unexpected client_brand shape on ${ticketId}`,
+      JSON.stringify(obj).slice(0, 400),
+    );
+  }
+  return null;
+}
+
+// -------------------------------------------------------------------------
+// Inlined: lib/jira/client.ts (Deno-ported — btoa instead of Buffer)
+// -------------------------------------------------------------------------
+const jiraAuth = btoa(`${jiraEmail}:${jiraApiToken}`);
+const jiraHeaders: Record<string, string> = {
+  Authorization: `Basic ${jiraAuth}`,
+  'Content-Type': 'application/json',
+};
+
+async function getIssue(issueKey: string) {
+  const response = await fetch(`${jiraBaseUrl}/rest/api/3/issue/${issueKey}`, {
+    headers: jiraHeaders,
+  });
+  if (!response.ok) {
+    throw new Error(`Jira API request failed: ${response.status}`);
+  }
+  return response.json();
+}
+
+// -------------------------------------------------------------------------
+// Webhook payload + transition logic
+// -------------------------------------------------------------------------
 interface WebhookPayload {
   webhookEvent: string;
   issue: {
@@ -44,9 +117,17 @@ function timingSafeEqual(a: string, b: string): boolean {
 }
 
 function validateWebhookSecret(request: Request): boolean {
-  const secret = request.headers.get('X-Webhook-Secret');
-  if (!secret || !webhookSecret) return false;
-  return timingSafeEqual(secret, webhookSecret);
+  if (!webhookSecret) return false;
+  // Jira webhooks can't send custom headers, so accept the secret as a
+  // query parameter. The header path stays in place for other callers.
+  const url = new URL(request.url);
+  const querySecret = url.searchParams.get('secret');
+  if (querySecret && timingSafeEqual(querySecret, webhookSecret)) return true;
+
+  const headerSecret = request.headers.get('X-Webhook-Secret');
+  if (headerSecret && timingSafeEqual(headerSecret, webhookSecret)) return true;
+
+  return false;
 }
 
 function clientDescriptor(request: Request): string {
@@ -68,38 +149,30 @@ function isValidTransition(fromStatus: string, toStatus: string): boolean {
 function mapJiraFields(fields: any) {
   const mapped: any = {};
 
-  // who_owns_fix: cascading select
   const whoOwnsFix = fields[JIRA_FIELD_MAP.who_owns_fix];
   mapped.who_owns_fix = whoOwnsFix?.child?.value ?? whoOwnsFix?.value ?? null;
 
-  // detected_by: User Picker
   mapped.detected_by = fields[JIRA_FIELD_MAP.detected_by]?.displayName ?? null;
 
-  // Checkboxes
   mapped.documentation_updated = (fields[JIRA_FIELD_MAP.documentation_updated]?.length ?? 0) > 0;
   mapped.experiment_paused = (fields[JIRA_FIELD_MAP.experiment_paused]?.length ?? 0) > 0;
   mapped.preventable = (fields[JIRA_FIELD_MAP.preventable]?.length ?? 0) > 0;
   mapped.process_improvement_needed = (fields[JIRA_FIELD_MAP.process_improvement_needed]?.length ?? 0) > 0;
 
-  // Multi-select
   mapped.issue_category = fields[JIRA_FIELD_MAP.issue_category]?.map((item: any) => item.value) ?? [];
   mapped.issue_subtype = fields[JIRA_FIELD_MAP.issue_subtype]?.map((item: any) => item.value) ?? [];
   mapped.resolution_type = fields[JIRA_FIELD_MAP.resolution_type]?.map((item: any) => item.value) ?? [];
 
-  // Single select
   mapped.reproducibility = fields[JIRA_FIELD_MAP.reproducibility]?.value ?? null;
   mapped.severity = fields[JIRA_FIELD_MAP.severity]?.value ?? null;
 
-  // Text
   mapped.root_cause_description = fields[JIRA_FIELD_MAP.root_cause_description] ?? null;
 
-  // Root cause: multi-select
   const rootCause = fields[JIRA_FIELD_MAP.root_cause]?.map((item: any) => item.value) ?? [];
   mapped.root_cause_initial = rootCause;
   mapped.root_cause_final = rootCause;
 
-  // nbly_brand: pending
-  mapped.client_brand = fields[JIRA_FIELD_MAP.nbly_brand]?.value ?? null;
+  mapped.client_brand = extractBrand(fields[JIRA_FIELD_MAP.nbly_brand], fields.summary ?? 'unknown');
 
   return mapped;
 }
@@ -116,20 +189,23 @@ async function calculateLogNumber(ticketId: string): Promise<number> {
   return (data?.[0]?.log_number ?? 0) + 1;
 }
 
-export async function onRequest(context: { request: Request }) {
-  const { request } = context;
-
+// -------------------------------------------------------------------------
+// Request handler (Deno / Supabase Edge entrypoint)
+// -------------------------------------------------------------------------
+Deno.serve(async (request: Request) => {
   if (request.method !== 'POST') {
     return new Response('Method not allowed', { status: 405 });
   }
 
   if (!validateWebhookSecret(request)) {
+    const url = new URL(request.url);
     console.warn(
       '[jira-webhook] rejected unauthenticated request',
       JSON.stringify({
         at: new Date().toISOString(),
         client: clientDescriptor(request),
         headerPresent: Boolean(request.headers.get('X-Webhook-Secret')),
+        queryPresent: url.searchParams.has('secret'),
       }),
     );
     return new Response('Unauthorized', { status: 401 });
@@ -145,7 +221,6 @@ export async function onRequest(context: { request: Request }) {
     const issue = payload.issue;
     const projectKey = issue.fields.project.key;
 
-    // Check if project is active
     const { data: project } = await supabase
       .from('projects')
       .select('is_active')
@@ -156,8 +231,7 @@ export async function onRequest(context: { request: Request }) {
       return new Response('Project not active', { status: 200 });
     }
 
-    // Find status change
-    const statusChange = payload.changelog.items.find(item => item.field === 'status');
+    const statusChange = payload.changelog.items.find((item) => item.field === 'status');
     if (!statusChange) {
       return new Response('No status change', { status: 200 });
     }
@@ -166,23 +240,17 @@ export async function onRequest(context: { request: Request }) {
       return new Response('Invalid transition', { status: 200 });
     }
 
-    // Fetch full issue
     const fullIssue = await getIssue(issue.key);
-
-    // Map fields
     const mappedFields = mapJiraFields(fullIssue.fields);
 
-    // Determine test_type
     const hasDeploymentLabel = fullIssue.fields.labels?.includes('Deployment');
     const testType = hasDeploymentLabel ? 'Deployment' : 'A/B';
 
-    // Calculate log_number
     const logNumber = await calculateLogNumber(issue.key);
 
-    // Prepare log entry
     const logEntry = {
       jira_ticket_id: issue.key,
-      jira_ticket_url: `${baseUrl}/browse/${issue.key}`,
+      jira_ticket_url: `${jiraBaseUrl}/browse/${issue.key}`,
       jira_summary: issue.fields.summary,
       project_key: projectKey,
       client_brand: mappedFields.client_brand,
@@ -208,7 +276,6 @@ export async function onRequest(context: { request: Request }) {
       created_by: 'system',
     };
 
-    // Insert log
     const { data: insertedLog, error: insertError } = await supabase
       .from('quality_logs')
       .insert(logEntry)
@@ -219,7 +286,6 @@ export async function onRequest(context: { request: Request }) {
       throw insertError;
     }
 
-    // Insert audit log
     await supabase
       .from('audit_log')
       .insert({
@@ -234,4 +300,4 @@ export async function onRequest(context: { request: Request }) {
     console.error('Webhook error:', error);
     return new Response('Internal server error', { status: 500 });
   }
-}
+});
