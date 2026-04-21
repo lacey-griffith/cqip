@@ -115,6 +115,7 @@ export default function LogsPage() {
 
   const [editingLog, setEditingLog] = useState<EditableLog | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [auditCounts, setAuditCounts] = useState<Record<string, number>>({});
 
   useEffect(() => {
     async function loadData() {
@@ -136,6 +137,20 @@ export default function LogsPage() {
       setLogs((logsData ?? []) as LogEntry[]);
       setProfile(profileData);
       setLoading(false);
+
+      // Egg #10 — count audit_log rows per log so we can flag heavily-edited entries.
+      const ids = (logsData ?? []).map(l => l.id);
+      if (ids.length > 0) {
+        const { data: auditRows } = await supabase
+          .from('audit_log')
+          .select('log_entry_id')
+          .in('log_entry_id', ids);
+        const counts: Record<string, number> = {};
+        (auditRows ?? []).forEach((row: { log_entry_id: string }) => {
+          counts[row.log_entry_id] = (counts[row.log_entry_id] || 0) + 1;
+        });
+        setAuditCounts(counts);
+      }
     }
 
     loadData();
@@ -416,14 +431,26 @@ export default function LogsPage() {
                       </td>
                       <td className="px-4 py-3 align-top">{formatTriggeredDate(latest.triggered_at)}</td>
                       <td className="sticky left-0 px-4 py-3 align-top bg-[color:var(--f92-warm)]">
-                        <a
-                          href={latest.jira_ticket_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="font-medium text-[color:var(--f92-navy)] hover:underline"
-                        >
-                          {group.ticketId}
-                        </a>
+                        <div className="flex items-center gap-1">
+                          <a
+                            href={latest.jira_ticket_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="font-medium text-[color:var(--f92-navy)] hover:underline"
+                          >
+                            {group.ticketId}
+                          </a>
+                          {(auditCounts[latest.id] ?? 0) > 5 ? (
+                            <span
+                              role="img"
+                              aria-label="Heavily edited"
+                              title="This one's been through some things..."
+                              className="cursor-help text-sm"
+                            >
+                              👀
+                            </span>
+                          ) : null}
+                        </div>
                       </td>
                       <td className="px-4 py-3 align-top">{latest.client_brand ?? '—'}</td>
                       <td className="px-4 py-3 align-top">

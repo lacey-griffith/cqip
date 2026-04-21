@@ -1,11 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { BarChart, Bar, PieChart, Pie, Cell, Sector, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Card } from '@/components/ui/card';
 import { ActiveAlertsPanel } from '@/components/dashboard/active-alerts-panel';
 import { CollapsibleCard } from '@/components/dashboard/collapsible-card';
 import { useTheme } from '@/components/layout/theme-provider';
+import { useToast } from '@/components/layout/toaster';
+import { useLoadingMessage } from '@/lib/easter-eggs/use-loading-message';
 import { supabase } from '@/lib/supabase/client';
 
 interface KPIData {
@@ -21,6 +23,17 @@ interface ChartData {
   issueCategory: Array<{ name: string; value: number }>;
   severityDistribution: Array<{ severity: string; count: number }>;
   rootCauseFrequency: Array<{ cause: string; count: number }>;
+}
+
+function LoadingPanel() {
+  const message = useLoadingMessage();
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-center py-12">
+        <p className="text-[color:var(--f92-gray)]">{message}</p>
+      </div>
+    </div>
+  );
 }
 
 export default function DashboardPage() {
@@ -63,6 +76,17 @@ export default function DashboardPage() {
   } as const;
 
   const [pieHover, setPieHover] = useState<{ name: string; value: number } | null>(null);
+  const { toast } = useToast();
+  const [cleanStreakDays, setCleanStreakDays] = useState<number | null>(null);
+
+  // 1-in-5 chance per mount to drop a tiny celebratory glyph next to the
+  // "all clear" KPI when critical = 0. Kept stable across re-renders.
+  const sparkleEmoji = useMemo(() => {
+    if (Math.random() < 1 / 5) {
+      return Math.random() < 0.5 ? '🎊' : '⭐';
+    }
+    return null;
+  }, []);
 
   useEffect(() => {
     async function fetchDashboardData() {
@@ -204,6 +228,23 @@ export default function DashboardPage() {
     }
 
     fetchDashboardData();
+
+    // Egg #5 — clean streak: how many days since the most recent log?
+    (async () => {
+      const { data } = await supabase
+        .from('quality_logs')
+        .select('triggered_at')
+        .eq('is_deleted', false)
+        .order('triggered_at', { ascending: false })
+        .limit(1);
+      const latest = data?.[0]?.triggered_at;
+      if (!latest) {
+        setCleanStreakDays(null);
+        return;
+      }
+      const days = Math.floor((Date.now() - new Date(latest).getTime()) / (1000 * 60 * 60 * 24));
+      setCleanStreakDays(days);
+    })();
   }, []);
 
   const severityColors: { [key: string]: string } = {
@@ -250,13 +291,7 @@ export default function DashboardPage() {
   ];
 
   if (loading) {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-center py-12">
-          <p className="text-gray-500">Loading dashboard...</p>
-        </div>
-      </div>
-    );
+    return <LoadingPanel />;
   }
 
   if (error) {
@@ -273,11 +308,26 @@ export default function DashboardPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="rounded-3xl border border-[color:var(--f92-border)] bg-white p-8 shadow-sm">
-        <p className="text-sm uppercase tracking-[0.3em] text-[color:var(--f92-navy)]">Dashboard</p>
-        <h1 className="mt-3 text-3xl font-semibold text-[color:var(--f92-dark)]">Quality Intelligence Platform</h1>
-        <p className="mt-2 text-sm text-[color:var(--f92-gray)]">
-          Monitor rework events, analyze trends, and track quality metrics across your CRO projects.
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-sm uppercase tracking-[0.3em] text-[color:var(--f92-navy)]">Dashboard</p>
+            <h1 className="mt-3 text-3xl font-semibold text-[color:var(--f92-dark)]">Quality Intelligence Platform</h1>
+            <p className="mt-2 text-sm text-[color:var(--f92-gray)]">
+              Monitor rework events, analyze trends, and track quality metrics across your CRO projects.
+            </p>
+          </div>
+          {cleanStreakDays !== null && cleanStreakDays >= 7 ? (
+            <button
+              type="button"
+              onClick={() => toast('🚀 The team is crushing it!')}
+              className="cqip-streak-bounce inline-flex items-center gap-2 rounded-full border border-[color:var(--f92-border)] bg-[color:var(--f92-tint)] px-3 py-1.5 text-xs font-semibold text-[color:var(--f92-navy)] transition hover:bg-[color:var(--f92-warm)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)]"
+              aria-label={`${cleanStreakDays}-day clean streak`}
+            >
+              <span aria-hidden="true">🌟</span>
+              {cleanStreakDays}-day clean streak!
+            </button>
+          ) : null}
+        </div>
       </div>
 
       {/* KPI Cards */}
@@ -307,7 +357,13 @@ export default function DashboardPage() {
         <Card className="border-[color:var(--f92-border)] bg-white p-6 shadow-sm">
           <p className="text-xs font-medium uppercase text-[color:var(--f92-gray)]">Critical</p>
           <p className="mt-3 text-4xl font-bold text-red-600">{kpi.criticalIssuesOpen}</p>
-          <p className="mt-2 text-xs text-[color:var(--f92-gray)]">Open/In Progress</p>
+          <p className="mt-2 text-xs text-[color:var(--f92-gray)]">
+            {kpi.criticalIssuesOpen === 0 ? (
+              <>All systems normal{sparkleEmoji ? <span className="ml-1" aria-hidden="true">{sparkleEmoji}</span> : null}</>
+            ) : (
+              'Open/In Progress'
+            )}
+          </p>
         </Card>
 
         {/* Most Frequent Root Cause */}

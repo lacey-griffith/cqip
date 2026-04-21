@@ -166,6 +166,96 @@ textarea {
   color: #CBD5E1;
 }
 
+/* Classified-dossier styling for /dashboard/docs/array-of-sunshine */
+.cqip-dossier-bg {
+  background:
+    radial-gradient(ellipse at top, #1a1d2e 0%, #0a0c14 60%, #050608 100%);
+  color: #f8e9c8;
+}
+.cqip-dossier-card {
+  background: rgba(20, 18, 12, 0.85);
+  border-color: rgba(244, 121, 32, 0.4);
+  color: #f8e9c8;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+}
+.cqip-classified-stamp {
+  position: absolute;
+  top: 28px;
+  right: -36px;
+  transform: rotate(18deg);
+  border: 4px double #DC2626;
+  color: #DC2626;
+  padding: 6px 36px;
+  font-weight: 800;
+  letter-spacing: 0.3em;
+  font-size: 14px;
+  background: rgba(0, 0, 0, 0.15);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Easter-egg animations */
+@keyframes cqip-fusion-wave {
+  0%   { transform: translateX(-100%); opacity: 0; }
+  20%  { opacity: 0.6; }
+  100% { transform: translateX(100%); opacity: 0; }
+}
+.cqip-fusion-wave {
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    rgba(244, 121, 32, 0.0) 30%,
+    rgba(244, 121, 32, 0.45) 50%,
+    rgba(244, 121, 32, 0.0) 70%,
+    transparent 100%
+  );
+  animation: cqip-fusion-wave 1300ms ease-out forwards;
+}
+
+@keyframes cqip-logo-spin {
+  0%   { transform: rotate(0deg) scale(1); }
+  40%  { transform: rotate(180deg) scale(1.15); }
+  80%  { transform: rotate(360deg) scale(1.05); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+.cqip-logo-celebrate {
+  animation: cqip-logo-spin 900ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  filter: hue-rotate(0deg);
+}
+@keyframes cqip-logo-rainbow {
+  0%   { filter: hue-rotate(0deg); }
+  50%  { filter: hue-rotate(360deg); }
+  100% { filter: hue-rotate(0deg); }
+}
+.cqip-logo-rainbow {
+  animation: cqip-logo-rainbow 900ms ease-in-out both;
+}
+
+@keyframes cqip-twinkle {
+  0%   { opacity: 0; transform: scale(0.4); }
+  50%  { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.4); }
+}
+.cqip-twinkle {
+  animation: cqip-twinkle 1800ms ease-in-out forwards;
+}
+
+@keyframes cqip-streak-bounce {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-3px); }
+}
+.cqip-streak-bounce {
+  animation: cqip-streak-bounce 1800ms ease-in-out infinite;
+}
+
+@keyframes cqip-slot-spin {
+  0%   { transform: rotateX(0deg); }
+  100% { transform: rotateX(720deg); }
+}
+.cqip-slot-spin {
+  animation: cqip-slot-spin 600ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 /* Subtle fade-in for swapped panels (e.g. alerts empty vs populated state) */
 @keyframes cqip-fade-in {
   from { opacity: 0; transform: translateY(-4px); }

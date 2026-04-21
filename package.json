@@ -16,6 +16,8 @@
     "@radix-ui/react-switch": "^1.2.6",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.103.3",
+    "@types/canvas-confetti": "^1.9.0",
+    "canvas-confetti": "^1.9.4",
     "clsx": "^2.1.1",
     "csv-parse": "^6.2.1",
     "lucide-react": "^1.8.0",
