@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BarChart, Bar, PieChart, Pie, Cell, Sector, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Card } from '@/components/ui/card';
 import { ActiveAlertsPanel } from '@/components/dashboard/active-alerts-panel';
@@ -80,12 +80,13 @@ export default function DashboardPage() {
   const [cleanStreakDays, setCleanStreakDays] = useState<number | null>(null);
 
   // 1-in-5 chance per mount to drop a tiny celebratory glyph next to the
-  // "all clear" KPI when critical = 0. Kept stable across re-renders.
-  const sparkleEmoji = useMemo(() => {
+  // "all clear" KPI when critical = 0. Computed in an effect (client-only)
+  // so SSR and hydration agree on the initial null value.
+  const [sparkleEmoji, setSparkleEmoji] = useState<string | null>(null);
+  useEffect(() => {
     if (Math.random() < 1 / 5) {
-      return Math.random() < 0.5 ? '🎊' : '⭐';
+      setSparkleEmoji(Math.random() < 0.5 ? '🎊' : '⭐');
     }
-    return null;
   }, []);
 
   useEffect(() => {

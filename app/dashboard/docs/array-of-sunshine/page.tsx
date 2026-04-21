@@ -1,8 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import confetti from 'canvas-confetti';
-import { useKonamiCode } from '@/lib/easter-eggs/use-konami-code';
 
 interface EggEntry {
   name: string;
@@ -14,7 +13,7 @@ const EGGS: EggEntry[] = [
   {
     name: 'Konami code',
     trigger: '↑ ↑ ↓ ↓ ← → ← → B A',
-    description: 'Confetti, a toast, and the secret club door swings open.',
+    description: 'Confetti, a toast, and the secret club door swings open (on any dashboard page).',
   },
   {
     name: 'Logo unlock',
@@ -63,40 +62,77 @@ const EGGS: EggEntry[] = [
   },
 ];
 
+const UNLOCK_PASSWORD = 'open';
+
 export default function ArrayOfSunshinePage() {
   const [unlocked, setUnlocked] = useState(false);
+  const [password, setPassword] = useState('');
+  const [shake, setShake] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Honor a previous unlock from this session so refreshing doesn't re-lock.
-  useEffect(() => {
-    try {
-      if (sessionStorage.getItem('cqip-konami-found') === '1') setUnlocked(true);
-    } catch { /* ignore */ }
-  }, []);
-
-  useKonamiCode(() => {
-    setUnlocked(true);
-    try { sessionStorage.setItem('cqip-konami-found', '1'); } catch { /* ignore */ }
-    confetti({
-      particleCount: 220,
-      spread: 90,
-      origin: { y: 0.4 },
-      colors: ['#F47920', '#FFFFFF', '#FACC15'],
-    });
-  });
+  function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+    if (password.trim().toLowerCase() === UNLOCK_PASSWORD) {
+      setUnlocked(true);
+      setError(null);
+      confetti({
+        particleCount: 220,
+        spread: 90,
+        origin: { y: 0.4 },
+        colors: ['#F47920', '#FFFFFF', '#FACC15'],
+      });
+      return;
+    }
+    setError('Access denied. Try again.');
+    setShake(true);
+    setPassword('');
+    window.setTimeout(() => setShake(false), 520);
+  }
 
   if (!unlocked) {
     return (
-      <main className="flex min-h-[60vh] items-center justify-center px-6">
-        <div className="cqip-dossier-card max-w-md rounded-3xl border p-10 text-center font-mono">
+      <main className="cqip-dossier-bg flex min-h-[70vh] items-center justify-center px-6 py-10 font-mono">
+        <form
+          onSubmit={handleSubmit}
+          className={`cqip-dossier-card max-w-md rounded-3xl border p-10 text-center ${shake ? 'cqip-shake' : ''}`}
+        >
           <p className="text-xs uppercase tracking-[0.4em]">access denied</p>
           <h1 className="mt-3 text-2xl font-bold">🔐 Locked</h1>
           <p className="mt-3 text-sm opacity-80">
-            This dossier is sealed. Enter the code to proceed.
+            Enter the password to unseal this dossier.
           </p>
-          <p className="mt-6 text-xs opacity-60">
-            Hint: it&apos;s a classic. ↑↑↓↓...
-          </p>
-        </div>
+
+          <div className="mt-6 text-left">
+            <label htmlFor="cqip-dossier-password" className="text-[10px] uppercase tracking-[0.3em] opacity-70">
+              Password
+            </label>
+            <input
+              id="cqip-dossier-password"
+              type="password"
+              autoFocus
+              autoComplete="off"
+              spellCheck={false}
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              aria-invalid={Boolean(error)}
+              aria-describedby={error ? 'cqip-dossier-password-error' : undefined}
+              className="mt-2 w-full rounded-md border border-current/40 bg-black/30 px-3 py-2 font-mono text-sm tracking-widest text-current placeholder:text-current/40 focus:border-current/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-current/60"
+              placeholder="••••"
+            />
+            {error ? (
+              <p id="cqip-dossier-password-error" className="mt-2 text-xs uppercase tracking-widest text-red-400">
+                {error}
+              </p>
+            ) : null}
+          </div>
+
+          <button
+            type="submit"
+            className="mt-5 w-full rounded-md border border-current/50 bg-black/20 px-3 py-2 text-sm uppercase tracking-[0.3em] transition hover:bg-black/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current/60"
+          >
+            Unlock
+          </button>
+        </form>
       </main>
     );
   }

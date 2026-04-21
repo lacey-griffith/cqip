@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { ExternalLink } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
@@ -181,7 +182,22 @@ export default function LogDetailPage({ params }: { params: { id: string } }) {
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <p className="text-sm uppercase tracking-[0.3em] text-[color:var(--f92-navy)]">Log detail</p>
-          <h1 className="mt-2 text-3xl font-semibold text-[color:var(--f92-dark)]">{log.jira_ticket_id}</h1>
+          <h1 className="mt-2 text-3xl font-semibold">
+            {log.jira_ticket_url ? (
+              <a
+                href={log.jira_ticket_url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 text-[color:var(--f92-orange)] hover:underline"
+                aria-label={`${log.jira_ticket_id} — opens in Jira`}
+              >
+                {log.jira_ticket_id}
+                <ExternalLink className="h-5 w-5" aria-hidden="true" />
+              </a>
+            ) : (
+              <span className="text-[color:var(--f92-dark)]">{log.jira_ticket_id}</span>
+            )}
+          </h1>
           <p className="text-sm text-[color:var(--f92-gray)]">Rework history for this ticket and full audit trail.</p>
         </div>
         <Badge variant={getStatusVariant(log.log_status)}>{log.log_status}</Badge>

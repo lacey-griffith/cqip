@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useState } from 'react';
 
 const LOADING_MESSAGES = [
   'Interrogating Jira... 🔍',
@@ -15,12 +15,15 @@ const LOADING_MESSAGES = [
 ];
 
 /**
- * Returns a random fun loading message. Stable across re-renders for a given
- * mount, so the message doesn't flicker while loading.
+ * Returns a fun loading message. The initial value is stable so SSR and the
+ * first client render agree (no hydration mismatch); the real random pick
+ * happens in an effect after mount.
  */
 export function useLoadingMessage(): string {
-  return useMemo(() => {
+  const [message, setMessage] = useState<string>(LOADING_MESSAGES[0]);
+  useEffect(() => {
     const idx = Math.floor(Math.random() * LOADING_MESSAGES.length);
-    return LOADING_MESSAGES[idx];
+    setMessage(LOADING_MESSAGES[idx]);
   }, []);
+  return message;
 }

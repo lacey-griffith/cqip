@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, ChevronUp, ChevronsUpDown } from 'lucide-react';
+import { ChevronDown, ChevronRight, ChevronUp, ChevronsUpDown, RefreshCw } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Combobox } from '@/components/ui/combobox';
 import { EditLogDialog, type EditableLog } from '@/components/logs/edit-log-dialog';
+import { TicketLink } from '@/components/logs/ticket-link';
 import { cn } from '@/lib/utils';
 
 const ALL = '__all__';
@@ -44,6 +45,21 @@ interface TicketGroup {
 
 type SortKey = 'date' | 'brand' | 'severity' | 'status' | 'category';
 type SortDir = 'asc' | 'desc';
+
+type DatePill = 'all' | '30' | '60' | '90';
+
+const PILL_OPTIONS: Array<{ id: DatePill; label: string; days: number | null }> = [
+  { id: 'all', label: 'All time', days: null },
+  { id: '30', label: 'Last 30 days', days: 30 },
+  { id: '60', label: 'Last 60 days', days: 60 },
+  { id: '90', label: 'Last 90 days', days: 90 },
+];
+
+function daysAgoISO(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return d.toISOString().slice(0, 10);
+}
 
 const severityVariant = {
   Critical: 'critical',
@@ -110,6 +126,9 @@ export default function LogsPage() {
 
   const [sortKey, setSortKey] = useState<SortKey>('date');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
+
+  const [activePill, setActivePill] = useState<DatePill | null>('all');
+  const [filtersOpen, setFiltersOpen] = useState(true);
 
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
@@ -225,6 +244,50 @@ export default function LogsPage() {
     });
   }, [groupedTickets, sortKey, sortDir]);
 
+  function handleStartDateChange(value: string) {
+    setStartDate(value);
+    setActivePill(null);
+  }
+
+  function handleEndDateChange(value: string) {
+    setEndDate(value);
+    setActivePill(null);
+  }
+
+  function selectPill(pill: DatePill) {
+    if (activePill === pill) {
+      if (pill === 'all') return; // clicking the already-active "all" is a no-op
+      setActivePill('all');
+      setStartDate('');
+      setEndDate('');
+      return;
+    }
+    setActivePill(pill);
+    const opt = PILL_OPTIONS.find(p => p.id === pill);
+    if (!opt || opt.days == null) {
+      setStartDate('');
+      setEndDate('');
+    } else {
+      setStartDate(daysAgoISO(opt.days));
+      setEndDate('');
+    }
+  }
+
+  function resetAllFilters() {
+    setStartDate('');
+    setEndDate('');
+    setClientBrand('');
+    setSeverity('');
+    setStatus('');
+    setActivePill('all');
+  }
+
+  const activeFilterCount =
+    (startDate || endDate ? 1 : 0) +
+    (clientBrand ? 1 : 0) +
+    (severity ? 1 : 0) +
+    (status ? 1 : 0);
+
   function toggleSort(key: SortKey) {
     if (key === sortKey) {
       setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
@@ -304,73 +367,138 @@ export default function LogsPage() {
         </div>
       </div>
 
-      <Card>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
-          <div className="lg:col-span-2">
-            <Label htmlFor="startDate">Start date</Label>
-            <Input id="startDate" type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
-          </div>
-          <div className="lg:col-span-2">
-            <Label htmlFor="endDate">End date</Label>
-            <Input id="endDate" type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
-          </div>
-          <div className="lg:col-span-2">
-            <Label htmlFor="clientBrand">Client brand</Label>
-            <Combobox
-              value={clientBrand || ALL}
-              onChange={v => setClientBrand(v === ALL ? '' : v)}
-              options={clientBrandOptions}
-              placeholder="All brands"
-              emptyLabel="No matching brand"
+      <Card className="p-3 md:p-4">
+        <div className="flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => setFiltersOpen(o => !o)}
+            aria-expanded={filtersOpen}
+            aria-controls="cqip-filter-body"
+            className="inline-flex items-center gap-2 text-sm font-semibold text-[color:var(--f92-dark)] hover:text-[color:var(--f92-navy)] focus-visible:outline-none focus-visible:underline"
+          >
+            <ChevronDown
+              className={cn(
+                'h-4 w-4 text-[color:var(--f92-gray)] transition-transform duration-300',
+                filtersOpen ? 'rotate-0' : '-rotate-90',
+              )}
+              aria-hidden="true"
             />
-          </div>
-          <div className="lg:col-span-2">
-            <Label htmlFor="severity">Severity</Label>
-            <Select value={severity || ALL} onValueChange={value => setSeverity(value === ALL ? '' : value)}>
-              <SelectTrigger id="severity">
-                <SelectValue placeholder="All severities" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL}>All severities</SelectItem>
-                <SelectItem value="Critical">Critical</SelectItem>
-                <SelectItem value="High">High</SelectItem>
-                <SelectItem value="Medium">Medium</SelectItem>
-                <SelectItem value="Low">Low</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="lg:col-span-2">
-            <Label htmlFor="status">Status</Label>
-            <Select value={status || ALL} onValueChange={value => setStatus(value === ALL ? '' : value)}>
-              <SelectTrigger id="status">
-                <SelectValue placeholder="All statuses" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL}>All statuses</SelectItem>
-                <SelectItem value="Open">Open</SelectItem>
-                <SelectItem value="In Progress">In Progress</SelectItem>
-                <SelectItem value="Blocked">Blocked</SelectItem>
-                <SelectItem value="Pending Verification">Pending Verification</SelectItem>
-                <SelectItem value="Resolved">Resolved</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="lg:col-span-2">
-            <Label htmlFor="resetFilters" className="invisible hidden md:inline-block">Reset</Label>
-            <Button
-              id="resetFilters"
-              variant="outline"
-              className="w-full"
-              onClick={() => {
-                setStartDate('');
-                setEndDate('');
-                setClientBrand('');
-                setSeverity('');
-                setStatus('');
-              }}
+            Filters
+            {activeFilterCount > 0 ? (
+              <span className="text-xs font-medium text-[color:var(--f92-gray)]">
+                • {activeFilterCount} active
+              </span>
+            ) : null}
+          </button>
+          {activeFilterCount > 0 ? (
+            <button
+              type="button"
+              onClick={resetAllFilters}
+              className="text-xs text-[color:var(--f92-gray)] transition hover:text-[color:var(--f92-orange)] focus-visible:outline-none focus-visible:underline"
             >
-              Reset filters
-            </Button>
+              Reset
+            </button>
+          ) : null}
+        </div>
+
+        <div
+          id="cqip-filter-body"
+          className={cn(
+            'grid transition-[grid-template-rows] duration-300 ease-out',
+            filtersOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]',
+          )}
+          aria-hidden={!filtersOpen}
+        >
+          <div className="overflow-hidden">
+            <div className="pt-3">
+              {/* Quick filter pills */}
+              <div className="flex flex-wrap gap-1.5" role="group" aria-label="Date range presets">
+                {PILL_OPTIONS.map(opt => {
+                  const active = activePill === opt.id;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => selectPill(opt.id)}
+                      aria-pressed={active}
+                      className={cn(
+                        'rounded-full border px-3 py-1 text-xs font-medium transition',
+                        active
+                          ? 'border-[color:var(--f92-orange)] bg-[color:var(--f92-orange)] text-white'
+                          : 'border-[color:var(--f92-border)] bg-transparent text-[color:var(--f92-dark)] hover:border-[color:var(--f92-orange)] hover:text-[color:var(--f92-orange)]',
+                      )}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Compact filter row */}
+              <div className="mt-3 flex flex-wrap items-end gap-2">
+                <div className="min-w-[9rem] flex-1">
+                  <Label htmlFor="startDate" className="text-[10px] uppercase tracking-widest text-[color:var(--f92-gray)]">From</Label>
+                  <Input
+                    id="startDate"
+                    type="date"
+                    value={startDate}
+                    onChange={e => handleStartDateChange(e.target.value)}
+                    className="h-9 text-sm"
+                  />
+                </div>
+                <div className="min-w-[9rem] flex-1">
+                  <Label htmlFor="endDate" className="text-[10px] uppercase tracking-widest text-[color:var(--f92-gray)]">To</Label>
+                  <Input
+                    id="endDate"
+                    type="date"
+                    value={endDate}
+                    onChange={e => handleEndDateChange(e.target.value)}
+                    className="h-9 text-sm"
+                  />
+                </div>
+                <div className="min-w-[10rem] flex-1">
+                  <Label htmlFor="clientBrand" className="text-[10px] uppercase tracking-widest text-[color:var(--f92-gray)]">Brand</Label>
+                  <Combobox
+                    value={clientBrand || ALL}
+                    onChange={v => setClientBrand(v === ALL ? '' : v)}
+                    options={clientBrandOptions}
+                    placeholder="All brands"
+                    emptyLabel="No matching brand"
+                  />
+                </div>
+                <div className="min-w-[9rem] flex-1">
+                  <Label htmlFor="severity" className="text-[10px] uppercase tracking-widest text-[color:var(--f92-gray)]">Severity</Label>
+                  <Select value={severity || ALL} onValueChange={value => setSeverity(value === ALL ? '' : value)}>
+                    <SelectTrigger id="severity" className="h-9 text-sm">
+                      <SelectValue placeholder="All severities" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={ALL}>All severities</SelectItem>
+                      <SelectItem value="Critical">Critical</SelectItem>
+                      <SelectItem value="High">High</SelectItem>
+                      <SelectItem value="Medium">Medium</SelectItem>
+                      <SelectItem value="Low">Low</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="min-w-[10rem] flex-1">
+                  <Label htmlFor="status" className="text-[10px] uppercase tracking-widest text-[color:var(--f92-gray)]">Status</Label>
+                  <Select value={status || ALL} onValueChange={value => setStatus(value === ALL ? '' : value)}>
+                    <SelectTrigger id="status" className="h-9 text-sm">
+                      <SelectValue placeholder="All statuses" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={ALL}>All statuses</SelectItem>
+                      <SelectItem value="Open">Open</SelectItem>
+                      <SelectItem value="In Progress">In Progress</SelectItem>
+                      <SelectItem value="Blocked">Blocked</SelectItem>
+                      <SelectItem value="Pending Verification">Pending Verification</SelectItem>
+                      <SelectItem value="Resolved">Resolved</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </Card>
@@ -432,14 +560,7 @@ export default function LogsPage() {
                       <td className="px-4 py-3 align-top">{formatTriggeredDate(latest.triggered_at)}</td>
                       <td className="sticky left-0 px-4 py-3 align-top bg-[color:var(--f92-warm)]">
                         <div className="flex items-center gap-1">
-                          <a
-                            href={latest.jira_ticket_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="font-medium text-[color:var(--f92-navy)] hover:underline"
-                          >
-                            {group.ticketId}
-                          </a>
+                          <TicketLink ticketId={group.ticketId} url={latest.jira_ticket_url} />
                           {(auditCounts[latest.id] ?? 0) > 5 ? (
                             <span
                               role="img"
@@ -467,8 +588,14 @@ export default function LogsPage() {
                       <td className="px-4 py-3 align-top">{latest.who_owns_fix ?? '—'}</td>
                       <td className="px-4 py-3 align-top">
                         {hasMultiple ? (
-                          <Badge variant="default" className="text-xs">
-                            {group.entries.length} sendbacks
+                          <Badge
+                            variant="default"
+                            className="inline-flex items-center gap-1 text-xs"
+                            title={`${group.entries.length} rework events`}
+                          >
+                            <RefreshCw className="h-3 w-3" aria-hidden="true" />
+                            {group.entries.length}
+                            <span className="sr-only"> rework events</span>
                           </Badge>
                         ) : (
                           <span className="text-xs text-[color:var(--f92-gray)]">1</span>

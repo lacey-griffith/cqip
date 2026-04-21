@@ -11,18 +11,22 @@ export function EasterEggHost() {
   const [waveActive, setWaveActive] = useState(false);
 
   useKonamiCode(() => {
+    const konamiColors = ['#F47920', '#1E2D6B', '#FFFFFF', '#FACC15'];
+    // Two bursts for a "massive" effect — one centered, one wider spread.
     confetti({
-      particleCount: 180,
-      spread: 80,
-      origin: { y: 0.4 },
-      colors: ['#F47920', '#1E2D6B', '#FFFFFF', '#FEF6EE'],
+      particleCount: 260,
+      spread: 100,
+      startVelocity: 55,
+      origin: { y: 0.45 },
+      colors: konamiColors,
     });
-    // Mark Konami as found so /array-of-sunshine unlocks for the session.
-    try {
-      sessionStorage.setItem('cqip-konami-found', '1');
-    } catch {
-      /* ignore */
-    }
+    confetti({
+      particleCount: 140,
+      spread: 160,
+      startVelocity: 35,
+      origin: { y: 0.35 },
+      colors: konamiColors,
+    });
     toast('🎉 You found it! Welcome to the secret club.');
   });
 
