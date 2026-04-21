@@ -14,14 +14,20 @@ const supabaseWs = supabaseOrigin.replace(/^https:/, 'wss:');
 // Supabase for REST + realtime. 'unsafe-inline' on script-src is required
 // for Next's hydration shim and the theme-init script in app/layout.tsx;
 // consider moving to a nonce-based CSP once the app's inline scripts can
-// be nonce-attributed.
+// be nonce-attributed. Dev mode also needs 'unsafe-eval' for React's
+// stack-trace reconstruction.
+const isDev = process.env.NODE_ENV !== 'production';
+const scriptSrc = isDev
+  ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
+  : "script-src 'self' 'unsafe-inline'";
+
 const csp = [
   "default-src 'self'",
   "base-uri 'self'",
   "frame-ancestors 'none'",
   "object-src 'none'",
   "form-action 'self'",
-  "script-src 'self' 'unsafe-inline'",
+  scriptSrc,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https://fusion92.atlassian.net",
   "font-src 'self' data:",
@@ -46,6 +52,11 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Keep Next's dev indicator out of the bottom-left corner so it doesn't
+  // cover the sidebar docs button.
+  devIndicators: {
+    position: 'bottom-right',
+  },
   async headers() {
     return [
       {
@@ -57,3 +68,9 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
+
+// Initializes OpenNext's Cloudflare dev helper so `wrangler dev` / `next dev`
+// can reach Cloudflare bindings (KV, R2, D1, etc.) if we add any later. Safe
+// no-op when there are no bindings configured.
+import { initOpenNextCloudflareForDev } from '@opennextjs/cloudflare';
+initOpenNextCloudflareForDev();

@@ -8,9 +8,13 @@
     "start": "next start",
     "lint": "eslint",
     "import:csv": "tsx scripts/import-csv.ts",
-    "fix:dates": "tsx scripts/fix-dates.ts"
+    "fix:dates": "tsx scripts/fix-dates.ts",
+    "pages:build": "opennextjs-cloudflare build",
+    "preview": "opennextjs-cloudflare build && wrangler dev",
+    "deploy": "opennextjs-cloudflare build && wrangler deploy"
   },
   "dependencies": {
+    "@opennextjs/cloudflare": "^1.19.3",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-select": "^2.2.6",
     "@radix-ui/react-switch": "^1.2.6",
@@ -26,6 +30,7 @@
     "react-dom": "19.2.4",
     "recharts": "^3.8.1",
     "tailwind-merge": "^3.5.0",
+    "wrangler": "^4.84.1",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
