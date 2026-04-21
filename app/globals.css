@@ -194,6 +194,55 @@ textarea {
   user-select: none;
 }
 
+/* Print view — only the active report panel is visible. Clean white. */
+@media print {
+  @page {
+    margin: 16mm;
+  }
+  body {
+    background: #FFFFFF !important;
+    color: #1A1A2E !important;
+  }
+  /* Hide app chrome */
+  aside,
+  header,
+  nav,
+  [role="navigation"],
+  [data-print="hide"],
+  .cqip-skip-in-print {
+    display: none !important;
+  }
+  /* Keep only the report panel */
+  .cqip-report-print-root {
+    position: static !important;
+    display: block !important;
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    background: #FFFFFF !important;
+    color: #1A1A2E !important;
+  }
+  .cqip-report-print-root .recharts-responsive-container,
+  .cqip-report-print-root .recharts-wrapper {
+    break-inside: avoid;
+  }
+}
+
+/* Locked-dossier shake for wrong password */
+@keyframes cqip-shake {
+  0%, 100% { transform: translateX(0); }
+  15% { transform: translateX(-8px); }
+  30% { transform: translateX(8px); }
+  45% { transform: translateX(-6px); }
+  60% { transform: translateX(6px); }
+  75% { transform: translateX(-3px); }
+  90% { transform: translateX(3px); }
+}
+.cqip-shake {
+  animation: cqip-shake 500ms ease-in-out;
+}
+
 /* Easter-egg animations */
 @keyframes cqip-fusion-wave {
   0%   { transform: translateX(-100%); opacity: 0; }

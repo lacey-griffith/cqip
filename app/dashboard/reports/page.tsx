@@ -8,8 +8,12 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/lib/supabase/client';
-import { capitalizeName } from '@/lib/utils';
+import { capitalizeName, cn } from '@/lib/utils';
 import * as XLSX from 'xlsx';
+import { ScorecardReport } from '@/components/reports/scorecard-report';
+import { RootCauseReport } from '@/components/reports/root-cause-report';
+import { ClientReport } from '@/components/reports/client-report';
+import type { DateRange } from '@/components/reports/common';
 
 const ALL = '__all__';
 
@@ -67,6 +71,35 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
+
+  // Named-report selector state
+  type ReportKind = 'scorecard' | 'rootcause' | 'client';
+  const defaultStart = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    return d.toISOString().slice(0, 10);
+  })();
+  const today = new Date().toISOString().slice(0, 10);
+  const [cardStart, setCardStart] = useState<Record<ReportKind, string>>({
+    scorecard: defaultStart,
+    rootcause: defaultStart,
+    client: defaultStart,
+  });
+  const [cardEnd, setCardEnd] = useState<Record<ReportKind, string>>({
+    scorecard: today,
+    rootcause: today,
+    client: today,
+  });
+  const [activeReport, setActiveReport] = useState<ReportKind | null>(null);
+  const [activeRange, setActiveRange] = useState<DateRange | null>(null);
+
+  function generateReport(kind: ReportKind) {
+    const s = cardStart[kind];
+    const e = cardEnd[kind];
+    if (!s || !e) return;
+    setActiveReport(kind);
+    setActiveRange({ startISO: `${s}T00:00:00Z`, endISO: `${e}T23:59:59Z` });
+  }
 
   useEffect(() => {
     fetchReportsPage();
@@ -336,17 +369,105 @@ export default function ReportsPage() {
     [filters]
   );
 
+  const reportCards: Array<{
+    id: 'scorecard' | 'rootcause' | 'client';
+    title: string;
+    description: string;
+  }> = [
+    {
+      id: 'scorecard',
+      title: 'Quality Health Scorecard',
+      description: 'Monthly snapshot for leadership. How are we doing overall?',
+    },
+    {
+      id: 'rootcause',
+      title: 'Root Cause Breakdown',
+      description: 'Where are issues coming from? Use this for process improvement.',
+    },
+    {
+      id: 'client',
+      title: 'Client Quality Report',
+      description: 'Per-client breakdown. Where should we focus our attention?',
+    },
+  ];
+
   return (
     <div className="space-y-6">
-      <div className="rounded-3xl border border-[color:var(--f92-border)] bg-white p-8 shadow-sm">
+      <div className="rounded-3xl border border-[color:var(--f92-border)] bg-white p-8 shadow-sm cqip-skip-in-print">
         <p className="text-sm uppercase tracking-[0.3em] text-[color:var(--f92-navy)]">Reports</p>
-        <h1 className="mt-3 text-3xl font-semibold text-[color:var(--f92-dark)]">Saved Reports & Exports</h1>
+        <h1 className="mt-3 text-3xl font-semibold text-[color:var(--f92-dark)]">Reports</h1>
         <p className="mt-2 text-sm text-[color:var(--f92-gray)]">
-          Create saved report filters, export recurring datasets, and track quality insights.
+          Pick a named report for a focused view, or use the custom filter below for an ad-hoc table.
         </p>
       </div>
 
-      <Card className="border-[color:var(--f92-border)] bg-white p-6 shadow-sm">
+      {/* Three named report cards */}
+      <div className="cqip-skip-in-print grid gap-4 md:grid-cols-3">
+        {reportCards.map(rc => {
+          const active = activeReport === rc.id;
+          return (
+            <Card
+              key={rc.id}
+              className={cn(
+                'flex flex-col border bg-white p-5 shadow-sm transition',
+                active
+                  ? 'border-[color:var(--f92-orange)] ring-2 ring-[color:var(--f92-orange)]/40'
+                  : 'border-[color:var(--f92-border)]',
+              )}
+            >
+              <h3 className="text-base font-semibold text-[color:var(--f92-navy)]">{rc.title}</h3>
+              <p className="mt-1 text-xs text-[color:var(--f92-gray)]">{rc.description}</p>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <div>
+                  <Label htmlFor={`start-${rc.id}`} className="text-[10px] uppercase tracking-widest text-[color:var(--f92-gray)]">From</Label>
+                  <Input
+                    id={`start-${rc.id}`}
+                    type="date"
+                    value={cardStart[rc.id]}
+                    onChange={e => setCardStart(prev => ({ ...prev, [rc.id]: e.target.value }))}
+                    className="h-9 text-sm"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor={`end-${rc.id}`} className="text-[10px] uppercase tracking-widest text-[color:var(--f92-gray)]">To</Label>
+                  <Input
+                    id={`end-${rc.id}`}
+                    type="date"
+                    value={cardEnd[rc.id]}
+                    onChange={e => setCardEnd(prev => ({ ...prev, [rc.id]: e.target.value }))}
+                    className="h-9 text-sm"
+                  />
+                </div>
+              </div>
+              <Button
+                onClick={() => generateReport(rc.id)}
+                className="mt-4 w-full"
+                variant={active ? 'default' : 'secondary'}
+              >
+                {active ? 'Regenerate' : 'Generate Report'}
+              </Button>
+            </Card>
+          );
+        })}
+      </div>
+
+      {/* Active report panel */}
+      {activeReport && activeRange ? (
+        <div>
+          {activeReport === 'scorecard' ? <ScorecardReport key={`${activeRange.startISO}-${activeRange.endISO}`} range={activeRange} /> : null}
+          {activeReport === 'rootcause' ? <RootCauseReport key={`${activeRange.startISO}-${activeRange.endISO}`} range={activeRange} /> : null}
+          {activeReport === 'client' ? <ClientReport key={`${activeRange.startISO}-${activeRange.endISO}`} range={activeRange} /> : null}
+        </div>
+      ) : null}
+
+      <div className="cqip-skip-in-print rounded-3xl border border-[color:var(--f92-border)] bg-white p-6 shadow-sm">
+        <h2 className="text-lg font-semibold text-[color:var(--f92-navy)]">Custom filter &amp; export</h2>
+        <p className="mt-1 text-sm text-[color:var(--f92-gray)]">
+          Build your own view with the filters below. Save the filter set as a named report, or export the table as CSV / Excel.
+        </p>
+      </div>
+
+      <Card className="cqip-skip-in-print border-[color:var(--f92-border)] bg-white p-6 shadow-sm">
         <div className="grid gap-4 lg:grid-cols-3">
           <div>
             <Label htmlFor="startDate">Start date</Label>
@@ -496,7 +617,7 @@ export default function ReportsPage() {
       </Card>
 
       <div className="grid gap-6 lg:grid-cols-[1.4fr_0.6fr]">
-        <Card className="border-[color:var(--f92-border)] bg-white p-6 shadow-sm">
+        <Card className="cqip-skip-in-print border-[color:var(--f92-border)] bg-white p-6 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-lg font-semibold text-[color:var(--f92-navy)]">Filtered results</h2>
@@ -543,7 +664,7 @@ export default function ReportsPage() {
           )}
         </Card>
 
-        <Card className="border-[color:var(--f92-border)] bg-white p-6 shadow-sm">
+        <Card className="cqip-skip-in-print border-[color:var(--f92-border)] bg-white p-6 shadow-sm">
           <div className="mb-4">
             <h3 className="text-lg font-semibold text-[color:var(--f92-navy)]">Save current report</h3>
             <p className="text-sm text-[color:var(--f92-gray)]">Persist your current filters for later recall.</p>
