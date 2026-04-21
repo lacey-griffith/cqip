@@ -56,15 +56,22 @@ export function Nav() {
   const [profile, setProfile] = useState<NavProfile | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  // Egg state: logo click counter, avatar slot machine override, moon-hover twinkle.
+  // Egg state: logo click counter, avatar slot machine, moon→stars, sun→clouds.
   const logoClicks = useRef<{ count: number; lastAt: number }>({ count: 0, lastAt: 0 });
   const avatarClicks = useRef<{ count: number; lastAt: number }>({ count: 0, lastAt: 0 });
   const [logoCelebrating, setLogoCelebrating] = useState(false);
   const [slotPattern, setSlotPattern] = useState<AvatarPattern | null>(null);
   const [slotSpinning, setSlotSpinning] = useState(false);
-  const [twinkles, setTwinkles] = useState<Array<{ id: number; left: string; top: string; delay: number }>>([]);
-  const moonHoverStart = useRef<number | null>(null);
+  const [twinkles, setTwinkles] = useState<
+    Array<{ id: number; left: string; top: string; size: number; color: string; delay: number }>
+  >([]);
+  const [clouds, setClouds] = useState<
+    Array<{ id: number; top: string; duration: number; delay: number; direction: 1 | -1 }>
+  >([]);
   const moonHoverTimer = useRef<number | null>(null);
+  const sunHoverTimer = useRef<number | null>(null);
+  const twinkleClearTimer = useRef<number | null>(null);
+  const cloudClearTimer = useRef<number | null>(null);
 
   // Close the mobile drawer whenever the route changes.
   useEffect(() => {
@@ -197,19 +204,24 @@ export function Nav() {
     }
   }
 
+  const STAR_COLORS = ['#FFFFFF', '#FFF9C4', '#FFD700'];
+
   function handleMoonEnter() {
     if (theme !== 'dark') return;
-    moonHoverStart.current = Date.now();
     if (moonHoverTimer.current) window.clearTimeout(moonHoverTimer.current);
     moonHoverTimer.current = window.setTimeout(() => {
-      const stars = Array.from({ length: 8 }, (_, i) => ({
+      const count = 22 + Math.floor(Math.random() * 8); // 22–29 stars
+      const stars = Array.from({ length: count }, (_, i) => ({
         id: Date.now() + i,
-        left: `${10 + Math.random() * 80}%`,
-        top: `${5 + Math.random() * 60}%`,
-        delay: Math.random() * 600,
+        left: `${2 + Math.random() * 96}%`,
+        top: `${2 + Math.random() * 92}%`,
+        size: 3 + Math.random() * 5, // 3–8px
+        color: STAR_COLORS[Math.floor(Math.random() * STAR_COLORS.length)],
+        delay: i * (100 + Math.random() * 100), // staggered 100–200ms
       }));
       setTwinkles(stars);
-      window.setTimeout(() => setTwinkles([]), 2200);
+      if (twinkleClearTimer.current) window.clearTimeout(twinkleClearTimer.current);
+      twinkleClearTimer.current = window.setTimeout(() => setTwinkles([]), 3000);
     }, 3000);
   }
 
@@ -218,8 +230,56 @@ export function Nav() {
       window.clearTimeout(moonHoverTimer.current);
       moonHoverTimer.current = null;
     }
-    moonHoverStart.current = null;
   }
+
+  function handleSunEnter() {
+    if (theme !== 'light') return;
+    if (sunHoverTimer.current) window.clearTimeout(sunHoverTimer.current);
+    sunHoverTimer.current = window.setTimeout(() => {
+      const cloudSpecs = Array.from({ length: 3 }, (_, i) => ({
+        id: Date.now() + i,
+        top: `${8 + Math.random() * 75}%`,
+        duration: 4 + Math.random() * 2, // 4–6s
+        delay: i * 900, // staggered so they don't clump
+        direction: (i % 2 === 0 ? 1 : -1) as 1 | -1,
+      }));
+      setClouds(cloudSpecs);
+      if (cloudClearTimer.current) window.clearTimeout(cloudClearTimer.current);
+      const maxLife =
+        Math.max(...cloudSpecs.map(c => c.duration * 1000 + c.delay)) + 200;
+      cloudClearTimer.current = window.setTimeout(() => setClouds([]), maxLife);
+    }, 2000);
+  }
+
+  function handleSunLeave() {
+    if (sunHoverTimer.current) {
+      window.clearTimeout(sunHoverTimer.current);
+      sunHoverTimer.current = null;
+    }
+  }
+
+  // If the theme flips mid-animation, cancel pending triggers and clear any
+  // active particles so stars/clouds never appear in the wrong theme.
+  useEffect(() => {
+    if (moonHoverTimer.current) {
+      window.clearTimeout(moonHoverTimer.current);
+      moonHoverTimer.current = null;
+    }
+    if (sunHoverTimer.current) {
+      window.clearTimeout(sunHoverTimer.current);
+      sunHoverTimer.current = null;
+    }
+    if (twinkleClearTimer.current) {
+      window.clearTimeout(twinkleClearTimer.current);
+      twinkleClearTimer.current = null;
+    }
+    if (cloudClearTimer.current) {
+      window.clearTimeout(cloudClearTimer.current);
+      cloudClearTimer.current = null;
+    }
+    setTwinkles([]);
+    setClouds([]);
+  }, [theme]);
 
   const links = [
     ...navLinks,
@@ -367,6 +427,10 @@ export function Nav() {
               <button
                 type="button"
                 onClick={() => { if (isDark) handleToggleTheme(); }}
+                onMouseEnter={handleSunEnter}
+                onMouseLeave={handleSunLeave}
+                onFocus={handleSunEnter}
+                onBlur={handleSunLeave}
                 aria-pressed={!isDark}
                 aria-label="Light theme"
                 className={cn(
@@ -440,17 +504,53 @@ export function Nav() {
           </Link>
         </div>
 
-        {twinkles.length > 0 ? (
+        {isDark && twinkles.length > 0 ? (
           <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
             {twinkles.map(t => (
               <svg
                 key={t.id}
-                className="cqip-twinkle absolute h-3 w-3 text-[color:var(--f92-orange)]"
-                style={{ left: t.left, top: t.top, animationDelay: `${t.delay}ms` }}
+                className="cqip-star-twinkle absolute"
+                style={{
+                  left: t.left,
+                  top: t.top,
+                  width: `${t.size}px`,
+                  height: `${t.size}px`,
+                  color: t.color,
+                  animationDelay: `${t.delay}ms`,
+                }}
                 viewBox="0 0 24 24"
                 fill="currentColor"
               >
                 <path d="M12 2 L13.5 9 L20 10 L14 14 L16 21 L12 17 L8 21 L10 14 L4 10 L10.5 9 Z" />
+              </svg>
+            ))}
+          </div>
+        ) : null}
+
+        {!isDark && clouds.length > 0 ? (
+          <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
+            {clouds.map(c => (
+              <svg
+                key={c.id}
+                className="cqip-cloud-drift absolute"
+                style={{
+                  top: c.top,
+                  animationDuration: `${c.duration}s`,
+                  animationDelay: `${c.delay}ms`,
+                  // Flip horizontally for right-to-left drift.
+                  transform: c.direction === -1 ? 'scaleX(-1)' : undefined,
+                }}
+                width={88}
+                height={42}
+                viewBox="0 0 100 50"
+              >
+                <g fill="#FFFFFF">
+                  <circle cx="25" cy="30" r="16" />
+                  <circle cx="45" cy="22" r="20" />
+                  <circle cx="65" cy="27" r="17" />
+                  <circle cx="80" cy="31" r="13" />
+                  <ellipse cx="50" cy="40" rx="38" ry="9" fill="#F0F4F8" />
+                </g>
               </svg>
             ))}
           </div>

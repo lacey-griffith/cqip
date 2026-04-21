@@ -1,34 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import confetti from 'canvas-confetti';
-import { useKonamiCode } from '@/lib/easter-eggs/use-konami-code';
 import { useTypingDetector } from '@/lib/easter-eggs/use-typing-detector';
 import { useToast } from '@/components/layout/toaster';
 
+// Konami handling lives directly in app/dashboard/layout.tsx so the
+// sequence listener can't accidentally be mounted more than once.
 export function EasterEggHost() {
   const { toast } = useToast();
   const [waveActive, setWaveActive] = useState(false);
-
-  useKonamiCode(() => {
-    const konamiColors = ['#F47920', '#1E2D6B', '#FFFFFF', '#FACC15'];
-    // Two bursts for a "massive" effect — one centered, one wider spread.
-    confetti({
-      particleCount: 260,
-      spread: 100,
-      startVelocity: 55,
-      origin: { y: 0.45 },
-      colors: konamiColors,
-    });
-    confetti({
-      particleCount: 140,
-      spread: 160,
-      startVelocity: 35,
-      origin: { y: 0.35 },
-      colors: konamiColors,
-    });
-    toast('🎉 You found it! Welcome to the secret club.');
-  });
 
   useTypingDetector('fusion92', () => {
     setWaveActive(true);

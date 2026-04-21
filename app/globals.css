@@ -280,13 +280,32 @@ textarea {
   animation: cqip-logo-rainbow 900ms ease-in-out both;
 }
 
-@keyframes cqip-twinkle {
-  0%   { opacity: 0; transform: scale(0.4); }
-  50%  { opacity: 1; transform: scale(1); }
-  100% { opacity: 0; transform: scale(0.4); }
+/* Moon-hover stars: fade in → twinkle pulse → fade out. Total 2.8s. */
+@keyframes cqip-star-twinkle {
+  0%   { opacity: 0; transform: scale(0.3); }
+  15%  { opacity: 1; transform: scale(1); }
+  35%  { opacity: 0.5; transform: scale(0.85); }
+  55%  { opacity: 1; transform: scale(1.1); }
+  75%  { opacity: 0.6; transform: scale(0.95); }
+  100% { opacity: 0; transform: scale(0.5); }
 }
-.cqip-twinkle {
-  animation: cqip-twinkle 1800ms ease-in-out forwards;
+.cqip-star-twinkle {
+  animation: cqip-star-twinkle 2800ms ease-in-out forwards;
+  filter: drop-shadow(0 0 4px currentColor);
+}
+
+/* Sun-hover clouds: drift across the sidebar, fade in early, fade out late. */
+@keyframes cqip-cloud-drift {
+  0%   { transform: translateX(-110px); opacity: 0; }
+  12%  { opacity: 0.8; }
+  85%  { opacity: 0.8; }
+  100% { transform: translateX(calc(18rem + 10px)); opacity: 0; }
+}
+.cqip-cloud-drift {
+  left: 0;
+  animation-name: cqip-cloud-drift;
+  animation-timing-function: ease-in-out;
+  animation-fill-mode: forwards;
 }
 
 @keyframes cqip-streak-bounce {

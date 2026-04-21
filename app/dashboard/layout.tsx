@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import confetti from 'canvas-confetti';
 import { supabase } from '@/lib/supabase/client';
 import { Nav } from '@/components/layout/nav';
 import { IdleTimeout } from '@/components/layout/idle-timeout';
-import { ToasterProvider } from '@/components/layout/toaster';
+import { ToasterProvider, useToast } from '@/components/layout/toaster';
 import { EasterEggHost } from '@/components/layout/easter-egg-host';
 import { useLoadingMessage } from '@/lib/easter-eggs/use-loading-message';
 
@@ -16,6 +17,61 @@ function LoadingSplash() {
       {message}
     </div>
   );
+}
+
+const KONAMI = [
+  'ArrowUp',
+  'ArrowUp',
+  'ArrowDown',
+  'ArrowDown',
+  'ArrowLeft',
+  'ArrowRight',
+  'ArrowLeft',
+  'ArrowRight',
+  'b',
+  'a',
+];
+
+function KonamiListener() {
+  const { toast } = useToast();
+  const idx = useRef(0);
+
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      // Don't eat keystrokes while typing into a form field.
+      const target = event.target as HTMLElement | null;
+      if (target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable) {
+        return;
+      }
+
+      const keyValue = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+      const expected = KONAMI[idx.current];
+
+      if (keyValue === expected) {
+        idx.current += 1;
+        if (idx.current === KONAMI.length) {
+          idx.current = 0;
+          confetti({
+            particleCount: 300,
+            spread: 180,
+            colors: ['#F47920', '#1E2D6B', '#FFFFFF', '#FFD700'],
+            origin: { y: 0.6 },
+          });
+          toast('🎉 You found it! Welcome to the secret club.');
+        }
+      } else {
+        idx.current = keyValue === KONAMI[0] ? 1 : 0;
+      }
+
+      // eslint-disable-next-line no-console
+      console.log(`Konami: ${idx.current}/${KONAMI.length} - ${event.key}`);
+    }
+
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [toast]);
+
+  return null;
 }
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -56,6 +112,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {children}
         </main>
         <IdleTimeout />
+        <KonamiListener />
         <EasterEggHost />
       </div>
     </ToasterProvider>
