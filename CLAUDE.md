@@ -41,7 +41,7 @@ automates that entirely and adds analytics, alerts, and historical pattern detec
 | UI Components | shadcn/ui + Tailwind CSS | Use shadcn for all UI components |
 | Charts | Recharts | All dashboard visualizations |
 | Backend + DB + Auth | Supabase | Edge Functions (webhook/sync logic), Postgres, Auth |
-| Hosting | Cloudflare Pages | Team-preferred infra. Deploy via GitHub Actions |
+| Hosting | Cloudflare Workers (via @opennextjs/cloudflare) | Deployed with `wrangler deploy` from the repo. Workers + Assets supersedes Pages for Next 16 builds. |
 | Notifications | Microsoft Teams Incoming Webhooks | In-app alerts + Teams only. NO email. |
 | Source + CI/CD | GitHub + GitHub Actions | Auto-deploy on push to main |
 
@@ -586,7 +586,7 @@ Resolved             → green-500
 
 - [ ] `nbly_brand` Jira custom field ID — user to provide (searching custom fields for "NBLY")
 - [ ] Supabase project URL and anon key — user to create project and provide
-- [ ] Cloudflare Pages project — user to create and connect GitHub repo
+- [ ] Cloudflare Worker — run `npm run deploy` to publish (creates the worker named `cqip` per wrangler.toml). Set `SUPABASE_SERVICE_ROLE_KEY`, `JIRA_API_TOKEN`, `JIRA_EMAIL`, `WEBHOOK_SECRET`, `TEAMS_WEBHOOK_URL` via `wrangler secret put`.
 - [ ] Teams webhook URL — user to create #cqip-alerts channel and Incoming Webhook
 - [ ] JIRA_API_TOKEN — user to create at id.atlassian.com (NEVER put in this file)
 - [ ] Jira webhook registration — user to register in Jira Settings after Edge Function is deployed

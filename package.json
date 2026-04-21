@@ -9,9 +9,10 @@
     "lint": "eslint",
     "import:csv": "tsx scripts/import-csv.ts",
     "fix:dates": "tsx scripts/fix-dates.ts",
-    "pages:build": "opennextjs-cloudflare build",
+    "build:worker": "opennextjs-cloudflare build",
     "preview": "opennextjs-cloudflare build && wrangler dev",
-    "deploy": "opennextjs-cloudflare build && wrangler deploy"
+    "deploy": "opennextjs-cloudflare build && wrangler deploy",
+    "deploy:dry-run": "opennextjs-cloudflare build && wrangler deploy --dry-run --outdir .wrangler/dry-run"
   },
   "dependencies": {
     "@opennextjs/cloudflare": "^1.19.3",
