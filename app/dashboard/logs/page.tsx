@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Combobox } from '@/components/ui/combobox';
 import { EditLogDialog, type EditableLog } from '@/components/logs/edit-log-dialog';
+import { ConfirmDeleteDialog } from '@/components/logs/confirm-delete-dialog';
 import { TicketLink } from '@/components/logs/ticket-link';
 import { cn } from '@/lib/utils';
 
@@ -134,6 +135,8 @@ export default function LogsPage() {
 
   const [editingLog, setEditingLog] = useState<EditableLog | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [deletingLog, setDeletingLog] = useState<LogEntry | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [auditCounts, setAuditCounts] = useState<Record<string, number>>({});
 
   useEffect(() => {
@@ -313,6 +316,27 @@ export default function LogsPage() {
       notes: log.notes,
     });
     setEditOpen(true);
+  }
+
+  function openDeleteDialog(log: LogEntry) {
+    setDeletingLog(log);
+    setDeleteOpen(true);
+  }
+
+  async function confirmDelete() {
+    if (!deletingLog) return;
+    const response = await fetch('/api/logs/edit', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: deletingLog.id }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(result?.error || 'Unable to delete log.');
+    }
+    // Remove the log from local state so the row disappears without refetch.
+    setLogs(prev => prev.filter(l => l.id !== deletingLog.id));
+    setDeletingLog(null);
   }
 
   function applyEditedLog(updated: EditableLog) {
@@ -603,7 +627,17 @@ export default function LogsPage() {
                       </td>
                       {profile?.role === 'admin' ? (
                         <td className="px-4 py-3 align-top">
-                          <Button variant="secondary" size="sm" onClick={() => openEditDialog(latest)}>Edit</Button>
+                          <div className="flex flex-wrap gap-1.5">
+                            <Button variant="secondary" size="sm" onClick={() => openEditDialog(latest)}>Edit</Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openDeleteDialog(latest)}
+                              className="text-red-600 hover:text-red-700"
+                            >
+                              Delete
+                            </Button>
+                          </div>
                         </td>
                       ) : null}
                     </tr>,
@@ -653,7 +687,17 @@ export default function LogsPage() {
                                       <td className="px-2 py-2 align-top">{entry.notes ?? '—'}</td>
                                       {profile?.role === 'admin' ? (
                                         <td className="px-2 py-2 align-top">
-                                          <Button variant="secondary" size="sm" onClick={() => openEditDialog(entry)}>Edit</Button>
+                                          <div className="flex flex-wrap gap-1.5">
+                                            <Button variant="secondary" size="sm" onClick={() => openEditDialog(entry)}>Edit</Button>
+                                            <Button
+                                              variant="outline"
+                                              size="sm"
+                                              onClick={() => openDeleteDialog(entry)}
+                                              className="text-red-600 hover:text-red-700"
+                                            >
+                                              Delete
+                                            </Button>
+                                          </div>
                                         </td>
                                       ) : null}
                                     </tr>
@@ -680,6 +724,21 @@ export default function LogsPage() {
         open={editOpen}
         onOpenChange={setEditOpen}
         onSaved={applyEditedLog}
+      />
+
+      <ConfirmDeleteDialog
+        open={deleteOpen}
+        onOpenChange={open => {
+          setDeleteOpen(open);
+          if (!open) setDeletingLog(null);
+        }}
+        title="Delete this log entry?"
+        description={
+          deletingLog
+            ? `This will soft-delete ${deletingLog.jira_ticket_id} log #${deletingLog.log_number}. This action cannot be undone.`
+            : 'This action cannot be undone.'
+        }
+        onConfirm={confirmDelete}
       />
     </div>
   );

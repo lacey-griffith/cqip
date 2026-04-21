@@ -102,3 +102,75 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ success: true });
 }
+
+export async function DELETE(req: NextRequest) {
+  const supabase = await createSupabaseRouteClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const { data: profile } = await supabase
+    .from('user_profiles')
+    .select('role, is_active, display_name, email')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  if (!profile || profile.role !== 'admin' || !profile.is_active) {
+    return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
+  }
+
+  // Accept id from JSON body or ?id= query param so the caller can pick.
+  let id: string | undefined;
+  try {
+    const body = await req.json().catch(() => ({}));
+    id = body?.id;
+  } catch {
+    /* ignore */
+  }
+  if (!id) {
+    id = new URL(req.url).searchParams.get('id') ?? undefined;
+  }
+  if (!id) {
+    return NextResponse.json({ error: 'id is required' }, { status: 400 });
+  }
+
+  // Snapshot the log before soft-deleting so the audit trail records what existed.
+  const { data: existing } = await supabase
+    .from('quality_logs')
+    .select('jira_ticket_id, log_status, severity, log_number, is_deleted')
+    .eq('id', id)
+    .maybeSingle();
+
+  if (!existing) {
+    return NextResponse.json({ error: 'Log not found' }, { status: 404 });
+  }
+  if (existing.is_deleted) {
+    return NextResponse.json({ success: true, already: true });
+  }
+
+  const { error: softDeleteError } = await supabase
+    .from('quality_logs')
+    .update({ is_deleted: true })
+    .eq('id', id);
+
+  if (softDeleteError) {
+    return NextResponse.json({ error: softDeleteError.message }, { status: 500 });
+  }
+
+  const changedBy = profile.display_name || profile.email || user.id;
+  const { error: auditError } = await supabaseAdmin.from('audit_log').insert({
+    log_entry_id: id,
+    action: 'DELETE',
+    field_name: 'is_deleted',
+    old_value: 'false',
+    new_value: 'true',
+    changed_by: changedBy,
+    notes: `Soft-delete of ${existing.jira_ticket_id} log #${existing.log_number} (was ${existing.log_status}${existing.severity ? `, ${existing.severity}` : ''})`,
+  });
+  if (auditError) {
+    console.warn('[logs/edit DELETE] audit_log insert failed', auditError);
+  }
+
+  return NextResponse.json({ success: true });
+}
