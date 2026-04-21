@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { capitalizeName } from '@/lib/utils';
+import { BackToSettings } from '@/components/ui/back-to-settings';
 
 interface UserProfile {
   id: string;
@@ -237,6 +238,7 @@ export default function UsersSettingsPage() {
 
   return (
     <div className="space-y-6">
+      <BackToSettings />
       <div className="rounded-3xl border border-[color:var(--f92-border)] bg-white p-8 shadow-sm">
         <p className="text-sm uppercase tracking-[0.3em] text-[color:var(--f92-navy)]">Settings</p>
         <h1 className="mt-3 text-3xl font-semibold text-[color:var(--f92-dark)]">User Management</h1>

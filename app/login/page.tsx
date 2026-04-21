@@ -85,6 +85,7 @@ function LoginView() {
   const [resetLoading, setResetLoading] = useState(false);
   const [attempts, setAttempts] = useState<AttemptState>({ count: 0, lockedUntil: null });
   const [now, setNow] = useState(() => Date.now());
+  const [rememberMe, setRememberMe] = useState(true);
 
   useEffect(() => {
     setAttempts(readAttempts());
@@ -140,6 +141,23 @@ function LoginView() {
 
     clearAttempts();
     setAttempts({ count: 0, lockedUntil: null });
+
+    // Remember-me: when unchecked, mark this as a short session. A
+    // sessionStorage canary dies when the browser closes; the dashboard
+    // layout checks the pair on next mount and signs the user back out
+    // if short-session is set but the canary is gone.
+    try {
+      if (rememberMe) {
+        window.localStorage.setItem('cqip-remember-me', 'true');
+        window.sessionStorage.removeItem('cqip-session-active');
+      } else {
+        window.localStorage.setItem('cqip-remember-me', 'false');
+        window.sessionStorage.setItem('cqip-session-active', '1');
+      }
+    } catch {
+      /* storage unavailable — session falls back to Supabase default */
+    }
+
     router.push(redirectTarget);
   }
 
@@ -254,6 +272,15 @@ function LoginView() {
                 suppressHydrationWarning
               />
             </div>
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-[color:var(--f92-dark)]">
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={e => setRememberMe(e.target.checked)}
+                className="h-4 w-4 rounded border-[color:var(--f92-border)] accent-[color:var(--f92-orange)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)]"
+              />
+              Remember me for 7 days
+            </label>
             {message ? <p className="text-sm text-[color:var(--f92-orange)]">{message}</p> : null}
             {locked ? (
               <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">

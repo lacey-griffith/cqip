@@ -56,9 +56,13 @@ export function Nav() {
   const [profile, setProfile] = useState<NavProfile | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  // Egg state: logo click counter, avatar slot machine, moon→stars, sun→clouds.
+  // Egg state: logo click counter, avatar slot machine, moon→stars, sun→clouds,
+  // admin-badge title cycling.
   const logoClicks = useRef<{ count: number; lastAt: number }>({ count: 0, lastAt: 0 });
   const avatarClicks = useRef<{ count: number; lastAt: number }>({ count: 0, lastAt: 0 });
+  const [adminTitle, setAdminTitle] = useState<string | null>(null);
+  const [adminBouncing, setAdminBouncing] = useState(false);
+  const adminClicks = useRef(0);
   const [logoCelebrating, setLogoCelebrating] = useState(false);
   const [slotPattern, setSlotPattern] = useState<AvatarPattern | null>(null);
   const [slotSpinning, setSlotSpinning] = useState(false);
@@ -178,6 +182,38 @@ export function Nav() {
     }
   }
 
+  const ADMIN_TITLES = [
+    'Bug Whisperer 🐛',
+    'The Architect 🏛️',
+    'Stack Overflow Survivor 💀',
+    '10x Engineer ⚡',
+    'The One 👁️',
+    'sudo make me a sandwich 🥪',
+    'Senior Googler 🔍',
+    'Principal Vibe Engineer ✨',
+    'Git Blame Recipient 😅',
+    'Keyboard Warrior ⌨️',
+    'Deploy Cowboy 🤠',
+    'I Am Groot 🌿',
+    'It Depends... 🤔',
+    'LGTM (didn\'t read) 👀',
+    '404: Title Not Found 🔍',
+  ];
+
+  function handleAdminBadgeClick() {
+    if (role !== 'admin') return;
+    adminClicks.current += 1;
+    if (adminClicks.current >= 9) {
+      adminClicks.current = 0;
+      setAdminTitle(null);
+    } else {
+      const pick = ADMIN_TITLES[Math.floor(Math.random() * ADMIN_TITLES.length)];
+      setAdminTitle(pick);
+    }
+    setAdminBouncing(true);
+    window.setTimeout(() => setAdminBouncing(false), 260);
+  }
+
   function handleAvatarClick() {
     const now = Date.now();
     if (now - avatarClicks.current.lastAt > 1200) avatarClicks.current.count = 0;
@@ -239,7 +275,7 @@ export function Nav() {
       const cloudSpecs = Array.from({ length: 3 }, (_, i) => ({
         id: Date.now() + i,
         top: `${8 + Math.random() * 75}%`,
-        duration: 4 + Math.random() * 2, // 4–6s
+        duration: 5 + Math.random() * 2, // 5–7s
         delay: i * 900, // staggered so they don't clump
         direction: (i % 2 === 0 ? 1 : -1) as 1 | -1,
       }));
@@ -305,10 +341,10 @@ export function Nav() {
         >
           <Menu className="h-5 w-5" aria-hidden="true" />
         </button>
-        <button
-          type="button"
+        <Link
+          href="/dashboard"
           onClick={handleLogoClick}
-          aria-label="CQIP"
+          aria-label="CQIP — go to dashboard"
           className={cn(
             'flex items-center gap-2 rounded-lg px-2 py-1 transition',
             logoCelebrating && 'cqip-logo-rainbow',
@@ -323,7 +359,7 @@ export function Nav() {
             className={cn(logoCelebrating && 'cqip-logo-celebrate')}
           />
           <span className="text-sm font-semibold text-[color:var(--f92-dark)]">CQIP</span>
-        </button>
+        </Link>
         <button
           type="button"
           onClick={handleAvatarClick}
@@ -361,10 +397,10 @@ export function Nav() {
         aria-label="Primary"
       >
         <div className="mb-6 flex items-center justify-between">
-          <button
-            type="button"
+          <Link
+            href="/dashboard"
             onClick={handleLogoClick}
-            aria-label="CQIP"
+            aria-label="CQIP — go to dashboard"
             className={cn(
               'inline-flex items-center gap-3 rounded-2xl bg-[color:var(--f92-tint)] px-4 py-3 text-left',
               logoCelebrating && 'cqip-logo-rainbow',
@@ -382,7 +418,7 @@ export function Nav() {
               <p className="text-sm font-semibold text-[color:var(--f92-dark)]">Fusion92 CQIP</p>
               <p className="text-xs text-[color:var(--f92-gray)]">CRO Quality Intelligence</p>
             </div>
-          </button>
+          </Link>
           <button
             type="button"
             onClick={() => setMobileOpen(false)}
@@ -412,12 +448,28 @@ export function Nav() {
             </button>
             <div className="min-w-0 flex-1">
               <p className="truncate font-semibold text-[color:var(--f92-dark)]">{primaryLabel}</p>
-              <Badge
-                variant={role === 'admin' ? 'open' : 'default'}
-                className="mt-1 text-[10px] uppercase tracking-widest"
-              >
-                {role === 'admin' ? 'Admin' : 'Viewer'}
-              </Badge>
+              {role === 'admin' ? (
+                <button
+                  type="button"
+                  onClick={handleAdminBadgeClick}
+                  aria-label="Admin badge — click for alternate titles"
+                  className={cn(
+                    'mt-1 origin-left transition-transform',
+                    adminBouncing && 'scale-110',
+                  )}
+                >
+                  <Badge
+                    variant="open"
+                    className="text-[10px] uppercase tracking-widest"
+                  >
+                    {adminTitle ?? 'Admin'}
+                  </Badge>
+                </button>
+              ) : (
+                <Badge variant="default" className="mt-1 text-[10px] uppercase tracking-widest">
+                  Viewer
+                </Badge>
+              )}
             </div>
             <div
               role="group"
@@ -540,16 +592,23 @@ export function Nav() {
                   // Flip horizontally for right-to-left drift.
                   transform: c.direction === -1 ? 'scaleX(-1)' : undefined,
                 }}
-                width={88}
-                height={42}
-                viewBox="0 0 100 50"
+                width={104}
+                height={54}
+                viewBox="0 0 120 60"
               >
-                <g fill="#FFFFFF">
-                  <circle cx="25" cy="30" r="16" />
-                  <circle cx="45" cy="22" r="20" />
-                  <circle cx="65" cy="27" r="17" />
-                  <circle cx="80" cy="31" r="13" />
-                  <ellipse cx="50" cy="40" rx="38" ry="9" fill="#F0F4F8" />
+                {/* Super Mario cloud: chunky, overlapping white circles with
+                    a soft gray shadow sitting just under the main body. */}
+                <g>
+                  <ellipse cx="60" cy="46" rx="52" ry="11" fill="#E2E8F0" opacity="0.6" />
+                  <g fill="#FFFFFF">
+                    <circle cx="24" cy="38" r="14" />
+                    <circle cx="40" cy="30" r="18" />
+                    <circle cx="58" cy="22" r="22" />
+                    <circle cx="78" cy="28" r="20" />
+                    <circle cx="96" cy="36" r="16" />
+                    <rect x="20" y="36" width="84" height="12" rx="6" />
+                  </g>
+                  <ellipse cx="60" cy="48" rx="44" ry="4" fill="#E2E8F0" opacity="0.5" />
                 </g>
               </svg>
             ))}

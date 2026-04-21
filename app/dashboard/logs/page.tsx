@@ -13,6 +13,7 @@ import { Combobox } from '@/components/ui/combobox';
 import { EditLogDialog, type EditableLog } from '@/components/logs/edit-log-dialog';
 import { ConfirmDeleteDialog } from '@/components/logs/confirm-delete-dialog';
 import { TicketLink } from '@/components/logs/ticket-link';
+import { MmiList } from '@/components/logs/mmi-tooltip';
 import { cn } from '@/lib/utils';
 
 const ALL = '__all__';
@@ -533,8 +534,8 @@ export default function LogsPage() {
             <thead>
               <tr className="text-[color:var(--f92-dark)]">
                 <th className="w-8 px-2 py-3" aria-label="Expand">{' '}</th>
-                <SortableHeader k="date" label="Date" />
-                <th className="px-4 py-3 font-semibold">Ticket</th>
+                <SortableHeader k="date" label="Date" className="sticky left-0 z-[2] whitespace-nowrap bg-white" />
+                <th className="sticky left-[6.5rem] z-[2] whitespace-nowrap bg-white px-4 py-3 font-semibold">Ticket</th>
                 <SortableHeader k="brand" label="Brand" />
                 <SortableHeader k="severity" label="Severity" />
                 <SortableHeader k="status" label="Status" />
@@ -581,8 +582,10 @@ export default function LogsPage() {
                           </button>
                         ) : null}
                       </td>
-                      <td className="px-4 py-3 align-top">{formatTriggeredDate(latest.triggered_at)}</td>
-                      <td className="sticky left-0 px-4 py-3 align-top bg-[color:var(--f92-warm)]">
+                      <td className="sticky left-0 z-[1] whitespace-nowrap bg-[color:var(--f92-warm)] px-4 py-3 align-top">
+                        {formatTriggeredDate(latest.triggered_at)}
+                      </td>
+                      <td className="sticky left-[6.5rem] z-[1] whitespace-nowrap bg-[color:var(--f92-warm)] px-4 py-3 align-top">
                         <div className="flex items-center gap-1">
                           <TicketLink ticketId={group.ticketId} url={latest.jira_ticket_url} />
                           {(auditCounts[latest.id] ?? 0) > 5 ? (
@@ -607,7 +610,7 @@ export default function LogsPage() {
                         <Badge variant={getStatusVariant(latest.log_status)}>{latest.log_status}</Badge>
                       </td>
                       <td className="px-4 py-3 align-top">
-                        {Array.isArray(latest.issue_category) ? latest.issue_category.join(', ') : '—'}
+                        <MmiList values={latest.issue_category} />
                       </td>
                       <td className="px-4 py-3 align-top">{latest.who_owns_fix ?? '—'}</td>
                       <td className="px-4 py-3 align-top">
@@ -627,7 +630,7 @@ export default function LogsPage() {
                       </td>
                       {profile?.role === 'admin' ? (
                         <td className="px-4 py-3 align-top">
-                          <div className="flex flex-wrap gap-1.5">
+                          <div className="flex flex-col gap-1.5 sm:flex-row sm:flex-wrap">
                             <Button variant="secondary" size="sm" onClick={() => openEditDialog(latest)}>Edit</Button>
                             <Button
                               variant="outline"
@@ -679,7 +682,7 @@ export default function LogsPage() {
                                         </Badge>
                                       </td>
                                       <td className="px-2 py-2 align-top">
-                                        {Array.isArray(entry.issue_category) ? entry.issue_category.join(', ') : '—'}
+                                        <MmiList values={entry.issue_category} />
                                       </td>
                                       <td className="px-2 py-2 align-top">
                                         {Array.isArray(entry.root_cause_final) ? entry.root_cause_final.join(', ') : '—'}
@@ -687,7 +690,7 @@ export default function LogsPage() {
                                       <td className="px-2 py-2 align-top">{entry.notes ?? '—'}</td>
                                       {profile?.role === 'admin' ? (
                                         <td className="px-2 py-2 align-top">
-                                          <div className="flex flex-wrap gap-1.5">
+                                          <div className="flex flex-col gap-1.5 sm:flex-row sm:flex-wrap">
                                             <Button variant="secondary" size="sm" onClick={() => openEditDialog(entry)}>Edit</Button>
                                             <Button
                                               variant="outline"

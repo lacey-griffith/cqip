@@ -85,6 +85,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         router.replace('/login');
         return;
       }
+
+      // Short-session (Remember me unchecked at login) — canary lives in
+      // sessionStorage and dies on browser close. If the preference was set
+      // to "no" but the canary is missing, treat this as a new browser
+      // session and sign the user out.
+      try {
+        const remember = window.localStorage.getItem('cqip-remember-me');
+        const canary = window.sessionStorage.getItem('cqip-session-active');
+        if (remember === 'false' && !canary) {
+          await supabase.auth.signOut();
+          router.replace('/login');
+          return;
+        }
+        if (remember === 'false' && canary) {
+          // refresh canary (keeps it alive for the life of this tab/window)
+          window.sessionStorage.setItem('cqip-session-active', '1');
+        }
+      } catch {
+        /* storage unavailable; let Supabase default persistence ride */
+      }
+
       setReady(true);
     }
     verifySession();

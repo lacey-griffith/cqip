@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { BarChart, Bar, PieChart, Pie, Cell, Sector, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Card } from '@/components/ui/card';
 import { ActiveAlertsPanel } from '@/components/dashboard/active-alerts-panel';
@@ -9,6 +9,7 @@ import { useTheme } from '@/components/layout/theme-provider';
 import { useToast } from '@/components/layout/toaster';
 import { useLoadingMessage } from '@/lib/easter-eggs/use-loading-message';
 import { supabase } from '@/lib/supabase/client';
+import { cn } from '@/lib/utils';
 
 interface KPIData {
   totalLogsThisMonth: number;
@@ -34,6 +35,49 @@ function LoadingPanel() {
       </div>
     </div>
   );
+}
+
+function MatrixRainOverlay() {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = window.innerWidth * dpr;
+    canvas.height = window.innerHeight * dpr;
+    canvas.style.width = `${window.innerWidth}px`;
+    canvas.style.height = `${window.innerHeight}px`;
+    ctx.scale(dpr, dpr);
+
+    const fontSize = 16;
+    const columns = Math.floor(window.innerWidth / fontSize);
+    const drops: number[] = Array(columns).fill(1);
+    const glyphs = 'アイウエオカキクケコサシスセソタチツテトナニヌネノ0123456789{}[]<>/\\|+=*#@$';
+
+    let rafId = 0;
+    function draw() {
+      if (!ctx) return;
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.08)';
+      ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
+      ctx.fillStyle = '#00FF41';
+      ctx.font = `${fontSize}px monospace`;
+      for (let i = 0; i < drops.length; i++) {
+        const ch = glyphs[Math.floor(Math.random() * glyphs.length)];
+        ctx.fillText(ch, i * fontSize, drops[i] * fontSize);
+        if (drops[i] * fontSize > window.innerHeight && Math.random() > 0.975) drops[i] = 0;
+        drops[i]++;
+      }
+      rafId = window.requestAnimationFrame(draw);
+    }
+    draw();
+    return () => window.cancelAnimationFrame(rafId);
+  }, []);
+
+  return <canvas ref={canvasRef} className="cqip-matrix-overlay" aria-hidden="true" />;
 }
 
 export default function DashboardPage() {
@@ -79,6 +123,16 @@ export default function DashboardPage() {
   const { toast } = useToast();
   const [cleanStreakDays, setCleanStreakDays] = useState<number | null>(null);
 
+  // Title click → matrix rain easter egg
+  const titleClicks = useRef(0);
+  const titleClicksResetAt = useRef(0);
+  const [matrixActive, setMatrixActive] = useState(false);
+
+  // Manual Jira sync
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
+
   // 1-in-5 chance per mount to drop a tiny celebratory glyph next to the
   // "all clear" KPI when critical = 0. Computed in an effect (client-only)
   // so SSR and hydration agree on the initial null value.
@@ -88,6 +142,74 @@ export default function DashboardPage() {
       setSparkleEmoji(Math.random() < 0.5 ? '🎊' : '⭐');
     }
   }, []);
+
+  // Hydrate lastSyncedAt from localStorage, fetch admin role for sync button.
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem('cqip-last-sync');
+      if (saved) setLastSyncedAt(saved);
+    } catch { /* ignore */ }
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) return;
+      const { data } = await supabase
+        .from('user_profiles')
+        .select('role')
+        .eq('id', session.user.id)
+        .maybeSingle();
+      setIsAdmin(data?.role === 'admin');
+    })();
+  }, []);
+
+  function handleTitleClick() {
+    const now = Date.now();
+    if (now - titleClicksResetAt.current > 2500) titleClicks.current = 0;
+    titleClicks.current += 1;
+    titleClicksResetAt.current = now;
+    if (titleClicks.current >= 7) {
+      titleClicks.current = 0;
+      setMatrixActive(true);
+      window.setTimeout(() => {
+        setMatrixActive(false);
+        toast('There is no bug. 🕶️');
+      }, 3000);
+    }
+  }
+
+  async function handleSyncWithJira() {
+    if (syncing) return;
+    setSyncing(true);
+    try {
+      const response = await fetch('/api/jira/sync', { method: 'POST' });
+      if (!response.ok) {
+        throw new Error('Sync failed');
+      }
+      const stamp = new Date().toISOString();
+      setLastSyncedAt(stamp);
+      try { window.localStorage.setItem('cqip-last-sync', stamp); } catch { /* ignore */ }
+      toast('✅ Synced with Jira');
+    } catch (err) {
+      console.error('[dashboard] jira sync failed', err);
+      toast('❌ Sync failed — try again');
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  function formatLastSync(iso: string | null): string {
+    if (!iso) return 'Never synced';
+    const then = new Date(iso);
+    if (Number.isNaN(then.getTime())) return 'Never synced';
+    const diff = Date.now() - then.getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'Last synced: just now';
+    if (mins < 60) return `Last synced: ${mins} minute${mins === 1 ? '' : 's'} ago`;
+    const sameDay = then.toDateString() === new Date().toDateString();
+    if (sameDay) {
+      return `Last synced: Today at ${then.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+    }
+    return `Last synced: ${then.toLocaleDateString('en-US', { month: 'short', day: '2-digit' })} at ${then.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+  }
 
   useEffect(() => {
     async function fetchDashboardData() {
@@ -307,55 +429,92 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      {matrixActive ? <MatrixRainOverlay /> : null}
+
       {/* Header */}
-      <div className="rounded-3xl border border-[color:var(--f92-border)] bg-white p-8 shadow-sm">
+      <div className="rounded-3xl border border-[color:var(--f92-border)] bg-white p-6 md:p-7 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-sm uppercase tracking-[0.3em] text-[color:var(--f92-navy)]">Dashboard</p>
-            <h1 className="mt-3 text-3xl font-semibold text-[color:var(--f92-dark)]">Quality Intelligence Platform</h1>
+            <h1
+              onClick={handleTitleClick}
+              className="mt-3 text-3xl font-semibold text-[color:var(--f92-dark)] cursor-pointer select-none"
+            >
+              Quality Intelligence Platform
+            </h1>
             <p className="mt-2 text-sm text-[color:var(--f92-gray)]">
               Monitor rework events, analyze trends, and track quality metrics across your CRO projects.
             </p>
           </div>
-          {cleanStreakDays !== null && cleanStreakDays >= 7 ? (
-            <button
-              type="button"
-              onClick={() => toast('🚀 The team is crushing it!')}
-              className="cqip-streak-bounce inline-flex items-center gap-2 rounded-full border border-[color:var(--f92-border)] bg-[color:var(--f92-tint)] px-3 py-1.5 text-xs font-semibold text-[color:var(--f92-navy)] transition hover:bg-[color:var(--f92-warm)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)]"
-              aria-label={`${cleanStreakDays}-day clean streak`}
-            >
-              <span aria-hidden="true">🌟</span>
-              {cleanStreakDays}-day clean streak!
-            </button>
-          ) : null}
+          <div className="flex flex-col items-end gap-2">
+            {isAdmin ? (
+              <div className="flex flex-col items-end gap-1">
+                <button
+                  type="button"
+                  onClick={handleSyncWithJira}
+                  disabled={syncing}
+                  className="inline-flex items-center gap-2 rounded-full bg-[color:var(--f92-orange)] px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)] focus-visible:ring-offset-2"
+                >
+                  <svg
+                    className={cn('h-3.5 w-3.5', syncing && 'animate-spin')}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M21 12a9 9 0 1 1-3-6.7L21 8" />
+                    <path d="M21 3v5h-5" />
+                  </svg>
+                  {syncing ? 'Syncing…' : 'Sync with Jira'}
+                </button>
+                <p className="text-[10px] uppercase tracking-widest text-[color:var(--f92-gray)]">
+                  {formatLastSync(lastSyncedAt)}
+                </p>
+              </div>
+            ) : null}
+            {cleanStreakDays !== null && cleanStreakDays >= 7 ? (
+              <button
+                type="button"
+                onClick={() => toast('🚀 The team is crushing it!')}
+                className="cqip-streak-bounce inline-flex items-center gap-2 rounded-full border border-[color:var(--f92-border)] bg-[color:var(--f92-tint)] px-3 py-1.5 text-xs font-semibold text-[color:var(--f92-navy)] transition hover:bg-[color:var(--f92-warm)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)]"
+                aria-label={`${cleanStreakDays}-day clean streak`}
+              >
+                <span aria-hidden="true">🌟</span>
+                {cleanStreakDays}-day clean streak!
+              </button>
+            ) : null}
+          </div>
         </div>
       </div>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-5">
         {/* Total Logs This Month */}
-        <Card className="border-[color:var(--f92-border)] bg-white p-6 shadow-sm">
+        <Card className="border-[color:var(--f92-border)] bg-white p-4 md:p-5 shadow-sm">
           <p className="text-xs font-medium uppercase text-[color:var(--f92-gray)]">Total Logs</p>
           <p className="mt-3 text-4xl font-bold text-[color:var(--f92-navy)]">{kpi.totalLogsThisMonth}</p>
           <p className="mt-2 text-xs text-[color:var(--f92-gray)]">This month</p>
         </Card>
 
         {/* Open Count */}
-        <Card className="border-[color:var(--f92-border)] bg-white p-6 shadow-sm">
+        <Card className="border-[color:var(--f92-border)] bg-white p-4 md:p-5 shadow-sm">
           <p className="text-xs font-medium uppercase text-[color:var(--f92-gray)]">Open</p>
           <p className="mt-3 text-4xl font-bold text-blue-500">{kpi.openCount}</p>
           <p className="mt-2 text-xs text-[color:var(--f92-gray)]">Requires action</p>
         </Card>
 
         {/* In Progress Count */}
-        <Card className="border-[color:var(--f92-border)] bg-white p-6 shadow-sm">
+        <Card className="border-[color:var(--f92-border)] bg-white p-4 md:p-5 shadow-sm">
           <p className="text-xs font-medium uppercase text-[color:var(--f92-gray)]">In Progress</p>
           <p className="mt-3 text-4xl font-bold text-indigo-500">{kpi.inProgressCount}</p>
           <p className="mt-2 text-xs text-[color:var(--f92-gray)]">Being worked on</p>
         </Card>
 
         {/* Critical Issues Open */}
-        <Card className="border-[color:var(--f92-border)] bg-white p-6 shadow-sm">
+        <Card className="border-[color:var(--f92-border)] bg-white p-4 md:p-5 shadow-sm">
           <p className="text-xs font-medium uppercase text-[color:var(--f92-gray)]">Critical</p>
           <p className="mt-3 text-4xl font-bold text-red-600">{kpi.criticalIssuesOpen}</p>
           <p className="mt-2 text-xs text-[color:var(--f92-gray)]">
@@ -368,7 +527,7 @@ export default function DashboardPage() {
         </Card>
 
         {/* Most Frequent Root Cause */}
-        <Card className="border-[color:var(--f92-border)] bg-white p-6 shadow-sm">
+        <Card className="border-[color:var(--f92-border)] bg-white p-4 md:p-5 shadow-sm">
           <p className="text-xs font-medium uppercase text-[color:var(--f92-gray)]">Top Root Cause</p>
           <p className="mt-3 line-clamp-2 text-sm font-semibold text-[color:var(--f92-navy)]">
             {kpi.mostFrequentRootCause || 'N/A'}

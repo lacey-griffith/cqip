@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
+import { BackToSettings } from '@/components/ui/back-to-settings';
 
 interface Project {
   id: string;
@@ -142,6 +143,7 @@ export default function ProjectsSettingsPage() {
 
   return (
     <div className="space-y-6">
+      <BackToSettings />
       <div className="rounded-3xl border border-[color:var(--f92-border)] bg-white p-8 shadow-sm">
         <p className="text-sm uppercase tracking-[0.3em] text-[color:var(--f92-navy)]">Settings</p>
         <h1 className="mt-3 text-3xl font-semibold text-[color:var(--f92-dark)]">Project Management</h1>

@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/lib/supabase/client';
+import { BackToSettings } from '@/components/ui/back-to-settings';
 
 interface AlertRule {
   id: string;
@@ -338,6 +339,7 @@ export default function AlertRulesPage() {
 
   return (
     <div className="space-y-6">
+      <BackToSettings />
       {/* Header */}
       <div className="rounded-3xl border border-[color:var(--f92-border)] bg-white p-8 shadow-sm">
         <p className="text-sm uppercase tracking-[0.3em] text-[color:var(--f92-navy)]">Settings</p>

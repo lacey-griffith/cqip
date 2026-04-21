@@ -229,6 +229,61 @@ textarea {
   }
 }
 
+/* Chart / dashboard section titles — lighter in dark mode for contrast. */
+:root[data-theme="dark"] .cqip-section-title {
+  color: #E2E8F0 !important;
+}
+
+/* Global interactive-element cursors — ensures every button, link,
+   and explicit role-button element gets a pointer cursor in one place. */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+a[href] {
+  cursor: pointer;
+}
+button:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+/* Matrix-rain easter egg canvas */
+.cqip-matrix-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  pointer-events: none;
+  background: rgba(0, 0, 0, 0.85);
+  transition: opacity 400ms ease;
+}
+
+/* Missing-info speech bubble */
+.cqip-mmi-bubble {
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  transform: translate(-50%, 6px);
+  z-index: 30;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--f92-orange);
+  background: var(--f92-dark);
+  color: #FFFFFF;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
+}
+.cqip-mmi-bubble::before {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-bottom-color: var(--f92-orange);
+}
+
 /* Locked-dossier shake for wrong password */
 @keyframes cqip-shake {
   0%, 100% { transform: translateX(0); }
@@ -296,10 +351,10 @@ textarea {
 
 /* Sun-hover clouds: drift across the sidebar, fade in early, fade out late. */
 @keyframes cqip-cloud-drift {
-  0%   { transform: translateX(-110px); opacity: 0; }
-  12%  { opacity: 0.8; }
-  85%  { opacity: 0.8; }
-  100% { transform: translateX(calc(18rem + 10px)); opacity: 0; }
+  0%   { transform: translateX(-130px); opacity: 0; }
+  12%  { opacity: 0.85; }
+  85%  { opacity: 0.85; }
+  100% { transform: translateX(calc(18rem + 20px)); opacity: 0; }
 }
 .cqip-cloud-drift {
   left: 0;
