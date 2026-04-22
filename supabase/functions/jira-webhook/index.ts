@@ -277,8 +277,21 @@ Deno.serve(async (request: Request) => {
               .eq('jira_value', brandValue)
               .maybeSingle();
             brandId = brand?.id ?? null;
+
+            // Fall back to aliases if no direct brand match. Historical
+            // Jira strings that predate the canonical names flow through
+            // brand_aliases so we don't have to rewrite tickets.
             if (!brandId) {
-              console.warn('[jira-webhook] milestone: no brand match for', brandValue);
+              const { data: alias } = await supabase
+                .from('brand_aliases')
+                .select('brand_id')
+                .eq('jira_value', brandValue)
+                .maybeSingle();
+              brandId = alias?.brand_id ?? null;
+            }
+
+            if (!brandId) {
+              console.warn('[jira-webhook] milestone: no brand or alias match for', brandValue);
             }
           }
 
