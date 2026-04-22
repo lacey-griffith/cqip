@@ -23,6 +23,7 @@ interface LogEntry {
   triggered_at: string;
   jira_ticket_id: string;
   jira_ticket_url: string;
+  jira_summary: string | null;
   client_brand: string | null;
   severity: string | null;
   log_status: string;
@@ -146,7 +147,7 @@ export default function LogsPage() {
     async function loadData() {
       const { data: logsData } = await supabase
         .from('quality_logs')
-        .select('id, triggered_at, jira_ticket_id, jira_ticket_url, client_brand, severity, log_status, issue_category, root_cause_final, who_owns_fix, log_number, notes, resolution_notes')
+        .select('id, triggered_at, jira_ticket_id, jira_ticket_url, jira_summary, client_brand, severity, log_status, issue_category, root_cause_final, who_owns_fix, log_number, notes, resolution_notes')
         .eq('is_deleted', false)
         .order('triggered_at', { ascending: false });
 
@@ -614,7 +615,11 @@ export default function LogsPage() {
                       </td>
                       <td className="sticky left-[6.5rem] z-[1] whitespace-nowrap bg-[color:var(--f92-warm)] px-4 py-3 align-top">
                         <div className="flex items-center gap-1">
-                          <TicketLink ticketId={group.ticketId} url={latest.jira_ticket_url} />
+                          <TicketLink
+                            ticketId={group.ticketId}
+                            url={latest.jira_ticket_url}
+                            title={latest.jira_summary}
+                          />
                           {(auditCounts[latest.id] ?? 0) > 5 ? (
                             <span
                               role="img"
