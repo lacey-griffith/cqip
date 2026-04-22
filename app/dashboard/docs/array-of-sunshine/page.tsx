@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import confetti from 'canvas-confetti';
+import { supabase } from '@/lib/supabase/client';
 
 interface EggEntry {
   name: string;
@@ -89,6 +90,21 @@ export default function ArrayOfSunshinePage() {
   const [password, setPassword] = useState('');
   const [shake, setShake] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [triggerCount, setTriggerCount] = useState<number | null>(null);
+
+  // Pull current count on unlock so we can show it.
+  useEffect(() => {
+    if (!unlocked) return;
+    async function load() {
+      const { data } = await supabase
+        .from('easter_egg_stats')
+        .select('hit_count')
+        .eq('egg_name', 'array_of_sunshine_unlock')
+        .maybeSingle();
+      setTriggerCount(data?.hit_count ?? 0);
+    }
+    load();
+  }, [unlocked]);
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -101,6 +117,18 @@ export default function ArrayOfSunshinePage() {
         origin: { y: 0.4 },
         colors: ['#F47920', '#FFFFFF', '#FACC15'],
       });
+
+      // Count this trigger. Fire-and-forget; failures don't block the unlock.
+      supabase
+        .rpc('increment_easter_egg', { p_name: 'array_of_sunshine_unlock' })
+        .then(({ data, error: rpcError }) => {
+          if (rpcError) {
+            console.error('[sunshine] increment failed', rpcError);
+            return;
+          }
+          if (typeof data === 'number') setTriggerCount(data);
+        });
+
       return;
     }
     setError('Access denied. Try again.');
@@ -165,6 +193,11 @@ export default function ArrayOfSunshinePage() {
           <p className="text-xs uppercase tracking-[0.4em] opacity-70">Top secret</p>
           <h1 className="mt-2 text-3xl font-bold">🔐 CLASSIFIED: CQIP Secret Files</h1>
           <p className="mt-2 text-sm opacity-80">You didn&apos;t find this here. 🤫</p>
+          {triggerCount !== null ? (
+            <p className="mt-2 text-xs uppercase tracking-[0.3em] opacity-60">
+              Unlocked {triggerCount} time{triggerCount === 1 ? '' : 's'}
+            </p>
+          ) : null}
 
           <ol className="mt-8 space-y-4">
             {EGGS.map((egg, idx) => (
