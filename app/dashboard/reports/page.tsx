@@ -13,6 +13,7 @@ import * as XLSX from 'xlsx';
 import { ScorecardReport } from '@/components/reports/scorecard-report';
 import { RootCauseReport } from '@/components/reports/root-cause-report';
 import { ClientReport } from '@/components/reports/client-report';
+import { SyncJiraButton } from '@/components/dashboard/sync-jira-button';
 import type { DateRange } from '@/components/reports/common';
 
 const ALL = '__all__';
@@ -394,11 +395,16 @@ export default function ReportsPage() {
   return (
     <div className="space-y-6">
       <div className="rounded-3xl border border-[color:var(--f92-border)] bg-white p-8 shadow-sm cqip-skip-in-print">
-        <p className="text-sm uppercase tracking-[0.3em] text-[color:var(--f92-navy)]">Reports</p>
-        <h1 className="mt-3 text-3xl font-semibold text-[color:var(--f92-dark)]">Reports</h1>
-        <p className="mt-2 text-sm text-[color:var(--f92-gray)]">
-          Pick a named report for a focused view, or use the custom filter below for an ad-hoc table.
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-sm uppercase tracking-[0.3em] text-[color:var(--f92-navy)]">Reports</p>
+            <h1 className="mt-3 text-3xl font-semibold text-[color:var(--f92-dark)]">Reports</h1>
+            <p className="mt-2 text-sm text-[color:var(--f92-gray)]">
+              Pick a named report for a focused view, or use the custom filter below for an ad-hoc table.
+            </p>
+          </div>
+          <SyncJiraButton />
+        </div>
       </div>
 
       {/* Three named report cards */}

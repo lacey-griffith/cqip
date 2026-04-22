@@ -14,6 +14,7 @@ import { EditLogDialog, type EditableLog } from '@/components/logs/edit-log-dial
 import { ConfirmDeleteDialog } from '@/components/logs/confirm-delete-dialog';
 import { TicketLink } from '@/components/logs/ticket-link';
 import { MmiList } from '@/components/logs/mmi-tooltip';
+import { SyncJiraButton } from '@/components/dashboard/sync-jira-button';
 import { cn } from '@/lib/utils';
 
 const ALL = '__all__';
@@ -418,6 +419,7 @@ export default function LogsPage() {
           <p className="text-sm uppercase tracking-[0.3em] text-[color:var(--f92-navy)]">Logs</p>
           <h1 className="mt-2 text-3xl font-semibold text-[color:var(--f92-dark)]">Quality Logs</h1>
         </div>
+        <SyncJiraButton />
       </div>
 
       <Card className="p-3 md:p-4">
