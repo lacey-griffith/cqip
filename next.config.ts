@@ -29,7 +29,7 @@ const csp = [
   "form-action 'self'",
   scriptSrc,
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https://fusion92.atlassian.net",
+  `img-src 'self' data: blob: https://fusion92.atlassian.net${supabaseOrigin ? ` ${supabaseOrigin}` : ''}`,
   "font-src 'self' data:",
   `connect-src 'self'${supabaseOrigin ? ` ${supabaseOrigin} ${supabaseWs}` : ''}`,
   "manifest-src 'self'",
