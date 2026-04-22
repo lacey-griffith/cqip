@@ -23,6 +23,7 @@ interface NavProfile {
   color_preference: string | null;
   pattern_preference: AvatarPattern | null;
   theme_preference: 'light' | 'dark' | null;
+  avatar_url: string | null;
 }
 
 const navLinks = [
@@ -275,7 +276,7 @@ export function Nav() {
     if (sunHoverTimer.current) window.clearTimeout(sunHoverTimer.current);
     sunHoverTimer.current = window.setTimeout(() => {
       // eslint-disable-next-line no-console
-      console.log('[nav] sun hover 2s fired — spawning clouds');
+      console.log('[nav] sun hover 1.5s fired — spawning clouds');
       // First cloud renders immediately (delay 0); later clouds stagger.
       const cloudSpecs = Array.from({ length: 3 }, (_, i) => ({
         id: Date.now() + i,
@@ -289,7 +290,7 @@ export function Nav() {
       const maxLife =
         Math.max(...cloudSpecs.map(c => c.duration * 1000 + c.delay)) + 400;
       cloudClearTimer.current = window.setTimeout(() => setClouds([]), maxLife);
-    }, 2000);
+    }, 1500);
   }
 
   function handleSunLeave() {
@@ -376,6 +377,7 @@ export function Nav() {
               displayName={capitalizeName(profile?.display_name)}
               color={profile?.color_preference}
               pattern={slotPattern ?? profile?.pattern_preference}
+              avatarUrl={profile?.avatar_url}
               size="sm"
             />
           </span>
@@ -447,6 +449,7 @@ export function Nav() {
                   displayName={capitalizeName(profile?.display_name)}
                   color={profile?.color_preference}
                   pattern={slotPattern ?? profile?.pattern_preference}
+                  avatarUrl={profile?.avatar_url}
                   size="md"
                 />
               </span>
@@ -584,6 +587,16 @@ export function Nav() {
           </div>
         ) : null}
 
+        {/* Sky tint fades in while clouds are animating. */}
+        <div
+          aria-hidden="true"
+          className={cn(
+            'pointer-events-none absolute inset-0 transition-opacity duration-500',
+            !isDark && clouds.length > 0 ? 'opacity-100' : 'opacity-0',
+          )}
+          style={{ background: 'rgba(147, 197, 253, 0.25)' }}
+        />
+
         {!isDark && clouds.length > 0 ? (
           <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
             {clouds.map(c => (
@@ -601,10 +614,11 @@ export function Nav() {
                 height={54}
                 viewBox="0 0 120 60"
               >
-                {/* Super Mario cloud: chunky, overlapping white circles with
-                    a soft gray shadow sitting just under the main body. */}
+                {/* Super Mario cloud: chunky overlapping white circles on top
+                    of a light-gray shadow belly so the cloud stays readable
+                    against the sky tint. */}
                 <g>
-                  <ellipse cx="60" cy="46" rx="52" ry="11" fill="#E2E8F0" opacity="0.6" />
+                  <ellipse cx="60" cy="48" rx="52" ry="11" fill="#CBD5E1" />
                   <g fill="#FFFFFF">
                     <circle cx="24" cy="38" r="14" />
                     <circle cx="40" cy="30" r="18" />
@@ -613,7 +627,6 @@ export function Nav() {
                     <circle cx="96" cy="36" r="16" />
                     <rect x="20" y="36" width="84" height="12" rx="6" />
                   </g>
-                  <ellipse cx="60" cy="48" rx="44" ry="4" fill="#E2E8F0" opacity="0.5" />
                 </g>
               </svg>
             ))}

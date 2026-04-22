@@ -26,8 +26,12 @@ interface ProfileData {
   color_preference: string | null;
   pattern_preference: AvatarPattern | null;
   theme_preference: Theme | null;
+  avatar_url: string | null;
   role: 'admin' | 'read_only';
 }
+
+const ALLOWED_AVATAR_MIME = ['image/jpeg', 'image/png', 'image/webp'];
+const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
 
 export default function ProfileSettingsPage() {
   const { theme, setTheme } = useTheme();
@@ -35,9 +39,12 @@ export default function ProfileSettingsPage() {
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [color, setColor] = useState<string>(DEFAULT_AVATAR_COLOR);
   const [pattern, setPattern] = useState<AvatarPattern>(DEFAULT_AVATAR_PATTERN);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [savingAppearance, setSavingAppearance] = useState(false);
   const [appearanceMessage, setAppearanceMessage] = useState<string | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -76,6 +83,7 @@ export default function ProfileSettingsPage() {
       setProfile(p);
       setColor(p.color_preference || DEFAULT_AVATAR_COLOR);
       setPattern((p.pattern_preference as AvatarPattern) || DEFAULT_AVATAR_PATTERN);
+      setAvatarUrl(p.avatar_url ?? null);
       if (p.theme_preference === 'dark' || p.theme_preference === 'light') {
         setTheme(p.theme_preference);
       }
@@ -114,6 +122,79 @@ export default function ProfileSettingsPage() {
   async function handleTheme(nextTheme: Theme) {
     setTheme(nextTheme);
     await persistAppearance({ theme_preference: nextTheme });
+  }
+
+  async function handleUploadPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-selecting the same file later
+    if (!file || !profile) return;
+    setPhotoError(null);
+
+    if (!ALLOWED_AVATAR_MIME.includes(file.type)) {
+      setPhotoError('Please upload a JPG, PNG, or WebP image.');
+      return;
+    }
+    if (file.size > MAX_AVATAR_BYTES) {
+      setPhotoError('Image must be 2 MB or smaller.');
+      return;
+    }
+
+    setUploadingPhoto(true);
+    try {
+      const ext = (file.name.split('.').pop() || 'png').toLowerCase();
+      const path = `${profile.id}/avatar.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(path, file, { upsert: true, contentType: file.type, cacheControl: '3600' });
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path);
+      // Append a cache-buster so the new image shows immediately even when
+      // the URL hasn't changed from last upload.
+      const busted = `${urlData.publicUrl}?v=${Date.now()}`;
+
+      const { error: profileError } = await supabase
+        .from('user_profiles')
+        .update({ avatar_url: busted })
+        .eq('id', profile.id);
+      if (profileError) throw profileError;
+
+      setAvatarUrl(busted);
+    } catch (err) {
+      console.error('[profile] avatar upload failed', err);
+      setPhotoError(err instanceof Error ? err.message : 'Upload failed. Try again.');
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }
+
+  async function handleRemovePhoto() {
+    if (!profile) return;
+    setPhotoError(null);
+    setUploadingPhoto(true);
+    try {
+      // Best-effort: try to delete every known extension. Ignore errors
+      // because the object may not exist for that particular extension.
+      await supabase.storage
+        .from('avatars')
+        .remove([
+          `${profile.id}/avatar.jpg`,
+          `${profile.id}/avatar.jpeg`,
+          `${profile.id}/avatar.png`,
+          `${profile.id}/avatar.webp`,
+        ]);
+      const { error: profileError } = await supabase
+        .from('user_profiles')
+        .update({ avatar_url: null })
+        .eq('id', profile.id);
+      if (profileError) throw profileError;
+      setAvatarUrl(null);
+    } catch (err) {
+      console.error('[profile] avatar remove failed', err);
+      setPhotoError(err instanceof Error ? err.message : 'Remove failed. Try again.');
+    } finally {
+      setUploadingPhoto(false);
+    }
   }
 
   async function handleChangePassword(e: React.FormEvent) {
@@ -183,13 +264,41 @@ export default function ProfileSettingsPage() {
 
       <Card className="border-[color:var(--f92-border)] bg-white p-6 shadow-sm">
         <div className="grid gap-6 lg:grid-cols-[auto_1fr]">
-          <div className="flex items-center gap-4">
-            <UserAvatar
-              displayName={capitalizeName(profile.display_name)}
-              color={color}
-              pattern={pattern}
-              size="lg"
-            />
+          <div className="flex items-start gap-4">
+            <div className="flex flex-col items-center gap-2">
+              <UserAvatar
+                displayName={capitalizeName(profile.display_name)}
+                color={color}
+                pattern={pattern}
+                avatarUrl={avatarUrl}
+                size="lg"
+              />
+              <div className="flex flex-col gap-1 text-center">
+                <label className="inline-flex cursor-pointer items-center justify-center rounded-full border border-[color:var(--f92-border)] bg-white px-3 py-1 text-xs font-medium text-[color:var(--f92-dark)] transition hover:border-[color:var(--f92-orange)] hover:text-[color:var(--f92-orange)]">
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    disabled={uploadingPhoto}
+                    onChange={handleUploadPhoto}
+                  />
+                  {uploadingPhoto ? 'Uploading…' : avatarUrl ? 'Change photo' : 'Upload photo'}
+                </label>
+                {avatarUrl ? (
+                  <button
+                    type="button"
+                    onClick={handleRemovePhoto}
+                    disabled={uploadingPhoto}
+                    className="text-[10px] uppercase tracking-widest text-[color:var(--f92-gray)] transition hover:text-red-600 disabled:opacity-60"
+                  >
+                    Remove photo
+                  </button>
+                ) : null}
+                {photoError ? (
+                  <p className="text-[10px] text-red-600">{photoError}</p>
+                ) : null}
+              </div>
+            </div>
             <div>
               <h2 className="text-lg font-semibold text-[color:var(--f92-navy)]">{capitalizeName(profile.display_name)}</h2>
               <p className="mt-1 text-xs uppercase tracking-[0.2em] text-[color:var(--f92-gray)]">

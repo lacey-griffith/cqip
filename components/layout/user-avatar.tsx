@@ -25,8 +25,7 @@ export const AVATAR_PATTERNS = [
   'stripes',
   'squiggles',
   'checkered',
-  'spirals',
-  'cheetah',
+  'checkered_large',
 ] as const;
 export type AvatarPattern = (typeof AVATAR_PATTERNS)[number];
 
@@ -36,8 +35,7 @@ export const AVATAR_PATTERN_LABELS: Record<AvatarPattern, string> = {
   stripes: 'Diagonal Stripes',
   squiggles: 'Squiggles',
   checkered: 'Checkered',
-  spirals: 'Spirals',
-  cheetah: 'Cheetah',
+  checkered_large: 'Checkered (Large)',
 };
 
 export const DEFAULT_AVATAR_PATTERN: AvatarPattern = 'none';
@@ -54,6 +52,7 @@ interface UserAvatarProps {
   displayName?: string | null;
   color?: string | null;
   pattern?: AvatarPattern | null;
+  avatarUrl?: string | null;
   size?: 'sm' | 'md' | 'lg';
   className?: string;
 }
@@ -108,34 +107,11 @@ function PatternDef({ id, pattern }: { id: string; pattern: AvatarPattern }) {
       </pattern>
     );
   }
-  if (pattern === 'spirals') {
+  if (pattern === 'checkered_large') {
     return (
-      <pattern id={id} x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse">
-        <path
-          d="M12 12 m-6 0 a6 6 0 1 1 12 0 a6 6 0 1 1 -10 0 a4 4 0 1 1 8 0 a4 4 0 1 1 -6 0"
-          fill="none"
-          stroke="rgba(255,255,255,0.42)"
-          strokeWidth="1.4"
-          strokeLinecap="round"
-        />
-      </pattern>
-    );
-  }
-  if (pattern === 'cheetah') {
-    return (
-      <pattern id={id} x="0" y="0" width="28" height="28" patternUnits="userSpaceOnUse">
-        <g fill="rgba(0,0,0,0.32)">
-          <ellipse cx="6" cy="6" rx="2.6" ry="2" />
-          <ellipse cx="20" cy="10" rx="2.4" ry="1.8" />
-          <ellipse cx="11" cy="18" rx="2.6" ry="2" />
-          <ellipse cx="24" cy="22" rx="2.2" ry="1.6" />
-        </g>
-        <g fill="rgba(255,255,255,0.16)">
-          <circle cx="6" cy="6" r="0.9" />
-          <circle cx="20" cy="10" r="0.9" />
-          <circle cx="11" cy="18" r="0.9" />
-          <circle cx="24" cy="22" r="0.9" />
-        </g>
+      <pattern id={id} x="0" y="0" width="56" height="56" patternUnits="userSpaceOnUse">
+        <rect x="0" y="0" width="28" height="28" fill="rgba(255,255,255,0.32)" />
+        <rect x="28" y="28" width="28" height="28" fill="rgba(255,255,255,0.32)" />
       </pattern>
     );
   }
@@ -146,6 +122,7 @@ export function UserAvatar({
   displayName,
   color,
   pattern,
+  avatarUrl,
   size = 'md',
   className,
 }: UserAvatarProps) {
@@ -156,6 +133,20 @@ export function UserAvatar({
   const { px, fontSize } = sizeMap[size];
   const reactId = React.useId().replace(/[:]/g, '');
   const patternId = `avatar-pattern-${reactId}`;
+
+  // Photo wins over initials when present.
+  if (avatarUrl) {
+    return (
+      <img
+        src={avatarUrl}
+        alt={displayName ? `${displayName} avatar` : 'User avatar'}
+        width={px}
+        height={px}
+        className={cn('rounded-full object-cover select-none', className)}
+        style={{ width: px, height: px }}
+      />
+    );
+  }
 
   return (
     <svg

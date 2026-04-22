@@ -12,13 +12,28 @@ interface EggEntry {
 const EGGS: EggEntry[] = [
   {
     name: 'Konami code',
-    trigger: '↑ ↑ ↓ ↓ ← → ← → B A',
-    description: 'Confetti, a toast, and the secret club door swings open (on any dashboard page).',
+    trigger: '↑ ↑ ↓ ↓ ← → ← → B A (anywhere on a dashboard page)',
+    description: 'Massive confetti explosion (orange, navy, white, gold) plus a toast.',
   },
   {
-    name: 'Logo unlock',
+    name: 'Matrix rain',
+    trigger: 'Click the "Quality Intelligence Platform" title 7× on the dashboard',
+    description: 'Green glyphs cascade over the whole screen for 3 seconds. Ends with "There is no bug. 🕶️".',
+  },
+  {
+    name: 'Sun → clouds',
+    trigger: 'In light mode, hover the Sun icon for 1.5 seconds',
+    description: 'Three chunky Super Mario clouds drift across the sidebar over a soft sky-blue tint.',
+  },
+  {
+    name: 'Moon → stars',
+    trigger: 'In dark mode, hover the Moon icon for 3 seconds',
+    description: '20-odd tiny stars twinkle across the sidebar in white, pale yellow, and gold.',
+  },
+  {
+    name: 'Logo rainbow',
     trigger: 'Click the CQ hexagon 5× quickly',
-    description: 'The logo bounces, spins, and rainbow-cycles before snapping back.',
+    description: 'The logo bounces, spins, and hue-rotates through the rainbow before snapping back to Fusion92 orange.',
   },
   {
     name: 'Brand chant',
@@ -26,39 +41,44 @@ const EGGS: EggEntry[] = [
     description: 'A warm orange wave sweeps across the screen.',
   },
   {
-    name: 'All clear sparkle',
-    trigger: 'Critical KPI = 0 (1-in-5 page loads)',
+    name: 'Avatar slot machine',
+    trigger: 'Click your avatar 3× quickly',
+    description: 'Patterns reel through like a slot machine and land on a random one.',
+  },
+  {
+    name: 'Admin badge titles',
+    trigger: 'Admins: click the ADMIN badge in the sidebar',
+    description: 'Cycles through 15 alternate titles (Bug Whisperer, 404: Title Not Found, sudo make me a sandwich, etc.). The 9th click resets to ADMIN.',
+  },
+  {
+    name: 'Missing Info tooltip',
+    trigger: 'Hover over "Missing / Miscommunicated Info" anywhere in the app',
+    description: 'A speech bubble appears after 500ms: "📞 Have you tried... talking to each other?"',
+  },
+  {
+    name: 'Zero-critical sparkle',
+    trigger: 'Critical KPI = 0 (fires on roughly 1-in-5 dashboard loads)',
     description: 'A tiny 🎊 or ⭐ pops in next to "All systems normal".',
   },
   {
     name: 'Clean streak',
     trigger: 'No new logs in 7+ days',
-    description: 'A bouncing badge appears in the dashboard header.',
+    description: 'A bouncing badge appears in the dashboard header. Click it for an extra kudos toast.',
   },
   {
-    name: 'Avatar slot machine',
-    trigger: 'Click your avatar 3× quickly',
-    description: 'Patterns reel through like a slot machine and land random.',
-  },
-  {
-    name: 'Twinkle',
-    trigger: 'In dark mode, hover the moon icon for 3s',
-    description: 'Tiny stars twinkle in the sidebar background.',
-  },
-  {
-    name: 'Lost in development',
+    name: 'Lost in development (404)',
     trigger: 'Hit any 404 URL',
     description: 'The CQIP logo looks confused. We logged it.',
   },
   {
     name: 'Loading messages',
     trigger: 'Anywhere the app is loading',
-    description: 'Honest, slightly chaotic status updates while you wait.',
+    description: 'Honest, slightly chaotic status updates while you wait (Interrogating Jira…, Bribing the database…).',
   },
   {
     name: 'Audit-trail eyes',
     trigger: 'A log edited more than 5 times',
-    description: 'A 👀 emoji appears next to the ticket. It has been through some things.',
+    description: 'A 👀 emoji appears next to the ticket ID. It has been through some things.',
   },
 ];
 

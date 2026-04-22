@@ -491,32 +491,32 @@ export default function DashboardPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
         {/* Total Logs This Month */}
-        <Card className="border-[color:var(--f92-border)] bg-white p-4 md:p-5 shadow-sm">
-          <p className="text-xs font-medium uppercase text-[color:var(--f92-gray)]">Total Logs</p>
-          <p className="mt-3 text-4xl font-bold text-[color:var(--f92-navy)]">{kpi.totalLogsThisMonth}</p>
+        <Card className="border-[color:var(--f92-border)] bg-white p-3 md:p-4 shadow-sm">
+          <p className="text-xs font-medium uppercase tracking-wider text-[color:var(--f92-gray)]">Total Logs</p>
+          <p className="mt-2 text-3xl md:text-4xl font-bold text-[color:var(--f92-navy)]">{kpi.totalLogsThisMonth}</p>
           <p className="mt-2 text-xs text-[color:var(--f92-gray)]">This month</p>
         </Card>
 
         {/* Open Count */}
-        <Card className="border-[color:var(--f92-border)] bg-white p-4 md:p-5 shadow-sm">
-          <p className="text-xs font-medium uppercase text-[color:var(--f92-gray)]">Open</p>
-          <p className="mt-3 text-4xl font-bold text-blue-500">{kpi.openCount}</p>
+        <Card className="border-[color:var(--f92-border)] bg-white p-3 md:p-4 shadow-sm">
+          <p className="text-xs font-medium uppercase tracking-wider text-[color:var(--f92-gray)]">Open</p>
+          <p className="mt-2 text-3xl md:text-4xl font-bold text-blue-500">{kpi.openCount}</p>
           <p className="mt-2 text-xs text-[color:var(--f92-gray)]">Requires action</p>
         </Card>
 
         {/* In Progress Count */}
-        <Card className="border-[color:var(--f92-border)] bg-white p-4 md:p-5 shadow-sm">
-          <p className="text-xs font-medium uppercase text-[color:var(--f92-gray)]">In Progress</p>
-          <p className="mt-3 text-4xl font-bold text-indigo-500">{kpi.inProgressCount}</p>
+        <Card className="border-[color:var(--f92-border)] bg-white p-3 md:p-4 shadow-sm">
+          <p className="text-xs font-medium uppercase tracking-wider text-[color:var(--f92-gray)]">In Progress</p>
+          <p className="mt-2 text-3xl md:text-4xl font-bold text-indigo-500">{kpi.inProgressCount}</p>
           <p className="mt-2 text-xs text-[color:var(--f92-gray)]">Being worked on</p>
         </Card>
 
         {/* Critical Issues Open */}
-        <Card className="border-[color:var(--f92-border)] bg-white p-4 md:p-5 shadow-sm">
-          <p className="text-xs font-medium uppercase text-[color:var(--f92-gray)]">Critical</p>
-          <p className="mt-3 text-4xl font-bold text-red-600">{kpi.criticalIssuesOpen}</p>
+        <Card className="border-[color:var(--f92-border)] bg-white p-3 md:p-4 shadow-sm">
+          <p className="text-xs font-medium uppercase tracking-wider text-[color:var(--f92-gray)]">Critical</p>
+          <p className="mt-2 text-3xl md:text-4xl font-bold text-red-600">{kpi.criticalIssuesOpen}</p>
           <p className="mt-2 text-xs text-[color:var(--f92-gray)]">
             {kpi.criticalIssuesOpen === 0 ? (
               <>All systems normal{sparkleEmoji ? <span className="ml-1" aria-hidden="true">{sparkleEmoji}</span> : null}</>
@@ -527,8 +527,8 @@ export default function DashboardPage() {
         </Card>
 
         {/* Most Frequent Root Cause */}
-        <Card className="border-[color:var(--f92-border)] bg-white p-4 md:p-5 shadow-sm">
-          <p className="text-xs font-medium uppercase text-[color:var(--f92-gray)]">Top Root Cause</p>
+        <Card className="border-[color:var(--f92-border)] bg-white p-3 md:p-4 shadow-sm">
+          <p className="text-xs font-medium uppercase tracking-wider text-[color:var(--f92-gray)]">Top Root Cause</p>
           <p className="mt-3 line-clamp-2 text-sm font-semibold text-[color:var(--f92-navy)]">
             {kpi.mostFrequentRootCause || 'N/A'}
           </p>

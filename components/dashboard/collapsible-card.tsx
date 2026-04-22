@@ -23,7 +23,7 @@ export function CollapsibleCard({
   return (
     <Card
       className={cn(
-        'border-[color:var(--f92-border)] bg-white shadow-sm transition-[padding] duration-300',
+        'border-[color:var(--f92-border)] bg-white shadow-sm transition-[padding] duration-300 ease-in-out',
         open ? 'p-4 md:p-5' : 'px-5 py-3',
         className,
       )}
@@ -47,7 +47,7 @@ export function CollapsibleCard({
       </button>
       <div
         className={cn(
-          'grid transition-[grid-template-rows] duration-300 ease-out',
+          'grid transition-[grid-template-rows,opacity] duration-300 ease-in-out',
           open ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0',
         )}
         aria-hidden={!open}
