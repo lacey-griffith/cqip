@@ -38,8 +38,8 @@ const EGGS: EggEntry[] = [
   },
   {
     name: 'Brand chant',
-    trigger: 'Type "fusion92" anywhere on a dashboard page',
-    description: 'A warm orange wave sweeps across the screen.',
+    trigger: 'Type "fusion92" or "f92" anywhere, or click the F92 atom in the sidebar',
+    description: 'Multi-pass orange shimmer sweeps across the screen. A tiny love letter to the team.',
   },
   {
     name: 'Avatar slot machine',

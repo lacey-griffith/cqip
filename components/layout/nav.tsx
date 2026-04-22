@@ -11,6 +11,7 @@ import {
   AVATAR_PATTERNS,
   type AvatarPattern,
 } from '@/components/layout/user-avatar';
+import { F92Logo } from '@/components/layout/f92-logo';
 import { useTheme } from '@/components/layout/theme-provider';
 import { supabase } from '@/lib/supabase/client';
 import { useToast } from '@/components/layout/toaster';
@@ -553,7 +554,7 @@ export function Nav() {
           })}
         </nav>
 
-        <div className="mt-auto pt-4">
+        <div className="mt-auto flex items-center gap-2 pt-4">
           <Link
             href="/dashboard/docs"
             aria-label="Documentation"
@@ -562,6 +563,15 @@ export function Nav() {
             <HelpCircle className="h-4 w-4" aria-hidden="true" />
             <span className="sr-only">Documentation</span>
           </Link>
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent('cqip:fusion-wave'))}
+            aria-label="Fusion92"
+            className="flex h-9 w-9 items-center justify-center rounded-full transition hover:bg-[color:var(--f92-tint)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)]"
+          >
+            <F92Logo size={20} aria-hidden={true} />
+            <span className="sr-only">Fire Fusion92 shimmer</span>
+          </button>
         </div>
 
         {isDark && twinkles.length > 0 ? (
