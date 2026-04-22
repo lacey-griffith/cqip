@@ -20,8 +20,7 @@ export function EasterEggHost() {
     setWaveActive(true);
     toast('🧡 Built with love by Fusion92');
     // Longest layer ends at delay(340) + duration(1700) = 2040ms;
-    // 1900ms keeps the container around through the last frame without
-    // lingering empty.
+    // hold 2100ms so the last frame lands before the container unmounts.
     window.setTimeout(() => setWaveActive(false), 2100);
   }
 
