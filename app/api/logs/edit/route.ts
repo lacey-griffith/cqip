@@ -120,22 +120,68 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
   }
 
-  // Accept id from JSON body or ?id= query param so the caller can pick.
-  let id: string | undefined;
-  try {
-    const body = await req.json().catch(() => ({}));
-    id = body?.id;
-  } catch {
-    /* ignore */
+  const body = await req.json().catch(() => ({}));
+  const queryId = new URL(req.url).searchParams.get('id') ?? undefined;
+  const id = (body?.id as string | undefined) ?? queryId;
+  const mode = body?.mode as string | undefined;
+  const jiraTicketId = body?.jira_ticket_id as string | undefined;
+  const changedBy = profile.display_name || profile.email || user.id;
+
+  // -----------------------------------------------------------------------
+  // Batch mode: soft-delete every non-deleted log for a jira_ticket_id.
+  // -----------------------------------------------------------------------
+  if (mode === 'ticket') {
+    if (!jiraTicketId) {
+      return NextResponse.json({ error: 'jira_ticket_id is required for batch delete' }, { status: 400 });
+    }
+
+    const { data: targets, error: fetchError } = await supabase
+      .from('quality_logs')
+      .select('id, log_number, log_status, severity')
+      .eq('jira_ticket_id', jiraTicketId)
+      .eq('is_deleted', false);
+
+    if (fetchError) {
+      return NextResponse.json({ error: fetchError.message }, { status: 500 });
+    }
+    if (!targets || targets.length === 0) {
+      return NextResponse.json({ success: true, deleted: 0 });
+    }
+
+    const { error: softError } = await supabase
+      .from('quality_logs')
+      .update({ is_deleted: true })
+      .eq('jira_ticket_id', jiraTicketId)
+      .eq('is_deleted', false);
+
+    if (softError) {
+      return NextResponse.json({ error: softError.message }, { status: 500 });
+    }
+
+    const auditRows = targets.map(t => ({
+      log_entry_id: t.id,
+      action: 'DELETE',
+      field_name: 'is_deleted',
+      old_value: 'false',
+      new_value: 'true',
+      changed_by: changedBy,
+      notes: `Batch soft-delete of ${jiraTicketId} log #${t.log_number} (was ${t.log_status}${t.severity ? `, ${t.severity}` : ''})`,
+    }));
+    const { error: auditError } = await supabaseAdmin.from('audit_log').insert(auditRows);
+    if (auditError) {
+      console.warn('[logs/edit DELETE ticket] audit_log insert failed', auditError);
+    }
+
+    return NextResponse.json({ success: true, deleted: targets.length });
   }
-  if (!id) {
-    id = new URL(req.url).searchParams.get('id') ?? undefined;
-  }
+
+  // -----------------------------------------------------------------------
+  // Single-row mode: soft-delete one log by id.
+  // -----------------------------------------------------------------------
   if (!id) {
     return NextResponse.json({ error: 'id is required' }, { status: 400 });
   }
 
-  // Snapshot the log before soft-deleting so the audit trail records what existed.
   const { data: existing } = await supabase
     .from('quality_logs')
     .select('jira_ticket_id, log_status, severity, log_number, is_deleted')
@@ -158,7 +204,6 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: softDeleteError.message }, { status: 500 });
   }
 
-  const changedBy = profile.display_name || profile.email || user.id;
   const { error: auditError } = await supabaseAdmin.from('audit_log').insert({
     log_entry_id: id,
     action: 'DELETE',

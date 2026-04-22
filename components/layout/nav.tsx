@@ -269,20 +269,25 @@ export function Nav() {
   }
 
   function handleSunEnter() {
+    // eslint-disable-next-line no-console
+    console.log(`[nav] sun hover enter — theme=${theme}`);
     if (theme !== 'light') return;
     if (sunHoverTimer.current) window.clearTimeout(sunHoverTimer.current);
     sunHoverTimer.current = window.setTimeout(() => {
+      // eslint-disable-next-line no-console
+      console.log('[nav] sun hover 2s fired — spawning clouds');
+      // First cloud renders immediately (delay 0); later clouds stagger.
       const cloudSpecs = Array.from({ length: 3 }, (_, i) => ({
         id: Date.now() + i,
         top: `${8 + Math.random() * 75}%`,
         duration: 5 + Math.random() * 2, // 5–7s
-        delay: i * 900, // staggered so they don't clump
+        delay: i === 0 ? 0 : 900 + (i - 1) * 1200,
         direction: (i % 2 === 0 ? 1 : -1) as 1 | -1,
       }));
       setClouds(cloudSpecs);
       if (cloudClearTimer.current) window.clearTimeout(cloudClearTimer.current);
       const maxLife =
-        Math.max(...cloudSpecs.map(c => c.duration * 1000 + c.delay)) + 200;
+        Math.max(...cloudSpecs.map(c => c.duration * 1000 + c.delay)) + 400;
       cloudClearTimer.current = window.setTimeout(() => setClouds([]), maxLife);
     }, 2000);
   }

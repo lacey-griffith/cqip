@@ -138,6 +138,8 @@ export default function LogsPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [deletingLog, setDeletingLog] = useState<LogEntry | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deletingGroup, setDeletingGroup] = useState<TicketGroup | null>(null);
+  const [deleteGroupOpen, setDeleteGroupOpen] = useState(false);
   const [auditCounts, setAuditCounts] = useState<Record<string, number>>({});
 
   useEffect(() => {
@@ -338,6 +340,31 @@ export default function LogsPage() {
     // Remove the log from local state so the row disappears without refetch.
     setLogs(prev => prev.filter(l => l.id !== deletingLog.id));
     setDeletingLog(null);
+  }
+
+  function openDeleteGroupDialog(group: TicketGroup) {
+    setDeletingGroup(group);
+    setDeleteGroupOpen(true);
+  }
+
+  async function confirmDeleteGroup() {
+    if (!deletingGroup) return;
+    const response = await fetch('/api/logs/edit', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'ticket',
+        jira_ticket_id: deletingGroup.ticketId,
+      }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(result?.error || 'Unable to delete ticket logs.');
+    }
+    // Drop every log for the ticket from local state.
+    const doomedIds = new Set(deletingGroup.entries.map(e => e.id));
+    setLogs(prev => prev.filter(l => !doomedIds.has(l.id)));
+    setDeletingGroup(null);
   }
 
   function applyEditedLog(updated: EditableLog) {
@@ -651,9 +678,21 @@ export default function LogsPage() {
                       <tr key={`${group.ticketId}-details`} id={`group-${group.ticketId}-details`}>
                         <td colSpan={colCount + 1} className="px-4 pb-4 pt-0">
                           <div className="rounded-2xl border border-dashed border-[color:var(--f92-border)] bg-[color:var(--f92-tint)] p-4">
-                            <p className="mb-2 text-xs uppercase tracking-widest text-[color:var(--f92-gray)]">
-                              All sendbacks for {group.ticketId}
-                            </p>
+                            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                              <p className="text-xs uppercase tracking-widest text-[color:var(--f92-gray)]">
+                                All sendbacks for {group.ticketId}
+                              </p>
+                              {profile?.role === 'admin' ? (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => openDeleteGroupDialog(group)}
+                                  className="text-red-600 hover:text-red-700"
+                                >
+                                  Delete all logs for this ticket
+                                </Button>
+                              ) : null}
+                            </div>
                             <div className="overflow-x-auto">
                               <table className="min-w-full text-left text-xs">
                                 <thead>
@@ -738,10 +777,26 @@ export default function LogsPage() {
         title="Delete this log entry?"
         description={
           deletingLog
-            ? `This will soft-delete ${deletingLog.jira_ticket_id} log #${deletingLog.log_number}. This action cannot be undone.`
-            : 'This action cannot be undone.'
+            ? `This will soft-delete ${deletingLog.jira_ticket_id} log #${deletingLog.log_number}. This cannot be undone.`
+            : 'This cannot be undone.'
         }
         onConfirm={confirmDelete}
+      />
+
+      <ConfirmDeleteDialog
+        open={deleteGroupOpen}
+        onOpenChange={open => {
+          setDeleteGroupOpen(open);
+          if (!open) setDeletingGroup(null);
+        }}
+        title={deletingGroup ? `Delete all logs for ${deletingGroup.ticketId}?` : 'Delete all logs?'}
+        description={
+          deletingGroup
+            ? `Delete all ${deletingGroup.entries.length} log${deletingGroup.entries.length === 1 ? '' : 's'} for ticket ${deletingGroup.ticketId}? This cannot be undone.`
+            : 'This cannot be undone.'
+        }
+        confirmLabel="Delete all"
+        onConfirm={confirmDeleteGroup}
       />
     </div>
   );

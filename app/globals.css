@@ -352,8 +352,8 @@ button:disabled,
 /* Sun-hover clouds: drift across the sidebar, fade in early, fade out late. */
 @keyframes cqip-cloud-drift {
   0%   { transform: translateX(-130px); opacity: 0; }
-  12%  { opacity: 0.85; }
-  85%  { opacity: 0.85; }
+  6%   { opacity: 0.85; }
+  88%  { opacity: 0.85; }
   100% { transform: translateX(calc(18rem + 20px)); opacity: 0; }
 }
 .cqip-cloud-drift {
