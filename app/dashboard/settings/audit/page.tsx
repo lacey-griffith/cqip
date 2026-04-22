@@ -62,6 +62,26 @@ export default function AuditLogPage() {
   const [ticketFilter, setTicketFilter] = useState('');
 
   useEffect(() => {
+    async function loadEntries() {
+      const { data, error } = await supabase
+        .from('audit_log')
+        .select(`
+          id, log_entry_id, action, field_name, old_value, new_value,
+          changed_by, changed_at, notes,
+          quality_logs:log_entry_id ( jira_ticket_id, jira_summary )
+        `)
+        .order('changed_at', { ascending: false })
+        .limit(500);
+
+      if (error) {
+        console.error('[audit] load failed', error);
+        setLoading(false);
+        return;
+      }
+      setEntries((data ?? []) as unknown as AuditEntry[]);
+      setLoading(false);
+    }
+
     async function init() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
@@ -81,27 +101,6 @@ export default function AuditLogPage() {
     }
     init();
   }, []);
-
-  async function loadEntries() {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('audit_log')
-      .select(`
-        id, log_entry_id, action, field_name, old_value, new_value,
-        changed_by, changed_at, notes,
-        quality_logs:log_entry_id ( jira_ticket_id, jira_summary )
-      `)
-      .order('changed_at', { ascending: false })
-      .limit(500);
-
-    if (error) {
-      console.error('[audit] load failed', error);
-      setLoading(false);
-      return;
-    }
-    setEntries((data ?? []) as unknown as AuditEntry[]);
-    setLoading(false);
-  }
 
   const userOptions = useMemo(() => {
     const set = new Set<string>();
