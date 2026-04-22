@@ -28,6 +28,12 @@ const settingsSections = [
     href: '/dashboard/settings/users',
     icon: '👥',
   },
+  {
+    title: 'Change Log',
+    description: 'Admin-only audit trail of every create, update, delete, and status change.',
+    href: '/dashboard/settings/audit',
+    icon: '📜',
+  },
 ];
 
 export default function SettingsPage() {
