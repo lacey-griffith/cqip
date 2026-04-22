@@ -172,7 +172,18 @@ function mapJiraFields(fields: any) {
   mapped.root_cause_initial = rootCause;
   mapped.root_cause_final = rootCause;
 
-  mapped.client_brand = extractBrand(fields[JIRA_FIELD_MAP.nbly_brand], fields.summary ?? 'unknown');
+  const rawBrand = fields[JIRA_FIELD_MAP.nbly_brand];
+  mapped.client_brand = extractBrand(rawBrand, fields.summary ?? 'unknown');
+  // Diagnostic: dump the raw shape whenever brand resolves to null, so we can
+  // see WHY on the next live ticket in Supabase logs. Remove once confirmed.
+  if (mapped.client_brand == null) {
+    console.warn('[jira-webhook] client_brand resolved null', JSON.stringify({
+      ticket: fields.summary ?? 'unknown',
+      rawType: typeof rawBrand,
+      rawIsArray: Array.isArray(rawBrand),
+      rawPreview: rawBrand == null ? null : JSON.stringify(rawBrand).slice(0, 300),
+    }));
+  }
 
   return mapped;
 }
