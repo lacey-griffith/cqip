@@ -278,11 +278,11 @@ export function Nav() {
       // eslint-disable-next-line no-console
       console.log('[nav] sun hover 1.5s fired — spawning clouds');
       // First cloud renders immediately (delay 0); later clouds stagger.
-      const cloudSpecs = Array.from({ length: 3 }, (_, i) => ({
+      const cloudSpecs = Array.from({ length: 6 }, (_, i) => ({
         id: Date.now() + i,
         top: `${8 + Math.random() * 75}%`,
         duration: 5 + Math.random() * 2, // 5–7s
-        delay: i === 0 ? 0 : 900 + (i - 1) * 1200,
+        delay: i === 0 ? 0 : 600 + (i - 1) * 700,
         direction: (i % 2 === 0 ? 1 : -1) as 1 | -1,
       }));
       setClouds(cloudSpecs);
@@ -594,7 +594,7 @@ export function Nav() {
             'pointer-events-none absolute inset-0 transition-opacity duration-500',
             !isDark && clouds.length > 0 ? 'opacity-100' : 'opacity-0',
           )}
-          style={{ background: 'rgba(147, 197, 253, 0.25)' }}
+          style={{ background: 'rgba(147, 197, 253, 0.55)' }}
         />
 
         {!isDark && clouds.length > 0 ? (
