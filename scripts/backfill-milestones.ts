@@ -9,8 +9,8 @@
  * JIRA_BASE_URL, JIRA_EMAIL, JIRA_API_TOKEN (same as .env.local).
  *
  * Strategy:
- *   1. Page through every issue in NBLYCRO via /rest/api/3/search?jql=…
- *      with expand=changelog, 100 per page.
+ *   1. Page through every issue in NBLYCRO via POST /rest/api/3/search/jql
+ *      with expand=changelog, 100 per page, cursor-paginated by nextPageToken.
  *   2. For each issue, scan histories in chronological order; take the
  *      FIRST history whose items include {field:'status', toString:'Dev Client Review'}.
  *   3. Resolve brand_id by matching the issue's current
@@ -90,28 +90,34 @@ interface JiraIssue {
 }
 
 interface JiraSearchResponse {
-  startAt: number;
-  maxResults: number;
-  total: number;
   issues: JiraIssue[];
+  nextPageToken?: string;
+  isLast?: boolean;
 }
 
-async function jiraSearch(startAt: number): Promise<JiraSearchResponse> {
-  const url = new URL(`${jiraBaseUrl}/rest/api/3/search`);
-  url.searchParams.set('jql', JQL);
-  url.searchParams.set('startAt', String(startAt));
-  url.searchParams.set('maxResults', String(PAGE_SIZE));
-  url.searchParams.set('expand', 'changelog');
-  url.searchParams.set('fields', `summary,${NBLY_BRAND_FIELD}`);
+async function jiraSearch(nextPageToken: string | null): Promise<JiraSearchResponse> {
+  const body: Record<string, unknown> = {
+    jql: JQL,
+    maxResults: PAGE_SIZE,
+    expand: ['changelog'],
+    fields: ['summary', NBLY_BRAND_FIELD],
+  };
+  if (nextPageToken) body.nextPageToken = nextPageToken;
 
   let attempt = 0;
   while (true) {
-    const res = await fetch(url.toString(), {
-      headers: {
-        Authorization: `Basic ${jiraAuth}`,
-        'Content-Type': 'application/json',
+    const res = await fetch(
+      `${jiraBaseUrl}/rest/api/3/search/jql`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${jiraAuth}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify(body),
       },
-    });
+    );
     if (res.ok) return res.json() as Promise<JiraSearchResponse>;
     if (res.status === 429 && attempt < 3) {
       const backoffMs = 1000 * Math.pow(2, attempt);
@@ -120,7 +126,8 @@ async function jiraSearch(startAt: number): Promise<JiraSearchResponse> {
       attempt += 1;
       continue;
     }
-    throw new Error(`Jira search failed: ${res.status} ${res.statusText}`);
+    const text = await res.text().catch(() => '');
+    throw new Error(`Jira search failed: ${res.status} ${res.statusText} — ${text.slice(0, 200)}`);
   }
 }
 
@@ -159,8 +166,8 @@ async function run() {
   const brandMap = await loadBrandMap();
   console.log(`  loaded ${brandMap.size} brands`);
 
-  let startAt = 0;
-  let total = Infinity;
+  let nextPageToken: string | null = null;
+  let pageNum = 0;
   let processed = 0;
   let inserted = 0;
   let skippedNoDcr = 0;
@@ -168,10 +175,13 @@ async function run() {
   let errored = 0;
   const unmatchedBrands = new Map<string, number>();
 
-  while (startAt < total) {
-    const page = await jiraSearch(startAt);
-    total = page.total;
-    if (startAt === 0) console.log(`→ ${total} NBLYCRO issues to scan`);
+  // The new /search/jql endpoint doesn't return a total count, so we use
+  // cursor pagination: keep calling with nextPageToken until Jira flags
+  // isLast or stops returning a token.
+  do {
+    pageNum += 1;
+    const page = await jiraSearch(nextPageToken);
+    console.log(`→ page ${pageNum} — ${page.issues.length} issues`);
 
     for (const issue of page.issues) {
       processed += 1;
@@ -225,16 +235,14 @@ async function run() {
       }
 
       if (processed % 50 === 0) {
-        console.log(`  · processed ${processed}/${total}`);
+        console.log(`  · processed ${processed}`);
       }
       await sleep(REQUEST_DELAY_MS);
     }
 
-    startAt += page.issues.length;
-    // Jira page returning fewer than expected with startAt < total usually
-    // signals the tail of the result set; break to avoid an infinite loop.
-    if (page.issues.length === 0) break;
-  }
+    nextPageToken = page.nextPageToken ?? null;
+    if (page.isLast) break;
+  } while (nextPageToken);
 
   console.log('');
   console.log(`Done. processed=${processed}, inserted=${inserted}, skipped_no_dcr=${skippedNoDcr}, skipped_duplicate=${skippedDuplicate}, errored=${errored}, unmatched_brands=${unmatchedBrands.size}`);
