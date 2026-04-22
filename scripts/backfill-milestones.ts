@@ -156,22 +156,39 @@ function firstDevClientReviewEntry(issue: JiraIssue): string | null {
 }
 
 async function loadBrandMap(): Promise<Map<string, string>> {
-  const { data, error } = await supabase.from('brands').select('id, jira_value');
-  if (error) {
-    console.error('Failed to load brands table:', error);
+  const map = new Map<string, string>();
+
+  const { data: brands, error: brandsErr } = await supabase
+    .from('brands')
+    .select('id, jira_value');
+  if (brandsErr) {
+    console.error('Failed to load brands table:', brandsErr);
     process.exit(1);
   }
-  const map = new Map<string, string>();
-  for (const row of data ?? []) {
-    if (row.jira_value) map.set(row.jira_value, row.id);
+  for (const b of brands ?? []) {
+    if (b.jira_value) map.set(b.jira_value, b.id);
   }
+
+  // Aliases route historical Jira strings to canonical brand_ids.
+  // brand_aliases.jira_value is UNIQUE, so no collision with brands above.
+  const { data: aliases, error: aliasesErr } = await supabase
+    .from('brand_aliases')
+    .select('brand_id, jira_value');
+  if (aliasesErr) {
+    console.error('Failed to load brand_aliases table:', aliasesErr);
+    process.exit(1);
+  }
+  for (const a of aliases ?? []) {
+    if (a.jira_value) map.set(a.jira_value, a.brand_id);
+  }
+
   return map;
 }
 
 async function run() {
-  console.log('→ loading brands table…');
+  console.log('→ loading brands + aliases…');
   const brandMap = await loadBrandMap();
-  console.log(`  loaded ${brandMap.size} brands`);
+  console.log(`  loaded ${brandMap.size} jira_value → brand_id mappings`);
 
   let nextPageToken: string | null = null;
   let pageNum = 0;
