@@ -14,6 +14,7 @@ import { EditLogDialog, type EditableLog } from '@/components/logs/edit-log-dial
 import { ConfirmDeleteDialog } from '@/components/logs/confirm-delete-dialog';
 import { TicketLink } from '@/components/logs/ticket-link';
 import { MmiList } from '@/components/logs/mmi-tooltip';
+import { RowActionsMenu } from '@/components/logs/row-actions-menu';
 import { SyncJiraButton } from '@/components/dashboard/sync-jira-button';
 import { cn } from '@/lib/utils';
 
@@ -733,17 +734,12 @@ export default function LogsPage() {
                       </td>
                       {isAdmin ? (
                         <td className="px-4 py-3 align-top">
-                          <div className="flex flex-col gap-1.5 sm:flex-row sm:flex-wrap">
-                            <Button variant="secondary" size="sm" onClick={() => openEditDialog(latest)}>Edit</Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => openDeleteDialog(latest)}
-                              className="text-red-600 hover:text-red-700"
-                            >
-                              Delete
-                            </Button>
-                          </div>
+                          <RowActionsMenu
+                            ticketId={latest.jira_ticket_id}
+                            logNumber={latest.log_number}
+                            onEdit={() => openEditDialog(latest)}
+                            onDelete={() => openDeleteDialog(latest)}
+                          />
                         </td>
                       ) : null}
                     </tr>,
@@ -821,17 +817,12 @@ export default function LogsPage() {
                                       <td className="px-2 py-2 align-top">{entry.notes ?? '—'}</td>
                                       {isAdmin ? (
                                         <td className="px-2 py-2 align-top">
-                                          <div className="flex flex-col gap-1.5 sm:flex-row sm:flex-wrap">
-                                            <Button variant="secondary" size="sm" onClick={() => openEditDialog(entry)}>Edit</Button>
-                                            <Button
-                                              variant="outline"
-                                              size="sm"
-                                              onClick={() => openDeleteDialog(entry)}
-                                              className="text-red-600 hover:text-red-700"
-                                            >
-                                              Delete
-                                            </Button>
-                                          </div>
+                                          <RowActionsMenu
+                                            ticketId={entry.jira_ticket_id}
+                                            logNumber={entry.log_number}
+                                            onEdit={() => openEditDialog(entry)}
+                                            onDelete={() => openDeleteDialog(entry)}
+                                          />
                                         </td>
                                       ) : null}
                                     </tr>
