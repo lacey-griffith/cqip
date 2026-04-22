@@ -42,7 +42,7 @@ const jiraAuth = Buffer.from(`${jiraEmail}:${jiraApiToken}`).toString('base64');
 
 const NBLY_BRAND_FIELD = 'customfield_12220';
 const JQL = 'project = NBLYCRO';
-const PAGE_SIZE = 100;
+const PAGE_SIZE = 50;
 const REQUEST_DELAY_MS = 100;
 
 function sleep(ms: number) {
@@ -99,7 +99,7 @@ async function jiraSearch(nextPageToken: string | null): Promise<JiraSearchRespo
   const body: Record<string, unknown> = {
     jql: JQL,
     maxResults: PAGE_SIZE,
-    expand: ['changelog'],
+    expand: 'changelog',
     fields: ['summary', NBLY_BRAND_FIELD],
   };
   if (nextPageToken) body.nextPageToken = nextPageToken;
@@ -125,6 +125,13 @@ async function jiraSearch(nextPageToken: string | null): Promise<JiraSearchRespo
       await sleep(backoffMs);
       attempt += 1;
       continue;
+    }
+    if (res.status === 400) {
+      const text = await res.text().catch(() => '');
+      console.error('[jira-search] 400 from Jira');
+      console.error('  request body:', JSON.stringify(body, null, 2));
+      console.error('  response:', text.slice(0, 400));
+      throw new Error(`Jira search failed: 400 Bad Request`);
     }
     const text = await res.text().catch(() => '');
     throw new Error(`Jira search failed: ${res.status} ${res.statusText} — ${text.slice(0, 200)}`);
