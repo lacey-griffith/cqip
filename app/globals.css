@@ -306,50 +306,43 @@ button:disabled,
   88%  { opacity: 0.45; }
   100% { transform: translateX(120%); opacity: 0; }
 }
-.cqip-fusion-wave {
-  position: relative;
-  overflow: hidden;
-}
-.cqip-fusion-wave::before,
-.cqip-fusion-wave::after,
-.cqip-fusion-wave > .cqip-fusion-wave-extra {
-  content: '';
+.cqip-fusion-wave-layer {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: linear-gradient(
-    110deg,
+  animation-name: cqip-fusion-wave;
+  animation-fill-mode: forwards;
+  animation-timing-function: ease-out;
+}
+.cqip-fusion-wave-layer-1 {
+  background: linear-gradient(110deg,
     transparent 0%,
-    rgba(244, 121, 32, 0.0) 35%,
+    rgba(244, 121, 32, 0) 35%,
     rgba(244, 121, 32, 0.55) 50%,
-    rgba(244, 121, 32, 0.0) 65%,
-    transparent 100%
-  );
-  animation: cqip-fusion-wave 1600ms ease-out forwards;
+    rgba(244, 121, 32, 0) 65%,
+    transparent 100%);
+  animation-duration: 1600ms;
+  animation-delay: 0ms;
 }
-.cqip-fusion-wave::after {
-  background: linear-gradient(
-    100deg,
+.cqip-fusion-wave-layer-2 {
+  background: linear-gradient(100deg,
     transparent 0%,
-    rgba(255, 180, 80, 0.0) 35%,
+    rgba(255, 180, 80, 0) 35%,
     rgba(255, 180, 80, 0.5) 50%,
-    rgba(255, 180, 80, 0.0) 65%,
-    transparent 100%
-  );
-  animation-delay: 180ms;
+    rgba(255, 180, 80, 0) 65%,
+    transparent 100%);
   animation-duration: 1500ms;
+  animation-delay: 180ms;
 }
-.cqip-fusion-wave > .cqip-fusion-wave-extra {
-  background: linear-gradient(
-    120deg,
+.cqip-fusion-wave-layer-3 {
+  background: linear-gradient(120deg,
     transparent 0%,
-    rgba(244, 121, 32, 0.0) 35%,
+    rgba(244, 121, 32, 0) 35%,
     rgba(244, 121, 32, 0.4) 50%,
-    rgba(244, 121, 32, 0.0) 65%,
-    transparent 100%
-  );
-  animation-delay: 340ms;
+    rgba(244, 121, 32, 0) 65%,
+    transparent 100%);
   animation-duration: 1700ms;
+  animation-delay: 340ms;
 }
 
 @keyframes cqip-logo-spin {

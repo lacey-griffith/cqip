@@ -19,7 +19,10 @@ export function EasterEggHost() {
     lastFireRef.current = now;
     setWaveActive(true);
     toast('🧡 Built with love by Fusion92');
-    window.setTimeout(() => setWaveActive(false), 1900);
+    // Longest layer ends at delay(340) + duration(1700) = 2040ms;
+    // 1900ms keeps the container around through the last frame without
+    // lingering empty.
+    window.setTimeout(() => setWaveActive(false), 2100);
   }
 
   useTypingDetector('fusion92', triggerWave);
@@ -35,9 +38,11 @@ export function EasterEggHost() {
   return waveActive ? (
     <div
       aria-hidden="true"
-      className="cqip-fusion-wave pointer-events-none fixed inset-0 z-[80]"
+      className="pointer-events-none fixed inset-0 z-[80] overflow-hidden"
     >
-      <div className="cqip-fusion-wave-extra" aria-hidden="true" />
+      <div className="cqip-fusion-wave-layer cqip-fusion-wave-layer-1" />
+      <div className="cqip-fusion-wave-layer cqip-fusion-wave-layer-2" />
+      <div className="cqip-fusion-wave-layer cqip-fusion-wave-layer-3" />
     </div>
   ) : null;
 }
