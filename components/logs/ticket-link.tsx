@@ -7,10 +7,11 @@ interface TicketLinkProps {
   ticketId: string;
   url: string | null | undefined;
   title?: string | null;
+  brand?: string | null;
   className?: string;
 }
 
-export function TicketLink({ ticketId, url, title, className }: TicketLinkProps) {
+export function TicketLink({ ticketId, url, title, brand, className }: TicketLinkProps) {
   if (!title) {
     if (!url) {
       return <span className={cn('font-medium text-[color:var(--f92-dark)]', className)}>{ticketId}</span>;
@@ -32,6 +33,8 @@ export function TicketLink({ ticketId, url, title, className }: TicketLinkProps)
     );
   }
 
+  const brandLabel = brand?.trim() ? brand.trim() : null;
+
   return (
     <div className={cn('flex flex-col gap-0.5', className)}>
       <span
@@ -40,20 +43,28 @@ export function TicketLink({ ticketId, url, title, className }: TicketLinkProps)
       >
         {title}
       </span>
-      {url ? (
-        <a
-          href={url}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-1 text-xs text-[color:var(--f92-orange)] hover:underline"
-          aria-label={`${ticketId} — opens in Jira`}
-        >
-          {ticketId}
-          <ExternalLink className="h-3 w-3" aria-hidden="true" />
-        </a>
-      ) : (
-        <span className="text-xs text-[color:var(--f92-gray)]">{ticketId}</span>
-      )}
+      <div className="flex items-center gap-2 text-xs">
+        {url ? (
+          <a
+            href={url}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 text-[color:var(--f92-orange)] hover:underline"
+            aria-label={`${ticketId} — opens in Jira`}
+          >
+            {ticketId}
+            <ExternalLink className="h-3 w-3" aria-hidden="true" />
+          </a>
+        ) : (
+          <span className="text-[color:var(--f92-gray)]">{ticketId}</span>
+        )}
+        {brandLabel ? (
+          <>
+            <span className="text-[color:var(--f92-lgray)]" aria-hidden="true">•</span>
+            <span className="font-medium text-[color:var(--f92-navy)]">{brandLabel}</span>
+          </>
+        ) : null}
+      </div>
     </div>
   );
 }

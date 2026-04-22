@@ -47,7 +47,7 @@ interface TicketGroup {
   entries: LogEntry[]; // sorted by triggered_at desc
 }
 
-type SortKey = 'date' | 'brand' | 'severity' | 'status' | 'category';
+type SortKey = 'date' | 'severity' | 'status' | 'category';
 type SortDir = 'asc' | 'desc';
 
 type DatePill = 'all' | '30' | '60' | '90';
@@ -108,16 +108,6 @@ function formatTriggeredDate(value: string | null | undefined): string {
   return date.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
 }
 
-function compareNullable<T>(a: T | null | undefined, b: T | null | undefined, getter: (v: T) => number | string): number {
-  if (a == null && b == null) return 0;
-  if (a == null) return 1;
-  if (b == null) return -1;
-  const av = getter(a);
-  const bv = getter(b);
-  if (typeof av === 'number' && typeof bv === 'number') return av - bv;
-  return String(av).localeCompare(String(bv));
-}
-
 export default function LogsPage() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -143,6 +133,9 @@ export default function LogsPage() {
   const [deletingGroup, setDeletingGroup] = useState<TicketGroup | null>(null);
   const [deleteGroupOpen, setDeleteGroupOpen] = useState(false);
   const [auditCounts, setAuditCounts] = useState<Record<string, number>>({});
+
+  const [selectedTicketIds, setSelectedTicketIds] = useState<Set<string>>(new Set());
+  const [batchDeleteOpen, setBatchDeleteOpen] = useState(false);
 
   useEffect(() => {
     async function loadData() {
@@ -235,8 +228,6 @@ export default function LogsPage() {
       switch (sortKey) {
         case 'date':
           return dirMul * (new Date(a.latest.triggered_at).getTime() - new Date(b.latest.triggered_at).getTime());
-        case 'brand':
-          return dirMul * compareNullable(a.latest.client_brand, b.latest.client_brand, v => v);
         case 'severity':
           return dirMul * ((SEVERITY_RANK[a.latest.severity ?? ''] ?? 0) - (SEVERITY_RANK[b.latest.severity ?? ''] ?? 0));
         case 'status':
@@ -369,6 +360,41 @@ export default function LogsPage() {
     setDeletingGroup(null);
   }
 
+  function toggleGroupSelection(ticketId: string) {
+    setSelectedTicketIds(prev => {
+      const next = new Set(prev);
+      if (next.has(ticketId)) next.delete(ticketId);
+      else next.add(ticketId);
+      return next;
+    });
+  }
+
+  function clearSelection() {
+    setSelectedTicketIds(new Set());
+  }
+
+  async function confirmBatchDelete() {
+    if (selectedTicketIds.size === 0) return;
+    const ticketIds = Array.from(selectedTicketIds);
+    const responses = await Promise.all(
+      ticketIds.map(ticketId =>
+        fetch('/api/logs/edit', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode: 'ticket', jira_ticket_id: ticketId }),
+        }),
+      ),
+    );
+    const failed = responses.filter(r => !r.ok);
+    if (failed.length > 0) {
+      throw new Error(`Failed to delete ${failed.length} of ${ticketIds.length} ticket${ticketIds.length === 1 ? '' : 's'}.`);
+    }
+    // Drop every log belonging to any selected ticket from local state.
+    const doomedTicketIds = new Set(ticketIds);
+    setLogs(prev => prev.filter(l => !doomedTicketIds.has(l.jira_ticket_id)));
+    setSelectedTicketIds(new Set());
+  }
+
   function applyEditedLog(updated: EditableLog) {
     setLogs(prev =>
       prev.map(l =>
@@ -410,7 +436,16 @@ export default function LogsPage() {
     );
   }
 
-  const colCount = profile?.role === 'admin' ? 10 : 9;
+  // Main-row columns: col1 + Date + Ticket + Severity + Status + Category + Sendbacks (+ Actions for admin)
+  const colCount = profile?.role === 'admin' ? 8 : 7;
+  const isAdmin = profile?.role === 'admin';
+
+  const selectedLogsTotal = useMemo(() => {
+    if (selectedTicketIds.size === 0) return 0;
+    return sortedGroups
+      .filter(g => selectedTicketIds.has(g.ticketId))
+      .reduce((sum, g) => sum + g.entries.length, 0);
+  }, [sortedGroups, selectedTicketIds]);
 
   return (
     <div className="space-y-6">
@@ -558,33 +593,55 @@ export default function LogsPage() {
         </div>
       </Card>
 
+      {isAdmin && selectedTicketIds.size > 0 ? (
+        <div className="sticky top-2 z-20 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[color:var(--f92-orange)] bg-white px-4 py-2 shadow-sm">
+          <p className="text-sm font-medium text-[color:var(--f92-dark)]">
+            {selectedTicketIds.size} ticket{selectedTicketIds.size === 1 ? '' : 's'} selected
+            <span className="ml-2 text-xs text-[color:var(--f92-gray)]">
+              ({selectedLogsTotal} log{selectedLogsTotal === 1 ? '' : 's'})
+            </span>
+          </p>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setBatchDeleteOpen(true)}
+              className="text-red-600 hover:text-red-700"
+            >
+              Delete selected
+            </Button>
+            <Button variant="secondary" size="sm" onClick={clearSelection}>
+              Clear
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       <Card>
         <div className="overflow-x-auto">
           <table className="min-w-full border-separate border-spacing-y-3 text-left text-sm">
             <thead>
               <tr className="text-[color:var(--f92-dark)]">
-                <th className="w-8 px-2 py-3" aria-label="Expand">{' '}</th>
-                <SortableHeader k="date" label="Date" className="sticky left-0 z-[2] whitespace-nowrap bg-white" />
-                <th className="sticky left-[6.5rem] z-[2] whitespace-nowrap bg-white px-4 py-3 font-semibold">Ticket</th>
-                <SortableHeader k="brand" label="Brand" />
+                <th className="sticky left-0 z-[2] w-12 whitespace-nowrap bg-white px-2 py-3" aria-label={isAdmin ? 'Select ticket' : 'Expand'}>{' '}</th>
+                <SortableHeader k="date" label="Date" className="sticky left-12 z-[2] whitespace-nowrap bg-white" />
+                <th className="sticky left-[9.5rem] z-[2] whitespace-nowrap bg-white px-4 py-3 font-semibold">Ticket</th>
                 <SortableHeader k="severity" label="Severity" />
                 <SortableHeader k="status" label="Status" />
                 <SortableHeader k="category" label="Issue category" />
-                <th className="px-4 py-3 font-semibold">Owner</th>
                 <th className="px-4 py-3 font-semibold">Sendbacks</th>
-                {profile?.role === 'admin' ? <th className="px-4 py-3 font-semibold">Actions</th> : null}
+                {isAdmin ? <th className="px-4 py-3 font-semibold">Actions</th> : null}
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={colCount + 1} className="px-4 py-6 text-center text-[color:var(--f92-gray)]">
+                  <td colSpan={colCount} className="px-4 py-6 text-center text-[color:var(--f92-gray)]">
                     Loading logs...
                   </td>
                 </tr>
               ) : sortedGroups.length === 0 ? (
                 <tr>
-                  <td colSpan={colCount + 1} className="px-4 py-6 text-center text-[color:var(--f92-gray)]">
+                  <td colSpan={colCount} className="px-4 py-6 text-center text-[color:var(--f92-gray)]">
                     No logs found for the selected filters.
                   </td>
                 </tr>
@@ -593,34 +650,48 @@ export default function LogsPage() {
                   const isExpanded = !!expanded[group.ticketId];
                   const hasMultiple = group.entries.length > 1;
                   const latest = group.latest;
+                  const isSelected = selectedTicketIds.has(group.ticketId);
+                  const expandButton = hasMultiple ? (
+                    <button
+                      type="button"
+                      onClick={() => toggleExpand(group.ticketId)}
+                      aria-expanded={isExpanded}
+                      aria-controls={`group-${group.ticketId}-details`}
+                      aria-label={isExpanded ? `Collapse ${group.ticketId} sendbacks` : `Expand ${group.ticketId} sendbacks`}
+                      className="flex h-7 w-7 items-center justify-center rounded-full text-[color:var(--f92-gray)] transition hover:bg-[color:var(--f92-tint)] hover:text-[color:var(--f92-orange)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)]"
+                    >
+                      {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                    </button>
+                  ) : null;
                   const rows = [
                     <tr
                       key={`${group.ticketId}-summary`}
                       className="rounded-3xl border border-[color:var(--f92-border)] bg-[color:var(--f92-warm)]"
                     >
-                      <td className="px-2 py-3 align-top">
-                        {hasMultiple ? (
-                          <button
-                            type="button"
-                            onClick={() => toggleExpand(group.ticketId)}
-                            aria-expanded={isExpanded}
-                            aria-controls={`group-${group.ticketId}-details`}
-                            aria-label={isExpanded ? `Collapse ${group.ticketId} sendbacks` : `Expand ${group.ticketId} sendbacks`}
-                            className="flex h-7 w-7 items-center justify-center rounded-full text-[color:var(--f92-gray)] transition hover:bg-[color:var(--f92-tint)] hover:text-[color:var(--f92-orange)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)]"
-                          >
-                            {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                          </button>
-                        ) : null}
+                      <td className="sticky left-0 z-[1] w-12 bg-[color:var(--f92-warm)] px-2 py-3 align-top">
+                        <div className="flex items-center gap-1">
+                          {isAdmin ? (
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleGroupSelection(group.ticketId)}
+                              aria-label={`Select ${group.ticketId} for batch action`}
+                              className="h-4 w-4 cursor-pointer rounded border-[color:var(--f92-border)] text-[color:var(--f92-orange)] focus:ring-[color:var(--f92-orange)]"
+                            />
+                          ) : null}
+                          {expandButton}
+                        </div>
                       </td>
-                      <td className="sticky left-0 z-[1] whitespace-nowrap bg-[color:var(--f92-warm)] px-4 py-3 align-top">
+                      <td className="sticky left-12 z-[1] whitespace-nowrap bg-[color:var(--f92-warm)] px-4 py-3 align-top">
                         {formatTriggeredDate(latest.triggered_at)}
                       </td>
-                      <td className="sticky left-[6.5rem] z-[1] whitespace-nowrap bg-[color:var(--f92-warm)] px-4 py-3 align-top">
-                        <div className="flex items-center gap-1">
+                      <td className="sticky left-[9.5rem] z-[1] bg-[color:var(--f92-warm)] px-4 py-3 align-top">
+                        <div className="flex items-start gap-1">
                           <TicketLink
                             ticketId={group.ticketId}
                             url={latest.jira_ticket_url}
                             title={latest.jira_summary}
+                            brand={latest.client_brand}
                           />
                           {(auditCounts[latest.id] ?? 0) > 5 ? (
                             <span
@@ -634,7 +705,6 @@ export default function LogsPage() {
                           ) : null}
                         </div>
                       </td>
-                      <td className="px-4 py-3 align-top">{latest.client_brand ?? '—'}</td>
                       <td className="px-4 py-3 align-top">
                         <Badge variant={getSeverityVariant(latest.severity ?? '')}>
                           {latest.severity ?? 'Unknown'}
@@ -646,7 +716,6 @@ export default function LogsPage() {
                       <td className="px-4 py-3 align-top">
                         <MmiList values={latest.issue_category} />
                       </td>
-                      <td className="px-4 py-3 align-top">{latest.who_owns_fix ?? '—'}</td>
                       <td className="px-4 py-3 align-top">
                         {hasMultiple ? (
                           <Badge
@@ -662,7 +731,7 @@ export default function LogsPage() {
                           <span className="text-xs text-[color:var(--f92-gray)]">1</span>
                         )}
                       </td>
-                      {profile?.role === 'admin' ? (
+                      {isAdmin ? (
                         <td className="px-4 py-3 align-top">
                           <div className="flex flex-col gap-1.5 sm:flex-row sm:flex-wrap">
                             <Button variant="secondary" size="sm" onClick={() => openEditDialog(latest)}>Edit</Button>
@@ -683,13 +752,25 @@ export default function LogsPage() {
                   if (isExpanded && hasMultiple) {
                     rows.push(
                       <tr key={`${group.ticketId}-details`} id={`group-${group.ticketId}-details`}>
-                        <td colSpan={colCount + 1} className="px-4 pb-4 pt-0">
+                        <td colSpan={colCount} className="px-4 pb-4 pt-0">
                           <div className="rounded-2xl border border-dashed border-[color:var(--f92-border)] bg-[color:var(--f92-tint)] p-4">
                             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                               <p className="text-xs uppercase tracking-widest text-[color:var(--f92-gray)]">
-                                All sendbacks for {group.ticketId}
+                                <span>All sendbacks for {group.ticketId}</span>
+                                {latest.client_brand ? (
+                                  <>
+                                    <span className="mx-2" aria-hidden="true">·</span>
+                                    <span>Brand: <span className="text-[color:var(--f92-navy)]">{latest.client_brand}</span></span>
+                                  </>
+                                ) : null}
+                                {latest.who_owns_fix ? (
+                                  <>
+                                    <span className="mx-2" aria-hidden="true">·</span>
+                                    <span>Owner: <span className="text-[color:var(--f92-dark)]">{latest.who_owns_fix}</span></span>
+                                  </>
+                                ) : null}
                               </p>
-                              {profile?.role === 'admin' ? (
+                              {isAdmin ? (
                                 <Button
                                   variant="outline"
                                   size="sm"
@@ -706,12 +787,14 @@ export default function LogsPage() {
                                   <tr className="text-[color:var(--f92-gray)]">
                                     <th className="px-2 py-2 font-semibold">Date</th>
                                     <th className="px-2 py-2 font-semibold">#</th>
+                                    <th className="px-2 py-2 font-semibold">Brand</th>
                                     <th className="px-2 py-2 font-semibold">Status</th>
                                     <th className="px-2 py-2 font-semibold">Severity</th>
                                     <th className="px-2 py-2 font-semibold">Category</th>
+                                    <th className="px-2 py-2 font-semibold">Owner</th>
                                     <th className="px-2 py-2 font-semibold">Root cause</th>
                                     <th className="px-2 py-2 font-semibold">Notes</th>
-                                    {profile?.role === 'admin' ? <th className="px-2 py-2 font-semibold">Actions</th> : null}
+                                    {isAdmin ? <th className="px-2 py-2 font-semibold">Actions</th> : null}
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -719,6 +802,7 @@ export default function LogsPage() {
                                     <tr key={entry.id} className="border-t border-[color:var(--f92-border)]">
                                       <td className="px-2 py-2 align-top">{formatTriggeredDate(entry.triggered_at)}</td>
                                       <td className="px-2 py-2 align-top">{entry.log_number}</td>
+                                      <td className="px-2 py-2 align-top">{entry.client_brand ?? '—'}</td>
                                       <td className="px-2 py-2 align-top">
                                         <Badge variant={getStatusVariant(entry.log_status)}>{entry.log_status}</Badge>
                                       </td>
@@ -730,11 +814,12 @@ export default function LogsPage() {
                                       <td className="px-2 py-2 align-top">
                                         <MmiList values={entry.issue_category} />
                                       </td>
+                                      <td className="px-2 py-2 align-top">{entry.who_owns_fix ?? '—'}</td>
                                       <td className="px-2 py-2 align-top">
                                         {Array.isArray(entry.root_cause_final) ? entry.root_cause_final.join(', ') : '—'}
                                       </td>
                                       <td className="px-2 py-2 align-top">{entry.notes ?? '—'}</td>
-                                      {profile?.role === 'admin' ? (
+                                      {isAdmin ? (
                                         <td className="px-2 py-2 align-top">
                                           <div className="flex flex-col gap-1.5 sm:flex-row sm:flex-wrap">
                                             <Button variant="secondary" size="sm" onClick={() => openEditDialog(entry)}>Edit</Button>
@@ -804,6 +889,15 @@ export default function LogsPage() {
         }
         confirmLabel="Delete all"
         onConfirm={confirmDeleteGroup}
+      />
+
+      <ConfirmDeleteDialog
+        open={batchDeleteOpen}
+        onOpenChange={setBatchDeleteOpen}
+        title={`Delete ${selectedTicketIds.size} ticket${selectedTicketIds.size === 1 ? '' : 's'}?`}
+        description={`This will soft-delete all ${selectedLogsTotal} log${selectedLogsTotal === 1 ? '' : 's'} across ${selectedTicketIds.size} ticket${selectedTicketIds.size === 1 ? '' : 's'}. This cannot be undone.`}
+        confirmLabel="Delete selected"
+        onConfirm={confirmBatchDelete}
       />
     </div>
   );
