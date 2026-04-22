@@ -247,8 +247,68 @@ Deno.serve(async (request: Request) => {
       return new Response('No status change', { status: 200 });
     }
 
+    // -------------------------------------------------------------------
+    // Milestone branch — records the FIRST time a ticket enters
+    // 'Dev Client Review'. Runs before the rework branch so a transition
+    // that doesn't satisfy isValidTransition (e.g. In Development →
+    // Dev Client Review) still creates a milestone.
+    // -------------------------------------------------------------------
+    let milestoneCreated = false;
+    if (statusChange.toString === 'Dev Client Review') {
+      const { data: existing } = await supabase
+        .from('test_milestones')
+        .select('id')
+        .eq('jira_ticket_id', issue.key)
+        .eq('milestone_type', 'dev_client_review')
+        .eq('is_deleted', false)
+        .maybeSingle();
+
+      if (!existing) {
+        try {
+          const fullIssueForMilestone = await getIssue(issue.key);
+          const rawBrand = fullIssueForMilestone.fields[JIRA_FIELD_MAP.nbly_brand];
+          const brandValue = extractBrand(rawBrand, issue.key);
+
+          let brandId: string | null = null;
+          if (brandValue) {
+            const { data: brand } = await supabase
+              .from('brands')
+              .select('id')
+              .eq('jira_value', brandValue)
+              .maybeSingle();
+            brandId = brand?.id ?? null;
+            if (!brandId) {
+              console.warn('[jira-webhook] milestone: no brand match for', brandValue);
+            }
+          }
+
+          const { error: milestoneError } = await supabase
+            .from('test_milestones')
+            .insert({
+              jira_ticket_id: issue.key,
+              jira_ticket_url: `${jiraBaseUrl}/browse/${issue.key}`,
+              jira_summary: fullIssueForMilestone.fields.summary,
+              brand_id: brandId,
+              brand_jira_value: brandValue,
+              source: 'webhook',
+              created_by: 'system',
+            });
+          if (milestoneError) {
+            // Duplicate inserts (race against another webhook delivery) are
+            // expected to collide against idx_test_milestones_unique; log
+            // and carry on so the rework branch still runs.
+            console.warn('[jira-webhook] milestone insert failed', milestoneError.message);
+          } else {
+            milestoneCreated = true;
+          }
+        } catch (milestoneErr) {
+          console.error('[jira-webhook] milestone branch error', milestoneErr);
+        }
+      }
+    }
+
     if (!isValidTransition(statusChange.fromString, statusChange.toString)) {
-      return new Response('Invalid transition', { status: 200 });
+      return new Response(milestoneCreated ? 'Milestone recorded' : 'Invalid transition', { status: 200 });
     }
 
     const fullIssue = await getIssue(issue.key);
