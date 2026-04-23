@@ -11,7 +11,7 @@ interface SparklineProps {
 export function Sparkline({ points, width = 80, height = 24 }: SparklineProps) {
   const max = points.reduce((m, p) => Math.max(m, p.count), 0);
 
-  if (max === 0) {
+  if (max === 0 || points.length < 2) {
     return (
       <span className="text-xs text-[color:var(--f92-lgray)]" title="No tests in the last 6 months">
         —

@@ -37,6 +37,7 @@ export default function CoveragePage() {
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [logs, setLogs] = useState<QualityLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
 
   const [sortMode, setSortMode] = useState<SortMode>('drought');
@@ -54,6 +55,16 @@ export default function CoveragePage() {
         supabase.auth.getSession(),
       ]);
       if (cancelled) return;
+
+      // Surface partial failures so the page doesn't silently render as empty.
+      const failures: string[] = [];
+      if (brandsRes.error) failures.push(`brands: ${brandsRes.error.message}`);
+      if (milestonesRes.error) failures.push(`test_milestones: ${milestonesRes.error.message}`);
+      if (logsRes.error) failures.push(`quality_logs: ${logsRes.error.message}`);
+      if (failures.length > 0) {
+        console.error('[coverage] fetch failures', failures);
+        setLoadError(failures.join(' · '));
+      }
 
       setBrands((brandsRes.data ?? []) as Brand[]);
       setMilestones((milestonesRes.data ?? []) as Milestone[]);
@@ -173,6 +184,13 @@ export default function CoveragePage() {
           <SyncJiraButton />
         </div>
       </div>
+
+      {loadError ? (
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <p className="font-medium">Some data failed to load</p>
+          <p className="mt-1 text-xs">{loadError}</p>
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         {loading
@@ -313,7 +331,11 @@ export default function CoveragePage() {
           // Hand off to Settings → Coverage; the in-drawer inline manage
           // UI is served from that page (§5) to keep scope tight.
           setDrawerOpen(false);
-          window.location.href = '/dashboard/settings/coverage';
+          if (drawerRow) {
+            window.location.href = `/dashboard/settings/coverage?brand=${encodeURIComponent(drawerRow.brand.id)}`;
+          } else {
+            window.location.href = '/dashboard/settings/coverage';
+          }
         }}
       />
     </div>
