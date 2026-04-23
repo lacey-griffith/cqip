@@ -143,6 +143,68 @@ export function ManageMilestonesDialog({ brands, currentUserEmail, initialBrandI
     setAddSubmitting(true);
     try {
       const brand = brandLookup.get(addBrandId);
+      const notes = addNotes.trim() || null;
+
+      // Look for any existing milestone on the same (ticket, milestone_type),
+      // including soft-deleted rows. If the latest is soft-deleted, offer to
+      // restore + update it rather than letting the partial unique index
+      // silently accept a parallel INSERT (which would leave two rows: the
+      // soft-deleted original and the new active one).
+      const { data: existing } = await supabase
+        .from('test_milestones')
+        .select('id, is_deleted')
+        .eq('jira_ticket_id', ticket)
+        .eq('milestone_type', 'dev_client_review')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (existing && existing.is_deleted) {
+        const confirmed = window.confirm(
+          `A previously deleted milestone exists for ${ticket}. ` +
+          `Restore and update it? (Click Cancel to create a separate new record.)`,
+        );
+        if (confirmed) {
+          const { error: restoreErr } = await supabase
+            .from('test_milestones')
+            .update({
+              is_deleted: false,
+              reached_at: reachedAtIso,
+              notes,
+              brand_id: addBrandId,
+              brand_jira_value: brand?.jira_value ?? null,
+              source: 'manual',
+              created_by: currentUserEmail,
+            })
+            .eq('id', existing.id);
+          if (restoreErr) {
+            console.error('[milestones] restore failed', restoreErr);
+            toast('❌ Failed to restore milestone');
+            return;
+          }
+          const { error: auditErr } = await supabase.from('audit_log').insert({
+            log_entry_id: null,
+            target_type: 'test_milestone',
+            target_id: existing.id,
+            action: 'UPDATE',
+            field_name: 'is_deleted',
+            old_value: 'true',
+            new_value: 'false',
+            changed_by: currentUserEmail,
+            notes: 'Restored via admin UI (previously soft-deleted)',
+          });
+          if (auditErr) console.warn('[milestones] audit insert failed', auditErr);
+          toast('♻️ Milestone restored');
+          setAddTicket('');
+          setAddNotes('');
+          setAddReachedAt(toDatetimeLocal(new Date()));
+          await loadMilestones();
+          return;
+        }
+        // Admin opted out of restore — fall through to normal INSERT, which
+        // creates a parallel active row next to the soft-deleted one.
+      }
+
       const { data: inserted, error } = await supabase
         .from('test_milestones')
         .insert({
@@ -155,13 +217,13 @@ export function ManageMilestonesDialog({ brands, currentUserEmail, initialBrandI
           reached_at: reachedAtIso,
           source: 'manual',
           created_by: currentUserEmail,
-          notes: addNotes.trim() || null,
+          notes,
         })
         .select('id, jira_ticket_id')
         .single();
       if (error) {
         if (error.code === '23505' || (error.message ?? '').includes('duplicate')) {
-          toast('❌ That ticket already has a milestone recorded. Delete the existing one first if you want to correct it.');
+          toast(`❌ A milestone already exists for ${ticket}. Edit the existing one or soft-delete it first if you need to change the ticket, brand, or type.`);
         } else {
           console.error('[milestones] insert failed', error);
           toast('❌ Failed to add milestone');
