@@ -11,6 +11,15 @@ import { useToast } from '@/components/layout/toaster';
 import { useLoadingMessage } from '@/lib/easter-eggs/use-loading-message';
 import { SyncJiraButton } from '@/components/dashboard/sync-jira-button';
 import { LogDrawer, type LogDrawerQualityLog } from '@/components/dashboard/log-drawer';
+
+// Dashboard-local log shape: everything LogDrawer needs to render a row
+// plus the filter-only arrays the charts aggregate over. The drawer
+// itself accepts the narrower LogDrawerQualityLog shape — the extras
+// are only read inside the click handlers on this page.
+type DashboardLog = LogDrawerQualityLog & {
+  issue_category: string[] | null;
+  root_cause_final: string[] | null;
+};
 import {
   countInWindow,
   endOfLastWeek,
@@ -114,7 +123,7 @@ export default function DashboardPage() {
   // Lifted to state so the chart onClick handlers can filter against the
   // same array the charts aggregate. Matches the 3-month window the chart
   // data uses.
-  const [chartLogs, setChartLogs] = useState<LogDrawerQualityLog[]>([]);
+  const [chartLogs, setChartLogs] = useState<DashboardLog[]>([]);
 
   // Drawer state — charts call openDrawer to populate and reveal.
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -246,7 +255,7 @@ export default function DashboardPage() {
         if (allLogs && allLogs.length > 0) {
           // Stash the raw logs so chart onClick handlers can filter against
           // the same array that fed the aggregations.
-          setChartLogs(allLogs as LogDrawerQualityLog[]);
+          setChartLogs(allLogs as DashboardLog[]);
 
           // Rework volume by week — keyed by ISO Sunday date so the click
           // handler can reconstruct the exact [start, end) window. Display
@@ -607,7 +616,7 @@ export default function DashboardPage() {
         {/* Issue Category Breakdown */}
         <CollapsibleCard title="Issue Category Breakdown">
           {charts.issueCategory.length > 0 ? (
-            <div className="relative">
+            <div className="relative" role="region" aria-label="Issue Category Breakdown. Click a slice to see tickets.">
               {pieHover ? (
                 <div
                   className="absolute right-2 top-2 z-10 rounded-xl border border-[color:var(--f92-border)] bg-[color:var(--f92-surface)] px-3 py-2 text-xs shadow-md"
@@ -636,10 +645,23 @@ export default function DashboardPage() {
                     dataKey="value"
                     activeShape={renderActiveCategory}
                     isAnimationActive={false}
+                    style={{ cursor: 'pointer' }}
                     onMouseEnter={(slice: { name?: string; value?: number }) =>
                       setPieHover({ name: slice.name ?? '', value: slice.value ?? 0 })
                     }
                     onMouseLeave={() => setPieHover(null)}
+                    onClick={(slice: { name?: string }) => {
+                      const category = slice.name;
+                      if (!category) return;
+                      const filtered = chartLogs.filter(log =>
+                        Array.isArray(log.issue_category) && log.issue_category.includes(category),
+                      );
+                      openDrawer(
+                        `Issue Category: ${category}`,
+                        `${filtered.length} ${filtered.length === 1 ? 'ticket' : 'tickets'}`,
+                        filtered,
+                      );
+                    }}
                   >
                     {charts.issueCategory.map((_, index) => (
                       <Cell
