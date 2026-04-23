@@ -201,6 +201,7 @@ export function Nav() {
     'Git Blame Recipient 😅',
     'Keyboard Warrior ⌨️',
     'Deploy Cowboy 🤠',
+    'Deploy Cowgirl 🤠',
     'I Am Groot 🌿',
     'It Depends... 🤔',
     'LGTM (didn\'t read) 👀',
