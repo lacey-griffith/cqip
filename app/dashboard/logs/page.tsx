@@ -593,13 +593,13 @@ export default function LogsPage() {
       ) : null}
 
       <Card>
-        <div className="overflow-x-auto">
+        <div className="max-h-[40rem] overflow-x-auto overflow-y-auto pr-2">
           <table className="min-w-full border-separate border-spacing-y-3 text-left text-sm">
-            <thead>
+            <thead className="sticky top-0 z-[3] bg-[color:var(--f92-surface)]">
               <tr className="text-[color:var(--f92-dark)]">
-                <th className="sticky left-0 z-[2] w-12 whitespace-nowrap bg-white px-2 py-3" aria-label={isAdmin ? 'Select ticket' : 'Expand'}>{' '}</th>
-                <SortableHeader k="date" label="Date" className="sticky left-12 z-[2] whitespace-nowrap bg-white" />
-                <th className="sticky left-[9.5rem] z-[2] whitespace-nowrap bg-white px-4 py-3 font-semibold">Ticket</th>
+                <th className="sticky left-0 z-[2] w-12 whitespace-nowrap bg-[color:var(--f92-surface)] px-2 py-3" aria-label={isAdmin ? 'Select ticket' : 'Expand'}>{' '}</th>
+                <SortableHeader k="date" label="Date" className="sticky left-12 z-[2] whitespace-nowrap bg-[color:var(--f92-surface)]" />
+                <th className="sticky left-[9.5rem] z-[2] whitespace-nowrap bg-[color:var(--f92-surface)] px-4 py-3 font-semibold">Ticket</th>
                 <SortableHeader k="severity" label="Severity" />
                 <SortableHeader k="status" label="Status" />
                 <SortableHeader k="category" label="Issue category" />
