@@ -40,6 +40,12 @@ const settingsSections = [
     href: '/dashboard/settings/coverage',
     icon: '🎯',
   },
+  {
+    title: 'System Info',
+    description: 'Build version and deploy status. Admin-only.',
+    href: '/dashboard/settings/system',
+    icon: '⚙️',
+  },
 ];
 
 export default function SettingsPage() {
