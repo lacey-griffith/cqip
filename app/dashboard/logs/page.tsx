@@ -15,6 +15,7 @@ import { ConfirmDeleteDialog } from '@/components/logs/confirm-delete-dialog';
 import { TicketLink } from '@/components/logs/ticket-link';
 import { MmiList } from '@/components/logs/mmi-tooltip';
 import { RowActionsMenu } from '@/components/logs/row-actions-menu';
+import { LogDetailDrawer } from '@/components/logs/log-detail-drawer';
 import { SyncJiraButton } from '@/components/dashboard/sync-jira-button';
 import { getSeverityVariant, getStatusVariant } from '@/components/logs/badge-variants';
 import { cn } from '@/lib/utils';
@@ -111,6 +112,12 @@ export default function LogsPage() {
 
   const [selectedTicketIds, setSelectedTicketIds] = useState<Set<string>>(new Set());
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false);
+
+  // Log detail drawer — opens when a title or log-number is clicked.
+  // Keeps logId only; the drawer lazy-fetches the full row so we don't
+  // bloat the list query with every column.
+  const [detailLogId, setDetailLogId] = useState<string | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
 
   useEffect(() => {
     async function loadData() {
@@ -667,6 +674,10 @@ export default function LogsPage() {
                             url={latest.jira_ticket_url}
                             title={latest.jira_summary}
                             brand={latest.client_brand}
+                            onTitleClick={() => {
+                              setDetailLogId(latest.id);
+                              setDetailOpen(true);
+                            }}
                           />
                           {(auditCounts[latest.id] ?? 0) > 5 ? (
                             <span
@@ -771,7 +782,19 @@ export default function LogsPage() {
                                   {group.entries.map(entry => (
                                     <tr key={entry.id} className="border-t border-[color:var(--f92-border)]">
                                       <td className="px-2 py-2 align-top">{formatTriggeredDate(entry.triggered_at)}</td>
-                                      <td className="px-2 py-2 align-top">{entry.log_number}</td>
+                                      <td className="px-2 py-2 align-top">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setDetailLogId(entry.id);
+                                            setDetailOpen(true);
+                                          }}
+                                          className="font-medium text-[color:var(--f92-orange)] hover:underline focus-visible:outline-none focus-visible:underline"
+                                          aria-label={`Open sendback #${entry.log_number} details`}
+                                        >
+                                          #{entry.log_number}
+                                        </button>
+                                      </td>
                                       <td className="px-2 py-2 align-top">{entry.client_brand ?? '—'}</td>
                                       <td className="px-2 py-2 align-top">
                                         <Badge variant={getStatusVariant(entry.log_status)}>{entry.log_status}</Badge>
@@ -863,6 +886,24 @@ export default function LogsPage() {
         description={`This will soft-delete all ${selectedLogsTotal} log${selectedLogsTotal === 1 ? '' : 's'} across ${selectedTicketIds.size} ticket${selectedTicketIds.size === 1 ? '' : 's'}. This cannot be undone.`}
         confirmLabel="Delete selected"
         onConfirm={confirmBatchDelete}
+      />
+
+      <LogDetailDrawer
+        logId={detailLogId}
+        open={detailOpen}
+        onOpenChange={open => {
+          setDetailOpen(open);
+          if (!open) setDetailLogId(null);
+        }}
+        isAdmin={isAdmin}
+        onEdit={() => {
+          const match = logs.find(l => l.id === detailLogId);
+          if (!match) return;
+          openEditDialog(match);
+          // Close the drawer so the dialog sits cleanly on top rather
+          // than behind a dimmed drawer overlay.
+          setDetailOpen(false);
+        }}
       />
     </div>
   );

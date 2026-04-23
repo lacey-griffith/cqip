@@ -8,10 +8,11 @@ interface TicketLinkProps {
   url: string | null | undefined;
   title?: string | null;
   brand?: string | null;
+  onTitleClick?: () => void;
   className?: string;
 }
 
-export function TicketLink({ ticketId, url, title, brand, className }: TicketLinkProps) {
+export function TicketLink({ ticketId, url, title, brand, onTitleClick, className }: TicketLinkProps) {
   if (!title) {
     if (!url) {
       return <span className={cn('font-medium text-[color:var(--f92-dark)]', className)}>{ticketId}</span>;
@@ -34,21 +35,31 @@ export function TicketLink({ ticketId, url, title, brand, className }: TicketLin
   }
 
   const brandLabel = brand?.trim() ? brand.trim() : null;
+  const titleClassName = 'font-medium text-[color:var(--f92-dark)] leading-snug text-left';
 
   return (
     <div className={cn('flex flex-col gap-0.5', className)}>
-      <span
-        className="font-medium text-[color:var(--f92-dark)] leading-snug"
-        title={title}
-      >
-        {title}
-      </span>
+      {onTitleClick ? (
+        <button
+          type="button"
+          onClick={onTitleClick}
+          className={cn(titleClassName, 'hover:underline focus-visible:outline-none focus-visible:underline')}
+          title={title}
+        >
+          {title}
+        </button>
+      ) : (
+        <span className={titleClassName} title={title}>
+          {title}
+        </span>
+      )}
       <div className="flex items-center gap-2 text-xs">
         {url ? (
           <a
             href={url}
             target="_blank"
             rel="noreferrer"
+            onClick={e => e.stopPropagation()}
             className="inline-flex items-center gap-1 text-[color:var(--f92-orange)] hover:underline"
             aria-label={`${ticketId} — opens in Jira`}
           >
