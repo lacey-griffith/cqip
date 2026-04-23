@@ -96,7 +96,18 @@ export function BrandDetailDrawer({ row, milestones, open, onOpenChange, isAdmin
               <BarChart data={chartData}>
                 <XAxis dataKey="month" fontSize={11} stroke="#6B7280" />
                 <YAxis fontSize={11} stroke="#6B7280" allowDecimals={false} />
-                <Tooltip cursor={{ fill: '#FEF6EE' }} />
+                <Tooltip
+                  cursor={{ fill: 'var(--f92-tint)' }}
+                  contentStyle={{
+                    backgroundColor: 'var(--f92-surface)',
+                    border: '1px solid var(--f92-border)',
+                    borderRadius: 8,
+                    color: 'var(--f92-dark)',
+                    fontSize: 12,
+                  }}
+                  labelStyle={{ color: 'var(--f92-dark)', fontWeight: 600 }}
+                  itemStyle={{ color: 'var(--f92-dark)' }}
+                />
                 <Bar dataKey="count" fill="#F47920" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>

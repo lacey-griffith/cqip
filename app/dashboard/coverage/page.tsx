@@ -129,11 +129,21 @@ export default function CoveragePage() {
 
   const crossBrand = useMemo(() => {
     const now = new Date();
+    const startOfYear = new Date(now.getFullYear(), 0, 1);
+    const allTime = milestones.filter(m => !m.is_deleted);
+    const earliest = allTime.reduce<Date | null>((acc, m) => {
+      const t = new Date(m.reached_at);
+      if (Number.isNaN(t.getTime())) return acc;
+      return !acc || t < acc ? t : acc;
+    }, null);
     return {
       thisWeek: countInWindow(milestones, null, startOfCurrentWeek(), now),
       lastWeek: countInWindow(milestones, null, startOfLastWeek(), endOfLastWeek()),
       rolling28: countInWindow(milestones, null, startOfRolling28(), now),
       thisMonth: countInWindow(milestones, null, startOfCurrentMonth(), now),
+      ytd: countInWindow(milestones, null, startOfYear, now),
+      allTime: allTime.length,
+      earliest,
     };
   }, [milestones]);
 
@@ -266,10 +276,20 @@ export default function CoveragePage() {
   }
 
   const kpiCards = [
-    { label: 'This Week', value: crossBrand.thisWeek },
-    { label: 'Last Week', value: crossBrand.lastWeek },
-    { label: 'Rolling 28 Days', value: crossBrand.rolling28 },
-    { label: 'This Month', value: crossBrand.thisMonth },
+    { label: 'This Week', value: crossBrand.thisWeek, hint: 'Tests reached' },
+    { label: 'Last Week', value: crossBrand.lastWeek, hint: 'Tests reached' },
+    { label: 'Rolling 28 Days', value: crossBrand.rolling28, hint: 'Tests reached' },
+    { label: 'This Month', value: crossBrand.thisMonth, hint: 'Tests reached' },
+  ];
+
+  const todayLabel = new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit' });
+  const earliestLabel = crossBrand.earliest
+    ? crossBrand.earliest.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+    : null;
+
+  const deliveredCards = [
+    { label: 'Tests This Year', value: crossBrand.ytd, hint: `Through ${todayLabel}` },
+    { label: 'Tests All Time', value: crossBrand.allTime, hint: earliestLabel ? `Since ${earliestLabel}` : null },
   ];
 
   return (
@@ -306,7 +326,24 @@ export default function CoveragePage() {
               <Card key={k.label} className="border-[color:var(--f92-border)] bg-white p-3 md:p-4 shadow-sm">
                 <p className="text-xs font-medium uppercase tracking-wider text-[color:var(--f92-gray)]">{k.label}</p>
                 <p className="mt-2 text-3xl md:text-4xl font-bold text-[color:var(--f92-navy)]">{k.value}</p>
-                <p className="mt-2 text-xs text-[color:var(--f92-gray)]">Tests reached</p>
+                <p className="mt-2 text-xs text-[color:var(--f92-gray)]">{k.hint}</p>
+              </Card>
+            ))}
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        {loading
+          ? Array.from({ length: 2 }, (_, i) => (
+              <Card key={i} className="border-[color:var(--f92-border)] bg-white p-3 md:p-4 shadow-sm">
+                <div className="h-3 w-24 animate-pulse rounded bg-[color:var(--f92-tint)]" />
+                <div className="mt-2 h-8 w-16 animate-pulse rounded bg-[color:var(--f92-tint)]" />
+              </Card>
+            ))
+          : deliveredCards.map(k => (
+              <Card key={k.label} className="border-[color:var(--f92-border)] bg-white p-3 md:p-4 shadow-sm">
+                <p className="text-xs font-medium uppercase tracking-wider text-[color:var(--f92-gray)]">{k.label}</p>
+                <p className="mt-2 text-3xl md:text-4xl font-bold text-[color:var(--f92-navy)]">{k.value}</p>
+                {k.hint ? <p className="mt-2 text-xs text-[color:var(--f92-gray)]">{k.hint}</p> : null}
               </Card>
             ))}
       </div>
