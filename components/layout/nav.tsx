@@ -75,10 +75,14 @@ export function Nav() {
   const [clouds, setClouds] = useState<
     Array<{ id: number; top: string; duration: number; delay: number; direction: 1 | -1 }>
   >([]);
+  const [shootingStars, setShootingStars] = useState<
+    Array<{ id: string; startX: number; startY: number; endX: number; endY: number; delay: number }>
+  >([]);
   const moonHoverTimer = useRef<number | null>(null);
   const sunHoverTimer = useRef<number | null>(null);
   const twinkleClearTimer = useRef<number | null>(null);
   const cloudClearTimer = useRef<number | null>(null);
+  const shootingStarClearTimer = useRef<number | null>(null);
 
   // Close the mobile drawer whenever the route changes.
   useEffect(() => {
@@ -261,6 +265,21 @@ export function Nav() {
       setTwinkles(stars);
       if (twinkleClearTimer.current) window.clearTimeout(twinkleClearTimer.current);
       twinkleClearTimer.current = window.setTimeout(() => setTwinkles([]), 3000);
+
+      const shootingSpecs = Array.from(
+        { length: 2 + Math.floor(Math.random() * 2) }, // 2 or 3 stars
+        (_, i) => ({
+          id: `shoot-${Date.now()}-${i}`,
+          startX: 10 + Math.random() * 40,   // 10–50% from left
+          startY: 5 + Math.random() * 30,    // 5–35% from top
+          endX:   60 + Math.random() * 30,   // 60–90% from left
+          endY:   60 + Math.random() * 30,   // 60–90% from top
+          delay:  400 + i * 700,             // stagger after twinkles start
+        }),
+      );
+      setShootingStars(shootingSpecs);
+      if (shootingStarClearTimer.current) window.clearTimeout(shootingStarClearTimer.current);
+      shootingStarClearTimer.current = window.setTimeout(() => setShootingStars([]), 3500);
     }, 3000);
   }
 
@@ -321,8 +340,13 @@ export function Nav() {
       window.clearTimeout(cloudClearTimer.current);
       cloudClearTimer.current = null;
     }
+    if (shootingStarClearTimer.current) {
+      window.clearTimeout(shootingStarClearTimer.current);
+      shootingStarClearTimer.current = null;
+    }
     setTwinkles([]);
     setClouds([]);
+    setShootingStars([]);
   }, [theme]);
 
   const links = [
@@ -597,6 +621,24 @@ export function Nav() {
               >
                 <path d="M12 2 L13.5 9 L20 10 L14 14 L16 21 L12 17 L8 21 L10 14 L4 10 L10.5 9 Z" />
               </svg>
+            ))}
+          </div>
+        ) : null}
+
+        {isDark && shootingStars.length > 0 ? (
+          <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
+            {shootingStars.map(s => (
+              <div
+                key={s.id}
+                className="cqip-shooting-star absolute"
+                style={{
+                  left: `${s.startX}%`,
+                  top: `${s.startY}%`,
+                  '--end-x': `${s.endX - s.startX}%`,
+                  '--end-y': `${s.endY - s.startY}%`,
+                  animationDelay: `${s.delay}ms`,
+                } as React.CSSProperties}
+              />
             ))}
           </div>
         ) : null}
