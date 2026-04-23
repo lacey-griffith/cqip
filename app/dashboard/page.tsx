@@ -568,7 +568,13 @@ export default function DashboardPage() {
       {/* Active Alerts Panel */}
       <ActiveAlertsPanel />
 
-      {/* Charts Grid */}
+      {/* Charts Grid.
+          Each chart wraps its Recharts tree in a role='region' with an
+          aria-label that hints at the click-to-drill-down. Recharts itself
+          doesn't natively give keyboard focus to Bar/Pie elements, so mouse
+          users get the full interaction today. TODO(a11y): add Enter/Space
+          activation for bars/slices via tabIndex + keydown wrappers in a
+          follow-up batch — tracked separately from 002.5c. */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Rework Volume by Week */}
         <CollapsibleCard title="Rework Volume (Weekly)">
@@ -776,7 +782,17 @@ export default function DashboardPage() {
 
       <LogDrawer
         open={drawerOpen}
-        onOpenChange={setDrawerOpen}
+        onOpenChange={open => {
+          setDrawerOpen(open);
+          if (!open) {
+            // Defensive: clear the payload after close so a subsequent
+            // open for a different chart never flashes the previous
+            // content during the open-state transition.
+            setDrawerLogs([]);
+            setDrawerTitle('');
+            setDrawerSubtitle('');
+          }
+        }}
         title={drawerTitle}
         subtitle={drawerSubtitle}
         logs={drawerLogs}
