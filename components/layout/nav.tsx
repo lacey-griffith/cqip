@@ -405,6 +405,7 @@ export function Nav() {
         )}
         aria-label="Primary"
       >
+        <div className="flex flex-1 flex-col overflow-y-auto pr-1">
         <div className="mb-6 flex items-center justify-between">
           <Link
             href="/dashboard"
@@ -555,7 +556,9 @@ export function Nav() {
           })}
         </nav>
 
-        <div className="mt-auto flex items-center gap-2 pt-4">
+        </div>
+
+        <div className="-mx-6 mt-4 flex shrink-0 items-center gap-2 border-t border-[color:var(--f92-border)] px-6 pt-4">
           <Link
             href="/dashboard/docs"
             aria-label="Documentation"
