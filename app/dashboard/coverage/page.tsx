@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -45,32 +45,37 @@ export default function CoveragePage() {
   const [drawerRow, setDrawerRow] = useState<CoverageRow | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
+  const refetchAll = useCallback(async () => {
+    const [brandsRes, milestonesRes, logsRes] = await Promise.all([
+      supabase.from('brands').select('id, brand_code, jira_value, display_name, is_active, is_paused, paused_reason').order('display_name'),
+      supabase.from('test_milestones').select('id, jira_ticket_id, jira_ticket_url, jira_summary, brand_id, brand_jira_value, milestone_type, reached_at, source, created_by, notes, is_deleted').eq('is_deleted', false),
+      supabase.from('quality_logs').select('id, client_brand, triggered_at, is_deleted').eq('is_deleted', false),
+    ]);
+
+    // Surface partial failures so the page doesn't silently render as empty.
+    const failures: string[] = [];
+    if (brandsRes.error) failures.push(`brands: ${brandsRes.error.message}`);
+    if (milestonesRes.error) failures.push(`test_milestones: ${milestonesRes.error.message}`);
+    if (logsRes.error) failures.push(`quality_logs: ${logsRes.error.message}`);
+    if (failures.length > 0) {
+      console.error('[coverage] fetch failures', failures);
+      setLoadError(failures.join(' · '));
+    } else {
+      setLoadError(null);
+    }
+
+    setBrands((brandsRes.data ?? []) as Brand[]);
+    setMilestones((milestonesRes.data ?? []) as Milestone[]);
+    setLogs((logsRes.data ?? []) as QualityLog[]);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
-    async function load() {
-      const [brandsRes, milestonesRes, logsRes, sessionRes] = await Promise.all([
-        supabase.from('brands').select('id, brand_code, jira_value, display_name, is_active, is_paused, paused_reason').order('display_name'),
-        supabase.from('test_milestones').select('id, jira_ticket_id, jira_ticket_url, jira_summary, brand_id, brand_jira_value, milestone_type, reached_at, source, created_by, notes, is_deleted').eq('is_deleted', false),
-        supabase.from('quality_logs').select('id, client_brand, triggered_at, is_deleted').eq('is_deleted', false),
-        supabase.auth.getSession(),
-      ]);
+    async function initialLoad() {
+      await refetchAll();
       if (cancelled) return;
-
-      // Surface partial failures so the page doesn't silently render as empty.
-      const failures: string[] = [];
-      if (brandsRes.error) failures.push(`brands: ${brandsRes.error.message}`);
-      if (milestonesRes.error) failures.push(`test_milestones: ${milestonesRes.error.message}`);
-      if (logsRes.error) failures.push(`quality_logs: ${logsRes.error.message}`);
-      if (failures.length > 0) {
-        console.error('[coverage] fetch failures', failures);
-        setLoadError(failures.join(' · '));
-      }
-
-      setBrands((brandsRes.data ?? []) as Brand[]);
-      setMilestones((milestonesRes.data ?? []) as Milestone[]);
-      setLogs((logsRes.data ?? []) as QualityLog[]);
-
-      const userId = sessionRes.data?.session?.user?.id;
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
       if (userId) {
         const { data: profile } = await supabase
           .from('user_profiles')
@@ -79,11 +84,23 @@ export default function CoveragePage() {
           .maybeSingle();
         if (!cancelled) setIsAdmin(profile?.role === 'admin');
       }
-      setLoading(false);
+      if (!cancelled) setLoading(false);
     }
-    load();
+    initialLoad();
     return () => { cancelled = true; };
-  }, []);
+  }, [refetchAll]);
+
+  // Refetch when the tab regains focus so admin round-trips to
+  // /settings/coverage don't leave this page showing stale counts.
+  useEffect(() => {
+    function onVisible() {
+      if (document.visibilityState === 'visible') {
+        void refetchAll();
+      }
+    }
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [refetchAll]);
 
   const crossBrand = useMemo(() => {
     const now = new Date();

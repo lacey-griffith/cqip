@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, Suspense } from 'react';
+import { useCallback, useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import { useToast } from '@/components/layout/toaster';
@@ -29,6 +29,14 @@ function CoverageSettingsBody() {
   const [pauseReasonDraft, setPauseReasonDraft] = useState('');
   const [pauseSubmitting, setPauseSubmitting] = useState(false);
 
+  const loadBrands = useCallback(async () => {
+    const { data: brandsData } = await supabase
+      .from('brands')
+      .select('id, brand_code, jira_value, display_name, is_active, is_paused, paused_reason')
+      .order('display_name');
+    setBrands((brandsData ?? []) as Brand[]);
+  }, []);
+
   useEffect(() => {
     async function init() {
       const { data: { session } } = await supabase.auth.getSession();
@@ -47,18 +55,28 @@ function CoverageSettingsBody() {
       setUserEmail(profile?.email ?? session.user.email ?? 'unknown');
 
       if (admin) {
-        const { data: brandsData } = await supabase
-          .from('brands')
-          .select('id, brand_code, jira_value, display_name, is_active, is_paused, paused_reason')
-          .order('display_name');
-        setBrands((brandsData ?? []) as Brand[]);
+        await loadBrands();
       }
       setLoading(false);
     }
     init();
-  }, []);
+  }, [loadBrands]);
 
   async function togglePause(brand: Brand, nextPaused: boolean, reason: string) {
+    if (pauseSubmitting) return;
+    const previous: Brand = { ...brand };
+    const reasonTrimmed = reason.trim() || null;
+
+    // Optimistic local update — restrict to fields actually on the Brand type
+    // so the state shape stays honest (no `as Brand` fib).
+    setBrands(prev =>
+      prev.map(b =>
+        b.id === brand.id
+          ? { ...b, is_paused: nextPaused, paused_reason: nextPaused ? reasonTrimmed : null }
+          : b,
+      ),
+    );
+
     setPauseSubmitting(true);
     try {
       const updates = nextPaused
@@ -66,7 +84,7 @@ function CoverageSettingsBody() {
             is_paused: true,
             paused_at: new Date().toISOString(),
             paused_by: userEmail,
-            paused_reason: reason.trim() || null,
+            paused_reason: reasonTrimmed,
           }
         : {
             is_paused: false,
@@ -75,11 +93,8 @@ function CoverageSettingsBody() {
             paused_reason: null,
           };
       const { error } = await supabase.from('brands').update(updates).eq('id', brand.id);
-      if (error) {
-        console.error('[coverage] pause toggle failed', error);
-        toast('❌ Failed to update brand');
-        return;
-      }
+      if (error) throw error;
+
       const { error: auditErr } = await supabase.from('audit_log').insert({
         log_entry_id: null,
         target_type: 'brand',
@@ -89,13 +104,23 @@ function CoverageSettingsBody() {
         old_value: String(brand.is_paused),
         new_value: String(nextPaused),
         changed_by: userEmail,
-        notes: nextPaused ? (updates.paused_reason ?? null) : 'Unpaused',
+        notes: nextPaused ? reasonTrimmed : 'Unpaused',
       });
       if (auditErr) console.warn('[coverage] audit insert failed', auditErr);
-      setBrands(prev => prev.map(b => (b.id === brand.id ? { ...b, ...updates } as Brand : b)));
+
       toast(nextPaused ? '⏸️ Brand paused' : '▶️ Brand resumed');
       setEditingBrandId(null);
       setPauseReasonDraft('');
+      // Refetch so the ManageMilestonesDialog's brand dropdown reflects
+      // fresh server state (covers races with concurrent admin edits).
+      void loadBrands();
+    } catch (err) {
+      // Roll back the optimistic update so UI and DB stay consistent.
+      setBrands(prev => prev.map(b => (b.id === brand.id ? previous : b)));
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[coverage] pause toggle failed', err);
+      toast(`❌ Failed to update ${brand.display_name}: ${msg}`);
+      throw err instanceof Error ? err : new Error(msg);
     } finally {
       setPauseSubmitting(false);
     }
