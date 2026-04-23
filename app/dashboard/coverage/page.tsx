@@ -9,6 +9,7 @@ import { Card } from '@/components/ui/card';
 import { Sparkline } from '@/components/coverage/sparkline';
 import { BrandDetailDrawer } from '@/components/coverage/brand-detail-drawer';
 import { SyncJiraButton } from '@/components/dashboard/sync-jira-button';
+import { downloadBrandedXlsx } from '@/lib/export/branded-xlsx';
 import {
   buildCoverageRows,
   countInWindow,
@@ -225,12 +226,7 @@ export default function CoveragePage() {
     );
   }
 
-  function handleExportCsv() {
-    const escape = (v: unknown) => {
-      const s = String(v ?? '');
-      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    };
-
+  function handleExportXlsx() {
     // Leadership-ready: always exclude paused brands (ignoring the
     // show-paused toggle) and always sort alphabetically by brand name
     // regardless of the table's current sort state.
@@ -239,31 +235,36 @@ export default function CoveragePage() {
       .slice()
       .sort((a, b) => a.brand.display_name.localeCompare(b.brand.display_name));
 
-    const header = [
-      'Brand Code',
-      'Brand',
-      'Tests This Week',
-      'Tests Last Week',
-      'Tests Last 28 Days',
-      'Tests This Month',
-      'Rework Events (28d)',
-      'Rework Ratio',
-      'Coverage Flag',
-    ];
+    const droughtCount = exportRows.filter(r => r.droughtFlag).length;
+    const dateStamp = new Date().toISOString().slice(0, 10);
+    const friendlyStamp = new Date().toLocaleString('en-US', {
+      month: 'short', day: 'numeric', year: 'numeric',
+      hour: 'numeric', minute: '2-digit',
+    });
 
-    const now = new Date();
-    const dateStamp = now.toISOString().slice(0, 10);
-    // Spec-requested format: YYYY-MM-DD HH:MM (24h). Slice the ISO string
-    // and swap the 'T' for a space rather than threading locale options.
-    const friendlyStamp = now.toISOString().slice(0, 16).replace('T', ' ');
-
-    const lines: string[] = [];
-    lines.push(escape(`CQIP Client Coverage — exported ${friendlyStamp}`));
-    lines.push(header.map(escape).join(','));
-    for (const r of exportRows) {
-      lines.push([
-        escape(r.brand.brand_code),
-        escape(r.brand.display_name),
+    downloadBrandedXlsx({
+      title: 'Client Coverage',
+      subtitle: `Exported ${friendlyStamp}`,
+      summaryRows: [
+        { label: 'Brands tracked (active)', value: exportRows.length },
+        { label: 'Drought brands', value: droughtCount },
+        { label: 'Tests this week', value: crossBrand.thisWeek },
+        { label: 'Tests rolling 28 days', value: crossBrand.rolling28 },
+      ],
+      headers: [
+        'Brand Code',
+        'Brand',
+        'Tests This Week',
+        'Tests Last Week',
+        'Tests Last 28 Days',
+        'Tests This Month',
+        'Rework Events (28d)',
+        'Rework Ratio',
+        'Coverage Flag',
+      ],
+      rows: exportRows.map(r => [
+        r.brand.brand_code,
+        r.brand.display_name,
         r.testsCurrentWeek,
         r.testsLastWeek,
         r.testsRolling28,
@@ -271,19 +272,11 @@ export default function CoveragePage() {
         r.reworkRolling28,
         formatRatio(r.testsRolling28, r.reworkRolling28),
         r.droughtFlag ? 'DROUGHT' : '',
-      ].map(escape).join(','));
-    }
-
-    const csv = lines.join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `CQIP_Client_Coverage_${dateStamp}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+      ]),
+      highlightRowWhen: row => row[8] === 'DROUGHT',
+      highlightNote: '⚠ flagged rows had ≤2 tests in the last 28 days',
+      filename: `CQIP_Client_Coverage_${dateStamp}`,
+    });
   }
 
   function openDrawer(row: CoverageRow) {
@@ -379,10 +372,10 @@ export default function CoveragePage() {
             <Button
               variant="secondary"
               size="sm"
-              onClick={handleExportCsv}
+              onClick={handleExportXlsx}
               disabled={rows.every(r => r.brand.is_paused)}
             >
-              Export CSV
+              Export to Excel
             </Button>
           </div>
         </div>

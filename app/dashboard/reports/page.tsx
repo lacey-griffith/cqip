@@ -9,7 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/lib/supabase/client';
 import { capitalizeName, cn } from '@/lib/utils';
-import * as XLSX from 'xlsx';
+import { SplitButton } from '@/components/ui/split-button';
+import { downloadBrandedXlsx } from '@/lib/export/branded-xlsx';
+import { downloadBrandedCsv } from '@/lib/export/branded-csv';
 import { ScorecardReport } from '@/components/reports/scorecard-report';
 import { RootCauseReport } from '@/components/reports/root-cause-report';
 import { ClientReport } from '@/components/reports/client-report';
@@ -223,8 +225,8 @@ export default function ReportsPage() {
     await fetchLogs(initialFilters);
   };
 
-  const downloadCsv = () => {
-    const header = [
+  const exportPayload = () => {
+    const headers = [
       'Triggered At',
       'Ticket',
       'Client Brand',
@@ -237,7 +239,7 @@ export default function ReportsPage() {
       'Project Key',
       'Summary',
     ];
-    const rows = logs.map(log => [
+    const rows: Array<(string | number | null)[]> = logs.map(log => [
       log.triggered_at,
       log.jira_ticket_url ? `${log.jira_ticket_id} (${log.jira_ticket_url})` : log.jira_ticket_id,
       log.client_brand || '',
@@ -250,47 +252,31 @@ export default function ReportsPage() {
       log.project_key,
       log.jira_summary || '',
     ]);
-
-    const csvContent = [header, ...rows]
-      .map(row => row.map(value => `"${String(value).replace(/"/g, '""')}"`).join(','))
-      .join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `cqip-reports-${new Date().toISOString().slice(0, 10)}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+    const friendlyStamp = new Date().toLocaleString('en-US', {
+      month: 'short', day: 'numeric', year: 'numeric',
+      hour: 'numeric', minute: '2-digit',
+    });
+    const dateStamp = new Date().toISOString().slice(0, 10);
+    return {
+      title: `Reports: ${logs.length} ${logs.length === 1 ? 'log' : 'logs'}`,
+      subtitle: `Exported ${friendlyStamp}`,
+      summaryRows: [
+        { label: 'Logs exported', value: logs.length },
+      ],
+      headers,
+      rows,
+      filename: `CQIP_Reports_${dateStamp}`,
+    };
   };
 
   const downloadExcel = () => {
-    const data = logs.map(log => ({
-      'Triggered At': log.triggered_at,
-      'Ticket': log.jira_ticket_url ? `${log.jira_ticket_id} (${log.jira_ticket_url})` : log.jira_ticket_id,
-      'Client Brand': log.client_brand || '',
-      'Severity': log.severity || '',
-      'Status': log.log_status,
-      'Issue Category': Array.isArray(log.issue_category) ? log.issue_category.join('; ') : '',
-      'Root Cause Final': Array.isArray(log.root_cause_final) ? log.root_cause_final.join('; ') : '',
-      'Owner': log.who_owns_fix || '',
-      'Test Type': log.test_type || '',
-      'Project Key': log.project_key,
-      'Summary': log.jira_summary || '',
-    }));
+    const p = exportPayload();
+    downloadBrandedXlsx(p);
+  };
 
-    const worksheet = XLSX.utils.json_to_sheet(data);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'CQIP Reports');
-
-    const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
-    const blob = new Blob([excelBuffer], { type: 'application/octet-stream' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `cqip-reports-${new Date().toISOString().slice(0, 10)}.xlsx`;
-    link.click();
-    URL.revokeObjectURL(url);
+  const downloadCsv = () => {
+    const p = exportPayload();
+    downloadBrandedCsv(p);
   };
 
   const saveReport = async () => {
@@ -617,8 +603,11 @@ export default function ReportsPage() {
         <div className="mt-6 flex flex-wrap items-center gap-3">
           <Button onClick={applyFilters}>Apply filters ({filterCount})</Button>
           <Button variant="outline" onClick={clearFilters}>Clear filters</Button>
-          <Button variant="secondary" onClick={downloadCsv} disabled={logs.length === 0}>Export CSV</Button>
-          <Button variant="secondary" onClick={downloadExcel} disabled={logs.length === 0}>Export Excel</Button>
+          <SplitButton
+            primary={{ label: 'Export to Excel', onClick: downloadExcel }}
+            secondary={{ label: 'Download CSV', onClick: downloadCsv }}
+            disabled={logs.length === 0}
+          />
         </div>
       </Card>
 
