@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { BarChart, Bar, PieChart, Pie, Cell, Sector, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { ArrowDown, ArrowRight, ArrowUp, LineChart } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { ActiveAlertsPanel } from '@/components/dashboard/active-alerts-panel';
 import { CollapsibleCard } from '@/components/dashboard/collapsible-card';
@@ -9,6 +10,13 @@ import { useTheme } from '@/components/layout/theme-provider';
 import { useToast } from '@/components/layout/toaster';
 import { useLoadingMessage } from '@/lib/easter-eggs/use-loading-message';
 import { SyncJiraButton } from '@/components/dashboard/sync-jira-button';
+import {
+  countInWindow,
+  endOfLastWeek,
+  startOfCurrentWeek,
+  startOfLastWeek,
+  type Milestone,
+} from '@/lib/coverage/queries';
 import { supabase } from '@/lib/supabase/client';
 
 interface KPIData {
@@ -98,6 +106,8 @@ export default function DashboardPage() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [testsThisWeek, setTestsThisWeek] = useState(0);
+  const [testsLastWeek, setTestsLastWeek] = useState(0);
   const { theme } = useTheme();
   const isDark = theme === 'dark';
 
@@ -294,6 +304,18 @@ export default function DashboardPage() {
 
     fetchDashboardData();
 
+    // Tests this week / last week for the Coverage KPI card.
+    (async () => {
+      const { data } = await supabase
+        .from('test_milestones')
+        .select('id, jira_ticket_id, jira_ticket_url, jira_summary, brand_id, brand_jira_value, milestone_type, reached_at, source, created_by, notes, is_deleted')
+        .eq('is_deleted', false);
+      const rows = (data ?? []) as Milestone[];
+      const now = new Date();
+      setTestsThisWeek(countInWindow(rows, null, startOfCurrentWeek(), now));
+      setTestsLastWeek(countInWindow(rows, null, startOfLastWeek(), endOfLastWeek()));
+    })();
+
     // Egg #5 — clean streak: how many days since the most recent log?
     (async () => {
       const { data } = await supabase
@@ -406,7 +428,7 @@ export default function DashboardPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
         {/* Total Logs This Month */}
         <Card className="border-[color:var(--f92-border)] bg-white p-3 md:p-4 shadow-sm">
           <p className="text-xs font-medium uppercase tracking-wider text-[color:var(--f92-gray)]">Total Logs</p>
@@ -426,6 +448,40 @@ export default function DashboardPage() {
           <p className="text-xs font-medium uppercase tracking-wider text-[color:var(--f92-gray)]">In Progress</p>
           <p className="mt-2 text-3xl md:text-4xl font-bold text-indigo-500">{kpi.inProgressCount}</p>
           <p className="mt-2 text-xs text-[color:var(--f92-gray)]">Being worked on</p>
+        </Card>
+
+        {/* Tests This Week */}
+        <Card className="border-[color:var(--f92-border)] bg-white p-3 md:p-4 shadow-sm">
+          <p className="text-xs font-medium uppercase tracking-wider text-[color:var(--f92-gray)]">
+            <LineChart className="mr-1 inline h-3 w-3" aria-hidden="true" />
+            Tests This Week
+          </p>
+          <p className="mt-2 text-3xl md:text-4xl font-bold text-[color:var(--f92-navy)]">{testsThisWeek}</p>
+          {(() => {
+            const delta = testsThisWeek - testsLastWeek;
+            if (delta > 0) {
+              return (
+                <p className="mt-2 inline-flex items-center gap-1 text-xs text-green-600">
+                  <ArrowUp className="h-3 w-3" aria-hidden="true" />
+                  {delta} vs last week
+                </p>
+              );
+            }
+            if (delta < 0) {
+              return (
+                <p className="mt-2 inline-flex items-center gap-1 text-xs text-red-600">
+                  <ArrowDown className="h-3 w-3" aria-hidden="true" />
+                  {Math.abs(delta)} vs last week
+                </p>
+              );
+            }
+            return (
+              <p className="mt-2 inline-flex items-center gap-1 text-xs text-[color:var(--f92-gray)]">
+                <ArrowRight className="h-3 w-3" aria-hidden="true" />
+                even with last week
+              </p>
+            );
+          })()}
         </Card>
 
         {/* Critical Issues Open */}
