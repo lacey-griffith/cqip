@@ -10,6 +10,7 @@ import { useTheme } from '@/components/layout/theme-provider';
 import { useToast } from '@/components/layout/toaster';
 import { useLoadingMessage } from '@/lib/easter-eggs/use-loading-message';
 import { SyncJiraButton } from '@/components/dashboard/sync-jira-button';
+import { LogDrawer, type LogDrawerQualityLog } from '@/components/dashboard/log-drawer';
 import {
   countInWindow,
   endOfLastWeek,
@@ -28,7 +29,7 @@ interface KPIData {
 }
 
 interface ChartData {
-  volumeByWeek: Array<{ week: string; count: number }>;
+  volumeByWeek: Array<{ week: string; weekStartIso: string; count: number }>;
   issueCategory: Array<{ name: string; value: number }>;
   severityDistribution: Array<{ severity: string; count: number }>;
   rootCauseFrequency: Array<{ cause: string; count: number }>;
@@ -109,6 +110,24 @@ export default function DashboardPage() {
   const [testsThisWeek, setTestsThisWeek] = useState(0);
   const [testsLastWeek, setTestsLastWeek] = useState(0);
   const [testsLoadFailed, setTestsLoadFailed] = useState(false);
+
+  // Lifted to state so the chart onClick handlers can filter against the
+  // same array the charts aggregate. Matches the 3-month window the chart
+  // data uses.
+  const [chartLogs, setChartLogs] = useState<LogDrawerQualityLog[]>([]);
+
+  // Drawer state — charts call openDrawer to populate and reveal.
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerTitle, setDrawerTitle] = useState('');
+  const [drawerSubtitle, setDrawerSubtitle] = useState('');
+  const [drawerLogs, setDrawerLogs] = useState<LogDrawerQualityLog[]>([]);
+
+  function openDrawer(title: string, subtitle: string, logs: LogDrawerQualityLog[]) {
+    setDrawerTitle(title);
+    setDrawerSubtitle(subtitle);
+    setDrawerLogs(logs);
+    setDrawerOpen(true);
+  }
   const { theme } = useTheme();
   const isDark = theme === 'dark';
 
@@ -225,21 +244,33 @@ export default function DashboardPage() {
 
         // Prepare chart data
         if (allLogs && allLogs.length > 0) {
-          // Rework volume by week
-          const volumeByWeek: { [key: string]: number } = {};
+          // Stash the raw logs so chart onClick handlers can filter against
+          // the same array that fed the aggregations.
+          setChartLogs(allLogs as LogDrawerQualityLog[]);
+
+          // Rework volume by week — keyed by ISO Sunday date so the click
+          // handler can reconstruct the exact [start, end) window. Display
+          // label derived from the same key.
+          const weekBuckets: Record<string, { count: number; weekStart: Date }> = {};
           (allLogs || []).forEach(log => {
             const date = new Date(log.triggered_at);
-            const weekStart = new Date(date);
-            weekStart.setDate(date.getDate() - date.getDay()); // Start of week (Sunday)
-            const weekKey = weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-            volumeByWeek[weekKey] = (volumeByWeek[weekKey] || 0) + 1;
+            const weekStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+            weekStart.setDate(weekStart.getDate() - weekStart.getDay()); // Sunday
+            const iso = weekStart.toISOString();
+            const bucket = weekBuckets[iso] ?? { count: 0, weekStart };
+            bucket.count += 1;
+            weekBuckets[iso] = bucket;
           });
 
           setCharts(prev => ({
             ...prev,
-            volumeByWeek: Object.entries(volumeByWeek)
-              .map(([week, count]) => ({ week, count }))
-              .sort((a, b) => new Date(a.week).getTime() - new Date(b.week).getTime()),
+            volumeByWeek: Object.entries(weekBuckets)
+              .map(([weekStartIso, { count, weekStart }]) => ({
+                week: weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                weekStartIso,
+                count,
+              }))
+              .sort((a, b) => new Date(a.weekStartIso).getTime() - new Date(b.weekStartIso).getTime()),
           }));
 
           // Issue category breakdown
@@ -533,20 +564,41 @@ export default function DashboardPage() {
         {/* Rework Volume by Week */}
         <CollapsibleCard title="Rework Volume (Weekly)">
           {charts.volumeByWeek.length > 0 ? (
-            <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={charts.volumeByWeek}>
-                <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
-                <XAxis dataKey="week" fontSize={12} stroke={axisColor} tick={{ fill: axisColor }} />
-                <YAxis fontSize={12} stroke={axisColor} tick={{ fill: axisColor }} />
-                <Tooltip
-                  cursor={{ fill: cursorFill }}
-                  contentStyle={tooltipContentStyle}
-                  labelStyle={tooltipLabelStyle}
-                  itemStyle={tooltipItemStyle}
-                />
-                <Bar dataKey="count" fill="#F47920" radius={[8, 8, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <div role="region" aria-label="Rework Volume by Week. Click a bar to see tickets.">
+              <ResponsiveContainer width="100%" height={240}>
+                <BarChart data={charts.volumeByWeek}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                  <XAxis dataKey="week" fontSize={12} stroke={axisColor} tick={{ fill: axisColor }} />
+                  <YAxis fontSize={12} stroke={axisColor} tick={{ fill: axisColor }} />
+                  <Tooltip
+                    cursor={{ fill: cursorFill }}
+                    contentStyle={tooltipContentStyle}
+                    labelStyle={tooltipLabelStyle}
+                    itemStyle={tooltipItemStyle}
+                  />
+                  <Bar
+                    dataKey="count"
+                    fill="#F47920"
+                    radius={[8, 8, 0, 0]}
+                    style={{ cursor: 'pointer' }}
+                    onClick={(data: { payload?: { weekStartIso?: string; week?: string } }) => {
+                      const iso = data.payload?.weekStartIso;
+                      if (!iso) return;
+                      const weekStart = new Date(iso);
+                      const weekEnd = new Date(weekStart);
+                      weekEnd.setDate(weekEnd.getDate() + 7);
+                      const filtered = chartLogs.filter(log => {
+                        const t = new Date(log.triggered_at).getTime();
+                        return t >= weekStart.getTime() && t < weekEnd.getTime();
+                      });
+                      const titleStr = `Week of ${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+                      const subtitleStr = `${filtered.length} ${filtered.length === 1 ? 'ticket' : 'tickets'}`;
+                      openDrawer(titleStr, subtitleStr, filtered);
+                    }}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           ) : (
             <p className="text-sm text-[color:var(--f92-gray)]">No data available</p>
           )}
@@ -660,6 +712,14 @@ export default function DashboardPage() {
           )}
         </CollapsibleCard>
       </div>
+
+      <LogDrawer
+        open={drawerOpen}
+        onOpenChange={setDrawerOpen}
+        title={drawerTitle}
+        subtitle={drawerSubtitle}
+        logs={drawerLogs}
+      />
     </div>
   );
 }
