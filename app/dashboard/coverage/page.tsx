@@ -226,44 +226,65 @@ export default function CoveragePage() {
   }
 
   function handleExportCsv() {
-    const header = [
-      'brand_code',
-      'display_name',
-      'is_paused',
-      'tests_this_week',
-      'tests_last_week',
-      'tests_rolling_28d',
-      'tests_this_month',
-      'rework_28d',
-      'rework_ratio',
-      'drought',
-    ];
     const escape = (v: unknown) => {
       const s = String(v ?? '');
       return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
-    const lines = [header.join(',')];
-    for (const r of visibleRows) {
+
+    // Leadership-ready: always exclude paused brands (ignoring the
+    // show-paused toggle) and always sort alphabetically by brand name
+    // regardless of the table's current sort state.
+    const exportRows = rows
+      .filter(r => !r.brand.is_paused)
+      .slice()
+      .sort((a, b) => a.brand.display_name.localeCompare(b.brand.display_name));
+
+    const header = [
+      'Brand Code',
+      'Brand',
+      'Tests This Week',
+      'Tests Last Week',
+      'Tests Last 28 Days',
+      'Tests This Month',
+      'Rework Events (28d)',
+      'Rework Ratio',
+      'Coverage Flag',
+    ];
+
+    const now = new Date();
+    const dateStamp = now.toISOString().slice(0, 10);
+    const friendlyStamp = now.toLocaleString('en-US', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).replace(',', '');
+
+    const lines: string[] = [];
+    lines.push(escape(`CQIP Client Coverage — exported ${friendlyStamp}`));
+    lines.push(header.map(escape).join(','));
+    for (const r of exportRows) {
       lines.push([
         escape(r.brand.brand_code),
         escape(r.brand.display_name),
-        r.brand.is_paused ? 'true' : 'false',
         r.testsCurrentWeek,
         r.testsLastWeek,
         r.testsRolling28,
         r.testsCurrentMonth,
         r.reworkRolling28,
         formatRatio(r.testsRolling28, r.reworkRolling28),
-        r.droughtFlag ? 'true' : 'false',
+        r.droughtFlag ? 'DROUGHT' : '',
       ].map(escape).join(','));
     }
+
     const csv = lines.join('\n');
-    const today = new Date().toISOString().slice(0, 10);
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `cqip-client-coverage-${today}.csv`;
+    a.download = `CQIP_Client_Coverage_${dateStamp}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -360,7 +381,12 @@ export default function CoveragePage() {
             Show paused brands
           </label>
           <div className="ml-auto">
-            <Button variant="secondary" size="sm" onClick={handleExportCsv} disabled={visibleRows.length === 0}>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleExportCsv}
+              disabled={rows.every(r => r.brand.is_paused)}
+            >
               Export CSV
             </Button>
           </div>
