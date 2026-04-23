@@ -2,12 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useTypingDetector } from '@/lib/easter-eggs/use-typing-detector';
-import { useToast } from '@/components/layout/toaster';
 
 // Konami handling lives directly in app/dashboard/layout.tsx so the
 // sequence listener can't accidentally be mounted more than once.
 export function EasterEggHost() {
-  const { toast } = useToast();
   const [waveActive, setWaveActive] = useState(false);
   const lastFireRef = useRef(0);
 
@@ -18,10 +16,9 @@ export function EasterEggHost() {
     if (now - lastFireRef.current < 300) return;
     lastFireRef.current = now;
     setWaveActive(true);
-    toast('🧡 Built with love by Fusion92');
-    // Longest layer ends at delay(340) + duration(1700) = 2040ms;
-    // hold 2100ms so the last frame lands before the container unmounts.
-    window.setTimeout(() => setWaveActive(false), 2100);
+    // Longest layer ends at delay(300) + duration(1400) = 1700ms;
+    // hold 1750ms so the last frame lands before the container unmounts.
+    window.setTimeout(() => setWaveActive(false), 1750);
   }
 
   useTypingDetector('fusion92', triggerWave);

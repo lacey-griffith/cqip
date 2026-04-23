@@ -300,49 +300,51 @@ button:disabled,
 
 /* Easter-egg animations */
 @keyframes cqip-fusion-wave {
-  0%   { transform: translateX(-120%); opacity: 0; }
-  12%  { opacity: 0.55; }
-  50%  { opacity: 0.7; }
-  88%  { opacity: 0.45; }
-  100% { transform: translateX(120%); opacity: 0; }
+  0%   { transform: translateX(-100%); opacity: 0; }
+  15%  { opacity: 0.7; }
+  85%  { opacity: 0.7; }
+  100% { transform: translateX(100%); opacity: 0; }
 }
 .cqip-fusion-wave-layer {
   position: absolute;
-  inset: 0;
+  left: 0;
+  width: 100%;
+  height: 33.34%;
   pointer-events: none;
-  animation-name: cqip-fusion-wave;
-  animation-fill-mode: forwards;
-  animation-timing-function: ease-out;
-}
-.cqip-fusion-wave-layer-1 {
-  background: linear-gradient(110deg,
+  background: linear-gradient(
+    90deg,
     transparent 0%,
-    rgba(244, 121, 32, 0) 35%,
-    rgba(244, 121, 32, 0.55) 50%,
-    rgba(244, 121, 32, 0) 65%,
-    transparent 100%);
-  animation-duration: 1600ms;
-  animation-delay: 0ms;
+    transparent 35%,
+    rgba(244, 121, 32, 0.5) 50%,
+    transparent 65%,
+    transparent 100%
+  );
+  animation: cqip-fusion-wave 1400ms ease-out forwards;
 }
+.cqip-fusion-wave-layer-1 { top: 0; }
 .cqip-fusion-wave-layer-2 {
-  background: linear-gradient(100deg,
+  top: 33.33%;
+  animation-delay: 150ms;
+  background: linear-gradient(
+    90deg,
     transparent 0%,
-    rgba(255, 180, 80, 0) 35%,
-    rgba(255, 180, 80, 0.5) 50%,
-    rgba(255, 180, 80, 0) 65%,
-    transparent 100%);
-  animation-duration: 1500ms;
-  animation-delay: 180ms;
+    transparent 35%,
+    rgba(255, 180, 80, 0.55) 50%,
+    transparent 65%,
+    transparent 100%
+  );
 }
 .cqip-fusion-wave-layer-3 {
-  background: linear-gradient(120deg,
+  top: 66.67%;
+  animation-delay: 300ms;
+  background: linear-gradient(
+    90deg,
     transparent 0%,
-    rgba(244, 121, 32, 0) 35%,
-    rgba(244, 121, 32, 0.4) 50%,
-    rgba(244, 121, 32, 0) 65%,
-    transparent 100%);
-  animation-duration: 1700ms;
-  animation-delay: 340ms;
+    transparent 35%,
+    rgba(244, 121, 32, 0.45) 50%,
+    transparent 65%,
+    transparent 100%
+  );
 }
 
 @keyframes cqip-logo-spin {
