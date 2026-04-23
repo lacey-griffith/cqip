@@ -59,14 +59,18 @@ export function SyncJiraButton({ className }: { className?: string }) {
     setSyncing(true);
     try {
       const response = await fetch('/api/jira/sync', { method: 'POST' });
-      if (!response.ok) throw new Error('Sync failed');
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || `HTTP ${response.status}`);
+      }
       const stamp = new Date().toISOString();
       setLastSyncedAt(stamp);
       try { window.localStorage.setItem(LAST_SYNC_KEY, stamp); } catch { /* ignore */ }
       toast('✅ Synced with Jira');
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
       console.error('[sync-jira-button] sync failed', err);
-      toast('❌ Sync failed — try again');
+      toast(`❌ Sync failed: ${msg.slice(0, 80)}`);
     } finally {
       setSyncing(false);
     }

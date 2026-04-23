@@ -1,6 +1,14 @@
 import { NextResponse } from 'next/server';
 import { createSupabaseRouteClient } from '@/lib/supabase/server';
 
+// Proxy route for the jira-sync Supabase Edge Function. Keeps admin-only
+// gating here even though the edge function has its own auth, so an anon
+// caller can't hammer the function from the browser.
+//
+// Batch 003 diagnostic pass: on non-2xx the route now folds the edge
+// function's body into the top-level `error` field so the client-side
+// toast surfaces the real failure string instead of 'Sync failed'.
+
 export async function POST() {
   const supabase = await createSupabaseRouteClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -26,7 +34,14 @@ export async function POST() {
   // to let the request through.
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!supabaseUrl || !anonKey) {
-    return NextResponse.json({ error: 'Sync function not configured' }, { status: 500 });
+    console.error('[api/jira/sync] missing env vars', {
+      urlPresent: Boolean(supabaseUrl),
+      keyPresent: Boolean(anonKey),
+    });
+    return NextResponse.json(
+      { error: 'Server misconfigured — contact admin' },
+      { status: 500 },
+    );
   }
 
   const functionUrl = `${supabaseUrl.replace(/\/$/, '')}/functions/v1/jira-sync?apikey=${encodeURIComponent(anonKey)}`;
@@ -43,18 +58,24 @@ export async function POST() {
     if (!res.ok) {
       const body = await res.text().catch(() => '');
       console.error(
-        '[jira/sync] edge function returned non-OK',
+        '[api/jira/sync] edge function returned non-OK',
         JSON.stringify({ status: res.status, body: body.slice(0, 500) }),
       );
+      const detail = body ? `: ${body.slice(0, 120)}` : '';
       return NextResponse.json(
-        { error: 'Jira sync edge function failed', status: res.status, detail: body.slice(0, 500) },
+        { error: `Sync service returned ${res.status}${detail}` },
         { status: 502 },
       );
     }
 
-    return NextResponse.json({ success: true });
+    const data = await res.json().catch(() => ({}));
+    return NextResponse.json({ ok: true, ...data });
   } catch (err) {
-    console.error('[jira/sync] request threw', err);
-    return NextResponse.json({ error: 'Unable to reach sync function' }, { status: 502 });
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[api/jira/sync] fetch threw', msg);
+    return NextResponse.json(
+      { error: `Network error calling sync service: ${msg}` },
+      { status: 502 },
+    );
   }
 }
