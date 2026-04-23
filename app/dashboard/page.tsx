@@ -108,6 +108,7 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [testsThisWeek, setTestsThisWeek] = useState(0);
   const [testsLastWeek, setTestsLastWeek] = useState(0);
+  const [testsLoadFailed, setTestsLoadFailed] = useState(false);
   const { theme } = useTheme();
   const isDark = theme === 'dark';
 
@@ -304,12 +305,20 @@ export default function DashboardPage() {
 
     fetchDashboardData();
 
-    // Tests this week / last week for the Coverage KPI card.
+    // Tests this week / last week for the Coverage KPI card. Track load
+    // failure so the card can distinguish "genuinely zero" from "fetch
+    // broke" — silently rendering '0 · even with last week' on an RLS
+    // reject would misrepresent the team's pace.
     (async () => {
-      const { data } = await supabase
+      const { data, error: milestonesError } = await supabase
         .from('test_milestones')
         .select('id, jira_ticket_id, jira_ticket_url, jira_summary, brand_id, brand_jira_value, milestone_type, reached_at, source, created_by, notes, is_deleted')
         .eq('is_deleted', false);
+      if (milestonesError) {
+        console.error('[dashboard] tests KPI fetch failed', milestonesError);
+        setTestsLoadFailed(true);
+        return;
+      }
       const rows = (data ?? []) as Milestone[];
       const now = new Date();
       setTestsThisWeek(countInWindow(rows, null, startOfCurrentWeek(), now));
@@ -456,32 +465,41 @@ export default function DashboardPage() {
             <LineChart className="mr-1 inline h-3 w-3" aria-hidden="true" />
             Tests This Week
           </p>
-          <p className="mt-2 text-3xl md:text-4xl font-bold text-[color:var(--f92-navy)]">{testsThisWeek}</p>
-          {(() => {
-            const delta = testsThisWeek - testsLastWeek;
-            if (delta > 0) {
-              return (
-                <p className="mt-2 inline-flex items-center gap-1 text-xs text-green-600">
-                  <ArrowUp className="h-3 w-3" aria-hidden="true" />
-                  {delta} vs last week
-                </p>
-              );
-            }
-            if (delta < 0) {
-              return (
-                <p className="mt-2 inline-flex items-center gap-1 text-xs text-red-600">
-                  <ArrowDown className="h-3 w-3" aria-hidden="true" />
-                  {Math.abs(delta)} vs last week
-                </p>
-              );
-            }
-            return (
-              <p className="mt-2 inline-flex items-center gap-1 text-xs text-[color:var(--f92-gray)]">
-                <ArrowRight className="h-3 w-3" aria-hidden="true" />
-                even with last week
-              </p>
-            );
-          })()}
+          {testsLoadFailed ? (
+            <>
+              <p className="mt-2 text-3xl md:text-4xl font-bold text-[color:var(--f92-lgray)]">—</p>
+              <p className="mt-2 text-xs text-red-600">Couldn&apos;t load test count</p>
+            </>
+          ) : (
+            <>
+              <p className="mt-2 text-3xl md:text-4xl font-bold text-[color:var(--f92-navy)]">{testsThisWeek}</p>
+              {(() => {
+                const delta = testsThisWeek - testsLastWeek;
+                if (delta > 0) {
+                  return (
+                    <p className="mt-2 inline-flex items-center gap-1 text-xs text-green-600">
+                      <ArrowUp className="h-3 w-3" aria-hidden="true" />
+                      {delta} vs last week
+                    </p>
+                  );
+                }
+                if (delta < 0) {
+                  return (
+                    <p className="mt-2 inline-flex items-center gap-1 text-xs text-red-600">
+                      <ArrowDown className="h-3 w-3" aria-hidden="true" />
+                      {Math.abs(delta)} vs last week
+                    </p>
+                  );
+                }
+                return (
+                  <p className="mt-2 inline-flex items-center gap-1 text-xs text-[color:var(--f92-gray)]">
+                    <ArrowRight className="h-3 w-3" aria-hidden="true" />
+                    even with last week
+                  </p>
+                );
+              })()}
+            </>
+          )}
         </Card>
 
         {/* Critical Issues Open */}

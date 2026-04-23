@@ -87,6 +87,15 @@ export function ManageMilestonesDialog({ brands, currentUserEmail, initialBrandI
     loadMilestones();
   }, []);
 
+  // If brands arrives after first render (parent is still fetching), sync
+  // the add-form brand default. Without this the form stays stuck on ''
+  // and every submit toasts 'Pick a brand'.
+  useEffect(() => {
+    if (!addBrandId && brands.length > 0) {
+      setAddBrandId(initialBrandId ?? brands[0].id);
+    }
+  }, [brands, addBrandId, initialBrandId]);
+
   async function loadMilestones() {
     setLoading(true);
     const { data, error } = await supabase
