@@ -16,9 +16,9 @@ export function EasterEggHost() {
     if (now - lastFireRef.current < 300) return;
     lastFireRef.current = now;
     setWaveActive(true);
-    // Longest layer ends at delay(300) + duration(1400) = 1700ms;
-    // hold 1750ms so the last frame lands before the container unmounts.
-    window.setTimeout(() => setWaveActive(false), 1750);
+    // Single-pass sweep runs 1400ms; 1500ms hold gives the last frame
+    // time to fade before the container unmounts.
+    window.setTimeout(() => setWaveActive(false), 1500);
   }
 
   useTypingDetector('fusion92', triggerWave);
@@ -30,14 +30,5 @@ export function EasterEggHost() {
     return () => window.removeEventListener('cqip:fusion-wave', onTrigger);
   }, []);
 
-  return waveActive ? (
-    <div
-      aria-hidden="true"
-      className="pointer-events-none fixed inset-0 z-[80] overflow-hidden"
-    >
-      <div className="cqip-fusion-wave-layer cqip-fusion-wave-layer-1" />
-      <div className="cqip-fusion-wave-layer cqip-fusion-wave-layer-2" />
-      <div className="cqip-fusion-wave-layer cqip-fusion-wave-layer-3" />
-    </div>
-  ) : null;
+  return waveActive ? <div aria-hidden="true" className="cqip-fusion-wave" /> : null;
 }

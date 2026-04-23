@@ -298,53 +298,41 @@ button:disabled,
   animation: cqip-shake 500ms ease-in-out;
 }
 
-/* Easter-egg animations */
+/* Easter-egg animations — single diagonal shimmer sweep. Rebuilt in
+   Batch 003 after the prior 3-layer stacked approach kept producing a
+   square flash at frame 0 and read as discrete bands rather than one
+   sweep. ::before carries the whole effect: a skewed, blurred orange
+   band translated across the viewport with opacity ramping in/out so
+   there's no solid initial frame. */
 @keyframes cqip-fusion-wave {
-  0%   { transform: translateX(-100%); opacity: 0; }
-  15%  { opacity: 0.7; }
-  85%  { opacity: 0.7; }
-  100% { transform: translateX(100%); opacity: 0; }
+  0%   { transform: translateX(-100%) skewX(-20deg); opacity: 0; }
+  10%  { opacity: 0.85; }
+  90%  { opacity: 0.85; }
+  100% { transform: translateX(200%) skewX(-20deg); opacity: 0; }
 }
-.cqip-fusion-wave-layer {
-  position: absolute;
-  left: 0;
-  width: 100%;
-  height: 33.34%;
+.cqip-fusion-wave {
+  position: fixed;
+  inset: 0;
   pointer-events: none;
+  overflow: hidden;
+  z-index: 80;
+}
+.cqip-fusion-wave::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: 0;
+  width: 40%;
+  height: 200%;
   background: linear-gradient(
     90deg,
-    transparent 0%,
-    transparent 35%,
-    rgba(244, 121, 32, 0.5) 50%,
-    transparent 65%,
-    transparent 100%
+    rgba(244, 121, 32, 0) 0%,
+    rgba(244, 121, 32, 0.6) 50%,
+    rgba(244, 121, 32, 0) 100%
   );
+  filter: blur(8px);
+  transform: translateX(-100%) skewX(-20deg);
   animation: cqip-fusion-wave 1400ms ease-out forwards;
-}
-.cqip-fusion-wave-layer-1 { top: 0; }
-.cqip-fusion-wave-layer-2 {
-  top: 33.33%;
-  animation-delay: 150ms;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    transparent 35%,
-    rgba(255, 180, 80, 0.55) 50%,
-    transparent 65%,
-    transparent 100%
-  );
-}
-.cqip-fusion-wave-layer-3 {
-  top: 66.67%;
-  animation-delay: 300ms;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    transparent 35%,
-    rgba(244, 121, 32, 0.45) 50%,
-    transparent 65%,
-    transparent 100%
-  );
 }
 
 @keyframes cqip-logo-spin {
