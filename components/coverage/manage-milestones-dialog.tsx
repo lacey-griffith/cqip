@@ -193,7 +193,12 @@ export function ManageMilestonesDialog({ brands, currentUserEmail, initialBrandI
             changed_by: currentUserEmail,
             notes: 'Restored via admin UI (previously soft-deleted)',
           });
-          if (auditErr) console.warn('[milestones] audit insert failed', auditErr);
+          if (auditErr) {
+            console.warn('[milestones] audit insert failed', auditErr);
+            if (process.env.NODE_ENV !== 'production') {
+              toast(`⚠️ Audit write failed: ${auditErr.message ?? 'unknown'}`);
+            }
+          }
           toast('♻️ Milestone restored');
           setAddTicket('');
           setAddNotes('');
@@ -242,7 +247,12 @@ export function ManageMilestonesDialog({ brands, currentUserEmail, initialBrandI
           changed_by: currentUserEmail,
           notes: 'Manual milestone added via admin UI',
         });
-        if (auditErr) console.warn('[milestones] audit insert failed', auditErr);
+        if (auditErr) {
+          console.warn('[milestones] audit insert failed', auditErr);
+          if (process.env.NODE_ENV !== 'production') {
+            toast(`⚠️ Audit write failed: ${auditErr.message ?? 'unknown'}`);
+          }
+        }
       }
       toast('✅ Milestone added');
       setAddTicket('');
@@ -318,7 +328,12 @@ export function ManageMilestonesDialog({ brands, currentUserEmail, initialBrandI
       }
       if (auditRows.length > 0) {
         const { error: auditErr } = await supabase.from('audit_log').insert(auditRows);
-        if (auditErr) console.warn('[milestones] audit insert failed', auditErr);
+        if (auditErr) {
+          console.warn('[milestones] audit insert failed', auditErr);
+          if (process.env.NODE_ENV !== 'production') {
+            toast(`⚠️ Audit write failed: ${auditErr.message ?? 'unknown'}`);
+          }
+        }
       }
       toast('✅ Milestone updated');
       cancelEdit();
@@ -353,7 +368,12 @@ export function ManageMilestonesDialog({ brands, currentUserEmail, initialBrandI
       changed_by: currentUserEmail,
       notes: 'Soft-deleted via admin UI',
     });
-    if (auditErr) console.warn('[milestones] audit insert failed', auditErr);
+    if (auditErr) {
+      console.warn('[milestones] audit insert failed', auditErr);
+      if (process.env.NODE_ENV !== 'production') {
+        toast(`⚠️ Audit write failed: ${auditErr.message ?? 'unknown'}`);
+      }
+    }
     setDeletingId(null);
     await loadMilestones();
   }

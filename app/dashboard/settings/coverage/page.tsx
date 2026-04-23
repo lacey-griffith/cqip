@@ -106,7 +106,12 @@ function CoverageSettingsBody() {
         changed_by: userEmail,
         notes: nextPaused ? reasonTrimmed : 'Unpaused',
       });
-      if (auditErr) console.warn('[coverage] audit insert failed', auditErr);
+      if (auditErr) {
+        console.warn('[coverage] audit insert failed', auditErr);
+        if (process.env.NODE_ENV !== 'production') {
+          toast(`⚠️ Audit write failed: ${auditErr.message ?? 'unknown'}`);
+        }
+      }
 
       toast(nextPaused ? '⏸️ Brand paused' : '▶️ Brand resumed');
       setEditingBrandId(null);
