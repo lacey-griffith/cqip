@@ -282,10 +282,10 @@ export function Nav() {
       // First cloud renders immediately (delay 0); later clouds stagger.
       const cloudSpecs = Array.from({ length: 6 }, (_, i) => ({
         id: Date.now() + i,
-        top: `${8 + Math.random() * 75}%`,
-        duration: 5 + Math.random() * 2, // 5–7s
-        delay: i === 0 ? 0 : 600 + (i - 1) * 700,
-        direction: (i % 2 === 0 ? 1 : -1) as 1 | -1,
+        top: `${8 + i * 14}%`,           // evenly distributed top 8% → ~78%
+        duration: 6 + Math.random() * 1.5,
+        delay: i * 400,                   // 0, 400, 800, 1200, 1600, 2000 ms
+        direction: 1 as 1 | -1,           // always left → right
       }));
       setClouds(cloudSpecs);
       if (cloudClearTimer.current) window.clearTimeout(cloudClearTimer.current);
@@ -621,8 +621,6 @@ export function Nav() {
                   top: c.top,
                   animationDuration: `${c.duration}s`,
                   animationDelay: `${c.delay}ms`,
-                  // Flip horizontally for right-to-left drift.
-                  transform: c.direction === -1 ? 'scaleX(-1)' : undefined,
                 }}
                 width={104}
                 height={54}
