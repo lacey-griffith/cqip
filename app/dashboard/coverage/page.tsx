@@ -253,14 +253,9 @@ export default function CoveragePage() {
 
     const now = new Date();
     const dateStamp = now.toISOString().slice(0, 10);
-    const friendlyStamp = now.toLocaleString('en-US', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    }).replace(',', '');
+    // Spec-requested format: YYYY-MM-DD HH:MM (24h). Slice the ISO string
+    // and swap the 'T' for a space rather than threading locale options.
+    const friendlyStamp = now.toISOString().slice(0, 16).replace('T', ' ');
 
     const lines: string[] = [];
     lines.push(escape(`CQIP Client Coverage — exported ${friendlyStamp}`));

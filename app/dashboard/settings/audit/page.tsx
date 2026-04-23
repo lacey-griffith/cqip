@@ -257,6 +257,14 @@ export default function AuditLogPage() {
                           <Badge variant="resolved">Brand</Badge>
                           <span className="font-mono text-xs text-[color:var(--f92-gray)]">{shortId(e.target_id)}</span>
                         </div>
+                      ) : effectiveType ? (
+                        // Forward-compat fallback: any future target_type
+                        // (e.g., 'alert_rule') renders with a bare type chip
+                        // + short id instead of '—'.
+                        <div className="flex items-center gap-2">
+                          <Badge variant="default">{effectiveType}</Badge>
+                          <span className="font-mono text-xs text-[color:var(--f92-gray)]">{shortId(e.target_id)}</span>
+                        </div>
                       ) : (
                         <span className="text-[color:var(--f92-gray)]">—</span>
                       )}

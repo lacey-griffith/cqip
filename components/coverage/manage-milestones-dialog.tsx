@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { useToast } from '@/components/layout/toaster';
 import { Badge } from '@/components/ui/badge';
@@ -83,20 +83,7 @@ export function ManageMilestonesDialog({ brands, currentUserEmail, initialBrandI
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
-  useEffect(() => {
-    loadMilestones();
-  }, []);
-
-  // If brands arrives after first render (parent is still fetching), sync
-  // the add-form brand default. Without this the form stays stuck on ''
-  // and every submit toasts 'Pick a brand'.
-  useEffect(() => {
-    if (!addBrandId && brands.length > 0) {
-      setAddBrandId(initialBrandId ?? brands[0].id);
-    }
-  }, [brands, addBrandId, initialBrandId]);
-
-  async function loadMilestones() {
+  const loadMilestones = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase
       .from('test_milestones')
@@ -108,7 +95,20 @@ export function ManageMilestonesDialog({ brands, currentUserEmail, initialBrandI
     }
     setMilestones((data ?? []) as Milestone[]);
     setLoading(false);
-  }
+  }, []);
+
+  useEffect(() => {
+    loadMilestones();
+  }, [loadMilestones]);
+
+  // If brands arrives after first render (parent is still fetching), sync
+  // the add-form brand default. Without this the form stays stuck on ''
+  // and every submit toasts 'Pick a brand'.
+  useEffect(() => {
+    if (!addBrandId && brands.length > 0) {
+      setAddBrandId(initialBrandId ?? brands[0].id);
+    }
+  }, [brands, addBrandId, initialBrandId]);
 
   const brandLookup = useMemo(() => {
     const m = new Map<string, Brand>();
