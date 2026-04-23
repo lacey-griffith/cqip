@@ -300,12 +300,18 @@ export function Nav() {
       // eslint-disable-next-line no-console
       console.log('[nav] sun hover 1.5s fired — spawning clouds');
       // First cloud renders immediately (delay 0); later clouds stagger.
+      // Random top + random delay — clouds should drift like real weather,
+      // not march in a grid. Range 5–90% top keeps them inside the sidebar;
+      // 0–2400ms delay window means some cluster, some spread out. Every
+      // cloud is held at translateX(-120%) during its delay thanks to
+      // animation-fill-mode:both, so nothing is visible in the sidebar
+      // until its turn.
       const cloudSpecs = Array.from({ length: 6 }, (_, i) => ({
         id: Date.now() + i,
-        top: `${8 + i * 14}%`,           // evenly distributed top 8% → ~78%
-        duration: 6 + Math.random() * 1.5,
-        delay: i * 400,                   // 0, 400, 800, 1200, 1600, 2000 ms
-        direction: 1 as 1 | -1,           // always left → right
+        top: `${5 + Math.random() * 85}%`,
+        duration: 5.5 + Math.random() * 2,   // 5.5–7.5s
+        delay: Math.random() * 2400,         // 0–2400ms, unrelated to index
+        direction: 1 as 1 | -1,              // always left → right
       }));
       setClouds(cloudSpecs);
       if (cloudClearTimer.current) window.clearTimeout(cloudClearTimer.current);
