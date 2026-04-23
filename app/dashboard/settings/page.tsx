@@ -34,6 +34,12 @@ const settingsSections = [
     href: '/dashboard/settings/audit',
     icon: '📜',
   },
+  {
+    title: 'Client Coverage',
+    description: 'Admin-only: add, edit, or delete test milestones.',
+    href: '/dashboard/settings/coverage',
+    icon: '🎯',
+  },
 ];
 
 export default function SettingsPage() {

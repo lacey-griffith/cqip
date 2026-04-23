@@ -29,6 +29,7 @@ interface NavProfile {
 
 const navLinks = [
   { href: '/dashboard', label: 'Dashboard' },
+  { href: '/dashboard/coverage', label: 'Client Coverage' },
   { href: '/dashboard/logs', label: 'Logs' },
   { href: '/dashboard/reports', label: 'Reports' },
   { href: '/dashboard/settings/profile', label: 'Profile' },
