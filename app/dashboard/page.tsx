@@ -731,6 +731,7 @@ export default function DashboardPage() {
         {/* Root Cause Frequency */}
         <CollapsibleCard title="Top Root Causes">
           {charts.rootCauseFrequency.length > 0 ? (
+            <div role="region" aria-label="Top Root Causes. Click a bar to see tickets.">
             <ResponsiveContainer width="100%" height={240}>
               <BarChart
                 data={charts.rootCauseFrequency}
@@ -746,9 +747,27 @@ export default function DashboardPage() {
                   labelStyle={tooltipLabelStyle}
                   itemStyle={tooltipItemStyle}
                 />
-                <Bar dataKey="count" fill="#F47920" radius={[0, 8, 8, 0]} />
+                <Bar
+                  dataKey="count"
+                  fill="#F47920"
+                  radius={[0, 8, 8, 0]}
+                  style={{ cursor: 'pointer' }}
+                  onClick={(data: { payload?: { cause?: string } }) => {
+                    const cause = data.payload?.cause;
+                    if (!cause) return;
+                    const filtered = chartLogs.filter(log =>
+                      Array.isArray(log.root_cause_final) && log.root_cause_final.includes(cause),
+                    );
+                    openDrawer(
+                      `Root Cause: ${cause}`,
+                      `${filtered.length} ${filtered.length === 1 ? 'ticket' : 'tickets'}`,
+                      filtered,
+                    );
+                  }}
+                />
               </BarChart>
             </ResponsiveContainer>
+            </div>
           ) : (
             <p className="text-sm text-[color:var(--f92-gray)]">No data available</p>
           )}
