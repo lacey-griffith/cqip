@@ -143,22 +143,22 @@ export function ManageMilestonesDialog({ brands, currentUserEmail, initialBrandI
     setAddSubmitting(true);
     try {
       const brand = brandLookup.get(addBrandId);
-      // TODO(audit): audit_log.log_entry_id is NOT NULL REFERENCES quality_logs(id)
-      //   — can't record milestone mutations there without widening the
-      //   schema. Skip the audit write until a follow-up migration relaxes
-      //   the constraint.
-      const { error } = await supabase.from('test_milestones').insert({
-        jira_ticket_id: ticket,
-        jira_ticket_url: `https://fusion92.atlassian.net/browse/${ticket}`,
-        jira_summary: null,
-        brand_id: addBrandId,
-        brand_jira_value: brand?.jira_value ?? null,
-        milestone_type: 'dev_client_review',
-        reached_at: reachedAtIso,
-        source: 'manual',
-        created_by: currentUserEmail,
-        notes: addNotes.trim() || null,
-      });
+      const { data: inserted, error } = await supabase
+        .from('test_milestones')
+        .insert({
+          jira_ticket_id: ticket,
+          jira_ticket_url: `https://fusion92.atlassian.net/browse/${ticket}`,
+          jira_summary: null,
+          brand_id: addBrandId,
+          brand_jira_value: brand?.jira_value ?? null,
+          milestone_type: 'dev_client_review',
+          reached_at: reachedAtIso,
+          source: 'manual',
+          created_by: currentUserEmail,
+          notes: addNotes.trim() || null,
+        })
+        .select('id, jira_ticket_id')
+        .single();
       if (error) {
         if (error.code === '23505' || (error.message ?? '').includes('duplicate')) {
           toast('❌ That ticket already has a milestone recorded. Delete the existing one first if you want to correct it.');
@@ -167,6 +167,20 @@ export function ManageMilestonesDialog({ brands, currentUserEmail, initialBrandI
           toast('❌ Failed to add milestone');
         }
         return;
+      }
+      if (inserted) {
+        const { error: auditErr } = await supabase.from('audit_log').insert({
+          log_entry_id: null,
+          target_type: 'test_milestone',
+          target_id: inserted.id,
+          action: 'CREATE',
+          field_name: null,
+          old_value: null,
+          new_value: inserted.jira_ticket_id,
+          changed_by: currentUserEmail,
+          notes: 'Manual milestone added via admin UI',
+        });
+        if (auditErr) console.warn('[milestones] audit insert failed', auditErr);
       }
       toast('✅ Milestone added');
       setAddTicket('');
@@ -200,19 +214,49 @@ export function ManageMilestonesDialog({ brands, currentUserEmail, initialBrandI
     }
     setEditSubmitting(true);
     try {
-      // TODO(audit): see handleAdd — audit_log FK to quality_logs blocks
-      // recording milestone edits until a schema widen.
+      const nextNotes = editState.notes.trim() || null;
+      const reachedAtChanged = reachedAtIso !== m.reached_at;
+      const notesChanged = nextNotes !== (m.notes ?? null);
       const { error } = await supabase
         .from('test_milestones')
         .update({
           reached_at: reachedAtIso,
-          notes: editState.notes.trim() || null,
+          notes: nextNotes,
         })
         .eq('id', m.id);
       if (error) {
         console.error('[milestones] update failed', error);
         toast('❌ Failed to save changes');
         return;
+      }
+      const auditRows: Array<Record<string, unknown>> = [];
+      if (reachedAtChanged) {
+        auditRows.push({
+          log_entry_id: null,
+          target_type: 'test_milestone',
+          target_id: m.id,
+          action: 'UPDATE',
+          field_name: 'reached_at',
+          old_value: m.reached_at,
+          new_value: reachedAtIso,
+          changed_by: currentUserEmail,
+        });
+      }
+      if (notesChanged) {
+        auditRows.push({
+          log_entry_id: null,
+          target_type: 'test_milestone',
+          target_id: m.id,
+          action: 'UPDATE',
+          field_name: 'notes',
+          old_value: m.notes ?? null,
+          new_value: nextNotes,
+          changed_by: currentUserEmail,
+        });
+      }
+      if (auditRows.length > 0) {
+        const { error: auditErr } = await supabase.from('audit_log').insert(auditRows);
+        if (auditErr) console.warn('[milestones] audit insert failed', auditErr);
       }
       toast('✅ Milestone updated');
       cancelEdit();
@@ -229,8 +273,6 @@ export function ManageMilestonesDialog({ brands, currentUserEmail, initialBrandI
 
   async function confirmDelete() {
     if (!deletingId) return;
-    // TODO(audit): see handleAdd — milestone soft-deletes can't be recorded
-    // in audit_log until the log_entry_id FK is widened.
     const { error } = await supabase
       .from('test_milestones')
       .update({ is_deleted: true })
@@ -238,6 +280,18 @@ export function ManageMilestonesDialog({ brands, currentUserEmail, initialBrandI
     if (error) {
       throw new Error(error.message);
     }
+    const { error: auditErr } = await supabase.from('audit_log').insert({
+      log_entry_id: null,
+      target_type: 'test_milestone',
+      target_id: deletingId,
+      action: 'DELETE',
+      field_name: null,
+      old_value: null,
+      new_value: null,
+      changed_by: currentUserEmail,
+      notes: 'Soft-deleted via admin UI',
+    });
+    if (auditErr) console.warn('[milestones] audit insert failed', auditErr);
     setDeletingId(null);
     await loadMilestones();
   }

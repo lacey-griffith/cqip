@@ -13,7 +13,9 @@ const ALL = '__all__';
 
 interface AuditEntry {
   id: string;
-  log_entry_id: string;
+  log_entry_id: string | null;
+  target_type: string | null;
+  target_id: string | null;
   action: string;
   field_name: string | null;
   old_value: string | null;
@@ -28,6 +30,11 @@ interface AuditEntry {
 }
 
 const ACTION_OPTIONS = ['CREATE', 'UPDATE', 'DELETE', 'STATUS_CHANGE', 'AI_SUGGESTION'] as const;
+const TARGET_TYPE_OPTIONS = [
+  { value: 'quality_log', label: 'Quality Log' },
+  { value: 'test_milestone', label: 'Milestone' },
+  { value: 'brand', label: 'Brand' },
+] as const;
 
 function formatTimestamp(iso: string): string {
   const d = new Date(iso);
@@ -51,6 +58,11 @@ function actionVariant(action: string): 'open' | 'in_progress' | 'blocked' | 're
   }
 }
 
+function shortId(id: string | null | undefined): string {
+  if (!id) return '—';
+  return id.slice(0, 8);
+}
+
 export default function AuditLogPage() {
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [entries, setEntries] = useState<AuditEntry[]>([]);
@@ -60,14 +72,15 @@ export default function AuditLogPage() {
   const [action, setAction] = useState('');
   const [user, setUser] = useState('');
   const [ticketFilter, setTicketFilter] = useState('');
+  const [targetType, setTargetType] = useState('');
 
   useEffect(() => {
     async function loadEntries() {
       const { data, error } = await supabase
         .from('audit_log')
         .select(`
-          id, log_entry_id, action, field_name, old_value, new_value,
-          changed_by, changed_at, notes,
+          id, log_entry_id, target_type, target_id, action, field_name,
+          old_value, new_value, changed_by, changed_at, notes,
           quality_logs:log_entry_id ( jira_ticket_id, jira_summary )
         `)
         .order('changed_at', { ascending: false })
@@ -114,13 +127,18 @@ export default function AuditLogPage() {
       if (endDate && e.changed_at > `${endDate}T23:59:59`) return false;
       if (action && e.action !== action) return false;
       if (user && e.changed_by !== user) return false;
+      if (targetType) {
+        // Treat legacy rows (target_type null but log_entry_id set) as quality_log.
+        const effectiveType = e.target_type ?? (e.log_entry_id ? 'quality_log' : null);
+        if (effectiveType !== targetType) return false;
+      }
       if (ticketFilter) {
         const tid = e.quality_logs?.jira_ticket_id?.toLowerCase() ?? '';
         if (!tid.includes(ticketFilter.toLowerCase())) return false;
       }
       return true;
     });
-  }, [entries, startDate, endDate, action, user, ticketFilter]);
+  }, [entries, startDate, endDate, action, user, targetType, ticketFilter]);
 
   if (isAdmin === false) {
     return (
@@ -138,7 +156,7 @@ export default function AuditLogPage() {
         <p className="text-sm uppercase tracking-[0.3em] text-[color:var(--f92-navy)]">Settings</p>
         <h1 className="mt-3 text-3xl font-semibold text-[color:var(--f92-dark)]">Change Log</h1>
         <p className="mt-2 text-sm text-[color:var(--f92-gray)]">
-          Every create, update, delete, and status change on quality logs is recorded here. Showing the 500 most recent events.
+          Every create, update, delete, and status change on quality logs, milestones, and brands is recorded here. Showing the 500 most recent events.
         </p>
       </div>
 
@@ -161,6 +179,18 @@ export default function AuditLogPage() {
               <SelectContent>
                 <SelectItem value={ALL}>All actions</SelectItem>
                 {ACTION_OPTIONS.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="min-w-[10rem] flex-1">
+            <Label htmlFor="auditTargetType" className="text-[10px] uppercase tracking-widest text-[color:var(--f92-gray)]">Target type</Label>
+            <Select value={targetType || ALL} onValueChange={v => setTargetType(v === ALL ? '' : v)}>
+              <SelectTrigger id="auditTargetType" className="h-9 text-sm">
+                <SelectValue placeholder="All targets" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>All targets</SelectItem>
+                {TARGET_TYPE_OPTIONS.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
@@ -189,7 +219,7 @@ export default function AuditLogPage() {
             <thead>
               <tr className="text-[color:var(--f92-dark)]">
                 <th className="px-4 py-3 font-semibold">When</th>
-                <th className="px-4 py-3 font-semibold">Ticket</th>
+                <th className="px-4 py-3 font-semibold">Target</th>
                 <th className="px-4 py-3 font-semibold">Action</th>
                 <th className="px-4 py-3 font-semibold">Field</th>
                 <th className="px-4 py-3 font-semibold">Change</th>
@@ -202,37 +232,52 @@ export default function AuditLogPage() {
                 <tr><td colSpan={7} className="px-4 py-6 text-center text-[color:var(--f92-gray)]">Loading change log…</td></tr>
               ) : filtered.length === 0 ? (
                 <tr><td colSpan={7} className="px-4 py-6 text-center text-[color:var(--f92-gray)]">No matching events.</td></tr>
-              ) : filtered.map(e => (
-                <tr key={e.id} className="border-t border-[color:var(--f92-border)] align-top">
-                  <td className="whitespace-nowrap px-4 py-3 text-[color:var(--f92-dark)]">{formatTimestamp(e.changed_at)}</td>
-                  <td className="whitespace-nowrap px-4 py-3">
-                    {e.quality_logs?.jira_ticket_id ? (
-                      <div className="flex flex-col">
-                        <span className="font-medium text-[color:var(--f92-dark)]">{e.quality_logs.jira_ticket_id}</span>
-                        {e.quality_logs.jira_summary ? (
-                          <span className="text-xs text-[color:var(--f92-gray)] line-clamp-1 max-w-[24rem]">
-                            {e.quality_logs.jira_summary}
-                          </span>
-                        ) : null}
-                      </div>
-                    ) : <span className="text-[color:var(--f92-gray)]">—</span>}
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge variant={actionVariant(e.action)}>{e.action}</Badge>
-                  </td>
-                  <td className="px-4 py-3 text-[color:var(--f92-dark)]">{e.field_name ?? '—'}</td>
-                  <td className="px-4 py-3 text-xs text-[color:var(--f92-dark)]">
-                    {e.old_value || e.new_value ? (
-                      <div className="flex flex-col gap-0.5">
-                        {e.old_value ? <span><span className="text-[color:var(--f92-gray)]">from:</span> {e.old_value}</span> : null}
-                        {e.new_value ? <span><span className="text-[color:var(--f92-gray)]">to:</span> {e.new_value}</span> : null}
-                      </div>
-                    ) : '—'}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-[color:var(--f92-dark)]">{e.changed_by}</td>
-                  <td className="px-4 py-3 text-xs text-[color:var(--f92-gray)]">{e.notes ?? '—'}</td>
-                </tr>
-              ))}
+              ) : filtered.map(e => {
+                const effectiveType = e.target_type ?? (e.log_entry_id ? 'quality_log' : null);
+                return (
+                  <tr key={e.id} className="border-t border-[color:var(--f92-border)] align-top">
+                    <td className="whitespace-nowrap px-4 py-3 text-[color:var(--f92-dark)]">{formatTimestamp(e.changed_at)}</td>
+                    <td className="whitespace-nowrap px-4 py-3">
+                      {effectiveType === 'quality_log' && e.quality_logs?.jira_ticket_id ? (
+                        <div className="flex flex-col">
+                          <span className="font-medium text-[color:var(--f92-dark)]">{e.quality_logs.jira_ticket_id}</span>
+                          {e.quality_logs.jira_summary ? (
+                            <span className="text-xs text-[color:var(--f92-gray)] line-clamp-1 max-w-[24rem]">
+                              {e.quality_logs.jira_summary}
+                            </span>
+                          ) : null}
+                        </div>
+                      ) : effectiveType === 'test_milestone' ? (
+                        <div className="flex items-center gap-2">
+                          <Badge variant="in_progress">Milestone</Badge>
+                          <span className="font-mono text-xs text-[color:var(--f92-gray)]">{shortId(e.target_id)}</span>
+                        </div>
+                      ) : effectiveType === 'brand' ? (
+                        <div className="flex items-center gap-2">
+                          <Badge variant="resolved">Brand</Badge>
+                          <span className="font-mono text-xs text-[color:var(--f92-gray)]">{shortId(e.target_id)}</span>
+                        </div>
+                      ) : (
+                        <span className="text-[color:var(--f92-gray)]">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge variant={actionVariant(e.action)}>{e.action}</Badge>
+                    </td>
+                    <td className="px-4 py-3 text-[color:var(--f92-dark)]">{e.field_name ?? '—'}</td>
+                    <td className="px-4 py-3 text-xs text-[color:var(--f92-dark)]">
+                      {e.old_value || e.new_value ? (
+                        <div className="flex flex-col gap-0.5">
+                          {e.old_value ? <span><span className="text-[color:var(--f92-gray)]">from:</span> {e.old_value}</span> : null}
+                          {e.new_value ? <span><span className="text-[color:var(--f92-gray)]">to:</span> {e.new_value}</span> : null}
+                        </div>
+                      ) : '—'}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-[color:var(--f92-dark)]">{e.changed_by}</td>
+                    <td className="px-4 py-3 text-xs text-[color:var(--f92-gray)]">{e.notes ?? '—'}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

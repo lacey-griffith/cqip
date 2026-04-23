@@ -61,9 +61,6 @@ function CoverageSettingsBody() {
   async function togglePause(brand: Brand, nextPaused: boolean, reason: string) {
     setPauseSubmitting(true);
     try {
-      // TODO(audit): audit_log.log_entry_id is NOT NULL REFERENCES
-      // quality_logs(id), so we can't record brand pause/unpause there
-      // until a later migration widens the constraint. Skip for now.
       const updates = nextPaused
         ? {
             is_paused: true,
@@ -83,6 +80,18 @@ function CoverageSettingsBody() {
         toast('❌ Failed to update brand');
         return;
       }
+      const { error: auditErr } = await supabase.from('audit_log').insert({
+        log_entry_id: null,
+        target_type: 'brand',
+        target_id: brand.id,
+        action: 'UPDATE',
+        field_name: 'is_paused',
+        old_value: String(brand.is_paused),
+        new_value: String(nextPaused),
+        changed_by: userEmail,
+        notes: nextPaused ? (updates.paused_reason ?? null) : 'Unpaused',
+      });
+      if (auditErr) console.warn('[coverage] audit insert failed', auditErr);
       setBrands(prev => prev.map(b => (b.id === brand.id ? { ...b, ...updates } as Brand : b)));
       toast(nextPaused ? '⏸️ Brand paused' : '▶️ Brand resumed');
       setEditingBrandId(null);
