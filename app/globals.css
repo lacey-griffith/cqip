@@ -381,13 +381,14 @@ button:disabled,
 }
 
 /* Moon-hover shooting stars: small bright dot with a trailing glow that
-   streaks diagonally. CSS vars --end-x / --end-y drive the delta so each
-   star can pick its own angle at spawn time. */
+   streaks diagonally across the sidebar. Motion is driven by animating
+   `left`/`top` (which resolve against the positioned overlay container)
+   rather than transform %, which would resolve against the 3×3 dot. */
 @keyframes cqip-shooting-star {
-  0%   { opacity: 0; transform: translate(0, 0) scale(0.5); }
-  15%  { opacity: 1; transform: translate(calc(var(--end-x) * 0.15), calc(var(--end-y) * 0.15)) scale(1); }
-  85%  { opacity: 1; transform: translate(calc(var(--end-x) * 0.85), calc(var(--end-y) * 0.85)) scale(1); }
-  100% { opacity: 0; transform: translate(var(--end-x), var(--end-y)) scale(0.3); }
+  0%   { opacity: 0; left: var(--start-x); top: var(--start-y); transform: scale(0.5); }
+  15%  { opacity: 1; transform: scale(1); }
+  85%  { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; left: var(--end-x); top: var(--end-y); transform: scale(0.3); }
 }
 .cqip-shooting-star {
   width: 3px;

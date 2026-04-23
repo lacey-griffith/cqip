@@ -100,9 +100,10 @@ async function run() {
     processed += 1;
     try {
       const newSummary = await fetchIssueSummary(log.jira_ticket_id);
-      if (newSummary == null) {
-        // Issue exists but has no summary — extremely rare. Count as
-        // unchanged to avoid stamping null over an existing string.
+      // Guard null AND empty-string: Jira occasionally returns '' for
+      // issues whose summary was cleared. Overwriting a valid CSV summary
+      // with a blank would silently wipe data.
+      if (!newSummary || newSummary.trim() === '') {
         unchanged += 1;
         continue;
       }

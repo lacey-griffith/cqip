@@ -633,10 +633,10 @@ export function Nav() {
                 key={s.id}
                 className="cqip-shooting-star absolute"
                 style={{
-                  left: `${s.startX}%`,
-                  top: `${s.startY}%`,
-                  '--end-x': `${s.endX - s.startX}%`,
-                  '--end-y': `${s.endY - s.startY}%`,
+                  '--start-x': `${s.startX}%`,
+                  '--start-y': `${s.startY}%`,
+                  '--end-x': `${s.endX}%`,
+                  '--end-y': `${s.endY}%`,
                   animationDelay: `${s.delay}ms`,
                 } as React.CSSProperties}
               />
