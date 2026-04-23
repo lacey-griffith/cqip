@@ -212,28 +212,27 @@ export function downloadBrandedXlsx(opts: BrandedXlsxOptions): void {
   merges.push({ s: { r: rowIndex, c: 0 }, e: { r: rowIndex, c: colCount - 1 } });
   rowIndex += 1;
 
-  // Build sheet
-  const aoa = rowsOut.map(r => r.map(cell => cell ?? {}));
-  const ws = XLSX.utils.aoa_to_sheet(aoa.map(row => row.map(c => ('v' in (c as Record<string, unknown>) ? (c as { v: unknown }).v : ''))));
-
-  // Overlay cell styles (aoa_to_sheet drops them — rewrite with stamped objects)
+  // Build the sheet directly from the styled cells rather than running
+  // aoa_to_sheet + overlaying styles. aoa_to_sheet collapses empty rows
+  // and the two-phase address math gets fragile when spacer rows are in
+  // play; direct assembly keeps the row indices exact and preserves
+  // each cell's type + style atomically.
+  const ws: Record<string, unknown> = {};
   for (let r = 0; r < rowsOut.length; r += 1) {
     const row = rowsOut[r];
     for (let c = 0; c < row.length; c += 1) {
       const cell = row[c] as Record<string, unknown> | undefined;
       if (!cell) continue;
+      const hasValue = 'v' in cell;
+      const hasStyle = 's' in cell;
+      if (!hasValue && !hasStyle) continue;
       const addr = XLSX.utils.encode_cell({ r, c });
-      const existing = ws[addr] as Record<string, unknown> | undefined;
-      if (existing) {
-        if (cell.s) (existing as { s?: unknown }).s = cell.s;
-        if (cell.t) (existing as { t?: unknown }).t = cell.t;
-      } else {
-        // Row had fewer filled cells than the final column width — create
-        // an empty styled cell so background fills extend across the row.
-        if (cell.s) {
-          ws[addr] = { t: 's', v: '', s: cell.s };
-        }
-      }
+      const out: Record<string, unknown> = {
+        v: hasValue ? cell.v : '',
+        t: cell.t ?? (typeof cell.v === 'number' ? 'n' : 's'),
+      };
+      if (hasStyle) out.s = cell.s;
+      ws[addr] = out;
     }
   }
 
@@ -261,19 +260,17 @@ export function downloadBrandedXlsx(opts: BrandedXlsxOptions): void {
   // Merges
   ws['!merges'] = merges;
 
-  // Freeze the header row
+  // Span the sheet from A1 through the last footer row. rowIndex is the
+  // 0-based next-unwritten index, which equals the 1-based last row — so
+  // `A1:{col}{rowIndex}` covers exactly the written range.
   ws['!ref'] = `A1:${lastColLetter}${rowIndex}`;
-  ws['!freeze'] = { xSplit: 0, ySplit: headerRowIndex + 1 };
-  // xlsx-js-style / SheetJS reads frozen panes from the 'views' array on
-  // the workbook, but setting via the sheet's !freeze works in the
-  // styled build; leave both for safety.
+  // Freeze the header row via sheet views. Excel, Sheets, and Numbers
+  // all read this shape; the undocumented `!freeze` key used previously
+  // was redundant.
+  ws['!views'] = [{ state: 'frozen', ySplit: headerRowIndex + 1, xSplit: 0 }];
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
-
-  // Attempt to freeze via sheet view too — some consumers (Numbers)
-  // prefer this shape.
-  ws['!views'] = [{ state: 'frozen', ySplit: headerRowIndex + 1, xSplit: 0 }];
 
   const buf: ArrayBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
   const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
