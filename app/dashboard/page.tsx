@@ -682,6 +682,7 @@ export default function DashboardPage() {
         {/* Severity Distribution */}
         <CollapsibleCard title="Severity Distribution">
           {charts.severityDistribution.length > 0 ? (
+            <div role="region" aria-label="Severity Distribution. Click a bar to see tickets.">
             <ResponsiveContainer width="100%" height={240}>
               <BarChart data={charts.severityDistribution}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
@@ -693,7 +694,25 @@ export default function DashboardPage() {
                   labelStyle={tooltipLabelStyle}
                   itemStyle={tooltipItemStyle}
                 />
-                <Bar dataKey="count" fill="#1E2D6B" radius={[8, 8, 0, 0]}>
+                <Bar
+                  dataKey="count"
+                  fill="#1E2D6B"
+                  radius={[8, 8, 0, 0]}
+                  style={{ cursor: 'pointer' }}
+                  onClick={(data: { payload?: { severity?: string } }) => {
+                    const severity = data.payload?.severity;
+                    if (!severity) return;
+                    const filtered = chartLogs.filter(log => {
+                      if (severity === 'Unknown') return log.severity == null;
+                      return log.severity === severity;
+                    });
+                    openDrawer(
+                      `Severity: ${severity}`,
+                      `${filtered.length} ${filtered.length === 1 ? 'ticket' : 'tickets'}`,
+                      filtered,
+                    );
+                  }}
+                >
                   {charts.severityDistribution.map((item, index) => (
                     <Cell
                       key={`cell-${index}`}
@@ -703,6 +722,7 @@ export default function DashboardPage() {
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
+            </div>
           ) : (
             <p className="text-sm text-[color:var(--f92-gray)]">No data available</p>
           )}
