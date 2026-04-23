@@ -1,12 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ChevronDown, ChevronUp, ChevronsUpDown } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Sparkline } from '@/components/coverage/sparkline';
 import { BrandDetailDrawer } from '@/components/coverage/brand-detail-drawer';
 import { SyncJiraButton } from '@/components/dashboard/sync-jira-button';
@@ -25,7 +24,32 @@ import {
 } from '@/lib/coverage/queries';
 import { cn } from '@/lib/utils';
 
-type SortMode = 'drought' | 'alpha';
+type SortKey =
+  | 'brand'
+  | 'thisWeek'
+  | 'lastWeek'
+  | 'rolling28'
+  | 'thisMonth'
+  | 'rework28'
+  | 'reworkRatio'
+  | 'status';
+type SortDir = 'asc' | 'desc';
+
+// Status sort rank — higher wins on desc so the default (status desc)
+// floats drought brands to top, matching the pre-Batch-002.5b UX. The
+// spec's phrasing was internally inconsistent on the asc ordering; we
+// went with the "drought first on desc" reading since that matches the
+// stated default behavior.
+function statusRank(row: CoverageRow): number {
+  if (row.brand.is_paused) return 2;
+  if (row.droughtFlag) return 3;
+  return 1;
+}
+
+function ratioSortValue(tests: number, rework: number): number {
+  if (tests === 0) return -1; // '—' sorts lowest per spec
+  return rework / tests;
+}
 
 function formatRatio(tests: number, rework: number): string {
   if (tests === 0) return '—';
@@ -40,7 +64,8 @@ export default function CoveragePage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
 
-  const [sortMode, setSortMode] = useState<SortMode>('drought');
+  const [sortKey, setSortKey] = useState<SortKey>('status');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [showPaused, setShowPaused] = useState(false);
   const [drawerRow, setDrawerRow] = useState<CoverageRow | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -117,18 +142,78 @@ export default function CoveragePage() {
   const visibleRows = useMemo(() => {
     const filtered = showPaused ? rows : rows.filter(r => !r.brand.is_paused);
     const sorted = [...filtered];
-    if (sortMode === 'drought') {
-      sorted.sort((a, b) => {
-        const ad = a.droughtFlag ? 0 : 1;
-        const bd = b.droughtFlag ? 0 : 1;
-        if (ad !== bd) return ad - bd;
-        return a.brand.display_name.localeCompare(b.brand.display_name);
-      });
-    } else {
-      sorted.sort((a, b) => a.brand.display_name.localeCompare(b.brand.display_name));
-    }
+    const dirMul = sortDir === 'asc' ? 1 : -1;
+    const alphaTieBreak = (a: CoverageRow, b: CoverageRow) => a.brand.display_name.localeCompare(b.brand.display_name);
+    sorted.sort((a, b) => {
+      let cmp = 0;
+      switch (sortKey) {
+        case 'brand':
+          cmp = a.brand.display_name.localeCompare(b.brand.display_name);
+          break;
+        case 'thisWeek':
+          cmp = a.testsCurrentWeek - b.testsCurrentWeek;
+          break;
+        case 'lastWeek':
+          cmp = a.testsLastWeek - b.testsLastWeek;
+          break;
+        case 'rolling28':
+          cmp = a.testsRolling28 - b.testsRolling28;
+          break;
+        case 'thisMonth':
+          cmp = a.testsCurrentMonth - b.testsCurrentMonth;
+          break;
+        case 'rework28':
+          cmp = a.reworkRolling28 - b.reworkRolling28;
+          break;
+        case 'reworkRatio':
+          cmp = ratioSortValue(a.testsRolling28, a.reworkRolling28)
+              - ratioSortValue(b.testsRolling28, b.reworkRolling28);
+          break;
+        case 'status':
+          cmp = statusRank(a) - statusRank(b);
+          break;
+      }
+      if (cmp !== 0) return dirMul * cmp;
+      // Stable alphabetical tie-break, independent of sortDir, so equal
+      // rows don't flip order when the user toggles direction.
+      return alphaTieBreak(a, b);
+    });
     return sorted;
-  }, [rows, sortMode, showPaused]);
+  }, [rows, sortKey, sortDir, showPaused]);
+
+  function toggleSort(key: SortKey) {
+    if (key === sortKey) {
+      setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      // Status and brand default to the more-useful first direction
+      // (desc for status so drought floats up; asc for brand for A-Z).
+      setSortDir(key === 'brand' ? 'asc' : 'desc');
+    }
+  }
+
+  function SortIcon({ active }: { active: boolean }) {
+    if (!active) return <ChevronsUpDown className="ml-1 inline h-3 w-3 text-[color:var(--f92-lgray)]" aria-hidden="true" />;
+    return sortDir === 'asc'
+      ? <ChevronUp className="ml-1 inline h-3 w-3 text-[color:var(--f92-orange)]" aria-hidden="true" />
+      : <ChevronDown className="ml-1 inline h-3 w-3 text-[color:var(--f92-orange)]" aria-hidden="true" />;
+  }
+
+  function SortableHeader({ k, label, className }: { k: SortKey; label: string; className?: string }) {
+    const active = sortKey === k;
+    return (
+      <th className={cn('px-4 py-3', className)} aria-sort={active ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
+        <button
+          type="button"
+          onClick={() => toggleSort(k)}
+          className="inline-flex items-center font-semibold text-[color:var(--f92-dark)] hover:text-[color:var(--f92-navy)] focus-visible:outline-none focus-visible:underline"
+        >
+          {label}
+          <SortIcon active={active} />
+        </button>
+      </th>
+    );
+  }
 
   function handleExportCsv() {
     const header = [
@@ -228,18 +313,6 @@ export default function CoveragePage() {
 
       <Card className="sticky top-2 z-10 p-3 md:p-4">
         <div className="flex flex-wrap items-end gap-3">
-          <div className="min-w-[10rem]">
-            <Label htmlFor="coverageSort" className="text-[10px] uppercase tracking-widest text-[color:var(--f92-gray)]">Sort</Label>
-            <Select value={sortMode} onValueChange={v => setSortMode(v as SortMode)}>
-              <SelectTrigger id="coverageSort" className="h-9 text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="drought">Drought first</SelectItem>
-                <SelectItem value="alpha">Alphabetical</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
           <label className="flex h-9 items-center gap-2 text-sm text-[color:var(--f92-dark)]">
             <input
               type="checkbox"
@@ -262,15 +335,15 @@ export default function CoveragePage() {
           <table className="min-w-full text-left text-sm">
             <thead>
               <tr className="text-[color:var(--f92-dark)]">
-                <th className="px-4 py-3 font-semibold">Brand</th>
-                <th className="px-4 py-3 font-semibold">This Week</th>
-                <th className="px-4 py-3 font-semibold">Last Week</th>
-                <th className="px-4 py-3 font-semibold">Rolling 28d</th>
-                <th className="px-4 py-3 font-semibold">This Month</th>
-                <th className="px-4 py-3 font-semibold">Rework 28d</th>
-                <th className="px-4 py-3 font-semibold">Rework Ratio</th>
+                <SortableHeader k="brand" label="Brand" />
+                <SortableHeader k="thisWeek" label="This Week" />
+                <SortableHeader k="lastWeek" label="Last Week" />
+                <SortableHeader k="rolling28" label="Rolling 28d" />
+                <SortableHeader k="thisMonth" label="This Month" />
+                <SortableHeader k="rework28" label="Rework 28d" />
+                <SortableHeader k="reworkRatio" label="Rework Ratio" />
                 <th className="px-4 py-3 font-semibold">Trend</th>
-                <th className="px-4 py-3 font-semibold">Status</th>
+                <SortableHeader k="status" label="Status" />
               </tr>
             </thead>
             <tbody>
