@@ -324,9 +324,9 @@ export function ManageMilestonesDialog({ brands, currentUserEmail, initialBrandI
           </p>
         </div>
 
-        <div className="mt-4 overflow-x-auto">
+        <div className="mt-4 max-h-[32rem] overflow-x-auto overflow-y-auto pr-2">
           <table className="min-w-full text-left text-sm">
-            <thead>
+            <thead className="sticky top-0 bg-white">
               <tr className="text-[color:var(--f92-gray)]">
                 <th className="px-2 py-2 font-semibold">Ticket</th>
                 <th className="px-2 py-2 font-semibold">Brand</th>

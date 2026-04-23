@@ -637,9 +637,9 @@ export default function ReportsPage() {
               No logs match the current filter selection.
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="max-h-[36rem] overflow-x-auto overflow-y-auto pr-2">
               <table className="min-w-full divide-y divide-[color:var(--f92-border)] text-left text-sm">
-                <thead className="bg-[color:var(--f92-warm)] text-[color:var(--f92-dark)]">
+                <thead className="sticky top-0 bg-[color:var(--f92-warm)] text-[color:var(--f92-dark)]">
                   <tr>
                     <th className="px-3 py-3 font-semibold">Date</th>
                     <th className="px-3 py-3 font-semibold">Ticket</th>
@@ -686,7 +686,7 @@ export default function ReportsPage() {
 
           <div className="mt-8">
             <h4 className="text-sm font-semibold text-[color:var(--f92-dark)]">Saved reports</h4>
-            <div className="mt-3 space-y-3">
+            <div className="mt-3 max-h-[28rem] space-y-3 overflow-y-auto pr-2">
               {savedReports.length === 0 ? (
                 <p className="text-sm text-[color:var(--f92-gray)]">No saved reports yet.</p>
               ) : (

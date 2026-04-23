@@ -28,7 +28,6 @@ export function EasterEggHost() {
     function onTrigger() { triggerWave(); }
     window.addEventListener('cqip:fusion-wave', onTrigger);
     return () => window.removeEventListener('cqip:fusion-wave', onTrigger);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return waveActive ? (

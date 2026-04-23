@@ -143,7 +143,7 @@ function CoverageSettingsBody() {
               </p>
             </div>
 
-            <div className="mt-4 space-y-3">
+            <div className="mt-4 max-h-[28rem] space-y-3 overflow-y-auto pr-2">
               {pausedBrands.length === 0 ? (
                 <p className="text-sm text-[color:var(--f92-gray)]">No brands paused.</p>
               ) : pausedBrands.map(b => (
