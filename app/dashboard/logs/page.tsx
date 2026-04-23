@@ -16,6 +16,7 @@ import { TicketLink } from '@/components/logs/ticket-link';
 import { MmiList } from '@/components/logs/mmi-tooltip';
 import { RowActionsMenu } from '@/components/logs/row-actions-menu';
 import { SyncJiraButton } from '@/components/dashboard/sync-jira-button';
+import { getSeverityVariant, getStatusVariant } from '@/components/logs/badge-variants';
 import { cn } from '@/lib/utils';
 
 const ALL = '__all__';
@@ -66,25 +67,6 @@ function daysAgoISO(days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-const severityVariant = {
-  Critical: 'critical',
-  High: 'high',
-  Medium: 'medium',
-  Low: 'low',
-} as const;
-
-type SeverityVariant = (typeof severityVariant)[keyof typeof severityVariant] | 'default';
-
-const statusVariant = {
-  Open: 'open',
-  'In Progress': 'in_progress',
-  Blocked: 'blocked',
-  'Pending Verification': 'pending',
-  Resolved: 'resolved',
-} as const;
-
-type StatusVariant = (typeof statusVariant)[keyof typeof statusVariant] | 'default';
-
 const SEVERITY_RANK: Record<string, number> = { Critical: 4, High: 3, Medium: 2, Low: 1 };
 const STATUS_RANK: Record<string, number> = {
   Open: 5,
@@ -93,14 +75,6 @@ const STATUS_RANK: Record<string, number> = {
   'Pending Verification': 2,
   Resolved: 1,
 };
-
-function getSeverityVariant(severity: string): SeverityVariant {
-  return (severityVariant as Record<string, SeverityVariant>)[severity] ?? 'default';
-}
-
-function getStatusVariant(status: string): StatusVariant {
-  return (statusVariant as Record<string, StatusVariant>)[status] ?? 'default';
-}
 
 function formatTriggeredDate(value: string | null | undefined): string {
   if (!value) return '—';
