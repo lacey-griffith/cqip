@@ -237,7 +237,6 @@ function CoverageSettingsBody() {
                 <PauseActiveBrandForm
                   brands={activeBrands}
                   onPause={(brand, reason) => togglePause(brand, true, reason)}
-                  submitting={pauseSubmitting}
                 />
               </div>
             ) : null}
@@ -250,20 +249,34 @@ function CoverageSettingsBody() {
 
 interface PauseActiveBrandFormProps {
   brands: Brand[];
-  onPause: (brand: Brand, reason: string) => Promise<void> | void;
-  submitting: boolean;
+  onPause: (brand: Brand, reason: string) => Promise<void>;
 }
 
-function PauseActiveBrandForm({ brands, onPause, submitting }: PauseActiveBrandFormProps) {
+function PauseActiveBrandForm({ brands, onPause }: PauseActiveBrandFormProps) {
   const [selectedId, setSelectedId] = useState(brands[0]?.id ?? '');
   const [reason, setReason] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (submitting) return;
     const brand = brands.find(b => b.id === selectedId);
     if (!brand) return;
-    onPause(brand, reason);
-    setReason('');
+    setFormError(null);
+    setSubmitting(true);
+    try {
+      await onPause(brand, reason);
+      // Only clear the form on success so a network failure doesn't
+      // swallow the admin's typed reason.
+      setSelectedId(brands[0]?.id ?? '');
+      setReason('');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to pause brand';
+      setFormError(msg);
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -291,7 +304,12 @@ function PauseActiveBrandForm({ brands, onPause, submitting }: PauseActiveBrandF
           className="h-9 text-sm"
         />
       </div>
-      <Button type="submit" disabled={submitting || !selectedId}>Pause</Button>
+      <Button type="submit" disabled={submitting || !selectedId}>
+        {submitting ? 'Pausing…' : 'Pause'}
+      </Button>
+      {formError ? (
+        <p className="md:col-span-3 text-xs text-red-600" role="alert">{formError}</p>
+      ) : null}
     </form>
   );
 }
