@@ -376,7 +376,11 @@ export default function CoveragePage() {
                       onClick={() => openDrawer(row)}
                       className={cn(
                         'cursor-pointer border-t border-[color:var(--f92-border)] transition hover:bg-[color:var(--f92-tint)]',
-                        row.droughtFlag && !row.brand.is_paused ? 'bg-[color:var(--f92-warm)]' : '',
+                        row.brand.is_paused
+                          ? 'bg-slate-100 text-[color:var(--f92-gray)] opacity-75 dark:bg-slate-900/40'
+                          : row.droughtFlag
+                            ? 'bg-[color:var(--f92-warm)]'
+                            : '',
                       )}
                     >
                       <td className="px-4 py-3">
