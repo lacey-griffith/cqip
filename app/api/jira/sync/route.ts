@@ -5,9 +5,12 @@ import { createSupabaseRouteClient } from '@/lib/supabase/server';
 // gating here even though the edge function has its own auth, so an anon
 // caller can't hammer the function from the browser.
 //
-// Batch 003 diagnostic pass: on non-2xx the route now folds the edge
-// function's body into the top-level `error` field so the client-side
-// toast surfaces the real failure string instead of 'Sync failed'.
+// Auth to the edge function uses CQIP_SYNC_AUTH_KEY — a custom shared
+// secret set with matching values on Supabase (via `supabase secrets set`)
+// and Cloudflare Worker (via `wrangler secret put`). This decouples the
+// handshake from any Supabase-managed key rotation (Batch 003.5 after
+// the ECC-signing migration broke SUPABASE_SERVICE_ROLE_KEY parity
+// between the two runtimes).
 
 export async function POST() {
   const supabase = await createSupabaseRouteClient();
@@ -27,30 +30,30 @@ export async function POST() {
   }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  // jira-sync's gateway auth accepts the anon key in both `?apikey=` and
-  // `Authorization: Bearer` — this matches the curl pattern that works.
-  // Using the anon key (not service role) is deliberate: the edge function
-  // itself has its own admin logic, and the gateway only needs a valid key
-  // to let the request through.
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!supabaseUrl || !anonKey) {
+  const syncAuthKey = process.env.CQIP_SYNC_AUTH_KEY;
+
+  if (!supabaseUrl || !syncAuthKey) {
     console.error('[api/jira/sync] missing env vars', {
       urlPresent: Boolean(supabaseUrl),
-      keyPresent: Boolean(anonKey),
+      syncAuthKeyPresent: Boolean(syncAuthKey),
     });
     return NextResponse.json(
-      { error: 'Server misconfigured — contact admin' },
+      {
+        error: syncAuthKey
+          ? 'Server misconfigured — contact admin'
+          : 'CQIP_SYNC_AUTH_KEY not configured on Worker — run `wrangler secret put CQIP_SYNC_AUTH_KEY`',
+      },
       { status: 500 },
     );
   }
 
-  const functionUrl = `${supabaseUrl.replace(/\/$/, '')}/functions/v1/jira-sync?apikey=${encodeURIComponent(anonKey)}`;
+  const functionUrl = `${supabaseUrl.replace(/\/$/, '')}/functions/v1/jira-sync?apikey=${encodeURIComponent(syncAuthKey)}`;
 
   try {
     const res = await fetch(functionUrl, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${anonKey}`,
+        Authorization: `Bearer ${syncAuthKey}`,
         'Content-Type': 'application/json',
       },
     });
