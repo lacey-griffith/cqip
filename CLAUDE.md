@@ -1,6 +1,6 @@
 # CQIP — CRO Quality Intelligence Platform
 ## Claude Code Project Context File
-### Fusion92 | CRO Department | v1.1
+### Fusion92 | CRO Department | v1.3
 
 ---
 
@@ -11,8 +11,11 @@ starts here. Before writing any code, read this file completely. When in doubt a
 a decision, check this file before asking the user. All major decisions are recorded
 here so they don't need to be re-explained.
 
-**Current deployed state:** Live at https://cqip.l-hay.workers.dev — Batch 001
-has shipped. See §16 for the full shipped-features log.
+**Current deployed state:** Live at https://cqip.l-hay.workers.dev — Batches
+001, 001.5, 002 (Client Coverage), 002.5a/b (audit generalization), 003
+(branded exports + dashboard click-drill + sync diagnostics), and 003.5
+(CQIP_SYNC_AUTH_KEY decoupling) have shipped. See §16 for the full
+shipped-features log.
 
 ---
 
@@ -33,8 +36,6 @@ automates that entirely and adds analytics, alerts, and historical pattern detec
 - AI-driven root cause classification (Claude analyzes issue context and suggests
   root cause from the existing taxonomy — always advisory, never automatic)
 - Cost analysis (attach estimated hours/cost to rework events)
-- Client Coverage tracking (planned Batch 002 — brands table, test milestones,
-  drought alerts)
 
 ---
 
@@ -42,9 +43,10 @@ automates that entirely and adds analytics, alerts, and historical pattern detec
 
 | Layer | Technology | Notes |
 |-------|-----------|-------|
-| Frontend | Next.js 16 (React) | App Router, TypeScript |
-| UI Components | shadcn/ui + Tailwind CSS | Use shadcn for all UI components |
+| Frontend | Next.js 16 (React 19) | App Router, TypeScript |
+| UI Components | shadcn/ui + Tailwind CSS v4 + Radix primitives | dialog, dropdown-menu, select, switch |
 | Charts | Recharts | All dashboard visualizations |
+| Exports | xlsx (read) + xlsx-js-style (write) | Branded F92 styling on Excel; xlsx-js-style added Batch 003 for cell formatting |
 | Backend + DB + Auth | Supabase | Edge Functions (webhook/sync logic), Postgres, Auth |
 | Hosting | Cloudflare Workers (via @opennextjs/cloudflare) | Deployed with `npm run deploy`. Workers + Assets — NOT Pages. Pages is incompatible with Next 16. |
 | Notifications | Microsoft Teams Incoming Webhooks | In-app alerts + Teams only. NO email. |
@@ -85,32 +87,44 @@ cqip/
 │   │   └── page.tsx
 │   ├── dashboard/
 │   │   ├── layout.tsx           # Konami listener, EasterEggHost, session check
-│   │   ├── page.tsx             # Home view (KPIs + charts + matrix rain)
+│   │   ├── page.tsx             # Home view (KPIs + charts + matrix rain + click-drill drawer)
+│   │   ├── coverage/
+│   │   │   └── page.tsx         # Client Coverage table (Batch 002): KPIs, drought flags,
+│   │   │                          sparklines, brand detail drawer, paused-row treatment,
+│   │   │                          per-column sort, leadership-ready CSV/XLSX export
 │   │   ├── docs/
 │   │   │   ├── page.tsx         # Docs home with QA tab guide
 │   │   │   └── array-of-sunshine/page.tsx   # Password-gated egg dossier
 │   │   ├── logs/
 │   │   │   ├── page.tsx         # Log table view (title + batch actions)
-│   │   │   └── [id]/page.tsx    # Log detail view
+│   │   │   └── [id]/page.tsx    # Log detail view (also reachable via in-page drawer)
 │   │   ├── reports/
-│   │   │   └── page.tsx         # Saved report views + exports
+│   │   │   └── page.tsx         # Saved report views + exports (CSV + branded XLSX via SplitButton)
 │   │   └── settings/
 │   │       ├── page.tsx         # Settings home
 │   │       ├── profile/         # Avatar, photo upload, theme, password
 │   │       ├── projects/        # Add/remove Jira projects
 │   │       ├── alerts/          # Alert rule config
 │   │       ├── users/           # User management (admin only)
-│   │       └── audit/           # Admin change log viewer (Batch 001)
+│   │       ├── audit/           # Admin change log viewer (Batch 001)
+│   │       ├── coverage/        # Admin: pause/unpause brands, manage milestones (Batch 002)
+│   │       └── system/          # Admin: build stamp + system info (Batch 003)
 │   └── api/
-│       └── jira/sync/route.ts   # Proxy to jira-sync edge function
+│       ├── admin/users/route.ts # Admin user create/manage (server-only)
+│       ├── logs/edit/route.ts   # Server-side edit endpoint
+│       └── jira/sync/route.ts   # Proxy to jira-sync edge function (forwards CQIP_SYNC_AUTH_KEY)
 │
 ├── components/
-│   ├── ui/                      # shadcn components
+│   ├── ui/                      # shadcn components + SplitButton (Batch 003)
 │   ├── charts/                  # Recharts wrappers
-│   ├── logs/                    # TicketLink, EditLogDialog, ConfirmDeleteDialog, MmiList
-│   ├── dashboard/               # KPI cards, ActiveAlertsPanel, SyncJiraButton
+│   ├── logs/                    # TicketLink, EditLogDialog, ConfirmDeleteDialog, MmiList,
+│   │                              LogDetailDrawer (Batch 003), three-dot action menu
+│   ├── coverage/                # BrandDetailDrawer, ManageMilestonesDialog, Sparkline (Batch 002)
+│   ├── dashboard/               # KPI cards, ActiveAlertsPanel, SyncJiraButton, LogDrawer
+│   │                              (shared click-to-filter drawer, Batch 003)
 │   ├── reports/                 # Scorecard, RootCause, Client reports
-│   └── layout/                  # Nav, UserAvatar, EasterEggHost, ThemeProvider,
+│   └── layout/                  # Nav (sticky-bottom docs + F92 atom + clouds + shooting stars),
+│                                  UserAvatar, EasterEggHost, ThemeProvider,
 │                                  F92Logo (inline SVG atom), IdleTimeout, Toaster
 │
 ├── lib/
@@ -135,21 +149,39 @@ cqip/
 │   │   ├── 002_user_profile_updates.sql
 │   │   ├── 003_admin_setup.sql
 │   │   ├── 004_theme_and_patterns.sql
-│   │   ├── 005_rls_all_tables.sql
+│   │   ├── 005_rls_all_tables.sql      # Defines public.is_admin() helper
 │   │   ├── 006_radara_config.sql
 │   │   ├── 007_avatar_patterns.sql     # Avatar patterns refresh + photo upload
-│   │   └── 008_easter_egg_stats.sql    # Egg trigger counter + RPC
+│   │   ├── 008_easter_egg_stats.sql    # Egg trigger counter + RPC
+│   │   ├── 009_client_coverage.sql     # Batch 002: brands + test_milestones
+│   │   │                                  + Client Coverage Drought rule seed
+│   │   ├── 010_brand_aliases.sql       # Batch 002: brand_aliases table + MRR-CA pause
+│   │   │                                  + tm.brand_id backfill via aliases
+│   │   ├── 011_audit_log_generalize.sql # Batch 002.5b: nullable log_entry_id +
+│   │   │                                   target_type/target_id pair + shape CHECK
+│   │   └── 012_audit_log_admin_insert.sql # Batch 002.5b hotfix: admin INSERT policy
+│   │                                       on audit_log (append-only from client)
 │   └── functions/               # Deno Edge Functions
-│       ├── jira-webhook/index.ts       # Receives Jira webhook events
-│       ├── jira-sync/index.ts          # On-demand + scheduled sync of open logs
+│       ├── jira-webhook/index.ts       # Receives Jira webhook events. Two branches:
+│       │                                 (1) milestone branch — first-time entry into
+│       │                                 'Dev Client Review' inserts a test_milestones row;
+│       │                                 (2) rework branch — sendback transitions create
+│       │                                 quality_logs rows. Both run in the same invocation.
+│       ├── jira-sync/index.ts          # On-demand + scheduled sync of open logs.
+│       │                                 Validates inbound calls against CQIP_SYNC_AUTH_KEY.
 │       └── radara-sweep/index.ts       # Radara's triage sweeps (not deployed yet)
 │
 ├── scripts/
-│   ├── field-discovery.ts       # One-time: maps Jira custom field IDs
-│   ├── import-csv.ts            # One-time: imports historical CSV data
-│   ├── fix-dates.ts             # One-time: backfills triggered_at from CSV
-│   ├── seed-alert-rules.ts      # One-time: seeds default alert_rules
-│   └── backfill-brands.ts       # On-demand: re-syncs null client_brand rows
+│   ├── field-discovery.ts            # One-time: maps Jira custom field IDs
+│   ├── import-csv.ts                 # One-time: imports historical CSV data
+│   ├── fix-dates.ts                  # One-time: backfills triggered_at from CSV
+│   ├── seed-alert-rules.ts           # One-time: seeds default alert_rules
+│   ├── backfill-brands.ts            # On-demand: re-syncs null client_brand rows
+│   ├── backfill-jira-summaries.ts    # On-demand: pulls real Jira titles for CSV-imported logs
+│   ├── backfill-milestones.ts        # On-demand: backfills historical Dev Client Review
+│   │                                   milestones; loads aliases into brand map; logs
+│   │                                   unmatched brand_jira_value strings
+│   └── gen-build-info.js             # Prebuild: stamps build metadata for Settings → System
 │
 └── .claude/
     └── agents/                  # Agent instructions used by Claude Code
@@ -387,6 +419,96 @@ Public-read bucket for profile photos. Each user can only write under
 their own `<uid>/` folder. `img-src` in next.config.ts CSP includes the
 Supabase origin so avatars render.
 
+### brands (migration 009 — Batch 002)
+Canonical per-project brand list with pause state. Drives Client Coverage.
+
+```sql
+CREATE TABLE brands (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_key     TEXT NOT NULL REFERENCES projects(jira_project_key),
+  brand_code      TEXT NOT NULL,           -- e.g. "MRA"
+  jira_value      TEXT UNIQUE NOT NULL,    -- matches customfield_12220 value,
+                                           -- e.g. "MRA - Mr Appliance"
+  display_name    TEXT NOT NULL,           -- e.g. "Mr. Appliance"
+  is_active       BOOLEAN NOT NULL DEFAULT TRUE,
+  is_paused       BOOLEAN NOT NULL DEFAULT FALSE,
+  paused_at       TIMESTAMPTZ,
+  paused_by       TEXT,
+  paused_reason   TEXT,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+```
+
+Seeded with 16 NBLY brands. MRR-CA is paused at seed time
+(migration 010) — no active tests. Admins can pause/unpause via
+`/dashboard/settings/coverage`.
+
+### brand_aliases (migration 010 — Batch 002)
+Maps historical Jira brand strings (e.g. `"MRR - Mr Rooter"` without
+"Plumbing") to canonical brands. Webhook + scripts resolve `brand_id`
+by checking `brands.jira_value` first, then falling back to
+`brand_aliases.jira_value`.
+
+```sql
+CREATE TABLE brand_aliases (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  brand_id    UUID NOT NULL REFERENCES brands(id) ON DELETE CASCADE,
+  jira_value  TEXT UNIQUE NOT NULL,
+  notes       TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+```
+
+### test_milestones (migration 009 — Batch 002)
+First-time-reached milestones per Jira ticket. Today only the
+`dev_client_review` milestone is recorded; the schema is open for more.
+Used by Client Coverage to compute "tests delivered" windows and
+drought flags.
+
+```sql
+CREATE TABLE test_milestones (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  jira_ticket_id    TEXT NOT NULL,
+  jira_ticket_url   TEXT,
+  jira_summary      TEXT,
+  brand_id          UUID REFERENCES brands(id),  -- nullable; aliases resolve later
+  brand_jira_value  TEXT,
+  milestone_type    TEXT NOT NULL DEFAULT 'dev_client_review',
+  reached_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  source            TEXT NOT NULL DEFAULT 'webhook'
+                      CHECK (source IN ('webhook','manual','backfill')),
+  created_by        TEXT NOT NULL DEFAULT 'system',
+  notes             TEXT,
+  is_deleted        BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX idx_test_milestones_unique
+  ON test_milestones(jira_ticket_id, milestone_type)
+  WHERE is_deleted = FALSE;   -- partial: soft-deleted rows can coexist
+```
+
+The unique index is partial on `is_deleted = FALSE`. This is intentional:
+soft-deleted rows do not block re-creation when an admin re-adds the
+milestone. The webhook's duplicate-check SELECT also filters on
+`is_deleted = FALSE` before inserting.
+
+### audit_log generalization (migrations 011 + 012 — Batch 002.5b)
+Original `audit_log` had `log_entry_id NOT NULL` with FK to
+`quality_logs`, so milestone and brand mutations had no place to land.
+Migration 011 made `log_entry_id` nullable, added a generic
+`(target_type, target_id)` pair, and a CHECK constraint that enforces:
+
+- `target_type = 'quality_log'` requires `log_entry_id IS NOT NULL`, OR
+- `target_type IN ('test_milestone','brand')` requires `target_id IS NOT NULL`
+
+Legacy rows were back-filled with `target_type = 'quality_log'` and
+`target_id = log_entry_id`. Migration 012 added an admin-only INSERT
+policy on `audit_log` so admin-initiated milestone/brand audit writes
+from the browser succeed (service-role edge-function writes were already
+fine; they bypass RLS). No UPDATE/DELETE policies — append-only from the
+client.
+
 ---
 
 ## 6. Jira Workflow & Trigger Logic
@@ -428,6 +550,37 @@ WHERE jira_ticket_id = $1 AND is_deleted = FALSE
 When the same ticket later transitions FROM Active Dev/Active Design BACK TO Dev QA
 or Dev Client Review → automatically set the most recent Open/In Progress log for
 that ticket to 'Pending Verification'.
+
+### Milestone Trigger (Batch 002 — separate branch in same webhook)
+When a ticket transitions INTO `Dev Client Review` (any forward
+direction — e.g. `In Development → Dev Client Review`), the webhook
+inserts a `test_milestones` row for that ticket if one does not already
+exist with `is_deleted = FALSE`. This branch runs BEFORE the rework
+branch in `jira-webhook/index.ts` so a transition that doesn't satisfy
+`isValidTransition` (the rework rule) still records a milestone. A
+single webhook invocation can record both: e.g. `Dev QA → Active Dev`
+won't create a milestone, but the prior `In Development → Dev Client
+Review` invocation did.
+
+The milestone branch is wrapped in try/catch and logs to
+`console.error` on failure but does not return non-200, so the rework
+branch still runs in the same invocation.
+
+### Brand Resolution Flow (used by webhook + backfill + coverage UI)
+For a Jira `customfield_12220` value (e.g. `"MRA - Mr Appliance"`):
+
+1. `extractBrand()` normalizes the raw shape (string, single-select
+   `{value}`, cascading `{value, child:{value}}`, or array of those).
+2. Look up `brands.jira_value = <extracted>` → got `brand_id`? Done.
+3. Otherwise, look up `brand_aliases.jira_value = <extracted>` → got
+   `brand_id`? Done.
+4. Otherwise, log a warning (`[jira-webhook] milestone: no brand or
+   alias match for ...`) and proceed with `brand_id = NULL`.
+   `test_milestones.brand_id` is nullable, and `brand_jira_value` is
+   stored verbatim so a later alias seed can backfill the FK.
+
+The backfill (`scripts/backfill-milestones.ts`) follows the same flow
+and surfaces unmatched strings so we can patch `brand_aliases`.
 
 ### Webhook registration
 Webhook URL format (live):
@@ -557,9 +710,14 @@ Seeded into alert_rules on first deploy.
 | Client Rework Spike | frequency_pattern | same client_brand, count >= 4, window = 14 days |
 | Repeated Sendback | per_ticket | log_number >= 3 |
 | Long-Running Open | aging | log_status IN ('Open','In Progress'), age >= 14 days |
+| Client Coverage Drought | frequency_pattern | scope = 'brand_coverage', threshold = 2, window_days = 28, skip_paused = true (seeded by migration 009) |
 
 All rules notify: `["teams", "in_app"]`. In-app works; Teams dispatch is not
-yet wired — alert_events rows are created but no Teams POST happens.
+yet wired — `alert_events` rows are created but no Teams POST happens.
+
+**Client Coverage Drought** rule is seeded but its evaluator is not yet
+wired in `lib/alerts/rules.ts`. The Coverage table surfaces drought
+visually today; the rule-engine path is planned for Batch 004.
 
 ---
 
@@ -679,6 +837,42 @@ Resolved             → green-500
     Increment via `increment_easter_egg(p_name)` RPC (SECURITY DEFINER).
     Counts only fire on successful triggers, not page views.
 
+12. **Webhook has two independent branches.** A single Jira status-change
+    invocation runs the milestone branch (entry into Dev Client Review)
+    AND the rework branch (sendback) sequentially. Failures in the
+    milestone branch are caught and logged but do NOT prevent the
+    rework branch from running. The function still returns 200.
+
+13. **Brand lookup falls back through aliases.** Anywhere a brand is
+    resolved from a Jira string (webhook, backfill, coverage UI),
+    follow `brands.jira_value → brand_aliases.jira_value → null`.
+    Never invent a brand row. Unmatched strings get logged and stored
+    verbatim in `brand_jira_value` so an alias seed can backfill later.
+
+14. **Soft-deleted milestones are recoverable.** The
+    `idx_test_milestones_unique` index is partial on `is_deleted = FALSE`,
+    so re-adding a previously-deleted milestone for the same
+    `(ticket, type)` is allowed. The Manage Milestones dialog restores
+    soft-deleted rows on re-add (does not insert a new row).
+
+15. **Audit writes for non-quality-log targets** must use
+    `target_type IN ('test_milestone','brand')` + `target_id`. The CHECK
+    constraint will reject half-specified rows. Browser-initiated audit
+    writes need the user to be admin (RLS policy from migration 012);
+    edge-function writes via service role bypass RLS.
+
+16. **Sync auth uses CQIP_SYNC_AUTH_KEY, not the Supabase anon key.**
+    Worker → jira-sync edge function handshake uses a custom shared
+    secret on both sides (Supabase secrets + Wrangler secrets). The
+    decoupling protects against Supabase-managed key rotations breaking
+    the path. 401 from the edge function almost always means the two
+    values drifted; see `app/api/jira/sync/route.ts` for the surfaced
+    error message.
+
+17. **Build stamp.** `scripts/gen-build-info.js` runs as `prebuild`
+    (npm script) and writes a build manifest read by Settings → System.
+    Do not regenerate manually outside of build.
+
 ---
 
 ## 14. What Is NOT In Scope for V1
@@ -692,10 +886,20 @@ Resolved             → green-500
 - Mobile app
 
 ### Planned but not yet shipped
-- **Teams webhook dispatch** — in-app alerts fire, Teams POST does not. Planned
-  as a dedicated batch after Client Coverage.
-- **Client Coverage section** — new /dashboard/coverage route, brands table,
-  test_milestones table, drought alert rule. Planned as Batch 002.
+- **Teams webhook dispatch** — in-app alerts fire, Teams POST does not.
+  Planned as Batch 005.
+- **Drought rule evaluator** — `Client Coverage Drought` is seeded in
+  `alert_rules` (migration 009) but `lib/alerts/rules.ts` has no
+  evaluator for `scope = 'brand_coverage'`. Planned as Batch 004.
+- **is_admin() consistency migration** — migrations 010 and 012 use
+  inline `EXISTS` lookups against `user_profiles` instead of
+  `public.is_admin()` (defined in migration 005). Planned migration 013
+  normalizes both to `public.is_admin()`. Batch 004.
+- **Server-side `changed_by` derivation** — current browser-initiated
+  audit writes trust the client-supplied `changed_by`. Planned Batch 004
+  security hardening: derive from `auth.uid()` on the server.
+- **Token-expiry monitoring** — no alert when `JIRA_API_TOKEN` silently
+  expires (prompted the 2026-04-23 incident). Planned Batch 005.
 - **Radara Edge Function deploy** — code is committed at
   `supabase/functions/radara-sweep/index.ts` but not deployed.
 
@@ -703,27 +907,44 @@ Resolved             → green-500
 
 ## 15. Pending / Active TODOs
 
-- [ ] **Teams alert dispatch** — biggest functional gap. Alert rules evaluate
-      and write alert_events but no Teams webhook POST. Dedicated batch after
-      Batch 002.
+### Immediate (carry-over from Batch 003.5)
+- [ ] **Re-point the Supabase pg_cron job** that fires jira-sync every 6
+      hours. It was configured manually in the Supabase dashboard using
+      the old anon/service-role apikey and will 401 silently now that
+      the edge function validates `CQIP_SYNC_AUTH_KEY`. Edit the
+      schedule's request URL to use
+      `?apikey=<CQIP_SYNC_AUTH_KEY value>` (or unschedule + reschedule).
+      No code path in this repo pins that schedule, so there's no
+      migration to update.
+
+### Batch 004 (planned)
+- [ ] **Drought rule evaluator** — wire `scope = 'brand_coverage'` in
+      `lib/alerts/rules.ts` so the seeded Drought rule actually emits
+      `alert_events`. Coverage UI already surfaces drought visually.
+- [ ] **Server-side `changed_by` derivation** — derive from
+      `auth.uid()` on the server rather than trusting the client. Covers
+      audit_log writes for milestones + brands that currently pass
+      `changed_by` from the browser.
+- [ ] **migration 013 — `is_admin()` consistency** — rewrite RLS
+      policies in migrations 010 and 012 to use `public.is_admin()`
+      from migration 005 instead of inline `EXISTS` lookups. Pure
+      normalization; no behavior change.
+
+### Batch 005 (planned)
+- [ ] **Teams alert dispatch** — biggest functional gap. Alert rules
+      evaluate and write `alert_events` but no Teams webhook POST.
+- [ ] **Jira token-expiry monitoring** — surface expiring tokens before
+      they silently break the webhook/sync paths (prompted by the
+      2026-04-23 silent-expiry incident).
+
+### Ops / deferred
 - [ ] **Radara Edge Function deploy** — run
       `npx supabase functions deploy radara-sweep` when ready.
-- [ ] **Jira QA-tab clear automation** — configure in Jira UI as an Automation
-      rule when ticket enters Dev Client Review.
-- [ ] **Client Coverage** — Batch 002.
-- [ ] **Remove diagnostic `client_brand` warn blocks** from jira-webhook and
-      jira-sync edge functions after 1–2 weeks of clean operation (added Batch 001).
-- [ ] **CQIP_SYNC_AUTH_KEY** — set via `npx supabase secrets set` AND
-      `npx wrangler secret put`; values must match on both sides
-      (Batch 003.5 hotfix — decouples Worker → jira-sync auth from
-      Supabase-managed key rotations).
-    - [ ] **Also re-point the existing Supabase pg_cron job** that fires
-          jira-sync every 6 hours — it was configured manually in the
-          dashboard with the old anon/service-role apikey and will
-          401 silently after the auth flip. Edit the schedule's
-          request URL to use `?apikey=<CQIP_SYNC_AUTH_KEY value>`
-          (or unschedule + reschedule). No code path in this repo
-          pins that schedule, so there's no migration to update.
+- [ ] **Jira QA-tab clear automation** — configure in Jira UI as an
+      Automation rule when ticket enters Dev Client Review.
+- [ ] **Remove diagnostic `client_brand` warn blocks** from jira-webhook
+      and jira-sync edge functions after the Batch 001 backfill
+      stabilizes.
 
 ### Recently completed (was pending, now done)
 - [x] Supabase project (ID: hupklpjruveleaahufmw)
@@ -731,7 +952,16 @@ Resolved             → green-500
 - [x] `nbly_brand` Jira field ID confirmed as `customfield_12220`
 - [x] Team user accounts created (Lacey, Xandor, Katy, Mark, Jacob, Randy, Zach)
 - [x] Jira webhook registered
-- [x] Jira sync cron scheduled
+- [x] Jira sync cron scheduled (pg_cron re-point still pending — see above)
+- [x] **Client Coverage** shipped (Batch 002) — brands, aliases,
+      milestones, paused brands, drought flag, sparklines, detail
+      drawer, admin milestone management, XLSX/CSV export
+- [x] **Audit log generalized** (Batch 002.5a/b) — non-quality-log
+      mutations now write audit rows; admin INSERT policy on audit_log
+- [x] **Branded XLSX + CSV** (Batch 003) — xlsx-js-style for F92
+      styling; SplitButton for reports export
+- [x] **CQIP_SYNC_AUTH_KEY** (Batch 003.5) — Worker → jira-sync
+      handshake decoupled from Supabase-managed key rotations
 
 ---
 
@@ -767,12 +997,83 @@ rewrite with Jira QA tab guide.
   Actions. Brand and Owner moved into expanded detail. Checkbox column
   + batch-delete selection bar for admins.
 
-### Batch 001.5 — April 2026 (in progress)
+### Batch 001.5 — April 2026
 - F92 shimmer rebuilt as three explicit layer divs (pseudo-element
   approach wasn't rendering)
 - Sunshine counter moved to only fire on successful password unlock
 - Three-dot menu replaces inline Edit/Delete buttons on logs page
 
+### Batch 002 — Client Coverage — April 2026
+- Migration 009: `brands` + `test_milestones` tables + Client Coverage
+  Drought alert rule seed; 16 NBLY brands seeded
+- Migration 010: `brand_aliases` table; MRR-CA marked paused at seed;
+  historical `test_milestones.brand_id` backfilled via aliases
+- `jira-webhook` extended with a milestone branch — first-time entry
+  into Dev Client Review inserts a `test_milestones` row (runs in the
+  same invocation as the rework branch, independently)
+- `scripts/backfill-milestones.ts` — historical Dev Client Review
+  milestones; logs unmatched `brand_jira_value` for alias patching;
+  uses `/rest/api/3/search/jql` (old `/search` endpoint returns 410)
+- `/dashboard/coverage` — KPIs, drought flags, sparklines, brand
+  detail drawer, per-column sort, paused-row visual treatment,
+  Tests Delivered YTD + All-Time cards, dark-mode sparkline tooltip,
+  leadership-ready CSV (title-case headers, drop paused, timestamp row)
+- `/dashboard/settings/coverage` — admin pause/unpause brands + manage
+  milestones dialog (add/edit/soft-delete; re-add restores soft-deleted
+  rows)
+- Navigation: Coverage entry in sidebar; sticky-bottom docs + F92 atom;
+  staggered cloud entry left-to-right; shooting stars on moon hover;
+  Deploy Cowgirl joins admin title rotation
+- Dashboard: new "Tests This Week" KPI with week-over-week delta
+- Pure helpers extracted for time windows, counts, and coverage rows
+
+### Batch 002.5a/b — Audit generalization — April 2026
+- Migration 011: `audit_log.log_entry_id` made nullable;
+  `target_type`/`target_id` pair added with CHECK constraint; legacy
+  rows back-filled with `target_type = 'quality_log'`
+- Migration 012: admin-only INSERT policy on `audit_log` so
+  browser-initiated audit writes for milestones + brands land; no
+  UPDATE/DELETE policy (append-only from client)
+- Deferred audit writes wired for milestone add/edit/delete and brand
+  pause/unpause; failed audit writes surface via dev toast
+- Coverage freshness: stale-read refetch, dropdown refresh, togglePause
+  rollback; pause-brand form awaits submit and surfaces errors
+- Long lists (settings, reports) capped with inline scroll
+
+### Batch 003 — Sync diagnostics + branded exports + dashboard drill — April 2026
+- `app/api/jira/sync/route.ts` — failure path surfaces actionable errors
+  to admin, distinguishes missing env vs. 401 auth mismatch
+- `components/dashboard/LogDrawer` — shared click-to-filter drawer;
+  dashboard charts (severity bar, issue-category donut, top root-cause
+  bar, rework weekly bar) open the drawer scoped to the clicked slice;
+  a11y hints + cursor polish for clickable charts
+- Log detail drawer opens on title click from the logs page
+- Logs table height capped with inline scroll (40rem)
+- F92 shimmer rewritten as a single diagonal sweep with blur
+- Clouds: random top positions + entry delays for natural drift
+- Branded XLSX + CSV for coverage and reports with F92 styling
+  (`xlsx-js-style` dep added); XLSX sheet built directly rather than
+  via `aoa_to_sheet` overlay
+- `SplitButton` UI for reports export action + dropdown variants
+- Admin-only `/dashboard/settings/system` — build stamp + system info
+  (prebuild `scripts/gen-build-info.js` writes the manifest)
+
+### Batch 003.5 — CQIP_SYNC_AUTH_KEY decoupling — 2026-04-24
+- New env var `CQIP_SYNC_AUTH_KEY` — shared secret between Worker and
+  `jira-sync` edge function. Set on both sides (Supabase secrets +
+  Wrangler secrets) with matching values. Any random string.
+- `jira-sync/index.ts` validates inbound requests against
+  `CQIP_SYNC_AUTH_KEY` rather than `SUPABASE_SERVICE_ROLE_KEY`
+- `app/api/jira/sync/route.ts` forwards the key as both `?apikey=...`
+  and `Authorization: Bearer ...`; surfaces a specific "auth mismatch"
+  hint on 401 so admins don't have to dig through logs
+- `.env.example` documents the var with a generation hint
+  (`openssl rand -hex 32`)
+- **Motivation:** Supabase ECC-signing migration broke
+  `SUPABASE_SERVICE_ROLE_KEY` parity between the Worker runtime and
+  the edge-function runtime. Decoupling the handshake removes that
+  failure mode permanently.
+
 ---
 
-*Last updated: April 2026 | Updated for CQIP v1.1 post Batch 001 + 001.5*
+*Last updated: 2026-04-24 | CQIP v1.3 — post Batches 002, 002.5, 003, 003.5*
