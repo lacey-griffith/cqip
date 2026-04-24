@@ -180,6 +180,7 @@ TEAMS_WEBHOOK_URL=               # Incoming webhook URL for #cqip-alerts channel
 
 # App
 WEBHOOK_SECRET=                  # Random secret to validate Jira webhook payloads
+CQIP_SYNC_AUTH_KEY=              # Shared secret between Worker and jira-sync edge function. Can be any random string — generate with `openssl rand -hex 32`. Not a JWT.
 ```
 
 ### Where they're set
@@ -712,6 +713,10 @@ Resolved             → green-500
 - [ ] **Client Coverage** — Batch 002.
 - [ ] **Remove diagnostic `client_brand` warn blocks** from jira-webhook and
       jira-sync edge functions after 1–2 weeks of clean operation (added Batch 001).
+- [ ] **CQIP_SYNC_AUTH_KEY** — set via `npx supabase secrets set` AND
+      `npx wrangler secret put`; values must match on both sides
+      (Batch 003.5 hotfix — decouples Worker → jira-sync auth from
+      Supabase-managed key rotations).
 
 ### Recently completed (was pending, now done)
 - [x] Supabase project (ID: hupklpjruveleaahufmw)
