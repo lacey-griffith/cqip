@@ -10,11 +10,16 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? Deno.env.get('NEXT_PUBLIC_SUPABASE_URL');
 const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? Deno.env.get('NEXT_PUBLIC_SUPABASE_ANON_KEY');
+// Shared secret between Worker (/api/jira/sync proxy) and this function.
+// Decoupled from Supabase-managed keys so rotations there can't break us.
+// Set on both ends with matching values via `supabase secrets set` and
+// `wrangler secret put`.
+const syncAuthKey = Deno.env.get('CQIP_SYNC_AUTH_KEY');
 const jiraBaseUrl = Deno.env.get('JIRA_BASE_URL');
 const jiraEmail = Deno.env.get('JIRA_EMAIL');
 const jiraApiToken = Deno.env.get('JIRA_API_TOKEN');
 
-if (!supabaseUrl || !serviceRoleKey || !jiraBaseUrl || !jiraEmail || !jiraApiToken) {
+if (!supabaseUrl || !serviceRoleKey || !syncAuthKey || !jiraBaseUrl || !jiraEmail || !jiraApiToken) {
   throw new Error('Missing required environment variables for jira-sync function');
 }
 
@@ -141,7 +146,13 @@ function timingSafeEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
-const validKeys = [anonKey, serviceRoleKey].filter((k): k is string => Boolean(k));
+// Only accept the custom shared secret. Dropping anonKey + serviceRoleKey
+// from the accepted set means Supabase's own key rotations (ECC migration,
+// legacy-key sunset) can't silently break the Worker → function auth
+// handshake. anonKey/serviceRoleKey env reads remain above because
+// serviceRoleKey is still how supabase-js authenticates DB calls from
+// inside this function — only the INBOUND gateway check changes.
+const validKeys = [syncAuthKey].filter((k): k is string => Boolean(k));
 
 function validateApiKey(request: Request): boolean {
   if (validKeys.length === 0) return false;
