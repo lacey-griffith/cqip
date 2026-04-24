@@ -19,8 +19,17 @@ const jiraBaseUrl = Deno.env.get('JIRA_BASE_URL');
 const jiraEmail = Deno.env.get('JIRA_EMAIL');
 const jiraApiToken = Deno.env.get('JIRA_API_TOKEN');
 
-if (!supabaseUrl || !serviceRoleKey || !syncAuthKey || !jiraBaseUrl || !jiraEmail || !jiraApiToken) {
-  throw new Error('Missing required environment variables for jira-sync function');
+{
+  const missing: string[] = [];
+  if (!supabaseUrl) missing.push('SUPABASE_URL');
+  if (!serviceRoleKey) missing.push('SUPABASE_SERVICE_ROLE_KEY');
+  if (!syncAuthKey) missing.push('CQIP_SYNC_AUTH_KEY');
+  if (!jiraBaseUrl) missing.push('JIRA_BASE_URL');
+  if (!jiraEmail) missing.push('JIRA_EMAIL');
+  if (!jiraApiToken) missing.push('JIRA_API_TOKEN');
+  if (missing.length > 0) {
+    throw new Error(`jira-sync missing required env vars: ${missing.join(', ')}`);
+  }
 }
 
 const supabase = createClient(supabaseUrl, serviceRoleKey);

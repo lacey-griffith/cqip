@@ -717,6 +717,13 @@ Resolved             → green-500
       `npx wrangler secret put`; values must match on both sides
       (Batch 003.5 hotfix — decouples Worker → jira-sync auth from
       Supabase-managed key rotations).
+    - [ ] **Also re-point the existing Supabase pg_cron job** that fires
+          jira-sync every 6 hours — it was configured manually in the
+          dashboard with the old anon/service-role apikey and will
+          401 silently after the auth flip. Edit the schedule's
+          request URL to use `?apikey=<CQIP_SYNC_AUTH_KEY value>`
+          (or unschedule + reschedule). No code path in this repo
+          pins that schedule, so there's no migration to update.
 
 ### Recently completed (was pending, now done)
 - [x] Supabase project (ID: hupklpjruveleaahufmw)

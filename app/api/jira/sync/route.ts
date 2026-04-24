@@ -65,8 +65,15 @@ export async function POST() {
         JSON.stringify({ status: res.status, body: body.slice(0, 500) }),
       );
       const detail = body ? `: ${body.slice(0, 120)}` : '';
+      // 401 with our auth setup almost always means the Worker and
+      // Supabase secrets are out of sync. Give the admin a hint so they
+      // don't have to dig through logs to tell it apart from a missing
+      // secret on the Supabase side (which surfaces as a 5xx boot error).
+      const hint = res.status === 401
+        ? ' (auth mismatch — Worker and Supabase CQIP_SYNC_AUTH_KEY values likely differ)'
+        : '';
       return NextResponse.json(
-        { error: `Sync service returned ${res.status}${detail}` },
+        { error: `Sync service returned ${res.status}${detail}${hint}` },
         { status: 502 },
       );
     }
