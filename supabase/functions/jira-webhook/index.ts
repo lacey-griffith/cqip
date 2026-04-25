@@ -283,7 +283,11 @@ Deno.serve(async (request: Request) => {
     // Null brand_id rows are reconciled by scripts/backfill-milestones.ts.
     // See CLAUDE.md §13 rule 18.
     // -------------------------------------------------------------------
-    let milestoneCreated = false;
+    // Milestone outcome for the response body — surfaced in the Supabase
+    // Invocations tab so a single glance tells an admin whether a DCR
+    // transition actually landed a row. Default holds for any transition
+    // that doesn't target Dev Client Review.
+    let milestoneOutcome = 'skipped-not-applicable';
     if (statusChange.toString === 'Dev Client Review') {
       const { data: existing } = await supabase
         .from('test_milestones')
@@ -293,7 +297,9 @@ Deno.serve(async (request: Request) => {
         .eq('is_deleted', false)
         .maybeSingle();
 
-      if (!existing) {
+      if (existing) {
+        milestoneOutcome = 'skipped-duplicate';
+      } else {
         // Payload-first: the webhook payload already snapshots the
         // transition's fields, so skip the Jira round-trip when we can.
         let brandValue = extractBrand(
@@ -338,14 +344,18 @@ Deno.serve(async (request: Request) => {
           // expected to collide against idx_test_milestones_unique; log
           // and carry on so the rework branch still runs.
           console.warn('[jira-webhook] milestone insert failed', milestoneError.message);
+          milestoneOutcome = 'error-insert';
         } else {
-          milestoneCreated = true;
+          milestoneOutcome = brandId ? 'recorded' : 'recorded-no-brand';
         }
       }
     }
 
     if (!isValidTransition(statusChange.fromString, statusChange.toString)) {
-      return new Response(milestoneCreated ? 'Milestone recorded' : 'Invalid transition', { status: 200 });
+      return new Response(
+        `milestone: ${milestoneOutcome}; rework: skipped-not-applicable`,
+        { status: 200 },
+      );
     }
 
     const fullIssue = await getIssue(issue.key);
@@ -403,7 +413,10 @@ Deno.serve(async (request: Request) => {
         notes: 'Created via Jira webhook',
       });
 
-    return new Response('Log created', { status: 200 });
+    return new Response(
+      `milestone: ${milestoneOutcome}; rework: recorded`,
+      { status: 200 },
+    );
   } catch (error) {
     console.error('Webhook error:', error);
     return new Response('Internal server error', { status: 500 });
