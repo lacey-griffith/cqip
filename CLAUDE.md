@@ -13,9 +13,9 @@ here so they don't need to be re-explained.
 
 **Current deployed state:** Live at https://cqip.l-hay.workers.dev — Batches
 001, 001.5, 002 (Client Coverage), 002.5a/b (audit generalization), 003
-(branded exports + dashboard click-drill + sync diagnostics), and 003.5
-(CQIP_SYNC_AUTH_KEY decoupling) have shipped. See §16 for the full
-shipped-features log.
+(branded exports + dashboard click-drill + sync diagnostics), 003.5
+(CQIP_SYNC_AUTH_KEY decoupling), and 004.1 (milestone branch hardening)
+have shipped. See §16 for the full shipped-features log.
 
 ---
 
@@ -873,6 +873,21 @@ Resolved             → green-500
     (npm script) and writes a build manifest read by Settings → System.
     Do not regenerate manually outside of build.
 
+18. **Milestone creation is independent of brand resolution.** On a
+    `Dev Client Review` transition, the `test_milestones` row is ALWAYS
+    inserted. Brand resolution is best-effort and must never gate the
+    insert. Order of attempts for brand value:
+    (1) webhook payload's `customfield_12220`,
+    (2) `getIssue()` fallback (wrapped in its own try/catch),
+    (3) `null`.
+    Payload wins on conflict — it is the authoritative snapshot of the
+    transition that just happened, and matches the state Jira fired the
+    webhook from. Null `brand_id` rows are recoverable via
+    `scripts/backfill-milestones.ts`. Reason: losing the milestone fact
+    because an unrelated Jira call failed (token expiry, transient
+    outage) is unacceptable. Batch 004.1 hardening; incident
+    2026-04-24 NBLYCRO-1452.
+
 ---
 
 ## 14. What Is NOT In Scope for V1
@@ -1074,6 +1089,36 @@ rewrite with Jira QA tab guide.
   the edge-function runtime. Decoupling the handshake removes that
   failure mode permanently.
 
+### Batch 004.1 — Milestone branch hardening — 2026-04-24
+- **Incident driver:** on 2026-04-24 at 16:51:59, NBLYCRO-1452
+  transitioned `Dev QA → Dev Client Review` while the Supabase-side
+  `JIRA_API_TOKEN` was still the Apr 23-expired value. The milestone
+  branch's broad try/catch swallowed `getIssue()`'s 401, no row was
+  written, webhook returned 200 (via the rework-branch's
+  "Invalid transition" path). The rework transition 10m41s later
+  succeeded because the token was rotated in that window. Root-cause
+  audit: see §13 rule 18.
+- `supabase/functions/jira-webhook/index.ts`:
+  - New `resolveBrandId(brandValue)` helper — brands → brand_aliases
+    → null, centralized (also tidies the inline lookup duplication)
+  - Milestone branch rewritten: payload-first brand/summary;
+    `getIssue()` fallback wrapped in its own try/catch so a Jira
+    outage degrades to a null-brand milestone rather than dropping the
+    row entirely; the `test_milestones` INSERT now ALWAYS runs on a
+    DCR transition (barring active-duplicate)
+  - Response body surfaces both branch outcomes — format:
+    `milestone: <outcome>; rework: <outcome>`. Milestone outcomes:
+    `recorded`, `recorded-no-brand`, `skipped-duplicate`,
+    `error-insert`, `skipped-not-applicable`. Scannable from the
+    Supabase Invocations tab without opening Logs.
+- **Contract preserved:** milestone failure never blocks the rework
+  branch; status code stays 200 (Jira retries would duplicate).
+- CLAUDE.md §13 rule 18 added documenting milestone independence +
+  brand resolution order + payload-wins-on-conflict.
+- **Ops carry-over:** missing milestone for NBLYCRO-1452 backfilled
+  manually post-deploy via `scripts/backfill-milestones.ts`
+  (source = 'backfill', reached_at = 2026-04-24T21:51:59Z).
+
 ---
 
-*Last updated: 2026-04-24 | CQIP v1.3 — post Batches 002, 002.5, 003, 003.5*
+*Last updated: 2026-04-24 | CQIP v1.3.1 — post Batches 002, 002.5, 003, 003.5, 004.1*
