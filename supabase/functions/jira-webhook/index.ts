@@ -83,6 +83,29 @@ async function getIssue(issueKey: string) {
   return response.json();
 }
 
+// Resolve a Jira brand string to a brands.id. Canonical brands.jira_value
+// match wins; brand_aliases is the fallback. Returns null (and warns)
+// when neither matches — callers insert with brand_id = null and rely on
+// scripts/backfill-milestones.ts to reconcile.
+async function resolveBrandId(brandValue: string): Promise<string | null> {
+  const { data: brand } = await supabase
+    .from('brands')
+    .select('id')
+    .eq('jira_value', brandValue)
+    .maybeSingle();
+  if (brand?.id) return brand.id as string;
+
+  const { data: alias } = await supabase
+    .from('brand_aliases')
+    .select('brand_id')
+    .eq('jira_value', brandValue)
+    .maybeSingle();
+  if (alias?.brand_id) return alias.brand_id as string;
+
+  console.warn('[jira-webhook] milestone: no brand or alias match for', brandValue);
+  return null;
+}
+
 // -------------------------------------------------------------------------
 // Webhook payload + transition logic
 // -------------------------------------------------------------------------
@@ -252,6 +275,13 @@ Deno.serve(async (request: Request) => {
     // 'Dev Client Review'. Runs before the rework branch so a transition
     // that doesn't satisfy isValidTransition (e.g. In Development →
     // Dev Client Review) still creates a milestone.
+    //
+    // Design: the milestone fact is independent of brand resolution. A
+    // Jira outage or token issue must NOT drop the milestone row — the
+    // insert always runs on a Dev Client Review transition, with brand
+    // resolved best-effort: payload-first, getIssue fallback, then null.
+    // Null brand_id rows are reconciled by scripts/backfill-milestones.ts.
+    // See CLAUDE.md §13 rule 18.
     // -------------------------------------------------------------------
     let milestoneCreated = false;
     if (statusChange.toString === 'Dev Client Review') {
@@ -264,58 +294,52 @@ Deno.serve(async (request: Request) => {
         .maybeSingle();
 
       if (!existing) {
-        try {
-          const fullIssueForMilestone = await getIssue(issue.key);
-          const rawBrand = fullIssueForMilestone.fields[JIRA_FIELD_MAP.nbly_brand];
-          const brandValue = extractBrand(rawBrand, issue.key);
+        // Payload-first: the webhook payload already snapshots the
+        // transition's fields, so skip the Jira round-trip when we can.
+        let brandValue = extractBrand(
+          issue.fields?.[JIRA_FIELD_MAP.nbly_brand],
+          issue.key,
+        );
+        let jiraSummary: string | null = issue.fields?.summary ?? null;
 
-          let brandId: string | null = null;
-          if (brandValue) {
-            const { data: brand } = await supabase
-              .from('brands')
-              .select('id')
-              .eq('jira_value', brandValue)
-              .maybeSingle();
-            brandId = brand?.id ?? null;
-
-            // Fall back to aliases if no direct brand match. Historical
-            // Jira strings that predate the canonical names flow through
-            // brand_aliases so we don't have to rewrite tickets.
-            if (!brandId) {
-              const { data: alias } = await supabase
-                .from('brand_aliases')
-                .select('brand_id')
-                .eq('jira_value', brandValue)
-                .maybeSingle();
-              brandId = alias?.brand_id ?? null;
-            }
-
-            if (!brandId) {
-              console.warn('[jira-webhook] milestone: no brand or alias match for', brandValue);
-            }
+        // Fall back to getIssue ONLY when the payload didn't include the
+        // brand. Wrap only this API call so a Jira failure degrades to a
+        // null-brand milestone rather than skipping the milestone entirely.
+        if (!brandValue) {
+          try {
+            const fullIssue = await getIssue(issue.key);
+            brandValue = extractBrand(
+              fullIssue.fields?.[JIRA_FIELD_MAP.nbly_brand],
+              issue.key,
+            );
+            jiraSummary = fullIssue.fields?.summary ?? jiraSummary;
+          } catch (err) {
+            console.warn('[jira-webhook] milestone: getIssue fallback failed', err);
+            // Continue — brandValue stays null; we still insert below.
           }
+        }
 
-          const { error: milestoneError } = await supabase
-            .from('test_milestones')
-            .insert({
-              jira_ticket_id: issue.key,
-              jira_ticket_url: `${jiraBaseUrl}/browse/${issue.key}`,
-              jira_summary: fullIssueForMilestone.fields.summary,
-              brand_id: brandId,
-              brand_jira_value: brandValue,
-              source: 'webhook',
-              created_by: 'system',
-            });
-          if (milestoneError) {
-            // Duplicate inserts (race against another webhook delivery) are
-            // expected to collide against idx_test_milestones_unique; log
-            // and carry on so the rework branch still runs.
-            console.warn('[jira-webhook] milestone insert failed', milestoneError.message);
-          } else {
-            milestoneCreated = true;
-          }
-        } catch (milestoneErr) {
-          console.error('[jira-webhook] milestone branch error', milestoneErr);
+        const brandId = brandValue ? await resolveBrandId(brandValue) : null;
+
+        const { error: milestoneError } = await supabase
+          .from('test_milestones')
+          .insert({
+            jira_ticket_id: issue.key,
+            jira_ticket_url: `${jiraBaseUrl}/browse/${issue.key}`,
+            jira_summary: jiraSummary,
+            brand_id: brandId,
+            brand_jira_value: brandValue,
+            source: 'webhook',
+            created_by: 'system',
+          });
+
+        if (milestoneError) {
+          // Duplicate inserts (race against another webhook delivery) are
+          // expected to collide against idx_test_milestones_unique; log
+          // and carry on so the rework branch still runs.
+          console.warn('[jira-webhook] milestone insert failed', milestoneError.message);
+        } else {
+          milestoneCreated = true;
         }
       }
     }
