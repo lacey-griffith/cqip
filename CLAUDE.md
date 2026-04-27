@@ -1,6 +1,6 @@
 # CQIP — CRO Quality Intelligence Platform
 ## Claude Code Project Context File
-### Fusion92 | CRO Department | v1.3
+### Fusion92 | CRO Department | v1.5
 
 ---
 
@@ -11,11 +11,17 @@ starts here. Before writing any code, read this file completely. When in doubt a
 a decision, check this file before asking the user. All major decisions are recorded
 here so they don't need to be re-explained.
 
-**Current deployed state:** Live at https://cqip.l-hay.workers.dev — Batches
-001, 001.5, 002 (Client Coverage), 002.5a/b (audit generalization), 003
-(branded exports + dashboard click-drill + sync diagnostics), 003.5
-(CQIP_SYNC_AUTH_KEY decoupling), and 004.1 (milestone branch hardening)
-have shipped. See §16 for the full shipped-features log.
+**Current deployed state:** Live at https://cqip.l-hay.workers.dev.
+All Batch 001-002.5b features shipped. Recent shipped (April 2026):
+Batch 003 (branded exports + dashboard click-drill), Batch 003.5
+(CQIP_SYNC_AUTH_KEY decoupling), Batch 004.0 (pg_cron jira-sync
+setup), Batch 004.1 (milestone branch hardening), Batch 004.2
+(dependabot triage + xlsx removal), Batch 004.3 (audit-write security
+cleanup, Migration 014), Batch 004.4 (drought rule evaluator,
+Migration 015), Batch 004.5 (Brands QA-config extension, Migration
+013). All migrations 001-015 have run against production.
+Batch 004.4.5 produced a UX discovery plan for Coverage + Settings
+reorg (Batch 005 implementation). See §16 for full shipped log.
 
 ---
 
@@ -110,16 +116,29 @@ cqip/
 │   │       ├── coverage/        # Admin: pause/unpause brands, manage milestones (Batch 002)
 │   │       └── system/          # Admin: build stamp + system info (Batch 003)
 │   └── api/
-│       ├── admin/users/route.ts # Admin user create/manage (server-only)
-│       ├── logs/edit/route.ts   # Server-side edit endpoint
-│       └── jira/sync/route.ts   # Proxy to jira-sync edge function (forwards CQIP_SYNC_AUTH_KEY)
+│       ├── admin/
+│       │   ├── brands/
+│       │   │   ├── pause/route.ts          # Batch 004.3: server-side pause/unpause
+│       │   │   └── qa-config/route.ts      # Batch 004.5: brand QA config UPDATE
+│       │   ├── milestones/
+│       │   │   ├── route.ts                # Batch 004.3: create + restore-soft-deleted
+│       │   │   └── [id]/route.ts           # Batch 004.3: edit + soft-delete
+│       │   └── users/route.ts              # Admin user create/manage (server-only)
+│       ├── brands/
+│       │   ├── [projectKey]/[brandCode]/route.ts # Batch 004.5: Bearer-auth, single-brand read
+│       │   └── route.ts                    # Batch 004.5: Bearer-auth, list-by-project
+│       ├── logs/edit/route.ts              # Server-side edit endpoint
+│       └── jira/sync/route.ts              # Proxy to jira-sync edge function (forwards CQIP_SYNC_AUTH_KEY)
 │
 ├── components/
 │   ├── ui/                      # shadcn components + SplitButton (Batch 003)
 │   ├── charts/                  # Recharts wrappers
 │   ├── logs/                    # TicketLink, EditLogDialog, ConfirmDeleteDialog, MmiList,
 │   │                              LogDetailDrawer (Batch 003), three-dot action menu
-│   ├── coverage/                # BrandDetailDrawer, ManageMilestonesDialog, Sparkline (Batch 002)
+│   ├── coverage/                # BrandDetailDrawer, ManageMilestonesDialog, Sparkline (Batch 002),
+│   │                              EditBrandQaConfigDrawer (Batch 004.5 — sheet drawer for
+│   │                              editing per-brand QA-automation config; opens from
+│   │                              /dashboard/settings/coverage)
 │   ├── dashboard/               # KPI cards, ActiveAlertsPanel, SyncJiraButton, LogDrawer
 │   │                              (shared click-to-filter drawer, Batch 003)
 │   ├── reports/                 # Scorecard, RootCause, Client reports
@@ -136,6 +155,12 @@ cqip/
 │   │   └── field-map.ts         # Custom field ID mappings (see §7)
 │   ├── alerts/
 │   │   └── rules.ts             # Alert rule evaluation logic
+│   ├── audit/
+│   │   └── get-changed-by.ts    # Batch 004.3: canonical helper for server-side
+│   │                              `changed_by` derivation (see §13 rule 19)
+│   ├── api/
+│   │   └── bearer-auth.ts       # Batch 004.5: timing-safe Bearer compare for
+│   │                              /api/brands/* routes (CQIP_BRANDS_API_TOKEN)
 │   ├── easter-eggs/
 │   │   ├── use-konami-code.ts
 │   │   ├── use-loading-message.ts
@@ -143,7 +168,10 @@ cqip/
 │   └── utils.ts
 │
 ├── supabase/
-│   ├── config.toml
+│   ├── config.toml              # Custom-auth edge functions (jira-sync, jira-webhook,
+│   │                              drought-evaluator) must have verify_jwt = false set here —
+│   │                              Supabase gateway otherwise rejects non-JWT auth headers
+│   │                              before the function runs (see §13 rule 21).
 │   ├── migrations/              # All SQL migrations, numbered
 │   │   ├── 001_initial_schema.sql
 │   │   ├── 002_user_profile_updates.sql
@@ -159,8 +187,15 @@ cqip/
 │   │   │                                  + tm.brand_id backfill via aliases
 │   │   ├── 011_audit_log_generalize.sql # Batch 002.5b: nullable log_entry_id +
 │   │   │                                   target_type/target_id pair + shape CHECK
-│   │   └── 012_audit_log_admin_insert.sql # Batch 002.5b hotfix: admin INSERT policy
-│   │                                       on audit_log (append-only from client)
+│   │   ├── 012_audit_log_admin_insert.sql # Batch 002.5b hotfix: admin INSERT policy
+│   │   │                                    on audit_log (append-only from client)
+│   │   ├── 013_brand_qa_config.sql      # Batch 004.5: brands QA-automation columns
+│   │   │                                    + GUY/RBW seed + admin UPDATE RLS policy
+│   │   ├── 014_audit_log_security_cleanup.sql # Batch 004.3: audit_log_admin_insert
+│   │   │                                        rewritten to use public.is_admin()
+│   │   └── 015_alert_events_brand_id.sql # Batch 004.4: alert_events.brand_id +
+│   │                                        CHECK + indexes; audit_log target-shape
+│   │                                        CHECK extended to allow 'alert_event'
 │   └── functions/               # Deno Edge Functions
 │       ├── jira-webhook/index.ts       # Receives Jira webhook events. Two branches:
 │       │                                 (1) milestone branch — first-time entry into
@@ -169,6 +204,10 @@ cqip/
 │       │                                 quality_logs rows. Both run in the same invocation.
 │       ├── jira-sync/index.ts          # On-demand + scheduled sync of open logs.
 │       │                                 Validates inbound calls against CQIP_SYNC_AUTH_KEY.
+│       ├── drought-evaluator/index.ts  # Batch 004.4: daily cron-driven brand drought
+│       │                                 reconciler. Validates inbound calls against
+│       │                                 CQIP_DROUGHT_AUTH_KEY. verify_jwt=false in
+│       │                                 config.toml.
 │       └── radara-sweep/index.ts       # Radara's triage sweeps (not deployed yet)
 │
 ├── scripts/
@@ -213,6 +252,8 @@ TEAMS_WEBHOOK_URL=               # Incoming webhook URL for #cqip-alerts channel
 # App
 WEBHOOK_SECRET=                  # Random secret to validate Jira webhook payloads
 CQIP_SYNC_AUTH_KEY=              # Shared secret between Worker and jira-sync edge function. Can be any random string — generate with `openssl rand -hex 32`. Not a JWT.
+CQIP_BRANDS_API_TOKEN=           # Shared secret for the read-only /api/brands endpoints (consumed by the Forge QA-automation app). Same value must be set as an encrypted Forge variable on the Forge side. Generate with `openssl rand -hex 32`. Not a JWT.
+CQIP_DROUGHT_AUTH_KEY=           # Shared secret between the daily pg_cron job and the drought-evaluator edge function. Generate with `openssl rand -hex 32`. Not a JWT. Set on Supabase Edge Functions secrets only — Worker does not need this one.
 ```
 
 ### Where they're set
@@ -228,7 +269,7 @@ Committed to repo with all keys present but empty values.
 ## 5. Database Schema
 
 All tables in Supabase Postgres. UUIDs for all IDs. RLS enabled on all tables.
-Migrations 001–008 have all run against the production project.
+Migrations 001–015 have all run against the production project.
 
 ### quality_logs
 Primary table. One row = one rework event.
@@ -376,14 +417,35 @@ CREATE TABLE alert_events (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   rule_id             UUID NOT NULL REFERENCES alert_rules(id),
   log_entry_id        UUID REFERENCES quality_logs(id),
+  brand_id            UUID REFERENCES brands(id),    -- migration 015
   triggered_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   notification_sent   BOOLEAN NOT NULL DEFAULT FALSE,
-  resolved_at         TIMESTAMPTZ
+  resolved_at         TIMESTAMPTZ,
+  CONSTRAINT alert_events_target_required CHECK (    -- migration 015
+    log_entry_id IS NOT NULL OR brand_id IS NOT NULL
+  )
 );
+
+-- Migration 015 partial indexes:
+CREATE INDEX idx_alert_events_brand_open
+  ON alert_events(brand_id)
+  WHERE resolved_at IS NULL AND brand_id IS NOT NULL;
+
+CREATE UNIQUE INDEX idx_alert_events_one_open_per_brand_rule
+  ON alert_events(brand_id, rule_id)
+  WHERE resolved_at IS NULL AND brand_id IS NOT NULL;
 ```
 
-**Known gap:** alert rules evaluate and create `alert_events` rows, but Teams
-webhook dispatch is NOT wired. See §14 and §15.
+`brand_id` was added in migration 015 (Batch 004.4) to support
+brand-scoped alerts (the drought rule). Existing log-scoped alerts
+(severity, repeated-sendback, etc.) continue to use `log_entry_id` and
+leave `brand_id` NULL. The CHECK enforces "at least one scope set"; the
+unique partial index race-protects the drought evaluator's "INSERT new
+open alert" path.
+
+**Known gap:** the drought evaluator now writes `alert_events` rows on
+its daily run, but Teams webhook dispatch is still NOT wired — Teams
+POST will land in Batch 006. See §14 and §15.
 
 ### saved_reports
 
@@ -443,6 +505,48 @@ Seeded with 16 NBLY brands. MRR-CA is paused at seed time
 (migration 010) — no active tests. Admins can pause/unpause via
 `/dashboard/settings/coverage`.
 
+**QA automation config columns (migration 013 — Batch 004 brands extension):**
+The brands table also carries config consumed by an external Forge
+QA-automation app (separate repo). All columns nullable except the
+gate flag, which defaults to FALSE.
+
+```sql
+-- Added by migration 013 (idempotent ADD COLUMN IF NOT EXISTS):
+live_url_base                    TEXT
+                                 CHECK (live_url_base IS NULL OR (live_url_base LIKE 'https://%' AND live_url_base NOT LIKE '%/'))
+default_local_sub_areas          TEXT[]
+client_contact_name              TEXT
+client_contact_jira_account_id   TEXT
+url_pattern                      TEXT
+                                 CHECK (url_pattern IS NULL OR url_pattern IN ('convert-preview','live-qa'))
+qa_automation_enabled            BOOLEAN NOT NULL DEFAULT FALSE
+notes                            TEXT
+updated_at                       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+
+-- Partial index on the Forge consumer's hot path:
+CREATE INDEX idx_brands_qa_automation_enabled
+  ON brands(qa_automation_enabled) WHERE qa_automation_enabled = TRUE;
+```
+
+`qa_automation_enabled` gates API exposure: `/api/brands/*` returns 404
+for any row where it is FALSE, even if the row exists. GUY and RBW are
+seeded with `qa_automation_enabled = TRUE`, `url_pattern =
+'convert-preview'`, and a `live_url_base`. The remaining 14 NBLY
+brands stay at the FALSE default until Lacey enables them via the
+admin UI.
+
+The QA columns are edited from `/dashboard/settings/coverage` via the
+`EditBrandQaConfigDrawer`, which calls `PATCH /api/admin/brands/qa-config`.
+That route writes the brand row with the service role and emits one
+audit_log row per changed field with `target_type = 'brand'` and
+`changed_by` derived server-side from `auth.uid()` per §13 rule on
+audit-write attribution.
+
+`updated_at` has no trigger — none of the existing tables in this
+project use updated_at triggers, so the admin route sets it explicitly
+on UPDATE. Direct SQL UPDATEs that bypass the route will not bump
+`updated_at` automatically.
+
 ### brand_aliases (migration 010 — Batch 002)
 Maps historical Jira brand strings (e.g. `"MRR - Mr Rooter"` without
 "Plumbing") to canonical brands. Webhook + scripts resolve `brand_id`
@@ -500,7 +604,11 @@ Migration 011 made `log_entry_id` nullable, added a generic
 `(target_type, target_id)` pair, and a CHECK constraint that enforces:
 
 - `target_type = 'quality_log'` requires `log_entry_id IS NOT NULL`, OR
-- `target_type IN ('test_milestone','brand')` requires `target_id IS NOT NULL`
+- `target_type IN ('test_milestone','brand','alert_event')` requires `target_id IS NOT NULL`
+
+(Migration 015 added `'alert_event'` to the allowed list so the
+drought evaluator's start/end audit rows can reference an
+`alert_events.id`.)
 
 Legacy rows were back-filled with `target_type = 'quality_log'` and
 `target_id = log_entry_id`. Migration 012 added an admin-only INSERT
@@ -691,10 +799,10 @@ GET  /project                                   # List all projects
 ### Read-Only
 - Katy, Mark, Jacob, Randy, Zach
 
-All accounts created and have logged in at least once.
-
-**Account creation:** Admin-only. No self-registration. Supabase Auth handles
-username/password. Admin invites users from the Settings → Users panel.
+**All 7 accounts (2 admin + 5 read-only) are active and have logged in.**
+Account creation is admin-only via Settings → Users; no self-registration.
+Supabase Auth handles username/password under the hood; usernames map
+to `<username>@cqip.local` fake emails.
 
 ---
 
@@ -712,12 +820,18 @@ Seeded into alert_rules on first deploy.
 | Long-Running Open | aging | log_status IN ('Open','In Progress'), age >= 14 days |
 | Client Coverage Drought | frequency_pattern | scope = 'brand_coverage', threshold = 2, window_days = 28, skip_paused = true (seeded by migration 009) |
 
-All rules notify: `["teams", "in_app"]`. In-app works; Teams dispatch is not
-yet wired — `alert_events` rows are created but no Teams POST happens.
+All rules are configured to notify on `["teams", "in_app"]`. Neither
+channel is yet dispatching: Teams webhook POST and in-app Toaster
+pings are both Batch 006 work. Today, `alert_events` rows are written
+by the drought evaluator and persisted, but no notification fires.
 
-**Client Coverage Drought** rule is seeded but its evaluator is not yet
-wired in `lib/alerts/rules.ts`. The Coverage table surfaces drought
-visually today; the rule-engine path is planned for Batch 004.
+**Client Coverage Drought** now has a working daily evaluator at
+`supabase/functions/drought-evaluator/index.ts` (Batch 004.4). It
+writes `alert_events` rows when droughts begin and end. The Coverage
+table also surfaces drought visually at read-time. The other six
+alert rules (Critical Issue Open, High Severity Spike, Repeat Root
+Cause, Client Rework Spike, Repeated Sendback, Long-Running Open)
+do not yet have evaluators wired and remain on the Batch 005 backlog.
 
 ---
 
@@ -824,10 +938,10 @@ Resolved             → green-500
 8. **Log number is per-ticket.** Count non-deleted logs for the same
    jira_ticket_id to determine the next log_number.
 
-9. **Teams notifications** include: rule name, trigger reason, client brand,
-   project key, log ID, and a direct link to the CQIP log detail page.
-   Dispatch is NOT YET WIRED — alert_events rows are created but no Teams POST
-   happens. See §15.
+9. **Teams notifications** include: rule name, trigger reason, client
+   brand, project key, log ID, and a direct link to the CQIP log
+   detail page. Dispatch is not yet wired — `alert_events` rows are
+   created but no Teams POST happens. Planned for Batch 006.
 
 10. **Webhook security.** Validate incoming Jira webhooks against WEBHOOK_SECRET.
     Reject any request that fails validation with 401. Secret accepted via
@@ -856,10 +970,11 @@ Resolved             → green-500
     soft-deleted rows on re-add (does not insert a new row).
 
 15. **Audit writes for non-quality-log targets** must use
-    `target_type IN ('test_milestone','brand')` + `target_id`. The CHECK
-    constraint will reject half-specified rows. Browser-initiated audit
-    writes need the user to be admin (RLS policy from migration 012);
-    edge-function writes via service role bypass RLS.
+    `target_type IN ('test_milestone','brand','alert_event')` +
+    `target_id`. The CHECK constraint will reject half-specified rows.
+    Browser-initiated audit writes need the user to be admin (RLS
+    policy from migration 012); edge-function writes via service role
+    bypass RLS.
 
 16. **Sync auth uses CQIP_SYNC_AUTH_KEY, not the Supabase anon key.**
     Worker → jira-sync edge function handshake uses a custom shared
@@ -888,6 +1003,45 @@ Resolved             → green-500
     outage) is unacceptable. Batch 004.1 hardening; incident
     2026-04-24 NBLYCRO-1452.
 
+19. **Audit log writes derive `changed_by` from `auth.uid()`
+    server-side.** Client-supplied `changed_by` values are ignored,
+    universally — every audit-emitting route forwards a forensic
+    `console.warn` if a body key called `changed_by` is present, then
+    discards it. The canonical helper is `getChangedBy()` in
+    `lib/audit/get-changed-by.ts`: it resolves
+    `user_profiles.email` → `auth.users.email` → `'unknown'`, never
+    throws on missing-profile rows, and is the single source of truth
+    for every audit write. Direct browser inserts into `audit_log` are
+    prohibited; client mutations that need an audit row go through a
+    server route that calls `getChangedBy()` against a cookie-bound
+    Supabase client and then writes via the service-role client.
+
+20. **Cron-driven audit writes use
+    `changed_by = 'system:<cron-name>'`** as the documented exception
+    to rule 19. There is no `auth.uid()` in a scheduled-job context, so
+    deriving from the session would always fail. Instead, the cron
+    function uses a stable, identifiable string the audit page can
+    filter on. Currently in use:
+    - `system:drought-evaluator` — daily Brand Coverage Drought
+      reconciler (Batch 004.4). Also: paused brands are deliberately
+      not evaluated by this cron, so any open drought alert from
+      before a pause stays open until the brand is unpaused; this
+      preserves the audit trail of when each drought began. The
+      `jira-sync` auto-advance audit row also uses `changed_by =
+      'system'` (predates this rule); future cron-context writers
+      should follow the `'system:<cron-name>'` convention so they
+      remain distinguishable in `/dashboard/settings/audit` filters.
+
+21. **Edge functions with custom Bearer auth must set `verify_jwt = false`**
+    in `supabase/config.toml`. The Supabase gateway defaults to
+    `verify_jwt = true`, which means it tries to parse the
+    Authorization header as a Supabase-signed JWT and rejects any
+    non-JWT bearer (e.g., our hex shared secrets) with 401 before the
+    function runs. Affected: `jira-sync`, `jira-webhook`,
+    `drought-evaluator`. Any future function that validates a custom
+    shared secret (e.g., a future Teams-dispatch trigger) must add
+    this setting at deploy time.
+
 ---
 
 ## 14. What Is NOT In Scope for V1
@@ -901,82 +1055,126 @@ Resolved             → green-500
 - Mobile app
 
 ### Planned but not yet shipped
-- **Teams webhook dispatch** — in-app alerts fire, Teams POST does not.
-  Planned as Batch 005.
-- **Drought rule evaluator** — `Client Coverage Drought` is seeded in
-  `alert_rules` (migration 009) but `lib/alerts/rules.ts` has no
-  evaluator for `scope = 'brand_coverage'`. Planned as Batch 004.
-- **is_admin() consistency migration** — migrations 010 and 012 use
-  inline `EXISTS` lookups against `user_profiles` instead of
-  `public.is_admin()` (defined in migration 005). Planned migration 013
-  normalizes both to `public.is_admin()`. Batch 004.
-- **Server-side `changed_by` derivation** — current browser-initiated
-  audit writes trust the client-supplied `changed_by`. Planned Batch 004
-  security hardening: derive from `auth.uid()` on the server.
+- **Teams webhook dispatch** — Planned as Batch 006 (dedicated batch).
+  `alert_events` rows are now written (Batch 004.4); Teams POST, rate
+  limiting, retry, message cards, and test-mode toggle are all
+  Batch 006 scope.
 - **Token-expiry monitoring** — no alert when `JIRA_API_TOKEN` silently
   expires (prompted the 2026-04-23 incident). Planned Batch 005.
 - **Radara Edge Function deploy** — code is committed at
   `supabase/functions/radara-sweep/index.ts` but not deployed.
 
+### Identified for v1.5 (post-v1)
+- **Multi-client readiness** — extending CQIP from NBLY-only to support
+  arbitrary CRO clients without manual code changes per onboarding.
+  Batch 004.99 (post-Batch-004) is the discovery exercise that produces
+  the remediation plan.
+- **Test milestone count exclusion flag** — admin-set
+  `excluded_from_count` boolean with required reason; admin restore;
+  Coverage queries respect the flag. Tracked as Batch 5.8.
+
 ---
 
 ## 15. Pending / Active TODOs
 
-### Immediate (carry-over from Batch 003.5)
-- [ ] **Re-point the Supabase pg_cron job** that fires jira-sync every 6
-      hours. It was configured manually in the Supabase dashboard using
-      the old anon/service-role apikey and will 401 silently now that
-      the edge function validates `CQIP_SYNC_AUTH_KEY`. Edit the
-      schedule's request URL to use
-      `?apikey=<CQIP_SYNC_AUTH_KEY value>` (or unschedule + reschedule).
-      No code path in this repo pins that schedule, so there's no
-      migration to update.
+### Pre-demo / immediate
+(Empty — all demo-prep items shipped via Batch 004 series.)
 
-### Batch 004 (planned)
-- [ ] **Drought rule evaluator** — wire `scope = 'brand_coverage'` in
-      `lib/alerts/rules.ts` so the seeded Drought rule actually emits
-      `alert_events`. Coverage UI already surfaces drought visually.
-- [ ] **Server-side `changed_by` derivation** — derive from
-      `auth.uid()` on the server rather than trusting the client. Covers
-      audit_log writes for milestones + brands that currently pass
-      `changed_by` from the browser.
-- [ ] **migration 013 — `is_admin()` consistency** — rewrite RLS
-      policies in migrations 010 and 012 to use `public.is_admin()`
-      from migration 005 instead of inline `EXISTS` lookups. Pure
-      normalization; no behavior change.
+### Awaiting external action
+- [ ] **Forge consumer integration** — dashboard side of the brands
+      API is shipped; Forge app (separate repo, Atlassian Forge
+      platform) is drafting v0.0.4 spec. No production traffic on
+      `/api/brands/*` until Forge consumer goes live. Tracked
+      cross-project; not actionable on dashboard side.
+- [ ] **SharePoint integration** — Carl is configuring Azure
+      application registration with `Sites.Selected` scope on the
+      CRO site. Blocked on his timeline. Not actionable on
+      dashboard side until Azure is ready.
 
-### Batch 005 (planned)
-- [ ] **Teams alert dispatch** — biggest functional gap. Alert rules
-      evaluate and write `alert_events` but no Teams webhook POST.
-- [ ] **Jira token-expiry monitoring** — surface expiring tokens before
-      they silently break the webhook/sync paths (prompted by the
-      2026-04-23 silent-expiry incident).
+### Batch 004.99 (post-Batch-004) — Multi-Client Readiness Review
+Discovery batch. Identifies all NBLY-hardcoded assumptions in CQIP
+and produces a remediation plan. Doesn't ship code itself — produces
+a markdown report (similar to Batch 004.4.5).
+
+- [ ] Audit `JIRA_FIELD_MAP` for NBLY-specific fields (e.g.,
+      `nbly_brand`)
+- [ ] Audit jira-webhook JQL filter (currently `project = NBLYCRO`)
+- [ ] Audit brand extraction logic in jira-webhook (uses
+      `customfield_12220`, NBLY-specific)
+- [ ] Audit Coverage page filters/labels for hardcoded NBLY
+      assumptions
+- [ ] Audit CSV import script for NBLY-specific column mappings
+- [ ] Document onboarding playbook (how to add a new CRO client)
+- [ ] Document offboarding playbook (deactivate without losing
+      history)
+- [ ] Identify any UI labels/copy that say "NBLY"
+
+### Batch 005 (post-demo) — Backlog cleanup, scope-locked
+Strict rule: only items already in scope at lock time. No new
+additions.
+
+- [ ] **5.1 Coverage + Settings UX redesign** — implement per Batch
+      004.4.5 plan. Decision locked: tabs (Details / QA Config /
+      Milestones / Pause) inside a unified `BrandAdminDrawer`,
+      not multi-drawer. Phased: Phase 1+2 (admin actions to
+      Coverage) + Phase 3 (delete settings page). Phase 4 cosmetic
+      polish optional.
+- [ ] **5.2 Jira token-expiry monitoring** — Teams alert when Jira
+      API returns 401/404 from sync or webhook. Calendar-style
+      early warning. Prevents silent breakage like the 2026-04-23
+      token-expiry incident.
+- [ ] **5.3 Remove diagnostic `client_brand` warns** — jira-webhook
+      and jira-sync edge functions log warnings when client_brand
+      resolves to null. Was added during Batch 001 backfill
+      diagnostics. Has been clean for ~2 weeks; safe to remove.
+- [ ] **5.4 Brands soft-delete** — only if business need emerges.
+      Currently brands table uses hard delete.
+- [ ] **5.5 Investigate 12 mystery POSTs** — During 2026-04-24 sync
+      debugging, 12 unexpected webhook POSTs appeared in invocation
+      logs in a 3-min window. Likely Jira queue drain. If pattern
+      repeats, dig in. Otherwise mark resolved.
+- [ ] **5.6 webhook_events table** (maybe) — for richer diagnostics
+      on webhook failures. Per Jenny's review of Batch 004.1.
+      Skip if current diagnostics are sufficient.
+- [ ] **5.7 Jira-sync graceful 404 handling** — when sync hits a
+      deleted Jira ticket, currently errors and stops. Refactor to
+      catch 404 specifically, mark log Resolved with note
+      "Auto-resolved: Jira ticket deleted from project", continue
+      processing remaining logs.
+- [ ] **5.8 Test milestone count exclusion flag** — new
+      `excluded_from_count` boolean + `excluded_reason` text on
+      test_milestones; 3-dot menu in BrandDetailDrawer milestone
+      cards; Coverage queries filter excluded; EXCLUDED badge
+      with reason tooltip; restore action. Coordinate with
+      drought evaluator (excluded milestones don't count toward
+      drought threshold).
+
+### Batch 006 (post-demo) — Teams webhook dispatch (dedicated)
+Wires `alert_events` rows to actually fire Teams notifications.
+Until this batch ships, alerts accumulate silently in the database.
+
+- [ ] Dispatch service (edge function or server route)
+- [ ] Rate limiting
+- [ ] Retry with exponential backoff
+- [ ] Adaptive Card / message card formatting per rule type
+- [ ] Test mode toggle in Settings → Alerts
+- [ ] Mark `notification_sent = TRUE` on success
+- [ ] Detect 401/403 from Teams webhook (rotation grace handling)
 
 ### Ops / deferred
-- [ ] **Radara Edge Function deploy** — run
-      `npx supabase functions deploy radara-sweep` when ready.
-- [ ] **Jira QA-tab clear automation** — configure in Jira UI as an
+- [ ] **Radara Edge Function deploy** — code committed at
+      `supabase/functions/radara-sweep/index.ts` but not deployed.
+- [ ] **Jira QA-tab clear automation** — configure as Jira UI
       Automation rule when ticket enters Dev Client Review.
-- [ ] **Remove diagnostic `client_brand` warn blocks** from jira-webhook
-      and jira-sync edge functions after the Batch 001 backfill
-      stabilizes.
+      Manual config; CQIP stays read-only against Jira.
 
-### Recently completed (was pending, now done)
-- [x] Supabase project (ID: hupklpjruveleaahufmw)
-- [x] Cloudflare Worker deploy + all secrets set
-- [x] `nbly_brand` Jira field ID confirmed as `customfield_12220`
-- [x] Team user accounts created (Lacey, Xandor, Katy, Mark, Jacob, Randy, Zach)
-- [x] Jira webhook registered
-- [x] Jira sync cron scheduled (pg_cron re-point still pending — see above)
-- [x] **Client Coverage** shipped (Batch 002) — brands, aliases,
-      milestones, paused brands, drought flag, sparklines, detail
-      drawer, admin milestone management, XLSX/CSV export
-- [x] **Audit log generalized** (Batch 002.5a/b) — non-quality-log
-      mutations now write audit rows; admin INSERT policy on audit_log
-- [x] **Branded XLSX + CSV** (Batch 003) — xlsx-js-style for F92
-      styling; SplitButton for reports export
-- [x] **CQIP_SYNC_AUTH_KEY** (Batch 003.5) — Worker → jira-sync
-      handshake decoupled from Supabase-managed key rotations
+### Randy items (Cloudflare org-level — when he's back)
+- [ ] Cloudflare Workers Paid billing transfer (currently Lacey
+      personal card)
+- [ ] Worker ownership transfer to F92 Cloudflare org
+- [ ] Demo date confirmation (Sammy's slot, otherwise next week)
+- [ ] CQIP success metrics check-in
+- [ ] Guest account setup for demo
 
 ---
 
@@ -1089,6 +1287,14 @@ rewrite with Jira QA tab guide.
   the edge-function runtime. Decoupling the handshake removes that
   failure mode permanently.
 
+### Batch 004.0 — pg_cron jira-sync — 2026-04-26
+Created the Supabase pg_cron job (`jira-sync-6h`) that fires the
+`jira-sync` edge function every 6 hours. Configured via the
+Supabase dashboard; includes the Bearer Authorization header for
+CQIP_SYNC_AUTH_KEY. Replaced the old anon-apikey-based scheduling
+that became invalid post-CQIP_SYNC_AUTH_KEY decoupling
+(Batch 003.5). No code change — operational config only.
+
 ### Batch 004.1 — Milestone branch hardening — 2026-04-24
 - **Incident driver:** on 2026-04-24 at 16:51:59, NBLYCRO-1452
   transitioned `Dev QA → Dev Client Review` while the Supabase-side
@@ -1119,6 +1325,206 @@ rewrite with Jira QA tab guide.
   manually post-deploy via `scripts/backfill-milestones.ts`
   (source = 'backfill', reached_at = 2026-04-24T21:51:59Z).
 
+### Batch 004.2 — Dependabot triage — 2026-04-26
+- **xlsx package removed.** SheetJS pulled the npm package; high-CVE
+  vulnerabilities had no fix path. Verified unused in the codebase
+  (was listed in package.json but never imported). `npm uninstall
+  xlsx`.
+- **fast-xml-parser auto-fixed** via `npm audit fix`; transitive dep
+  of an existing build tool.
+- **postcss CVE deferred** — flagged but not exploitable in CQIP
+  context. Requires breaking Next.js downgrade. Tracked but no
+  action.
+- **Cloudflare Workers Paid plan** — separate context: after Batch
+  003 added xlsx-js-style, CQIP hit the 3MiB free-tier ceiling on
+  deploys. Lacey upgraded to Paid plan on personal card; F92
+  billing transfer pending Randy.
+
+### Batch 004.3 — Audit-write security cleanup — 2026-04-26
+Two existing-tech-debt fixes bundled. Sets a clean baseline before
+Batch 004.4 (drought evaluator) starts emitting audit rows of its own.
+- **Migration 014 — `014_audit_log_security_cleanup.sql`** drops and
+  recreates the `audit_log_admin_insert` policy from migration 012 to
+  use `public.is_admin()` instead of an inline `EXISTS` lookup against
+  `user_profiles`. The helper additionally enforces
+  `is_active = TRUE`, which the inline version did not — so a
+  deactivated admin can no longer INSERT into `audit_log`. Originally
+  planned as migration 013; that number was claimed by
+  `013_brand_qa_config` first, so this migration takes 014. No other
+  RLS policies touched.
+- **`lib/audit/get-changed-by.ts`** — single canonical helper used by
+  every audit-emitting route. Returns
+  `user_profiles.email → auth.users.email → 'unknown'`; never throws
+  on missing-profile rows. Pass the cookie-bound client
+  (`createSupabaseRouteClient`); service-role clients return null
+  from `auth.getUser()` and would be useless here.
+- **Server-side `changed_by` retrofit completed for every audit
+  writer:**
+  - `app/api/admin/brands/qa-config/route.ts` — refactored from inline
+    derivation to `getChangedBy()`. Already followed the rule; just
+    points at the helper now.
+  - `app/api/logs/edit/route.ts` (POST + DELETE branches, single + batch
+    delete) — was using `display_name || email || id`. Now uses the
+    helper, so audit rows display the email consistently across all
+    sources. Note: existing audit rows written by this route before
+    the cutover still show display names; new rows show emails.
+  - `app/api/admin/brands/pause/route.ts` (NEW) — replaces the
+    client-side `supabase.from('audit_log').insert(...)` that lived
+    inside `togglePause` on `/dashboard/settings/coverage`.
+  - `app/api/admin/milestones/route.ts` (NEW) — POST handles both
+    create and restore-of-soft-deleted (the duplicate-detection
+    SELECT stays client-side; only the mutation moves server-side).
+  - `app/api/admin/milestones/[id]/route.ts` (NEW) — PATCH (edit
+    `reached_at` + `notes`) and DELETE (soft-delete).
+  - Each route forwards a `console.warn` with the attempted
+    `changed_by` value + `auth.uid()` if a client passes one in the
+    body, then discards it. Useful for forensics if a stale browser
+    bundle is still in the wild after deploy.
+- **Client-side dialogs refactored** to call the new server routes.
+  `components/coverage/manage-milestones-dialog.tsx` no longer takes
+  `currentUserEmail` (the prop is gone), and the parent settings page
+  no longer tracks `userEmail` state. `togglePause` in
+  `app/dashboard/settings/coverage/page.tsx` posts to the pause route
+  instead of writing to `brands` and `audit_log` directly.
+- **§13 rule 19 wording tightened** — was forward-looking when added
+  in the QA-config branch; now states the rule is universally enforced
+  and points at the canonical helper.
+- **§14 `Planned but not yet shipped`** — removed the `is_admin()`
+  consistency and `changed_by` derivation entries; both shipped here.
+- **§15 Batch 004 list** — removed those two items; only the drought
+  evaluator remains.
+
+### Batch 004.4 — Drought rule evaluator — 2026-04-27
+The seeded "Client Coverage Drought" rule was visible-only on the
+Coverage page; it never wrote `alert_events` rows. Batch 004.4 wires
+the daily evaluator + persistence so droughts are now recorded as
+they begin and end. Unblocks Batch 006 (Teams dispatch), which will
+read from `alert_events`.
+- **Migration 015 — `015_alert_events_brand_id.sql`**:
+  - Adds `alert_events.brand_id UUID REFERENCES brands(id)` (nullable)
+    so events can be brand-scoped instead of log-scoped.
+  - `alert_events_target_required` CHECK enforces that at least one
+    of `log_entry_id` or `brand_id` is set — keeps existing log-scoped
+    rows valid while admitting brand-scoped drought rows.
+  - Partial index `idx_alert_events_brand_open` for the per-brand
+    open-alert lookup.
+  - Partial unique index `idx_alert_events_one_open_per_brand_rule`
+    on `(brand_id, rule_id) WHERE resolved_at IS NULL` — race-protects
+    the "INSERT new open alert" path. The drought evaluator catches
+    23505 from this index and treats it as case-2 no-op.
+  - Extends `audit_log_target_shape_chk` (originally migration 011)
+    to allow `target_type='alert_event'` so the start/end audit rows
+    pass the constraint. `target_id` references the
+    `alert_events.id`.
+- **`supabase/functions/drought-evaluator/index.ts`** (new edge fn):
+  - Daily at 10:00 UTC (5am Central / 4pm Vietnam end-of-day) so the
+    VN team's late-day milestone pushes are captured before the
+    evaluator fires.
+  - Auth pattern mirrors `jira-sync`: Bearer header / `apikey`
+    header / `?apikey` query param, all timing-safe-compared against
+    `CQIP_DROUGHT_AUTH_KEY`.
+  - Reads threshold + window from `alert_rules.config` (so admin
+    tweaks land without redeploys); falls back to documented defaults
+    `threshold=2`, `window_days=28`.
+  - 4-case reconciler per brand:
+    1. drought + no open alert → INSERT (audit: CREATE
+       `target_type='alert_event'`, `changed_by='system:drought-evaluator'`)
+    2. drought + open alert → no-op
+    3. healthy + no open alert → no-op
+    4. healthy + open alert → UPDATE `resolved_at` (audit: UPDATE
+       `field_name='resolved_at'`, same `changed_by`)
+  - Per-brand try/catch isolates errors so one bad brand doesn't
+    abort the loop; errors counter surfaces in the response summary.
+  - 28-day cutoff is computed once at the top of the request as
+    `Date.now() - windowDays*86400000` and reused for every brand
+    to prevent drift across the loop.
+  - Returns `{ evaluated, droughts_started, droughts_ended,
+    skipped_paused, errors }` for log scannability.
+  - Multiple active rule rows → warns and uses the earliest. Zero
+    active rule rows → returns 200 with `{ skipped: true, reason }`
+    so an admin can intentionally disable the rule without 500-ing
+    cron.
+  - Paused brands are deliberately skipped. Their pre-pause open
+    alerts (if any) stay open — preserves the audit trail of when
+    each drought began. Documented as part of §13 rule 20.
+- **§13 rule 20 added** — cron-context audit writes use
+  `changed_by = 'system:<cron-name>'` as the documented exception
+  to rule 19's `auth.uid()`-derivation. First and currently only
+  user: `system:drought-evaluator`.
+- **§4 / `.env.example`** — `CQIP_DROUGHT_AUTH_KEY`. Supabase Edge
+  Functions secret only; the Worker does not need this one.
+- **§5 schema doc** updated with the new `alert_events.brand_id`
+  column, both partial indexes, the CHECK constraint, and the
+  expanded audit_log target-type list.
+- **Spec deviation flagged in code comments:** the prompt referred to
+  the rule as "Brand Coverage Drought"; the seeded row from migration
+  009 is `'Client Coverage Drought'`. The function uses the seeded
+  name (otherwise step 3 would never find the rule); the Batch 004.4
+  spec language was colloquial.
+
+### Batch 004.5 — Brands QA-config extension — 2026-04-26
+- **Migration 013 — `013_brand_qa_config.sql`** extends the existing
+  `brands` table with QA-automation config columns: `live_url_base`
+  (https-with-no-trailing-slash CHECK), `default_local_sub_areas`
+  (TEXT[]), `client_contact_name`, `client_contact_jira_account_id`,
+  `url_pattern` (CHECK in `convert-preview` | `live-qa`),
+  `qa_automation_enabled` (NOT NULL DEFAULT FALSE — gates API
+  exposure), `notes`, `updated_at`. Partial index on
+  `qa_automation_enabled = TRUE`. New admin-only UPDATE RLS policy
+  using `public.is_admin()` (additive — does not modify the existing
+  `brands_admin_write` policy from migration 009).
+- **Seed:** GUY and RBW UPDATEd to `qa_automation_enabled = TRUE`,
+  `url_pattern = 'convert-preview'`, with their respective
+  `live_url_base` (groundsguys.com / rainbowrestores.com). The other
+  14 NBLY brands are untouched and stay at the FALSE default.
+- **Admin UI:** `/dashboard/settings/coverage` extended with a "QA
+  Automation Config" card that lists every brand and opens an "Edit
+  QA Config" side drawer per brand (`EditBrandQaConfigDrawer`,
+  matching the existing `BrandDetailDrawer` Sheet pattern). Save
+  posts to `PATCH /api/admin/brands/qa-config`.
+- **Admin route:** `app/api/admin/brands/qa-config/route.ts`. Validates
+  admin session, fetches the current row, computes per-field diffs,
+  UPDATEs the brand with the changed columns + `updated_at = NOW()`,
+  and emits one `audit_log` row per changed field with
+  `target_type = 'brand'`. **First call site to follow §13 rule 19:**
+  `changed_by` is derived server-side from `user_profiles.email`
+  (looked up via `auth.uid()`); any client-supplied `changed_by` in
+  the request body is ignored.
+- **Public read API for the Forge QA-automation app:**
+  - `GET /api/brands/[projectKey]/[brandCode]` — single brand or 404.
+    Returns 404 (not 403) for QA-disabled rows.
+  - `GET /api/brands?projectKey=X` — list of QA-enabled brands.
+  - Both validated with `Authorization: Bearer <CQIP_BRANDS_API_TOKEN>`
+    via timing-safe compare (`lib/api/bearer-auth.ts`, `node:crypto`
+    `timingSafeEqual`). Path params validated as `^[A-Z0-9-]{1,32}$`
+    (allowing hyphens to keep MRR-CA queryable, even though MRR-CA is
+    paused/QA-disabled today).
+  - Response shape: `{ brand_code, project_key, display_name,
+    live_url_base, default_local_sub_areas, client_contact_name,
+    client_contact_jira_account_id, url_pattern, notes }`. No
+    internal IDs, no coverage fields, no pause state. Read-only — no
+    POST/PATCH/DELETE on these endpoints.
+- **New env var:** `CQIP_BRANDS_API_TOKEN` — shared secret for the
+  Forge integration. Documented in §4 + `.env.example`. Mirrors the
+  `CQIP_SYNC_AUTH_KEY` pattern: must be set on the Cloudflare Worker
+  via `wrangler secret put` and on the Forge side as an encrypted
+  Forge variable, with matching values.
+- **§13 rule 19 added:** audit log writes derive `changed_by` from
+  `auth.uid()` server-side. The brand QA-config route is the first
+  call site that follows it; the milestone + pause/unpause call
+  sites were retrofitted in Batch 004.3.
+- **Schema doc (§5)** updated with the new `brands` columns + the
+  `qa_automation_enabled` exposure rule + the no-trigger
+  `updated_at` convention.
+- **Coverage page redesign deferred** — KPI consolidation, padding
+  cleanup, and header-section moves for `/dashboard/coverage` were
+  intentionally NOT bundled into this branch. Tracked as Batch 005
+  item 5.1 in §15.
+- **Note on chronological vs batch-number ordering:** 004.5 shipped
+  on 2026-04-26 (calendar-prior to 004.3), but the Shipped Log is
+  ordered by batch number, not calendar date.
+
 ---
 
-*Last updated: 2026-04-24 | CQIP v1.3.1 — post Batches 002, 002.5, 003, 003.5, 004.1*
+*Last updated: 2026-04-27 | CQIP v1.5 — comprehensive sync after
+Batches 004.0, 004.1, 004.2, 004.3, 004.4, 004.5*
