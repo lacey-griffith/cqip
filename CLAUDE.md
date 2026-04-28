@@ -20,10 +20,12 @@ setup), Batch 004.1 (milestone branch hardening), Batch 004.2
 cleanup, Migration 014), Batch 004.4 (drought rule evaluator,
 Migration 015), Batch 004.5 (Brands QA-config extension, Migration
 013), Batch 004.6 (pre-demo security batch, Migration 016 — pending
-manual run). All migrations 001-015 have run against production;
-016 lands separately ahead of the Tue May 5 demo. Batch 004.4.5
-produced a UX discovery plan for Coverage + Settings reorg (Batch
-005 implementation). See §16 for full shipped log.
+manual run), Batch 004.7 (active alerts panel — brand-scoped render
+path, fixes drought-event TypeError). All migrations 001-015 have
+run against production; 016 lands separately ahead of the Tue May 5
+demo. Batch 004.4.5 produced a UX discovery plan for Coverage +
+Settings reorg (Batch 005 implementation). See §16 for full shipped
+log.
 
 ---
 
@@ -1086,6 +1088,28 @@ Resolved             → green-500
     (theme, avatar, color) continue to use the existing self-update
     RLS policy.
 
+23. **CLAUDE.md is updated atomically with every ship.** Every batch
+    that touches code, schema, or behavior must include CLAUDE.md
+    updates in the same commit:
+    - Header "Current deployed state" line — append the new batch.
+    - §5 schema doc — any new table, column, RLS policy, trigger.
+    - §13 — new business rule if behavior changed.
+    - §15 — remove anything that just shipped from Pending; add new
+      backlog items.
+    - §16 — new batch entry with date, what shipped, why.
+    - Footer date stamp; version bump only on structural changes.
+
+    **Why:** drift compounds. Future Claude Code sessions reading
+    CLAUDE.md must trust it as ground truth, which only works if it
+    stays current. A doc that's "mostly right" stops being load-bearing
+    fast — the cost of catching up after several batches is much higher
+    than the cost of a few CLAUDE.md edits per batch. **How to apply:**
+    when assembling a commit, treat CLAUDE.md as part of the change
+    set. If a batch ships without doc updates because nothing
+    structural changed, say so explicitly in the commit message
+    ("docs: no CLAUDE.md update — refactor only") so the omission is
+    intentional, not forgotten.
+
 ---
 
 ## 14. What Is NOT In Scope for V1
@@ -1192,6 +1216,20 @@ additions.
       with reason tooltip; restore action. Coordinate with
       drought evaluator (excluded milestones don't count toward
       drought threshold).
+- [ ] **5.12 `alert_events.context jsonb` for runtime snapshots** —
+      add a `context jsonb` column on `alert_events`, written by
+      evaluators at alert creation time with the human-readable
+      snapshot they computed (e.g. `{"summary": "MRR has 2
+      milestones in last 28 days", "count": 2, "threshold": 2,
+      "window_days": 28}`). Lets dashboard cards render truthful
+      runtime context (e.g., "has 2 milestones") without N+1
+      queries to recompute counts at render time. Schema change +
+      drought evaluator update + pattern docs for future
+      evaluators (Critical Issue Open, Repeat Root Cause, etc.).
+      Tracked from the Batch 004.7 sketch — same-day scope was
+      threshold-only rendering off `alert_rules.config`, which is
+      accurate but doesn't match the runtime count the evaluator
+      saw. Decided not worth same-day for the cosmetic improvement.
 
 ### Batch 006 (post-demo) — Teams webhook dispatch (dedicated)
 Wires `alert_events` rows to actually fire Teams notifications.
@@ -1506,6 +1544,73 @@ read from `alert_events`.
   name (otherwise step 3 would never find the rule); the Batch 004.4
   spec language was colloquial.
 
+### Batch 004.7 — Active alerts panel: brand-scoped render path — 2026-04-28
+Same-day fix: dashboard was crashing on load with
+`TypeError: Cannot read properties of null (reading '0')`. The
+`ActiveAlertsPanel` query joins `alert_events` to `quality_logs`,
+and Batch 004.4 (drought evaluator, 2026-04-27) started writing
+brand-scoped alert rows where `log_entry_id IS NULL` — supabase-js
+returned `null` for the related `quality_logs` field on those rows,
+and the existing `alert.quality_logs[0]?.field` access threw on
+`null[0]`. Seven such rows existed in production at fix time.
+- **`components/dashboard/active-alerts-panel.tsx`**:
+  - **Relation-shape normalization.** A first cut of the fix replaced
+    `quality_logs[0]?.x` with `quality_logs?.[0]?.x` on the
+    assumption that supabase-js returns embedded relations as arrays.
+    It crashed less but rendered every drought card with a generic
+    `'Alert'` header and no brand info — because supabase-js v2
+    actually returns embedded relations as **single objects** when
+    the FK targets a unique column (e.g. `rule_id → alert_rules.id`,
+    `brand_id → brands.id`, `log_entry_id → quality_logs.id`), and
+    `obj[0]` is `undefined`. The shipped fix introduces a
+    `pickFirst<T>(rel: T | T[] | null | undefined): T | undefined`
+    helper that handles all four shapes uniformly. Render code reads
+    one `rule = pickFirst(alert.alert_rules)`, etc., and stays
+    shape-agnostic.
+  - **Query extended** to fetch `brand_id` + a `brands(id, brand_code,
+    display_name)` relation so brand-scoped rows have a render target.
+  - **`isBrandScoped` branch** keyed on
+    `alert.log_entry_id == null && alert.brand_id != null` — the
+    FK on alert_events is the source of truth, not the joined data
+    shape (protects against a stale brand row or a deleted log).
+  - **Brand-scoped card layout**:
+        Client Coverage Drought • Mr. Rooter Plumbing (MRR)
+        Fewer than 2 milestones in last 28 days · 4h ago
+        Brand: MRR
+        View coverage →
+    Threshold + window pulled from `alert_rules.config` with the
+    same documented defaults (threshold=2, window_days=28) that the
+    drought evaluator uses. Severity badge suppressed for brand
+    rows (drought has no severity).
+  - **Log-scoped path** unchanged in spirit — still ticket id,
+    summary, severity badge, client / project chips, and a
+    `View Details →` link to `/dashboard/logs/${log_entry_id}`.
+  - **Hover contrast fix.** Card bg goes `warm → white` on hover;
+    the orange link kept its base color and lost contrast against
+    the lighter background because the link's own `hover:` modifier
+    only fires when the cursor is on the *link*, not the card. Card
+    wrapper gets a `group` class; both link variants get
+    `group-hover:text-[color:var(--f92-navy)]` alongside the
+    existing `hover:` rule. Either trigger now darkens the link.
+- **No schema changes.** No drought-evaluator changes. Strictly a
+  render-layer fix.
+- **Why threshold-only and not "has 2 milestones":** the
+  human-readable runtime count lives in `audit_log.notes` (written
+  by the drought evaluator at alert creation), not on
+  `alert_events`. Showing the live count truthfully would require
+  either an N+1 re-query of `test_milestones` per card or
+  string-parsing audit notes. Both rejected for same-day scope —
+  the threshold-and-window phrasing is accurate without either.
+  Cosmetic improvement queued as Batch 005 item 5.12
+  (`alert_events.context jsonb`).
+- **Lesson worth keeping:** any future supabase-js query that uses
+  embedded relations on FK-to-unique-column links should assume the
+  related data comes back as `T | null`, not `T[]`. If both shapes
+  are possible across the same field (e.g., a hand-written cast that
+  used to be array-shaped), use `pickFirst()` or equivalent.
+  Considered codifying as §13 rule 24 — deferred until a second
+  callsite needs it; one-shot in this file for now.
+
 ### Batch 004.6 — Pre-demo security batch — 2026-04-28
 Bundles three RLS-layer fixes from the 2026-04-28 read-only
 permissions review (Findings 1, 5, 11). All three land atomically
@@ -1635,4 +1740,4 @@ demo blocker.
 ---
 
 *Last updated: 2026-04-28 | CQIP v1.5 — comprehensive sync after
-Batches 004.0, 004.1, 004.2, 004.3, 004.4, 004.5, 004.6*
+Batches 004.0, 004.1, 004.2, 004.3, 004.4, 004.5, 004.6, 004.7*
