@@ -19,9 +19,11 @@ setup), Batch 004.1 (milestone branch hardening), Batch 004.2
 (dependabot triage + xlsx removal), Batch 004.3 (audit-write security
 cleanup, Migration 014), Batch 004.4 (drought rule evaluator,
 Migration 015), Batch 004.5 (Brands QA-config extension, Migration
-013). All migrations 001-015 have run against production.
-Batch 004.4.5 produced a UX discovery plan for Coverage + Settings
-reorg (Batch 005 implementation). See §16 for full shipped log.
+013), Batch 004.6 (pre-demo security batch, Migration 016 — pending
+manual run). All migrations 001-015 have run against production;
+016 lands separately ahead of the Tue May 5 demo. Batch 004.4.5
+produced a UX discovery plan for Coverage + Settings reorg (Batch
+005 implementation). See §16 for full shipped log.
 
 ---
 
@@ -352,6 +354,15 @@ CREATE INDEX idx_audit_log_entry ON audit_log(log_entry_id);
 CREATE INDEX idx_audit_log_changed_at ON audit_log(changed_at DESC);
 ```
 
+**RLS posture as of migration 016 (Batch 004.6):**
+- SELECT — `audit_log_select_admin` (admins only). Rename of the
+  previous `audit_log_select_all`; tightened so a read-only user
+  cannot exfiltrate `changed_by` emails via direct supabase-js.
+- INSERT / UPDATE / DELETE — no policy for `authenticated`. Every
+  audit row is written by a server route using the service role
+  (bypasses RLS); the migration-012/014 admin INSERT policy was
+  dropped as vestigial. Append-only contract preserved.
+
 ### projects
 Active and inactive Jira projects being monitored.
 
@@ -391,6 +402,16 @@ CREATE TABLE user_profiles (
   avatar_url          TEXT        -- profile photo URL (Supabase Storage)
 );
 ```
+
+**`role` and `is_active` are trigger-protected** (migration 016, Batch
+004.6). A `BEFORE UPDATE OF role, is_active` trigger raises
+`insufficient_privilege` when `auth.uid()` is set and the caller is
+not an admin, even if RLS would otherwise permit the row update. The
+existing `user_profiles_self_update` policy (migration 005) is still
+row-level only, so the trigger is the sole defense against a read-only
+user mutating their own role / is_active via supabase-js. Service-role
+calls (auth.uid() IS NULL) bypass the trigger so `/api/admin/users`
+can still toggle these columns. See §13 rule 22.
 
 ### alert_rules
 
@@ -1042,6 +1063,29 @@ Resolved             → green-500
     shared secret (e.g., a future Teams-dispatch trigger) must add
     this setting at deploy time.
 
+22. **`user_profiles.role` and `user_profiles.is_active` are
+    trigger-protected; cron / service-role writers bypass via the
+    `auth.uid() IS NOT NULL` guard.** Migration 016 (Batch 004.6)
+    adds a `BEFORE UPDATE OF role, is_active` trigger on
+    `user_profiles` that raises `insufficient_privilege` when the
+    caller has `auth.uid()` set and is not an admin. This closes the
+    privilege-escalation hole left by the row-level
+    `user_profiles_self_update` RLS policy (migration 005), which
+    cannot constrain individual columns and would otherwise let a
+    read-only user run
+    `supabase.from('user_profiles').update({ role: 'admin' })` from
+    dev tools. **Why:** RLS is the wire-level guard for normal
+    callers; the trigger is the column-level guard that RLS can't
+    express; the `auth.uid() IS NOT NULL` check carves out service-role
+    writers (no auth.uid() in that context) so `/api/admin/users` can
+    still toggle these columns via `supabaseAdmin`. **How to apply:**
+    Any future code that toggles `role` or `is_active` from the
+    browser must go through a server route that uses the service
+    role; cookie-bound clients will hit the trigger. The trigger is
+    intentionally tight — only those two columns; benign self-updates
+    (theme, avatar, color) continue to use the existing self-update
+    RLS policy.
+
 ---
 
 ## 14. What Is NOT In Scope for V1
@@ -1462,6 +1506,70 @@ read from `alert_events`.
   name (otherwise step 3 would never find the rule); the Batch 004.4
   spec language was colloquial.
 
+### Batch 004.6 — Pre-demo security batch — 2026-04-28
+Bundles three RLS-layer fixes from the 2026-04-28 read-only
+permissions review (Findings 1, 5, 11). All three land atomically
+in one migration because they're related cleanup on the same
+surface, and because a Tue May 5 demo is handing out a read-only
+guest credential — the privilege-escalation fix in particular is a
+demo blocker.
+- **Migration 016 — `016_pre_demo_security.sql`**:
+  - **Finding 1 fix — BEFORE UPDATE trigger on `user_profiles`.** New
+    function `public.user_profiles_protect_privileged_columns()`
+    (plpgsql, SECURITY INVOKER) wired to a
+    `BEFORE UPDATE OF role, is_active` trigger. Raises
+    `insufficient_privilege` when `auth.uid()` is set and the caller
+    is not an admin. Closes the hole where a read-only user could run
+    `supabase.from('user_profiles').update({ role: 'admin' })` from
+    dev tools — the existing `user_profiles_self_update` RLS policy
+    (migration 005) is row-level only and cannot constrain individual
+    columns. The `auth.uid() IS NOT NULL` guard is critical: it lets
+    service-role writers (used by `/api/admin/users`) through so
+    legitimate admin role / deactivation toggles still work. See §13
+    rule 22 for the durable contract.
+  - **Finding 5 fix — drop `audit_log_admin_insert`.** Migration 012
+    added an admin INSERT policy on `audit_log` so browser-initiated
+    milestone / brand audit writes could land. Batch 004.3 retrofitted
+    every writer to use a server route + service-role insert; the
+    policy has been unreachable from production code since. Removing
+    it closes the dev-tools tampering vector (an admin INSERTing
+    fabricated rows with arbitrary `changed_by`). Service-role writes
+    continue to bypass RLS exactly as before.
+  - **Finding 11 fix — `audit_log_select_all` → `audit_log_select_admin`.**
+    Renamed and tightened to `USING (public.is_admin())`. Read-only
+    users can no longer exfiltrate the audit trail (which contains
+    user emails in `changed_by`) via direct `supabase.from('audit_log')`
+    SELECTs. The audit page was already gating its UI on `isAdmin`;
+    this brings the wire protocol in line.
+- **CLAUDE.md §5** updated with the new audit_log RLS posture and the
+  user_profiles trigger-protection note.
+- **CLAUDE.md §13 rule 22** added documenting the trigger contract
+  and the service-role bypass.
+- **No application code changes.** Trigger + policy work is the
+  whole defense. Browser-side mutations of `role` / `is_active` will
+  start failing with `insufficient_privilege` once the migration runs;
+  no production code path makes those mutations from the browser
+  today (verified via grep), so no fallout is expected.
+- **Hand-verification snippets** included at the bottom of the
+  migration as commented-out SQL templates: read-only self-promotion
+  (expect rejection), read-only theme update (expect success), admin
+  promoting another user (expect success), `audit_log` SELECT
+  cardinality by role (0 vs full count), admin INSERT into
+  `audit_log` (expect RLS rejection).
+- **What's NOT in this batch:** the middleware admin-route gate
+  (Finding 4) and the audit `target_type` cleanup for jira-webhook /
+  jira-sync (Finding 7) are scheduled for separate follow-up batches
+  ahead of the May 5 demo (review's PROMPT B and PROMPT C
+  respectively; batch numbers assigned at land time — 004.7 was
+  taken by an unplanned same-day dashboard fix). Findings 2/3/6/9/13
+  are absorbed into the Batch 005 backlog (Batch 005 item 5.11 —
+  server routes + audit for projects / alert_rules / users
+  mutations; pre-deploy hardening for radara-sweep stays as Batch
+  005 ops carry-over).
+- **Run procedure:** Lacey runs migration 016 manually in the
+  Supabase SQL editor, then walks through the five hand-verification
+  snippets. No deploy required (RLS-only).
+
 ### Batch 004.5 — Brands QA-config extension — 2026-04-26
 - **Migration 013 — `013_brand_qa_config.sql`** extends the existing
   `brands` table with QA-automation config columns: `live_url_base`
@@ -1526,5 +1634,5 @@ read from `alert_events`.
 
 ---
 
-*Last updated: 2026-04-27 | CQIP v1.5 — comprehensive sync after
-Batches 004.0, 004.1, 004.2, 004.3, 004.4, 004.5*
+*Last updated: 2026-04-28 | CQIP v1.5 — comprehensive sync after
+Batches 004.0, 004.1, 004.2, 004.3, 004.4, 004.5, 004.6*
