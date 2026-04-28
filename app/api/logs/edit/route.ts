@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseRouteClient, supabaseAdmin } from '@/lib/supabase/server';
+import { getChangedBy } from '@/lib/audit/get-changed-by';
 
 interface EditPayload {
   id: string;
@@ -36,7 +37,7 @@ export async function POST(req: NextRequest) {
 
   const { data: profile } = await supabase
     .from('user_profiles')
-    .select('role, is_active, display_name, email')
+    .select('role, is_active')
     .eq('id', user.id)
     .maybeSingle();
 
@@ -84,7 +85,7 @@ export async function POST(req: NextRequest) {
     : [];
 
   if (diffs.length > 0) {
-    const changedBy = profile.display_name || profile.email || user.id;
+    const changedBy = await getChangedBy(supabase);
     const rows = diffs.map(d => ({
       log_entry_id: body.id,
       action: d.field === 'log_status' ? 'STATUS_CHANGE' : 'UPDATE',
@@ -112,7 +113,7 @@ export async function DELETE(req: NextRequest) {
 
   const { data: profile } = await supabase
     .from('user_profiles')
-    .select('role, is_active, display_name, email')
+    .select('role, is_active')
     .eq('id', user.id)
     .maybeSingle();
 
@@ -125,7 +126,7 @@ export async function DELETE(req: NextRequest) {
   const id = (body?.id as string | undefined) ?? queryId;
   const mode = body?.mode as string | undefined;
   const jiraTicketId = body?.jira_ticket_id as string | undefined;
-  const changedBy = profile.display_name || profile.email || user.id;
+  const changedBy = await getChangedBy(supabase);
 
   // -----------------------------------------------------------------------
   // Batch mode: soft-delete every non-deleted log for a jira_ticket_id.

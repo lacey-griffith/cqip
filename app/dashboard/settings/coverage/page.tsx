@@ -12,7 +12,10 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { BackToSettings } from '@/components/ui/back-to-settings';
 import { ManageMilestonesDialog } from '@/components/coverage/manage-milestones-dialog';
+import { EditBrandQaConfigDrawer, type BrandQaConfig } from '@/components/coverage/edit-brand-qa-config-drawer';
 import type { Brand } from '@/lib/coverage/queries';
+
+type BrandWithQa = Brand & BrandQaConfig;
 
 function CoverageSettingsBody() {
   const { toast } = useToast();
@@ -20,8 +23,7 @@ function CoverageSettingsBody() {
   const initialBrandId = searchParams.get('brand');
 
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
-  const [userEmail, setUserEmail] = useState('');
-  const [brands, setBrands] = useState<Brand[]>([]);
+  const [brands, setBrands] = useState<BrandWithQa[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Pause form state (per-brand)
@@ -29,13 +31,33 @@ function CoverageSettingsBody() {
   const [pauseReasonDraft, setPauseReasonDraft] = useState('');
   const [pauseSubmitting, setPauseSubmitting] = useState(false);
 
+  // QA config drawer state
+  const [qaDrawerBrand, setQaDrawerBrand] = useState<BrandQaConfig | null>(null);
+  const [qaDrawerOpen, setQaDrawerOpen] = useState(false);
+
   const loadBrands = useCallback(async () => {
     const { data: brandsData } = await supabase
       .from('brands')
-      .select('id, brand_code, jira_value, display_name, is_active, is_paused, paused_reason')
+      .select('id, brand_code, jira_value, display_name, is_active, is_paused, paused_reason, qa_automation_enabled, live_url_base, default_local_sub_areas, client_contact_name, client_contact_jira_account_id, url_pattern, notes')
       .order('display_name');
-    setBrands((brandsData ?? []) as Brand[]);
+    setBrands((brandsData ?? []) as BrandWithQa[]);
   }, []);
+
+  function openQaDrawer(brand: BrandWithQa) {
+    setQaDrawerBrand({
+      id: brand.id,
+      brand_code: brand.brand_code,
+      display_name: brand.display_name,
+      qa_automation_enabled: brand.qa_automation_enabled ?? false,
+      live_url_base: brand.live_url_base ?? null,
+      default_local_sub_areas: brand.default_local_sub_areas ?? null,
+      client_contact_name: brand.client_contact_name ?? null,
+      client_contact_jira_account_id: brand.client_contact_jira_account_id ?? null,
+      url_pattern: brand.url_pattern ?? null,
+      notes: brand.notes ?? null,
+    });
+    setQaDrawerOpen(true);
+  }
 
   useEffect(() => {
     async function init() {
@@ -47,12 +69,11 @@ function CoverageSettingsBody() {
       }
       const { data: profile } = await supabase
         .from('user_profiles')
-        .select('role, email')
+        .select('role')
         .eq('id', session.user.id)
         .maybeSingle();
       const admin = profile?.role === 'admin';
       setIsAdmin(admin);
-      setUserEmail(profile?.email ?? session.user.email ?? 'unknown');
 
       if (admin) {
         await loadBrands();
@@ -62,9 +83,9 @@ function CoverageSettingsBody() {
     init();
   }, [loadBrands]);
 
-  async function togglePause(brand: Brand, nextPaused: boolean, reason: string) {
+  async function togglePause(brand: BrandWithQa, nextPaused: boolean, reason: string) {
     if (pauseSubmitting) return;
-    const previous: Brand = { ...brand };
+    const previous: BrandWithQa = { ...brand };
     const reasonTrimmed = reason.trim() || null;
 
     // Optimistic local update — restrict to fields actually on the Brand type
@@ -79,38 +100,21 @@ function CoverageSettingsBody() {
 
     setPauseSubmitting(true);
     try {
-      const updates = nextPaused
-        ? {
-            is_paused: true,
-            paused_at: new Date().toISOString(),
-            paused_by: userEmail,
-            paused_reason: reasonTrimmed,
-          }
-        : {
-            is_paused: false,
-            paused_at: null,
-            paused_by: null,
-            paused_reason: null,
-          };
-      const { error } = await supabase.from('brands').update(updates).eq('id', brand.id);
-      if (error) throw error;
-
-      const { error: auditErr } = await supabase.from('audit_log').insert({
-        log_entry_id: null,
-        target_type: 'brand',
-        target_id: brand.id,
-        action: 'UPDATE',
-        field_name: 'is_paused',
-        old_value: String(brand.is_paused),
-        new_value: String(nextPaused),
-        changed_by: userEmail,
-        notes: nextPaused ? reasonTrimmed : 'Unpaused',
+      // §13 rule 19: pause + audit write happen in a single server route
+      // so changed_by is derived from auth.uid() rather than trusted from
+      // the browser.
+      const res = await fetch('/api/admin/brands/pause', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: brand.id, paused: nextPaused, reason: reasonTrimmed }),
       });
-      if (auditErr) {
-        console.warn('[coverage] audit insert failed', auditErr);
-        if (process.env.NODE_ENV !== 'production') {
-          toast(`⚠️ Audit write failed: ${auditErr.message ?? 'unknown'}`);
-        }
+      const result: { ok?: boolean; error?: string; auditError?: string } =
+        await res.json().catch(() => ({}));
+      if (!res.ok || !result.ok) {
+        throw new Error(result.error ?? `Pause request failed (${res.status})`);
+      }
+      if (result.auditError && process.env.NODE_ENV !== 'production') {
+        toast(`⚠️ Audit write failed: ${result.auditError}`);
       }
 
       toast(nextPaused ? '⏸️ Brand paused' : '▶️ Brand resumed');
@@ -165,9 +169,50 @@ function CoverageSettingsBody() {
         <>
           <ManageMilestonesDialog
             brands={brands}
-            currentUserEmail={userEmail}
             initialBrandId={initialBrandId}
           />
+
+          <Card className="p-4">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <div>
+                <h2 className="text-sm font-semibold text-[color:var(--f92-dark)]">QA Automation Config</h2>
+                <p className="mt-1 text-xs text-[color:var(--f92-gray)]">
+                  Per-brand config consumed by the Forge QA-automation app via /api/brands. Disabling a brand here hides it from the Forge API entirely (returns 404).
+                </p>
+              </div>
+              <p className="text-xs text-[color:var(--f92-gray)]">
+                {brands.filter(b => b.qa_automation_enabled).length} enabled / {brands.length} total
+              </p>
+            </div>
+
+            <div className="mt-4 max-h-[28rem] space-y-2 overflow-y-auto pr-2">
+              {brands.length === 0 ? (
+                <p className="text-sm text-[color:var(--f92-gray)]">No brands.</p>
+              ) : brands.map(b => (
+                <div key={b.id} className="flex items-center justify-between gap-3 rounded-xl border border-[color:var(--f92-border)] bg-white p-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-[color:var(--f92-dark)]">{b.display_name}</span>
+                      <span className="rounded-full border border-[color:var(--f92-border)] bg-[color:var(--f92-warm)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest text-[color:var(--f92-gray)]">
+                        {b.brand_code}
+                      </span>
+                      {b.qa_automation_enabled ? (
+                        <Badge variant="resolved">QA Enabled</Badge>
+                      ) : (
+                        <Badge variant="default">QA Disabled</Badge>
+                      )}
+                    </div>
+                    {b.live_url_base ? (
+                      <p className="mt-1 truncate text-xs text-[color:var(--f92-gray)]">{b.live_url_base}</p>
+                    ) : null}
+                  </div>
+                  <Button variant="secondary" size="sm" onClick={() => openQaDrawer(b)}>
+                    Edit QA Config
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </Card>
 
           <Card className="p-4">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -248,13 +293,23 @@ function CoverageSettingsBody() {
           </Card>
         </>
       )}
+
+      <EditBrandQaConfigDrawer
+        brand={qaDrawerBrand}
+        open={qaDrawerOpen}
+        onOpenChange={open => {
+          setQaDrawerOpen(open);
+          if (!open) setQaDrawerBrand(null);
+        }}
+        onSaved={() => { void loadBrands(); }}
+      />
     </div>
   );
 }
 
 interface PauseActiveBrandFormProps {
-  brands: Brand[];
-  onPause: (brand: Brand, reason: string) => Promise<void>;
+  brands: BrandWithQa[];
+  onPause: (brand: BrandWithQa, reason: string) => Promise<void>;
 }
 
 function PauseActiveBrandForm({ brands, onPause }: PauseActiveBrandFormProps) {
