@@ -1,0 +1,10 @@
+project_id = "hupklpjruveleaahufmw"
+
+[functions.jira-sync]
+verify_jwt = false
+
+[functions.jira-webhook]
+verify_jwt = false
+
+[functions.drought-evaluator]
+verify_jwt = false
