@@ -21,11 +21,11 @@ cleanup, Migration 014), Batch 004.4 (drought rule evaluator,
 Migration 015), Batch 004.5 (Brands QA-config extension, Migration
 013), Batch 004.6 (pre-demo security batch, Migration 016 — pending
 manual run), Batch 004.7 (active alerts panel — brand-scoped render
-path, fixes drought-event TypeError). All migrations 001-015 have
-run against production; 016 lands separately ahead of the Tue May 5
-demo. Batch 004.4.5 produced a UX discovery plan for Coverage +
-Settings reorg (Batch 005 implementation). See §16 for full shipped
-log.
+path, fixes drought-event TypeError), Batch 004.8 (middleware
+admin-route gate). All migrations 001-015 have run against
+production; 016 lands separately ahead of the Tue May 5 demo. Batch
+004.4.5 produced a UX discovery plan for Coverage + Settings reorg
+(Batch 005 implementation). See §16 for full shipped log.
 
 ---
 
@@ -1110,6 +1110,27 @@ Resolved             → green-500
     ("docs: no CLAUDE.md update — refactor only") so the omission is
     intentional, not forgotten.
 
+24. **Admin settings paths are middleware-gated; `/dashboard/settings/profile`
+    is carved out for self-service.** `middleware.ts` performs a
+    single `user_profiles` lookup on requests matching
+    `/dashboard/settings/*` (except `/profile`) and redirects
+    non-admins to `/dashboard`. The carve-out exists because
+    `/dashboard/settings/profile` is the page where every user
+    (admin and read_only alike) edits their own theme, avatar, and
+    password. **Why:** before Batch 004.8, settings pages were
+    "browseable but useless" for non-admins — each page mounted, did
+    its own client-side admin check, then rendered "Admin access
+    required". The middleware gate removes the surprise factor for a
+    guest demo and adds a server-side line of defense in front of the
+    client-side checks. **How to apply:** any new admin-only page
+    added under `/dashboard/settings/...` is automatically gated; no
+    per-page work needed. Any new self-service page under
+    `/dashboard/settings` must be added to the carve-out (extend the
+    negation in `isAdminSettingsPath`) or the middleware will block
+    legitimate users. Settings pages still keep their own client-side
+    `isAdmin` check as belt-and-suspenders against middleware bypass
+    (misconfigured matcher, deploy regression).
+
 ---
 
 ## 14. What Is NOT In Scope for V1
@@ -1544,6 +1565,48 @@ read from `alert_events`.
   name (otherwise step 3 would never find the rule); the Batch 004.4
   spec language was colloquial.
 
+### Batch 004.8 — Middleware admin-route gating — 2026-04-29
+Closes Finding 4 from the 2026-04-28 read-only permissions review.
+Before this batch, `middleware.ts` only enforced authentication —
+a read-only user could navigate directly to
+`/dashboard/settings/users`, `/audit`, `/projects`, `/alerts`,
+`/coverage`, or `/system` and see each page's client-side
+"Admin access required" panel. Functional but awkward for a guest
+demo, and a single layer of defense (page mount → fetch session →
+fetch role → render gate). With a read-only guest credential being
+handed out for the May 5 demo this becomes a hand-off-quality issue.
+- **`middleware.ts`**:
+  - New admin-gate block runs after the existing auth-or-login
+    redirects, only on requests matching `/dashboard/settings/*`
+    excluding `/dashboard/settings/profile`. Profile is carved out
+    because every user (admin and read_only alike) edits their own
+    theme / avatar / password / display-name there.
+  - One `user_profiles.select('role, is_active')` per admin-page
+    hit; zero overhead for non-admin paths. Reuses the existing
+    cookie-bound supabase client created at the top of the file.
+  - Non-admin or inactive → 302 to `/dashboard` (not `/login` —
+    they're authenticated, just not authorized; sending them to
+    /login would be misleading and produce an immediate
+    /login → /dashboard bounce).
+  - Comment block enumerates the six routing scenarios so the
+    intent is obvious from the file.
+- **CLAUDE.md §13 rule 24** added documenting the gate, the
+  carve-out, and what to do when adding a new settings page (admin
+  or self-service).
+- **No client-side changes.** Page-level `isAdmin` checks stay as
+  belt-and-suspenders. If the middleware matcher is ever
+  misconfigured or a deploy regresses, the pages still won't render
+  mutation UI to a non-admin.
+- **Hand-verification post-deploy:** log in as the read_only guest
+  in incognito, hit `/dashboard/settings/users` directly — should
+  redirect to `/dashboard` without flashing the admin-gate panel.
+  Then log in as an admin, hit the same URL — should render the
+  user-management page normally. Also confirm
+  `/dashboard/settings/profile` works for the read_only guest.
+- **What's NOT in this batch:** the audit `target_type` cleanup for
+  jira-webhook / jira-sync (Finding 7 / PROMPT C) is the last
+  pre-demo follow-up batch; will land as Batch 004.9.
+
 ### Batch 004.7 — Active alerts panel: brand-scoped render path — 2026-04-28
 Same-day fix: dashboard was crashing on load with
 `TypeError: Cannot read properties of null (reading '0')`. The
@@ -1739,5 +1802,5 @@ demo blocker.
 
 ---
 
-*Last updated: 2026-04-28 | CQIP v1.5 — comprehensive sync after
-Batches 004.0, 004.1, 004.2, 004.3, 004.4, 004.5, 004.6, 004.7*
+*Last updated: 2026-04-29 | CQIP v1.5 — comprehensive sync after
+Batches 004.0, 004.1, 004.2, 004.3, 004.4, 004.5, 004.6, 004.7, 004.8*
