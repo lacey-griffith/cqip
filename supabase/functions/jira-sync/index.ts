@@ -269,6 +269,8 @@ Deno.serve(async (request: Request) => {
             .from('audit_log')
             .insert({
               log_entry_id: log.id,
+              target_type: 'quality_log',
+              target_id: log.id,
               action: 'STATUS_CHANGE',
               field_name: 'log_status',
               old_value: log.log_status,

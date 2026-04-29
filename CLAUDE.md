@@ -19,13 +19,14 @@ setup), Batch 004.1 (milestone branch hardening), Batch 004.2
 (dependabot triage + xlsx removal), Batch 004.3 (audit-write security
 cleanup, Migration 014), Batch 004.4 (drought rule evaluator,
 Migration 015), Batch 004.5 (Brands QA-config extension, Migration
-013), Batch 004.6 (pre-demo security batch, Migration 016 — pending
-manual run), Batch 004.7 (active alerts panel — brand-scoped render
+013), Batch 004.6 (pre-demo security batch, Migration 016 — applied
+2026-04-28), Batch 004.7 (active alerts panel — brand-scoped render
 path, fixes drought-event TypeError), Batch 004.8 (middleware
-admin-route gate). All migrations 001-015 have run against
-production; 016 lands separately ahead of the Tue May 5 demo. Batch
-004.4.5 produced a UX discovery plan for Coverage + Settings reorg
-(Batch 005 implementation). See §16 for full shipped log.
+admin-route gate), Batch 004.9 (audit_log target_type cleanup,
+Migration 017 — backfill-only). All migrations 001-016 have run
+against production; 017 lands with this batch. Batch 004.4.5
+produced a UX discovery plan for Coverage + Settings reorg (Batch
+005 implementation). See §16 for full shipped log.
 
 ---
 
@@ -1565,6 +1566,46 @@ read from `alert_events`.
   name (otherwise step 3 would never find the rule); the Batch 004.4
   spec language was colloquial.
 
+### Batch 004.9 — audit_log target_type cleanup — 2026-04-29
+Closes Finding 7 from the 2026-04-28 read-only permissions review,
+the last pre-demo follow-up. Both Jira edge functions wrote audit
+rows with `log_entry_id` set but `target_type` and `target_id`
+unset — those rows passed `audit_log_target_shape_chk` only because
+Postgres three-valued-logic treats the constraint expression as
+NULL (not FALSE) when `target_type IS NULL`. Functionally fine, but
+the audit page filters on `target_type='quality_log'` and was
+silently missing every row written by the webhook or the auto-
+advance sync. With this batch, every row in `audit_log` has both
+shapes populated.
+- **`supabase/functions/jira-webhook/index.ts`** — the
+  "Created via Jira webhook" CREATE row now sets
+  `target_type: 'quality_log', target_id: insertedLog.id` alongside
+  the existing `log_entry_id`. Redundant for quality_log rows but
+  consistent with every other audit writer in the codebase
+  (Batch 004.3 / 004.4 / 004.5 all set both).
+- **`supabase/functions/jira-sync/index.ts`** — the auto-advance
+  STATUS_CHANGE row gets the same treatment with `target_id: log.id`.
+- **Migration 017 — `017_audit_log_backfill_target.sql`** — single
+  idempotent UPDATE backfilling
+  `target_type = 'quality_log', target_id = log_entry_id` on every
+  row where `target_type IS NULL AND log_entry_id IS NOT NULL`.
+  No schema change; the columns and CHECK constraint were both
+  added in migration 011 (Batch 002.5b).
+- **Deploy required.** The migration is run via the Supabase
+  dashboard; the two edge functions need to be redeployed via
+  `supabase functions deploy jira-webhook` and
+  `supabase functions deploy jira-sync` for the direct-write path
+  to take effect on new rows. The migration handles every row
+  written before the deploy lands; the direct-write path handles
+  everything after.
+- **CLAUDE.md §16 Batch 004.8 footer note** updated — Finding 7
+  closed; no remaining follow-ups from the 2026-04-28 review
+  ahead of the May 5 demo.
+- **What's NOT in this batch:** Findings 2/3/6/9/13 from the review
+  remain in the Batch 005 backlog (item 5.11 — server routes +
+  audit for projects / alert_rules / users mutations; pre-deploy
+  hardening for radara-sweep stays Batch 005 ops carry-over).
+
 ### Batch 004.8 — Middleware admin-route gating — 2026-04-29
 Closes Finding 4 from the 2026-04-28 read-only permissions review.
 Before this batch, `middleware.ts` only enforced authentication —
@@ -1603,9 +1644,8 @@ handed out for the May 5 demo this becomes a hand-off-quality issue.
   Then log in as an admin, hit the same URL — should render the
   user-management page normally. Also confirm
   `/dashboard/settings/profile` works for the read_only guest.
-- **What's NOT in this batch:** the audit `target_type` cleanup for
-  jira-webhook / jira-sync (Finding 7 / PROMPT C) is the last
-  pre-demo follow-up batch; will land as Batch 004.9.
+- **Follow-up:** the audit `target_type` cleanup for jira-webhook /
+  jira-sync (Finding 7 / PROMPT C) shipped as Batch 004.9.
 
 ### Batch 004.7 — Active alerts panel: brand-scoped render path — 2026-04-28
 Same-day fix: dashboard was crashing on load with
@@ -1803,4 +1843,4 @@ demo blocker.
 ---
 
 *Last updated: 2026-04-29 | CQIP v1.5 — comprehensive sync after
-Batches 004.0, 004.1, 004.2, 004.3, 004.4, 004.5, 004.6, 004.7, 004.8*
+Batches 004.0, 004.1, 004.2, 004.3, 004.4, 004.5, 004.6, 004.7, 004.8, 004.9*

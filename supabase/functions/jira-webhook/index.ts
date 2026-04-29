@@ -408,6 +408,8 @@ Deno.serve(async (request: Request) => {
       .from('audit_log')
       .insert({
         log_entry_id: insertedLog.id,
+        target_type: 'quality_log',
+        target_id: insertedLog.id,
         action: 'CREATE',
         changed_by: 'system',
         notes: 'Created via Jira webhook',
