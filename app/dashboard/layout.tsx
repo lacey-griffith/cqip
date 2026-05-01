@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import confetti from 'canvas-confetti';
 import { supabase } from '@/lib/supabase/client';
 import { Nav } from '@/components/layout/nav';
-import { IdleTimeout } from '@/components/layout/idle-timeout';
 import { ToasterProvider, useToast } from '@/components/layout/toaster';
 import { EasterEggHost } from '@/components/layout/easter-egg-host';
 import { useLoadingMessage } from '@/lib/easter-eggs/use-loading-message';
@@ -132,7 +131,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         >
           {children}
         </main>
-        <IdleTimeout />
         <KonamiListener />
         <EasterEggHost />
       </div>

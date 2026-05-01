@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { use, useEffect, useMemo, useState } from 'react';
 import { ExternalLink } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { Badge } from '@/components/ui/badge';
@@ -87,8 +87,8 @@ function formatDateTime(value: string | null | undefined): string {
   return `${datePart}, ${timePart}`;
 }
 
-export default function LogDetailPage({ params }: { params: { id: string } }) {
-  const { id } = params;
+export default function LogDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const [log, setLog] = useState<LogEntry | null>(null);
   const [auditTrail, setAuditTrail] = useState<AuditEntry[]>([]);
   const [history, setHistory] = useState<LogEntry[]>([]);
@@ -96,11 +96,17 @@ export default function LogDetailPage({ params }: { params: { id: string } }) {
 
   useEffect(() => {
     async function loadDetails() {
-      const { data: logData } = await supabase
+      const { data: logData, error: logError } = await supabase
         .from('quality_logs')
         .select('*')
         .eq('id', id)
         .single();
+
+      if (logError) {
+        console.error('[log-detail] fetch error', logError);
+        setLoading(false);
+        return;
+      }
 
       if (!logData) {
         setLoading(false);

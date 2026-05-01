@@ -12,9 +12,9 @@ a decision, check this file before asking the user. All major decisions are reco
 here so they don't need to be re-explained.
 
 **Current deployed state:** Live at https://cqip.l-hay.workers.dev.
-All Batch 001-002.5b features shipped. Recent shipped (April 2026):
-Batch 003 (branded exports + dashboard click-drill), Batch 003.5
-(CQIP_SYNC_AUTH_KEY decoupling), Batch 004.0 (pg_cron jira-sync
+All Batch 001-002.5b features shipped. Recent shipped (April-May
+2026): Batch 003 (branded exports + dashboard click-drill), Batch
+003.5 (CQIP_SYNC_AUTH_KEY decoupling), Batch 004.0 (pg_cron jira-sync
 setup), Batch 004.1 (milestone branch hardening), Batch 004.2
 (dependabot triage + xlsx removal), Batch 004.3 (audit-write security
 cleanup, Migration 014), Batch 004.4 (drought rule evaluator,
@@ -23,10 +23,13 @@ Migration 015), Batch 004.5 (Brands QA-config extension, Migration
 2026-04-28), Batch 004.7 (active alerts panel — brand-scoped render
 path, fixes drought-event TypeError), Batch 004.8 (middleware
 admin-route gate), Batch 004.9 (audit_log target_type cleanup,
-Migration 017 — backfill-only). All migrations 001-016 have run
-against production; 017 lands with this batch. Batch 004.4.5
-produced a UX discovery plan for Coverage + Settings reorg (Batch
-005 implementation). See §16 for full shipped log.
+Migration 017 — backfill-only), Batch 004.10 (pre-demo UX polish:
+Next 16 params fix, KPI accuracy + Aging card, alerts panel pill
+redesign, pointer cursors, default 60-day logs filter, IdleTimeout
+removal — 2026-05-01). All migrations 001-017 have run against
+production. Batch 004.4.5 produced a UX discovery plan for Coverage
++ Settings reorg (Batch 005 implementation). See §16 for full
+shipped log.
 
 ---
 
@@ -1132,6 +1135,21 @@ Resolved             → green-500
     `isAdmin` check as belt-and-suspenders against middleware bypass
     (misconfigured matcher, deploy regression).
 
+25. **Alert pills use per-theme CSS tokens, never inline hex colors.**
+    Each severity tier has a triplet of CSS vars in `app/globals.css`:
+    `--pill-{color}-bg`, `--pill-{color}-border`, `--pill-{color}-fg`,
+    defined in both `:root` and `:root[data-theme="dark"]`. Light mode
+    uses 50-stop tinted fill + 600-stop border + body-text color; dark
+    mode uses 900-stop deep fill + 600-stop border + lighter ramp text
+    (200-stop). Both modes hit WCAG AA on the active alerts panel
+    surface. **Why:** the previous attempt used inline hex on the JSX
+    directly — colors that read fine on the white light-mode panel
+    turned to mush on the dark-navy panel. Single source of truth in
+    tokens means a one-line change in globals.css adjusts every pill.
+    **How to apply:** any future severity-coded UI element (badges,
+    chips, status indicators) should reference these tokens or follow
+    the same per-theme pattern. Do not hardcode `#FAEEDA` etc. in JSX.
+
 ---
 
 ## 14. What Is NOT In Scope for V1
@@ -1168,7 +1186,8 @@ Resolved             → green-500
 ## 15. Pending / Active TODOs
 
 ### Pre-demo / immediate
-(Empty — all demo-prep items shipped via Batch 004 series.)
+(Empty — all demo-prep items shipped via Batch 004 series, including
+Batch 004.10 UX polish on 2026-05-01.)
 
 ### Awaiting external action
 - [ ] **Forge consumer integration** — dashboard side of the brands
@@ -1252,6 +1271,37 @@ additions.
       threshold-only rendering off `alert_rules.config`, which is
       accurate but doesn't match the runtime count the evaluator
       saw. Decided not worth same-day for the cosmetic improvement.
+- [ ] **5.13 Chart drawer → LogDetailDrawer reuse** — when a ticket
+      is clicked from a chart drilldown drawer (e.g. "Week of Apr 26:
+      4 tickets"), open the existing `LogDetailDrawer` from
+      `/dashboard/logs` instead of navigating to the full
+      `/dashboard/logs/[id]` page. Decision locked: Option A (close
+      the chart drawer, replace with log detail drawer — single
+      drawer at a time, no stacking). The `LogDetailDrawer` already
+      shows everything needed; this is a wiring change, not a
+      content change.
+- [ ] **5.14 Drought pill → BrandDetailDrawer reuse + drought
+      banner** — when a drought pill is clicked from the active
+      alerts panel, open the existing `BrandDetailDrawer` from
+      `/dashboard/coverage` instead of navigating to the coverage
+      page. Add a small banner at the top of the drawer when opened
+      from an alert: "Drought alert: N milestone(s) in last 28 days
+      (threshold: 2)". Drawer also gets a "View Coverage →" link to
+      the full coverage page. Pairs with 5.13 — together they create
+      a unified "click anything → drawer slides in" pattern across
+      the dashboard.
+- [ ] **5.15 Log detail page density redesign** —
+      `/dashboard/logs/[id]` page currently uses a 2-column grid
+      where every field gets equal real estate, including
+      single-word values like "Yes". Result is sparse and hard to
+      scan. Redesign with information hierarchy: header (ticket,
+      status, severity, brand, owner, dates) → narrative section
+      (notes, resolution notes) → secondary details (booleans, root
+      cause arrays) → audit trail in a tab or accordion. Note: the
+      `LogDetailDrawer` (used on Logs page + via 5.13 above) already
+      handles density well; consider whether the standalone page is
+      still needed once 5.13 ships, or whether the page becomes a
+      permalink-friendly version of the drawer.
 
 ### Batch 006 (post-demo) — Teams webhook dispatch (dedicated)
 Wires `alert_events` rows to actually fire Teams notifications.
@@ -1264,6 +1314,47 @@ Until this batch ships, alerts accumulate silently in the database.
 - [ ] Test mode toggle in Settings → Alerts
 - [ ] Mark `notification_sent = TRUE` on success
 - [ ] Detect 401/403 from Teams webhook (rotation grace handling)
+
+### Batch 007 — Convert.com test deployment automation
+Big-boy integration. Director of CRO requested a tool that lets the
+team pull active A/B tests for a given brand, then convert a winning
+variation into a deployment with a single click — pause test,
+create deployment from variation, rename per a formula, activate.
+NBLY-only initially, but spec assumes brand model is CRUD-ready so
+new clients can be onboarded without code changes (overlaps with
+Batch 004.99 multi-client readiness work).
+
+Discovery work the batch needs to start with:
+- Convert.com API auth model — service accounts? per-user OAuth?
+  API keys per project? Document the actual mechanism.
+- Rate limits and the pause/deploy state machine — what's atomic?
+  Can the four-step sequence happen in one API session, or is
+  there polling between steps? What's the failure mode if step 3
+  of 4 fails (half-deployed states are dangerous)?
+- Brand → Convert project mapping — CQIP knows brands, Convert
+  knows projects/accounts. Need a translation table; probably a
+  new column on `brands` (e.g. `convert_project_id`).
+- The naming formula (Lacey to provide) — derivable from Jira
+  ticket data? from CQIP-known fields? from a manual input at
+  click time?
+- UI placement — extend `/dashboard/coverage`, or new
+  `/dashboard/deployments` page?
+- Failure / rollback semantics — destructive 4-step action needs
+  confirmation dialog, audit trail (who clicked, what got renamed
+  to what, did all 4 steps succeed), and idempotency.
+
+Implementation sketch (post-discovery):
+- `lib/convert/client.ts` — Convert API client
+- New page or page extension for listing active tests by brand
+- Single-click deploy button with confirmation dialog
+- `convert_deployments` audit table (or extend existing `audit_log`
+  with `target_type='convert_deployment'`) recording every
+  deploy attempt + per-step success/failure
+- New env var(s) for Convert API credentials + per-brand mapping
+
+Realistic scope: 2-4 week build, not a weekend project. The
+"single push" hides a multi-step orchestrator with error handling,
+idempotency, and rollback semantics.
 
 ### Ops / deferred
 - [ ] **Radara Edge Function deploy** — code committed at
@@ -1566,6 +1657,87 @@ read from `alert_events`.
   name (otherwise step 3 would never find the rule); the Batch 004.4
   spec language was colloquial.
 
+### Batch 004.10 — Pre-demo UX polish — 2026-05-01
+Pure dashboard-visible polish ahead of the May 5 demo. No schema
+changes, no behavioral changes — six small fixes / refinements that
+add up to a noticeably more solid first impression. Atomic ship.
+- **Log detail page Next 16 fix** —
+  `app/dashboard/logs/[id]/page.tsx` was destructuring `params`
+  synchronously. In Next 16 production builds, dynamic-route
+  `params` is a `Promise<{id}>` that must be unwrapped with
+  `React.use()`; sync access silently resolved to `undefined`, the
+  query ran with `id=undefined`, and the page rendered "Log entry
+  not found" — but ONLY when reached via the dashboard chart
+  drawer's "View →" link. Page refresh worked because Next happened
+  to settle the promise during SSR. Fix: type `params` as
+  `Promise<{ id: string }>` and unwrap with `use(params)`.
+  Worth a grep for `params }: { params: {` in other client
+  components with dynamic routes — same bug pattern is latent
+  anywhere it appears.
+- **KPI accuracy + new Aging KPI** (`app/dashboard/page.tsx`) —
+  Open / In Progress / Critical KPIs were filtering against
+  `monthLogs` (`triggered_at >= monthStart`), which silently
+  dropped every still-open April log on May 1. The dashboard read
+  "0 open" while several aged Open / In Progress logs from prior
+  months were in flight. Fix: new `openLogs` query scoped to
+  `log_status IN ('Open','In Progress')` regardless of date; Open /
+  In Progress / Critical KPIs read from it. Total Logs This Month
+  and Top Root Cause continue to read from `monthLogs`
+  (intentionally month-scoped — those KPIs answer "this month",
+  not "right now"). Added a 7th KPI card "Aging" — count of
+  `openLogs` with `triggered_at >= 14 days old`. Orange when > 0,
+  navy when 0. Aligns with the "Long-Running Open" alert rule
+  from §10 — note the rule still has no evaluator wired (Batch
+  005). Grid bumped `lg:grid-cols-6` → `lg:grid-cols-7`.
+- **Alerts panel redesign** —
+  `components/dashboard/active-alerts-panel.tsx` +
+  `app/globals.css`. Replaced the full-width row layout with
+  compact severity pills. Each pill shows brand code + descriptor
+  + time ago (e.g. `MRR drought · 3d`). Brand code is dominant in
+  both alert flavors — drought rows use `brand.brand_code`;
+  log-scoped rows use a new `extractBrandCode()` helper that splits
+  the `"MRR - Mr Rooter Plumbing"` `client_brand` format on the
+  first `" - "`. Severity drives pill color via per-theme CSS
+  tokens (see new §13 rule 25): light mode is 50-stop tinted fill
+  + 600-stop border + body text; dark mode is 900-stop deep fill +
+  600-stop border + 200-stop ramp text. WCAG AA in both modes.
+  Drought pills are always amber (no severity dimension). Whole
+  pill is clickable: brand-scoped → `/dashboard/coverage`,
+  log-scoped → `/dashboard/logs/{log_entry_id}`. `role="button"` +
+  `tabIndex={0}` + Enter/Space keyboard handlers + `aria-label` for
+  accessibility; hover dims to 85% opacity; focus shows orange
+  ring; pills wrap when count exceeds row width. Removed:
+  per-row "View →" link (redundant when the whole card is
+  clickable) and the top "View all logs →" header link. New
+  `--f92-warm-hover` CSS var added (per-theme: `#FDFBF7` light,
+  `rgba(255,255,255,0.04)` dark) for the panel-internal hover
+  token. New pill color tokens added in `app/globals.css` for
+  amber / red / coral / gray, each with `-bg` / `-border` / `-fg`
+  triplets, light + dark variants.
+- **Pointer cursors sweep** (`app/globals.css`) — Global CSS rule:
+  `cursor: pointer` on `button:not(:disabled)`,
+  `[role="button"]:not(:disabled)`, `a[href]`, `summary`,
+  `label[for]`, and `select:not(:disabled)`; `cursor: not-allowed`
+  on disabled. Catches every interactive element in one place
+  rather than per-component sprinkles.
+- **Default 60-day filter on Logs page** —
+  `app/dashboard/logs/page.tsx`. `startDate` initial state seeded
+  with `daysAgoISO(60)` via lazy init; `activePill` initial state
+  `'60'` instead of `'all'`. All other filter logic untouched. Why:
+  default page load was rendering 18 months of logs and felt slow
+  + busy; 60 days matches the team's natural review window.
+- **IdleTimeout removal** (`app/dashboard/layout.tsx`) — Removed
+  the import and `<IdleTimeout />` mount. Sessions now persist for
+  Supabase's default refresh-token lifetime (~7 days). The
+  `cqip-remember-me` / `cqip-session-active` canary logic in
+  `verifySession()` is intentionally separate (it controls
+  "log out on browser close when Remember me unchecked") and
+  stays in place. Component file at
+  `components/layout/idle-timeout.tsx` left in place — can be
+  deleted if `npm run build` confirms no remaining references.
+- **§13 rule 25 added** documenting the per-theme CSS-token
+  pattern for severity-coded UI (no inline hex in JSX).
+
 ### Batch 004.9 — audit_log target_type cleanup — 2026-04-29
 Closes Finding 7 from the 2026-04-28 read-only permissions review,
 the last pre-demo follow-up. Both Jira edge functions wrote audit
@@ -1842,5 +2014,4 @@ demo blocker.
 
 ---
 
-*Last updated: 2026-04-29 | CQIP v1.5 — comprehensive sync after
-Batches 004.0, 004.1, 004.2, 004.3, 004.4, 004.5, 004.6, 004.7, 004.8, 004.9*
+*Last updated: 2026-05-01 | CQIP v1.5 — comprehensive sync after Batches 004.0 through 004.10*

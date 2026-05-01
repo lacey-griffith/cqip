@@ -34,6 +34,7 @@ interface KPIData {
   openCount: number;
   inProgressCount: number;
   criticalIssuesOpen: number;
+  agingCount: number;
   mostFrequentRootCause: string | null;
 }
 
@@ -100,12 +101,13 @@ function MatrixRainOverlay() {
 
 export default function DashboardPage() {
   const [kpi, setKpi] = useState<KPIData>({
-    totalLogsThisMonth: 0,
-    openCount: 0,
-    inProgressCount: 0,
-    criticalIssuesOpen: 0,
-    mostFrequentRootCause: null,
-  });
+      totalLogsThisMonth: 0,
+      openCount: 0,
+      inProgressCount: 0,
+      criticalIssuesOpen: 0,
+      agingCount: 0,
+      mostFrequentRootCause: null,
+    });
 
   const [charts, setCharts] = useState<ChartData>({
     volumeByWeek: [],
@@ -220,12 +222,33 @@ export default function DashboardPage() {
 
         if (allError) throw allError;
 
-        // Calculate KPIs
-        const openCount = (monthLogs || []).filter(l => l.log_status === 'Open').length;
-        const inProgressCount = (monthLogs || []).filter(l => l.log_status === 'In Progress').length;
-        const criticalIssuesOpen = (monthLogs || [])
-          .filter(l => l.severity === 'Critical' && ['Open', 'In Progress'].includes(l.log_status))
-          .length;
+        // Fetch ALL currently-open logs regardless of date — these are
+        // what's "live" right now. Used for the Open / In Progress /
+        // Critical KPIs so items from previous months that are still in
+        // flight don't disappear when a new month starts.
+        const { data: openLogs, error: openError } = await supabase
+          .from('quality_logs')
+          .select('*')
+          .eq('is_deleted', false)
+          .in('log_status', ['Open', 'In Progress']);
+
+        if (openError) throw openError;
+
+        // Calculate KPIs — Open / In Progress / Critical use openLogs
+        // (all-time currently-open) rather than monthLogs. Otherwise items
+        // from previous months that haven't been closed silently disappear
+        // from the dashboard on the 1st of each month.
+        const openCount = (openLogs || []).filter(l => l.log_status === 'Open').length;
+        const inProgressCount = (openLogs || []).filter(l => l.log_status === 'In Progress').length;
+        const criticalIssuesOpen = (openLogs || []).filter(l => l.severity === 'Critical').length;
+
+        // Aging — Open or In Progress for >= 14 days. Aligns with the
+        // "Long-Running Open" alert rule from CLAUDE.md §10.
+        const FOURTEEN_DAYS_MS = 14 * 24 * 60 * 60 * 1000;
+        const agingCount = (openLogs || []).filter(l => {
+          const age = Date.now() - new Date(l.triggered_at).getTime();
+          return age >= FOURTEEN_DAYS_MS;
+        }).length;
 
         // Find most frequent root cause this month
         const rootCauseCounts: { [key: string]: number } = {};
@@ -248,6 +271,7 @@ export default function DashboardPage() {
           openCount,
           inProgressCount,
           criticalIssuesOpen,
+          agingCount,
           mostFrequentRootCause,
         });
 
@@ -477,7 +501,7 @@ export default function DashboardPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-7">
         {/* Total Logs This Month */}
         <Card className="border-[color:var(--f92-border)] bg-white p-3 md:p-4 shadow-sm">
           <p className="text-xs font-medium uppercase tracking-wider text-[color:var(--f92-gray)]">Total Logs</p>
@@ -553,6 +577,15 @@ export default function DashboardPage() {
               'Open/In Progress'
             )}
           </p>
+        </Card>
+
+        {/* Aging — Open or In Progress >= 14 days old */}
+        <Card className="border-[color:var(--f92-border)] bg-white p-3 md:p-4 shadow-sm">
+          <p className="text-xs font-medium uppercase tracking-wider text-[color:var(--f92-gray)]">Aging</p>
+          <p className={`mt-2 text-3xl md:text-4xl font-bold ${kpi.agingCount > 0 ? 'text-orange-500' : 'text-[color:var(--f92-navy)]'}`}>
+            {kpi.agingCount}
+          </p>
+          <p className="mt-2 text-xs text-[color:var(--f92-gray)]">Open 14+ days</p>
         </Card>
 
         {/* Most Frequent Root Cause */}

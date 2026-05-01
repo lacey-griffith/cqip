@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { CheckCircle2 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -25,6 +25,15 @@ function pickFirst<T>(rel: Maybe<T>): T | undefined {
   if (rel == null) return undefined;
   if (Array.isArray(rel)) return rel[0];
   return rel;
+}
+
+// Pull just the brand code out of a full client_brand string. The DB
+// stores it as "MRR - Mr Rooter Plumbing"; we want "MRR" for the pill.
+// Falls back to the original string if the format doesn't split cleanly.
+function extractBrandCode(clientBrand: string | null | undefined): string | null {
+  if (!clientBrand) return null;
+  const code = clientBrand.split(' - ')[0]?.trim();
+  return code || clientBrand;
 }
 
 interface AlertRule {
@@ -61,6 +70,7 @@ interface AlertEvent {
 }
 
 export function ActiveAlertsPanel() {
+  const router = useRouter();
   const [alerts, setAlerts] = useState<AlertEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -200,12 +210,6 @@ export function ActiveAlertsPanel() {
         </span>
         <span className="text-sm font-medium text-[color:var(--f92-dark)]">All systems normal</span>
         <span className="text-xs text-[color:var(--f92-gray)]">— no active alerts</span>
-        <Link
-          href="/dashboard/logs"
-          className="ml-auto text-xs text-[color:var(--f92-orange)] transition-colors hover:text-[color:var(--f92-navy)]"
-        >
-          View logs →
-        </Link>
       </div>
     );
   }
@@ -216,19 +220,13 @@ export function ActiveAlertsPanel() {
       role="region"
       aria-label="Active alerts"
       aria-live="polite"
-      className="border-[color:var(--f92-border)] bg-white p-6 shadow-sm cqip-fade-in"
+      className="border-[color:var(--f92-border)] bg-white p-4 shadow-sm cqip-fade-in"
     >
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold text-[color:var(--f92-navy)]">Active Alerts</h3>
-        <Link
-          href="/dashboard/logs"
-          className="text-xs text-[color:var(--f92-orange)] hover:text-[color:var(--f92-navy)] transition-colors"
-        >
-          View all logs →
-        </Link>
       </div>
 
-      <div className="space-y-3">
+<div className="flex flex-wrap gap-2">
         {alerts.map((alert) => {
           // Source of truth for "which kind of alert" is the FK on
           // alert_events itself, not the joined data shape — protects against
@@ -239,76 +237,95 @@ export function ActiveAlertsPanel() {
           const brand = pickFirst(alert.brands);
           const ruleName = rule?.rule_name ?? 'Alert';
 
+          // Pill text — brand code dominant in both cases, descriptor + time on the right.
+          // Brand-scoped: "MRR drought · 3d"
+          // Log-scoped:   "MOJ critical · 3d"   (brand code from log.client_brand;
+          //                                       falls back to project_key if missing)
+          const brandLabel = isBrandScoped
+            ? brand?.brand_code ?? 'Unknown'
+            : extractBrandCode(log?.client_brand) ?? log?.project_key ?? 'Unknown';
+
+          const descriptor = isBrandScoped
+            ? 'drought'
+            : (log?.severity ?? 'alert').toLowerCase();
+
+          const timeAgo = formatTimeAgo(alert.triggered_at);
+
+          // Pill color — amber for drought, semantic ramps for severity.
+          // Uses CSS vars so light/dark mode swap automatically. The vars
+          // are defined in globals.css; both modes pass WCAG AA on the
+          // active alerts panel surface.
+          const pillToken: 'amber' | 'red' | 'coral' | 'gray' = (() => {
+            if (isBrandScoped) return 'amber';
+            switch (log?.severity) {
+              case 'Critical': return 'red';
+              case 'High':     return 'coral';
+              case 'Medium':   return 'amber';
+              case 'Low':      return 'gray';
+              default:         return 'gray';
+            }
+          })();
+
+          // Compute the destination — null means non-clickable (rare:
+          // alert with neither a brand_id nor a log_entry_id).
+          const href = isBrandScoped
+            ? '/dashboard/coverage'
+            : alert.log_entry_id
+              ? `/dashboard/logs/${alert.log_entry_id}`
+              : null;
+
+          const ariaLabel = `${ruleName}${
+            isBrandScoped && brand ? ` for ${brand.display_name}` : ''
+          } — ${timeAgo}`;
+
+          const pillInner = (
+            <>
+              <span className="font-semibold">{brandLabel}</span>
+              <span className="ml-1.5" style={{ opacity: 0.85 }}>{descriptor} · {timeAgo}</span>
+            </>
+          );
+
+          // Clickable pill — keyboard accessible (Enter / Space).
+          if (href) {
+            return (
+              <span
+                key={alert.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => router.push(href)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    router.push(href);
+                  }
+                }}
+                title={`${ruleName}${log?.jira_summary ? ` — ${log.jira_summary}` : ''}`}
+                aria-label={ariaLabel}
+                style={{
+                  backgroundColor: `var(--pill-${pillToken}-bg)`,
+                  color: `var(--pill-${pillToken}-fg)`,
+                  borderColor: `var(--pill-${pillToken}-border)`,
+                }}
+                className="inline-flex items-center text-xs px-3 py-1 rounded-full whitespace-nowrap border-[1.5px] transition-opacity hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)]"              >
+                {pillInner}
+              </span>
+            );
+          }
+
+          // Non-clickable fallback (extremely rare).
           return (
-            <div
+            <span
               key={alert.id}
-              className="group border border-[color:var(--f92-border)] rounded-lg p-3 bg-[color:var(--f92-warm)] hover:bg-white transition-colors"
+              title={ruleName}
+              style={{
+                backgroundColor: `var(--pill-${pillToken}-bg)`,
+                color: `var(--pill-${pillToken}-fg)`,
+                borderColor: `var(--pill-${pillToken}-border)`,
+              }}
+              className="inline-flex items-center text-xs px-3 py-1 rounded-full whitespace-nowrap border-[1.5px]"
             >
-              <div className="flex items-start justify-between mb-2">
-                <div className="flex-1">
-                  <h4 className="text-sm font-medium text-[color:var(--f92-navy)]">
-                    {ruleName}
-                    {isBrandScoped && brand ? (
-                      <span className="text-[color:var(--f92-gray)] font-normal">
-                        {' '}• {brand.display_name} ({brand.brand_code})
-                      </span>
-                    ) : null}
-                  </h4>
-                  <p className="text-xs text-[color:var(--f92-gray)] mt-1">
-                    {isBrandScoped
-                      ? describeBrandAlert(rule)
-                      : (
-                        <>
-                          {log?.jira_ticket_id ?? 'Unknown ticket'}
-                          {log?.jira_summary ? ` • ${log.jira_summary}` : ''}
-                        </>
-                      )}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 ml-3">
-                  {!isBrandScoped && log?.severity ? (
-                    <Badge
-                      variant={getSeverityVariant(log.severity)}
-                      className="text-xs px-2 py-0.5"
-                    >
-                      {log.severity}
-                    </Badge>
-                  ) : null}
-                  <span className="text-xs text-[color:var(--f92-gray)]">
-                    {formatTimeAgo(alert.triggered_at)}
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4 text-xs text-[color:var(--f92-gray)]">
-                  {isBrandScoped ? (
-                    brand ? <span>Brand: {brand.brand_code}</span> : null
-                  ) : (
-                    <>
-                      {log?.client_brand ? <span>Client: {log.client_brand}</span> : null}
-                      {log?.project_key ? <span>Project: {log.project_key}</span> : null}
-                    </>
-                  )}
-                </div>
-
-                {isBrandScoped ? (
-                  <Link
-                    href="/dashboard/coverage"
-                    className="text-xs text-[color:var(--f92-orange)] group-hover:text-[color:var(--f92-navy)] hover:text-[color:var(--f92-navy)] font-medium transition-colors"
-                  >
-                    View coverage →
-                  </Link>
-                ) : alert.log_entry_id ? (
-                  <Link
-                    href={`/dashboard/logs/${alert.log_entry_id}`}
-                    className="text-xs text-[color:var(--f92-orange)] group-hover:text-[color:var(--f92-navy)] hover:text-[color:var(--f92-navy)] font-medium transition-colors"
-                  >
-                    View Details →
-                  </Link>
-                ) : null}
-              </div>
-            </div>
+              {pillInner}
+            </span>
           );
         })}
       </div>

@@ -88,7 +88,7 @@ export default function LogsPage() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [startDate, setStartDate] = useState('');
+  const [startDate, setStartDate] = useState(() => daysAgoISO(60));
   const [endDate, setEndDate] = useState('');
   const [clientBrand, setClientBrand] = useState('');
   const [severity, setSeverity] = useState('');
@@ -97,7 +97,7 @@ export default function LogsPage() {
   const [sortKey, setSortKey] = useState<SortKey>('date');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
-  const [activePill, setActivePill] = useState<DatePill | null>('all');
+  const [activePill, setActivePill] = useState<DatePill | null>('60');
   const [filtersOpen, setFiltersOpen] = useState(true);
 
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});

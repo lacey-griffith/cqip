@@ -35,6 +35,24 @@
   --status-blocked: #EF4444;
   --status-pending-verification: #F59E0B;
   --status-resolved: #22C55E;
+
+  --f92-warm-hover: #FDFBF7;  /* slightly lighter than warm */
+
+  /* Alert pills — light mode: 50-stop tinted fill, body-text color,
+     600-stop border. The border carries severity meaning; fill +
+     text are kept neutral so multiple pills don't shout at the user. */
+  --pill-amber-bg:     #FAEEDA;
+  --pill-amber-border: #BA7517;
+  --pill-amber-fg:     #1A1A2E;
+  --pill-red-bg:       #FCEBEB;
+  --pill-red-border:   #A32D2D;
+  --pill-red-fg:       #1A1A2E;
+  --pill-coral-bg:     #FAECE7;
+  --pill-coral-border: #993C1D;
+  --pill-coral-fg:     #1A1A2E;
+  --pill-gray-bg:      #F1EFE8;
+  --pill-gray-border:  #5F5E5A;
+  --pill-gray-fg:      #1A1A2E;
 }
 
 :root[data-theme="dark"] {
@@ -63,6 +81,25 @@
   /* Soften the "open"/admin-badge blue in dark */
   --status-open: #3E68CC;
   --status-in-progress: #5B6BE0;
+
+  --f92-warm-hover: rgba(255, 255, 255, 0.04);  /* very subtle lift */
+
+/* Alert pills — dark mode: 900-stop deep fill, lighter ramp text,
+     same 600-stop border as light mode. Saturated dark fills give
+     pills weight against the navy panel without losing the colored
+     border accent. */
+  --pill-amber-bg:     #412402;
+  --pill-amber-border: #BA7517;
+  --pill-amber-fg:     #F0C674;
+  --pill-red-bg:       #501313;
+  --pill-red-border:   #A32D2D;
+  --pill-red-fg:       #F0A0A0;
+  --pill-coral-bg:     #4A1B0C;
+  --pill-coral-border: #993C1D;
+  --pill-coral-fg:     #F0B097;
+  --pill-gray-bg:      #2C2C2A;
+  --pill-gray-border:  #5F5E5A;
+  --pill-gray-fg:      #C8C6BE;
 }
 
 @theme inline {
@@ -446,5 +483,17 @@ button:disabled,
 .donut-chart .recharts-pie-sector path,
 .donut-chart .recharts-sector {
   transition: transform 200ms ease-out;
+  cursor: pointer;
+}
+
+/* Pointer cursor on all interactive elements.
+   :not(:disabled) keeps disabled buttons looking inert.
+   Excludes text inputs (they correctly use the I-beam cursor). */
+button:not(:disabled),
+[role="button"]:not(:disabled),
+a[href],
+summary,
+label[for],
+select:not(:disabled) {
   cursor: pointer;
 }
