@@ -1331,6 +1331,14 @@ additions.
       the rework-event model. Today's flat list is fine when most
       tickets only have one log; the redesign matters more once
       tickets routinely have 3+ sendbacks.
+- [ ] **5.18 Pagination on /dashboard/logs** — Batch 004.12 added
+      `.range(0, 9999)` on the all-time logs query as a defensive fix
+      against Supabase's 1000-row default cap. That ceiling is a soft
+      10k limit. Once non-deleted log count approaches ~5000, add
+      proper pagination or a virtualized list. Cheap monitoring:
+      quarterly `SELECT count(*) FROM quality_logs WHERE is_deleted =
+      FALSE`. Currently ~50 logs at NBLY pilot rate; revisit when
+      multi-client work (Batch 004.99) starts onboarding.
 
 ### Batch 006 (post-demo) — Teams webhook dispatch (dedicated)
 Wires `alert_events` rows to actually fire Teams notifications.
