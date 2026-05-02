@@ -26,10 +26,15 @@ admin-route gate), Batch 004.9 (audit_log target_type cleanup,
 Migration 017 — backfill-only), Batch 004.10 (pre-demo UX polish:
 Next 16 params fix, KPI accuracy + Aging card, alerts panel pill
 redesign, pointer cursors, default 60-day logs filter, IdleTimeout
-removal — 2026-05-01). All migrations 001-017 have run against
-production. Batch 004.4.5 produced a UX discovery plan for Coverage
-+ Settings reorg (Batch 005 implementation). See §16 for full
-shipped log.
+removal — 2026-05-01), Batch 004.11 (Saturday code pull-forward:
+chart-name eyebrow on chart drawer, Sendback # replaces severity on
+rework-volume rows, stacked LogDetailDrawer over chart drawer —
+2026-05-01), Batch 004.12 (Saturday dashboard accuracy + logs page
+count: dashboard charts now read all-time data, "Total Logs" KPI
+relabeled to "Logs This Month", filtered row count on /dashboard/logs
+— 2026-05-02). All migrations 001-017 have run against production.
+Batch 004.4.5 produced a UX discovery plan for Coverage + Settings
+reorg (Batch 005 implementation). See §16 for full shipped log.
 
 ---
 
@@ -1150,6 +1155,20 @@ Resolved             → green-500
     chips, status indicators) should reference these tokens or follow
     the same per-theme pattern. Do not hardcode `#FAEEDA` etc. in JSX.
 
+26. **Drawer-on-drawer stacking is supported and intentional.**
+    shadcn/ui's `Sheet` (Radix Dialog) handles overlay z-index
+    and focus management for nested drawers. The chart drill-down
+    pattern uses this: clicking a row in `LogDrawer` opens
+    `LogDetailDrawer` over it without closing the underlying
+    drawer. Closing the detail drawer returns to the chart drawer
+    with state intact. ESC closes topmost first; overlay click
+    closes only the topmost. **Why:** preserves the user's place
+    in their filtered list — they can drill into a ticket, back
+    out, drill into another. **How to apply:** new drawers that
+    need to layer on top of an existing drawer can render
+    unconditionally (Radix handles stacking) — don't try to
+    coordinate state to "hide" the underlying drawer.
+
 ---
 
 ## 14. What Is NOT In Scope for V1
@@ -1271,26 +1290,18 @@ additions.
       threshold-only rendering off `alert_rules.config`, which is
       accurate but doesn't match the runtime count the evaluator
       saw. Decided not worth same-day for the cosmetic improvement.
-- [ ] **5.13 Chart drawer → LogDetailDrawer reuse** — when a ticket
-      is clicked from a chart drilldown drawer (e.g. "Week of Apr 26:
-      4 tickets"), open the existing `LogDetailDrawer` from
-      `/dashboard/logs` instead of navigating to the full
-      `/dashboard/logs/[id]` page. Decision locked: Option A (close
-      the chart drawer, replace with log detail drawer — single
-      drawer at a time, no stacking). The `LogDetailDrawer` already
-      shows everything needed; this is a wiring change, not a
-      content change.
-- [ ] **5.14 Drought pill → BrandDetailDrawer reuse + drought
+- [ ] **5.13 Drought pill → BrandDetailDrawer reuse + drought
       banner** — when a drought pill is clicked from the active
       alerts panel, open the existing `BrandDetailDrawer` from
       `/dashboard/coverage` instead of navigating to the coverage
       page. Add a small banner at the top of the drawer when opened
       from an alert: "Drought alert: N milestone(s) in last 28 days
       (threshold: 2)". Drawer also gets a "View Coverage →" link to
-      the full coverage page. Pairs with 5.13 — together they create
-      a unified "click anything → drawer slides in" pattern across
-      the dashboard.
-- [ ] **5.15 Log detail page density redesign** —
+      the full coverage page. Pairs with the chart drawer →
+      LogDetailDrawer stacking shipped in Batch 004.11 — together
+      they create a unified "click anything → drawer slides in"
+      pattern across the dashboard.
+- [ ] **5.14 Log detail page density redesign** —
       `/dashboard/logs/[id]` page currently uses a 2-column grid
       where every field gets equal real estate, including
       single-word values like "Yes". Result is sparse and hard to
@@ -1298,10 +1309,28 @@ additions.
       status, severity, brand, owner, dates) → narrative section
       (notes, resolution notes) → secondary details (booleans, root
       cause arrays) → audit trail in a tab or accordion. Note: the
-      `LogDetailDrawer` (used on Logs page + via 5.13 above) already
-      handles density well; consider whether the standalone page is
-      still needed once 5.13 ships, or whether the page becomes a
-      permalink-friendly version of the drawer.
+      `LogDetailDrawer` (used on Logs page + via the chart-drawer
+      stacking from Batch 004.11) already handles density well;
+      consider whether the standalone page is still needed, or
+      whether it becomes a permalink-friendly version of the drawer.
+- [ ] **5.16 Dashboard global filter pills** — add an "All time / 30 /
+      60 / 90 days" pill UI to `/dashboard`, matching the existing
+      pattern on `/dashboard/logs`. All four charts (and optionally
+      the KPI strip) should respond to this filter as a single global
+      control. Currently dashboard charts are hardcoded to all-time
+      per Batch 004.12 (Rework Volume slices its display to the last
+      26 weeks for legibility); this would put scope under user
+      control instead. Pairs naturally with a "match what /logs is
+      filtered to" affordance.
+- [ ] **5.17 Chart drawer rows use grouped/expandable layout** — when
+      a chart drill-down drawer opens, same-ticket logs (multiple
+      rework events on one ticket) should collapse into a single
+      expandable row, matching the pattern used on `/dashboard/logs`.
+      Currently each rework event is its own row, which can look like
+      duplicate tickets to users who don't already think in terms of
+      the rework-event model. Today's flat list is fine when most
+      tickets only have one log; the redesign matters more once
+      tickets routinely have 3+ sendbacks.
 
 ### Batch 006 (post-demo) — Teams webhook dispatch (dedicated)
 Wires `alert_events` rows to actually fire Teams notifications.
@@ -1656,6 +1685,167 @@ read from `alert_events`.
   009 is `'Client Coverage Drought'`. The function uses the seeded
   name (otherwise step 3 would never find the rule); the Batch 004.4
   spec language was colloquial.
+
+### Batch 004.12 — Saturday dashboard accuracy + logs page count — 2026-05-02
+Three small Saturday fixes ahead of the May 5 demo. No schema changes;
+two of three are display-only. Atomic ship.
+- **Dashboard charts now read all-time data**
+  (`app/dashboard/page.tsx`) — the `allLogs` Supabase query was
+  filtering with `gte('triggered_at', monthStart - 3)`, which silently
+  excluded every CSV-imported historical log from every chart and made
+  the Issue Category / Severity / Top Root Causes distributions
+  under-count by months of activity. The 3-month filter is removed;
+  the query now returns all non-deleted logs. **Why:** if the chart
+  legend says "Top Root Causes" and the bars are aggregating only the
+  trailing 3 months of webhook-driven data, the dashboard is lying to
+  the user about which root causes are actually frequent in the
+  history. CSV-imported rows make up the bulk of historical context
+  and need to be included for the distributions to be accurate.
+  **Rework Volume legibility decision:** rendering an all-time bar
+  chart with weekly buckets would produce 100+ bars on data that goes
+  back to 2024. The fetch is unchanged — `chartLogs` carries every
+  log — but the volumeByWeek output is `.slice(-26)` (last 26 active
+  weeks, ~6 months) for visual legibility. Click-drill on a bar still
+  filters `chartLogs` by the displayed week, so the drawer shows the
+  exact tickets in that week. The decision favors trend readability
+  over "show every week ever" for the time-series chart while
+  preserving total-fidelity counts on the three distribution charts.
+  The `chartLogs` state-comment was updated to reflect the new
+  contract.
+- **"Total Logs" KPI relabeled "Logs This Month"**
+  (`app/dashboard/page.tsx`) — the eyebrow read "TOTAL LOGS" with a
+  subtle subtitle "This month"; on May 1 (the day the month resets to
+  0) the big "0" looked broken to a guest viewer who skipped the
+  6-pixel subtitle. Eyebrow now reads "LOGS THIS MONTH" so the scope
+  lands in the prominent slot; subtitle changed to "Resets on the 1st"
+  to actively explain a low/zero value rather than just labeling the
+  scope. **Critically:** only the label moved — the underlying
+  `kpi.totalLogsThisMonth` query (still scoped to `monthLogs`) is
+  unchanged. Other "this month"-scoped KPIs (Top Root Cause subtitle)
+  were left alone since their N/A render is already self-explanatory.
+- **Reactive row count on /dashboard/logs filter bar**
+  (`app/dashboard/logs/page.tsx`) — users had no way to validate that
+  toggling pills / picking a brand was actually narrowing the result
+  set, particularly when the table was scrolled or a filter narrowed
+  to a small page-1 result. New `logCountLabel` derived from
+  `filteredLogs.length` via `Intl.NumberFormat('en-US')` so commas
+  appear at four-figure counts (`1,247 logs`); singular when count is
+  exactly 1 (`1 log`). Renders in the filter card header on the right
+  side, matching `text-xs font-medium text-[color:var(--f92-gray)]`
+  typography (same as the existing "• 1 active" tag). Updates in
+  lockstep with filter state — no debounce, no async fetch, just a
+  `useMemo` over `filteredLogs.length`. **Edge case:** when the
+  filtered count is 0, the count text becomes
+  `0 logs · clear filters to see all` with the second half rendered
+  as a button that calls `resetAllFilters()`. Catches the common
+  "filters too narrow" mistake without forcing the user to scroll
+  the table to find the empty-state row. `aria-live="polite"` on the
+  span so screen readers announce updates as filters change.
+- **Defensive `.range(0, 9999)` added to two queries** —
+  `app/dashboard/logs/page.tsx` `loadData()` and
+  `app/dashboard/page.tsx` `allLogs` both lacked an explicit range, so
+  Supabase's PostgREST default 1000-row cap silently applied. Pre-004.12
+  the dashboard chart query was 3-month-scoped (under cap) and the
+  logs page list also fit comfortably under cap, so the limit was
+  latent. Once charts go all-time AND the logs page surfaces a
+  user-visible "1,247 logs" count, that cap turns into a silent lie:
+  the count would top out at 1,000 even when the underlying table
+  holds more. `.range(0, 9999)` is a defensive raise to 10k. If/when
+  the table crosses that, both surfaces need real pagination, not a
+  higher cap. **Why bundled into 004.12 and not deferred:** the new
+  count feature LITERALLY CANNOT WORK CORRECTLY past 1k logs without
+  this; without it, item 3 above would ship with a known-wrong-at-scale
+  failure mode.
+- **Decisions deliberately punted to backlog (5.16, 5.17):** the
+  dashboard does NOT yet have user-controlled filter pills (5.16) —
+  that's a real UI surface, not a Saturday polish item, and conflating
+  it with this batch would have meant adding state plumbing across
+  every chart. Tonight the dashboard is honestly all-time; users who
+  need a windowed view go to `/dashboard/logs` and use the existing
+  pills. Chart-drawer row grouping (5.17) was also left for Batch 005
+  — same reason: scope discipline.
+
+### Batch 004.11 — Saturday code pull-forward — 2026-05-01
+Three small drawer-side polish items pulled forward from the Batch
+005 backlog so they land before the May 5 demo. All three are
+chart-drawer UX — no schema changes, no behavioral changes outside
+the dashboard. Atomic ship.
+- **Chart-name eyebrow on chart drawer**
+  (`components/dashboard/log-drawer.tsx`,
+  `app/dashboard/page.tsx`) — the chart drill-down drawer now
+  renders a small eyebrow label above the title (e.g.
+  "FROM: REWORK VOLUME (WEEKLY)"). Style:
+  `text-[10px] uppercase tracking-widest text-[color:var(--f92-gray)]`
+  with prefix "From: ". Without this, "Week of Apr 26, 2026" gives
+  no indication which chart it came from once the drawer is open
+  and the chart is occluded. New optional `chartName?: string` prop
+  on `LogDrawer`; `openDrawer()` helper signature on the dashboard
+  page extended to `(chartName, title, subtitle, logs)`. All four
+  charts pass their canonical name: `Rework Volume (Weekly)`,
+  `Issue Category Breakdown`, `Severity Distribution`,
+  `Top Root Causes`. New `drawerChartName` state cleared in the
+  onOpenChange close branch alongside the other defensive resets.
+- **Sendback # replaces severity on rework-volume drawer rows**
+  (`components/dashboard/log-drawer.tsx`,
+  `app/dashboard/page.tsx`) — when the Rework Volume (Weekly)
+  chart is the source, drawer rows now show a "Sendback #N" badge
+  in place of the severity badge. Status badge stays. Severity
+  isn't the relevant signal in a "tickets that came back this week"
+  list — sendback count is. New `mode?: 'default' | 'rework-volume'`
+  prop on `LogDrawer`; mode is derived on the dashboard page from
+  `drawerChartName === 'Rework Volume (Weekly)'` rather than tracked
+  separately (cleaner — one source of truth, no chance of mode +
+  chartName drifting). `LogDrawerQualityLog` interface extended
+  with optional `log_number?: number` (the dashboard's filtered
+  `DashboardLog` already carries it from `quality_logs.*`). The
+  badge only renders when `log_number` is actually present, so a
+  consumer that doesn't supply it gets the default severity badge.
+- **Chart drawer rows open `LogDetailDrawer` stacked on top**
+  (`components/dashboard/log-drawer.tsx`,
+  `app/dashboard/page.tsx`,
+  `components/logs/log-detail-drawer.tsx`) — clicking a row in the
+  chart drawer now opens the existing `LogDetailDrawer` over it.
+  The chart drawer stays open behind. Closing the detail drawer
+  returns the user to the chart drawer with their filtered list
+  intact. Replaces the original Batch 005 plan (Option A:
+  close-and-replace) with Option B (stacking) — the user can drill
+  into a ticket, back out, drill into the next ticket without
+  losing their place. Implementation:
+  - `LogDrawer` row markup replaced the absolute-positioned
+    `<Link href={...}>` row activator with an absolute-positioned
+    `<button type="button">` that fires a new
+    `onLogClick?: (logId: string) => void` callback. The button
+    overlay (sibling to the chip's `relative z-10` lane) preserves
+    the original a11y pattern: it gets native Enter / Space
+    keyboard activation as a real `<button>`, the focus-visible
+    orange ring stays on the activator, and the external Jira
+    ticket chip is NOT nested inside an interactive parent (avoids
+    the WCAG 4.1.2 nested-interactive violation that putting an
+    `<a>` inside `role="button"` would create). Clicking the chip
+    opens Jira in a new tab; clicking anywhere else on the row
+    triggers `onLogClick`.
+  - `app/dashboard/page.tsx` adds `detailLogId` + `detailOpen`
+    state, passes `onLogClick` into `LogDrawer`, and renders
+    `<LogDetailDrawer>` as a sibling. `isAdmin={false}` for now —
+    see known limitation below. `onEdit` is `undefined` (no edit
+    action from the chart drilldown; users go to the logs page for
+    that).
+  - Radix Dialog handles the stacking natively: ESC closes the
+    topmost drawer first; overlay click on the detail drawer
+    closes only the detail drawer. No coordinated state hiding
+    required. New §13 rule 26 documents the pattern as
+    intentionally supported.
+- **Known limitation:** the dashboard-context `LogDetailDrawer`
+  hides the Edit action because `isAdmin` is hardcoded `false` —
+  the dashboard page does not currently fetch user role. Tracked
+  as a `// TODO:` comment in `app/dashboard/page.tsx` next to the
+  detail-drawer mount. Wire `isAdmin` from `user_profiles` in
+  Batch 005 (matches the gating pattern used by other admin
+  surfaces); for now, admins can still edit from `/dashboard/logs`.
+- **Batch 005 §15 cleanup:** old item 5.13 (chart drawer →
+  LogDetailDrawer reuse) shipped here, removed; old 5.14 (drought
+  pill → BrandDetailDrawer) renumbered to 5.13; old 5.15 (log
+  detail page density redesign) renumbered to 5.14.
 
 ### Batch 004.10 — Pre-demo UX polish — 2026-05-01
 Pure dashboard-visible polish ahead of the May 5 demo. No schema
@@ -2014,4 +2204,4 @@ demo blocker.
 
 ---
 
-*Last updated: 2026-05-01 | CQIP v1.5 — comprehensive sync after Batches 004.0 through 004.10*
+*Last updated: 2026-05-02 | CQIP v1.5 — comprehensive sync after Batches 004.0 through 004.12*

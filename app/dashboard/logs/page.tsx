@@ -121,11 +121,17 @@ export default function LogsPage() {
 
   useEffect(() => {
     async function loadData() {
+      // .range(0, 9999) overrides Supabase's PostgREST default 1000-row
+      // cap. Required so the Batch 004.12 row count doesn't silently
+      // mis-report once the table crosses 1000 non-deleted logs (CSV
+      // history + ongoing webhook traffic). If we ever cross 10k, this
+      // page needs real pagination, not a higher cap.
       const { data: logsData } = await supabase
         .from('quality_logs')
         .select('id, triggered_at, jira_ticket_id, jira_ticket_url, jira_summary, client_brand, severity, log_status, issue_category, root_cause_final, who_owns_fix, log_number, notes, resolution_notes')
         .eq('is_deleted', false)
-        .order('triggered_at', { ascending: false });
+        .order('triggered_at', { ascending: false })
+        .range(0, 9999);
 
       const { data: sessionData } = await supabase.auth.getSession();
       const userId = sessionData?.session?.user?.id;
@@ -268,6 +274,15 @@ export default function LogsPage() {
     (clientBrand ? 1 : 0) +
     (severity ? 1 : 0) +
     (status ? 1 : 0);
+
+  // Row count of the FILTERED log set — reflects whatever the user is
+  // currently looking at (so toggling a pill, picking a brand, or
+  // clearing filters all update this in lockstep with the table). Uses
+  // log count, not ticket-group count, since users think in "logs."
+  const logCountFormatted = useMemo(() => {
+    return new Intl.NumberFormat('en-US').format(filteredLogs.length);
+  }, [filteredLogs.length]);
+  const logCountLabel = filteredLogs.length === 1 ? '1 log' : `${logCountFormatted} logs`;
 
   function toggleSort(key: SortKey) {
     if (key === sortKey) {
@@ -440,7 +455,7 @@ export default function LogsPage() {
       </div>
 
       <Card className="p-3 md:p-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3">
           <button
             type="button"
             onClick={() => setFiltersOpen(o => !o)}
@@ -462,15 +477,43 @@ export default function LogsPage() {
               </span>
             ) : null}
           </button>
-          {activeFilterCount > 0 ? (
-            <button
-              type="button"
-              onClick={resetAllFilters}
-              className="text-xs text-[color:var(--f92-gray)] transition hover:text-[color:var(--f92-orange)] focus-visible:outline-none focus-visible:underline"
-            >
-              Reset
-            </button>
-          ) : null}
+          <div className="flex items-center gap-3">
+            {/* Reactive row count — updates in lockstep with filter
+                changes (no debounce / no async fetch). The 0-state offers
+                a one-click reset since a typical 0 result means filters
+                are too narrow, not that the dashboard is broken. */}
+            {loading ? null : filteredLogs.length === 0 ? (
+              <span
+                className="text-xs font-medium text-[color:var(--f92-gray)]"
+                aria-live="polite"
+              >
+                0 logs ·{' '}
+                <button
+                  type="button"
+                  onClick={resetAllFilters}
+                  className="text-[color:var(--f92-orange)] transition hover:underline focus-visible:outline-none focus-visible:underline"
+                >
+                  clear filters to see all
+                </button>
+              </span>
+            ) : (
+              <span
+                className="text-xs font-medium text-[color:var(--f92-gray)]"
+                aria-live="polite"
+              >
+                {logCountLabel}
+              </span>
+            )}
+            {activeFilterCount > 0 ? (
+              <button
+                type="button"
+                onClick={resetAllFilters}
+                className="text-xs text-[color:var(--f92-gray)] transition hover:text-[color:var(--f92-orange)] focus-visible:outline-none focus-visible:underline"
+              >
+                Reset
+              </button>
+            ) : null}
+          </div>
         </div>
 
         <div

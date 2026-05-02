@@ -11,6 +11,7 @@ import { useToast } from '@/components/layout/toaster';
 import { useLoadingMessage } from '@/lib/easter-eggs/use-loading-message';
 import { SyncJiraButton } from '@/components/dashboard/sync-jira-button';
 import { LogDrawer, type LogDrawerQualityLog } from '@/components/dashboard/log-drawer';
+import { LogDetailDrawer } from '@/components/logs/log-detail-drawer';
 
 // Dashboard-local log shape: everything LogDrawer needs to render a row
 // plus the filter-only arrays the charts aggregate over. The drawer
@@ -123,17 +124,35 @@ export default function DashboardPage() {
   const [testsLoadFailed, setTestsLoadFailed] = useState(false);
 
   // Lifted to state so the chart onClick handlers can filter against the
-  // same array the charts aggregate. Matches the 3-month window the chart
-  // data uses.
+  // same array the charts aggregate. All-time, no date filter — the
+  // distribution charts (Issue Category, Severity, Top Root Causes) need
+  // the full history (CSV-imported logs back through 2024 included) to
+  // be accurate. Rework Volume slices its own bucket list to the last
+  // 26 weeks at render time so the bar chart stays legible.
   const [chartLogs, setChartLogs] = useState<DashboardLog[]>([]);
 
   // Drawer state — charts call openDrawer to populate and reveal.
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerChartName, setDrawerChartName] = useState('');
   const [drawerTitle, setDrawerTitle] = useState('');
   const [drawerSubtitle, setDrawerSubtitle] = useState('');
   const [drawerLogs, setDrawerLogs] = useState<LogDrawerQualityLog[]>([]);
 
-  function openDrawer(title: string, subtitle: string, logs: LogDrawerQualityLog[]) {
+  // Stacked detail drawer (Batch 004.11 #11). Renders on top of the chart
+  // drawer; closing it returns the user to the chart drawer with state intact.
+  // TODO: wire isAdmin from user_profiles for the dashboard-context detail
+  // drawer (Edit action will be hidden until then; users can edit from
+  // /dashboard/logs).
+  const [detailLogId, setDetailLogId] = useState<string | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+
+  function openDrawer(
+    chartName: string,
+    title: string,
+    subtitle: string,
+    logs: LogDrawerQualityLog[],
+  ) {
+    setDrawerChartName(chartName);
     setDrawerTitle(title);
     setDrawerSubtitle(subtitle);
     setDrawerLogs(logs);
@@ -213,12 +232,20 @@ export default function DashboardPage() {
 
         if (monthError) throw monthError;
 
-        // Fetch all logs for chart data (last 3 months)
+        // Fetch ALL non-deleted logs for chart data — no date filter.
+        // Pre-Batch-004.12 this was a 3-month window, which silently
+        // excluded the CSV-imported historical rows from every chart and
+        // under-counted distributions. The Rework Volume chart slices to
+        // the last 26 weeks below for legibility; the other three charts
+        // aggregate over everything. .range(0, 9999) overrides the
+        // PostgREST default 1000-row cap — without it, the same fix
+        // would re-introduce silent under-counting once the table
+        // crosses 1000 logs.
         const { data: allLogs, error: allError } = await supabase
           .from('quality_logs')
           .select('*')
           .eq('is_deleted', false)
-          .gte('triggered_at', new Date(now.getFullYear(), now.getMonth() - 3, 1).toISOString());
+          .range(0, 9999);
 
         if (allError) throw allError;
 
@@ -295,6 +322,12 @@ export default function DashboardPage() {
             weekBuckets[iso] = bucket;
           });
 
+          // Render the last 26 weeks of activity (~6 months) so the bar
+          // chart stays legible even when chartLogs spans years of CSV
+          // history. The click-drill still filters chartLogs by the
+          // displayed week, so accuracy is preserved within the rendered
+          // range. .slice(-26) is "last 26 active weeks" — weeks with
+          // zero logs aren't bucketed and don't take a slot.
           setCharts(prev => ({
             ...prev,
             volumeByWeek: Object.entries(weekBuckets)
@@ -303,7 +336,8 @@ export default function DashboardPage() {
                 weekStartIso,
                 count,
               }))
-              .sort((a, b) => new Date(a.weekStartIso).getTime() - new Date(b.weekStartIso).getTime()),
+              .sort((a, b) => new Date(a.weekStartIso).getTime() - new Date(b.weekStartIso).getTime())
+              .slice(-26),
           }));
 
           // Issue category breakdown
@@ -502,11 +536,14 @@ export default function DashboardPage() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-7">
-        {/* Total Logs This Month */}
+        {/* Total Logs This Month — the eyebrow puts "This Month" in the
+            prominent slot so a 0 value reads as accurate ("0 logs this
+            month"), not as a broken dashboard. The query is unchanged
+            (still scoped to monthLogs); only the label moved. */}
         <Card className="border-[color:var(--f92-border)] bg-white p-3 md:p-4 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-wider text-[color:var(--f92-gray)]">Total Logs</p>
+          <p className="text-xs font-medium uppercase tracking-wider text-[color:var(--f92-gray)]">Logs This Month</p>
           <p className="mt-2 text-3xl md:text-4xl font-bold text-[color:var(--f92-navy)]">{kpi.totalLogsThisMonth}</p>
-          <p className="mt-2 text-xs text-[color:var(--f92-gray)]">This month</p>
+          <p className="mt-2 text-xs text-[color:var(--f92-gray)]">Resets on the 1st</p>
         </Card>
 
         {/* Open Count */}
@@ -641,7 +678,7 @@ export default function DashboardPage() {
                       });
                       const titleStr = `Week of ${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
                       const subtitleStr = `${filtered.length} ${filtered.length === 1 ? 'ticket' : 'tickets'}`;
-                      openDrawer(titleStr, subtitleStr, filtered);
+                      openDrawer('Rework Volume (Weekly)', titleStr, subtitleStr, filtered);
                     }}
                   />
                 </BarChart>
@@ -696,6 +733,7 @@ export default function DashboardPage() {
                         Array.isArray(log.issue_category) && log.issue_category.includes(category),
                       );
                       openDrawer(
+                        'Issue Category Breakdown',
                         `Issue Category: ${category}`,
                         `${filtered.length} ${filtered.length === 1 ? 'ticket' : 'tickets'}`,
                         filtered,
@@ -746,6 +784,7 @@ export default function DashboardPage() {
                       return log.severity === severity;
                     });
                     openDrawer(
+                      'Severity Distribution',
                       `Severity: ${severity}`,
                       `${filtered.length} ${filtered.length === 1 ? 'ticket' : 'tickets'}`,
                       filtered,
@@ -798,6 +837,7 @@ export default function DashboardPage() {
                       Array.isArray(log.root_cause_final) && log.root_cause_final.includes(cause),
                     );
                     openDrawer(
+                      'Top Root Causes',
                       `Root Cause: ${cause}`,
                       `${filtered.length} ${filtered.length === 1 ? 'ticket' : 'tickets'}`,
                       filtered,
@@ -824,11 +864,30 @@ export default function DashboardPage() {
             setDrawerLogs([]);
             setDrawerTitle('');
             setDrawerSubtitle('');
+            setDrawerChartName('');
           }
         }}
+        chartName={drawerChartName || undefined}
         title={drawerTitle}
         subtitle={drawerSubtitle}
         logs={drawerLogs}
+        mode={drawerChartName === 'Rework Volume (Weekly)' ? 'rework-volume' : 'default'}
+        onLogClick={id => {
+          setDetailLogId(id);
+          setDetailOpen(true);
+        }}
+      />
+
+      {/* Stacked detail drawer — opens on top of the chart drawer; Radix
+          handles overlay z-index + focus management. See §13 rule 26. */}
+      <LogDetailDrawer
+        logId={detailLogId}
+        open={detailOpen}
+        onOpenChange={open => {
+          setDetailOpen(open);
+          if (!open) setDetailLogId(null);
+        }}
+        isAdmin={false}
       />
     </div>
   );
