@@ -237,6 +237,10 @@ cqip/
 │   │                                   unmatched brand_jira_value strings
 │   └── gen-build-info.js             # Prebuild: stamps build metadata for Settings → System
 │
+├── docs/
+│   ├── multi-client-readiness.md      # Batch 004.99: multi-client audit + SPL onboarding/offboarding playbooks
+│   └── ux-plans/                      # UX redesign plans (Coverage + Settings reorg, etc.)
+│
 └── .claude/
     └── agents/                  # Agent instructions used by Claude Code
         ├── Karen.md             # Reality check, completion assessment
@@ -1249,8 +1253,10 @@ Resolved             → green-500
 ### Identified for v1.5 (post-v1)
 - **Multi-client readiness** — extending CQIP from NBLY-only to support
   arbitrary CRO clients without manual code changes per onboarding.
-  Batch 004.99 (post-Batch-004) is the discovery exercise that produces
-  the remediation plan.
+  Batch 004.99 discovery shipped 2026-05-06 — see
+  `docs/multi-client-readiness.md` for the audit, onboarding playbook,
+  offboarding playbook, and prioritized remediation plan. The report
+  is the playbook SPL (and subsequent CRO clients) onboarding follows.
 - **Test milestone count exclusion flag** — admin-set
   `excluded_from_count` boolean with required reason; admin restore;
   Coverage queries respect the flag. Tracked as Batch 5.8.
@@ -1274,10 +1280,11 @@ Batch 004.10 UX polish on 2026-05-01.)
       CRO site. Blocked on his timeline. Not actionable on
       dashboard side until Azure is ready.
 
-### Batch 004.99 (post-Batch-004) — Multi-Client Readiness Review
+### Batch 004.99 (post-Batch-004) — Multi-Client Readiness Review — shipped 2026-05-06
 Discovery batch. Identifies all NBLY-hardcoded assumptions in CQIP
-and produces a remediation plan. Doesn't ship code itself — produces
-a markdown report (similar to Batch 004.4.5).
+and produces a remediation plan. Doesn't ship code itself — produced
+a markdown report at `docs/multi-client-readiness.md`. See §16 for
+the shipped-log entry.
 
 **Immediate downstream consumer:** SPL (second CRO client) onboarding.
 Project info ready as of 2026-05-06. The 004.99 output is the
@@ -1289,18 +1296,26 @@ are multi-client from day one; building them on a single-client
 foundation would mean refactoring after onboarding. 004.99 → SPL
 → Batch 007 is the locked sequence.
 
-- [ ] Audit `JIRA_FIELD_MAP` for NBLY-specific fields (e.g.,
-      `nbly_brand`)
-- [ ] Audit jira-webhook JQL filter (currently `project = NBLYCRO`)
-- [ ] Audit brand extraction logic in jira-webhook (uses
-      `customfield_12220`, NBLY-specific)
-- [ ] Audit Coverage page filters/labels for hardcoded NBLY
-      assumptions
-- [ ] Audit CSV import script for NBLY-specific column mappings
-- [ ] Document onboarding playbook (how to add a new CRO client)
-- [ ] Document offboarding playbook (deactivate without losing
-      history)
-- [ ] Identify any UI labels/copy that say "NBLY"
+Deliverables (all complete):
+- [x] Audit `JIRA_FIELD_MAP` for NBLY-specific fields (e.g.,
+      `nbly_brand`) → §3 of report. Result: instance-global,
+      `nbly_brand` key name is cosmetic.
+- [x] Audit jira-webhook JQL filter (currently `project = NBLYCRO`)
+      → §4.1. Result: Critical operational item; Lacey adds a
+      second webhook for SPLCRO (Option A recommended).
+- [x] Audit brand extraction logic in jira-webhook → §4.2 + §4.5.
+      Three sub-cases for SPL's brand field shape.
+- [x] Audit Coverage page filters/labels for hardcoded NBLY
+      assumptions → §5. Result: clean (filters populate from
+      brands table).
+- [x] Audit CSV import script for NBLY-specific column mappings
+      → §2 (one-shot scripts, NBLY-frozen).
+- [x] Document onboarding playbook (how to add a new CRO client)
+      → §8 (10 steps, ~45 min day-of).
+- [x] Document offboarding playbook (deactivate without losing
+      history) → §9.
+- [x] Identify any UI labels/copy that say "NBLY" → §5 (5 strings
+      across 4 files; all Medium severity copy fixes).
 
 ### Batch 005 (post-demo) — Backlog cleanup, scope-locked
 Strict rule: only items already in scope at lock time. No new
@@ -1831,6 +1846,76 @@ read from `alert_events`.
   009 is `'Client Coverage Drought'`. The function uses the seeded
   name (otherwise step 3 would never find the rule); the Batch 004.4
   spec language was colloquial.
+
+### Batch 004.99 — Multi-Client Readiness Review — 2026-05-06
+Discovery batch. No code shipped — produced a comprehensive
+audit report at `docs/multi-client-readiness.md` (~700 lines)
+identifying every NBLY-hardcoded assumption in the codebase,
+verifying multi-tenant boundaries, and producing onboarding +
+offboarding playbooks for future CRO clients (SPL is the
+immediate downstream consumer).
+
+**Pre-audit verified by Lacey** (incorporated as audit
+assumptions):
+- SPL Jira project key: `SPLCRO`
+- SPL has a single brand named "SPL"
+- SPL's QA tab is configured; field IDs match instance-global
+  (`customfield_12906` Severity confirmed)
+- SPL workflow uses the same status names as NBLY
+- SharePoint integration in progress (Carl's Azure work) — known
+  dependency, NOT a CQIP code blocker
+
+**Audit methodology:** whole-repo grep for NBLY tokens (52 hits
+in tracked source files outside `CLAUDE.md` / `package-lock.json`
+/ the historical CSV); file-by-file review of edge functions,
+migrations, settings UI, mutation routes; schema review against
+§5; ops review of env vars / pg_cron / RLS / Teams / SharePoint.
+
+**Top-line findings (better shape than expected):**
+- Schema is multi-tenant ready from day one (`projects`,
+  `brands.project_key` FK, `quality_logs.project_key` FK,
+  `test_milestones`, `alert_events.brand_id` all FK-scoped).
+- Edge functions, mutation routes, RLS policies, pg_cron jobs:
+  zero NBLYCRO hardcoding in runtime code.
+- 52 NBLY hits resolve to: 9 hardcode (mostly the `nbly_brand`
+  key name in `JIRA_FIELD_MAP`), 5 seed (one-time SQL — already
+  shipped, not multi-client blockers), 4 Medium UI copy strings
+  (placeholder/error text mentioning `NBLYCRO`), 12 Low cosmetic.
+- **Zero Critical findings in code.** The Critical
+  operational item is the Jira-side webhook JQL (currently
+  `project = NBLYCRO`); Lacey adds a second webhook for SPLCRO.
+
+**Critical-path remediation for SPL onboarding (~30 min CQIP-side
++ 10 min Lacey-side in Jira):**
+1. Confirm SPL's `customfield_12220` value on a real ticket (P2
+   in §10).
+2. Seed `projects` row for SPLCRO.
+3. Seed `brands` row for SPL (SQL only — no admin UI for brand
+   creation today; flagged as Q1 in §10 follow-up).
+4. Configure Jira webhook for SPLCRO (Option A: separate
+   webhook).
+5. Update 5 UI placeholder strings (`'NBLYCRO-123'` →
+   `'PROJECT-123'`) — Medium copy fix, ~15 min.
+
+**Total SPL onboarding effort post-remediation:** 2–3 hours
+human time end-to-end (CQIP work + Jira config + verification
+ticket + post-onboarding QA). Of that, ~45 min is CQIP-side;
+remainder is Jira automation + SharePoint dependency.
+
+**Post-SPL polish (Batch 005.x):** brand-create admin UI on
+`/dashboard/settings/coverage`, rename `nbly_brand` →
+`client_brand_field`, decide single vs per-client Teams channel,
+decide brand-resolution fallback approach for single-brand
+clients. None block SPL going live.
+
+**Long-term:** per-project `alert_rules` config (only when
+per-client thresholds become needed), per-project
+`JIRA_FIELD_MAP` (only when a future client lands on a different
+Jira instance), `brand_aliases` admin UI.
+
+The report is durable and intended for re-reading 6 months from
+now during Client #3 / #4 onboarding. Update the §11 metadata
+block on each subsequent audit.
 
 ### Batch 005.3 — Remove diagnostic client_brand warns — 2026-05-06
 Cleanup batch. Removed the `console.warn` blocks added during Batch
@@ -2488,4 +2573,4 @@ demo blocker.
 
 ---
 
-*Last updated: 2026-05-06 | CQIP v1.5 — Batch 005.3 shipped (diagnostic client_brand warns removed)*
+*Last updated: 2026-05-06 | CQIP v1.5 — Batch 004.99 shipped (multi-client readiness audit + SPL onboarding playbook)*
