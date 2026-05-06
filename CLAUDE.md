@@ -730,10 +730,17 @@ https://hupklpjruveleaahufmw.supabase.co/functions/v1/jira-webhook?secret=<WEBHO
 Jira can't send custom headers — we pass `secret` as query param (with timing-safe
 comparison) and `apikey` as query param. See `supabase/functions/jira-webhook/index.ts`.
 
-### Jira-side automation (TO DO — manual config in Jira UI)
-When a ticket enters `Dev Client Review`, clear all QA tab custom fields on that
-ticket so the next rework cycle starts clean. Configure as a Jira Automation rule
-in Project Settings → Automation. CQIP stays read-only against Jira (see §13 rule 5).
+### Jira-side automation (CONFIGURED — 2026-05-06)
+When a ticket enters `Dev QA` or `Dev Client Review`, all QA tab
+custom fields are cleared on that ticket so the next rework cycle
+starts clean. Implemented as two Jira native automation flows in the
+Neighborly CRO space:
+- "Clear QA Fields On Transition" — auto-trigger on status entry
+- "Manually Clear QA Fields" — manual button via lightning bolt
+  menu on tickets, for edge cases
+Owner: Lacey Hay. Actor: Automation for Jira. CQIP stays read-only
+against Jira (see §13 rule 5) — these are Jira-side automations,
+not CQIP-initiated.
 
 ---
 
@@ -1224,6 +1231,16 @@ Discovery batch. Identifies all NBLY-hardcoded assumptions in CQIP
 and produces a remediation plan. Doesn't ship code itself — produces
 a markdown report (similar to Batch 004.4.5).
 
+**Immediate downstream consumer:** SPL (second CRO client) onboarding.
+Project info ready as of 2026-05-06. The 004.99 output is the
+playbook SPL onboarding follows. Subsequent client onboardings
+follow the same playbook.
+
+**Hard prerequisite for Batch 007 (Custom Jira Boards)** — boards
+are multi-client from day one; building them on a single-client
+foundation would mean refactoring after onboarding. 004.99 → SPL
+→ Batch 007 is the locked sequence.
+
 - [ ] Audit `JIRA_FIELD_MAP` for NBLY-specific fields (e.g.,
       `nbly_brand`)
 - [ ] Audit jira-webhook JQL filter (currently `project = NBLYCRO`)
@@ -1352,7 +1369,87 @@ Until this batch ships, alerts accumulate silently in the database.
 - [ ] Mark `notification_sent = TRUE` on success
 - [ ] Detect 401/403 from Teams webhook (rotation grace handling)
 
-### Batch 007 — Convert.com test deployment automation
+### Batch 007 (post-006, hard prereq: 004.99 + SPL onboarding) — Custom Jira Boards
+Internal Kanban-style board view inside CQIP mirroring active tickets
+across all onboarded CRO Jira projects. Functions as a CRO-native
+replacement for the standard Jira board, with quality_logs context
+integrated next to each ticket. Direct team request; high priority
+once multi-client foundation is in place.
+
+**Initial scope: read-only.** §13 rule 5 (CQIP read-only against Jira)
+remains intact for v1. Drag-drop / write-back is a follow-on batch
+once the read-only board has lived in production for a few weeks
+and team feedback informs the write model.
+
+**Decisions locked at scope time (2026-05-06):**
+- Read-only first; read-write as natural follow-on batch
+- Real-time sync via webhook (extend jira-webhook to cache all
+  ticket state, not just rework events)
+- Multi-board UX: per-client board (NBLY, SPL, future) plus a
+  "View All" combined view; same status columns + structure
+  across all
+- Brand-level filtering on per-client boards; global filter
+  system (built-in + user-custom) on all views
+- v1 columns only (status); swimlanes deferred to v2 unless
+  team friction surfaces during use
+- Card content: ticket ID, title, status, severity, brand,
+  assignee, sendback count, age, plus any custom-field tags;
+  expandable as needs emerge
+- Performance: server-side filtering + per-column pagination
+  (~50 tickets per column initial load, infinite scroll for
+  more) + client-side virtual scrolling per @tanstack/react-virtual
+- Cache layer: new `jira_tickets` table populated by webhook,
+  read-side served from cache (Jira API never hit at render time)
+- Permissions: same view for admins + read-only users (no
+  per-action gating in v1)
+- Ticket detail: click card opens unified drawer (ticket header
+  + status + assignee + brand + custom tags on top, associated
+  quality_logs underneath via existing LogDetailDrawer pattern;
+  per §13 rule 26 drawer-on-drawer is supported)
+- New page: `/dashboard/board` (or `/dashboard/boards` —
+  decide at implementation), linked in main nav alongside
+  Dashboard, Coverage, etc.
+
+DISCOVERY DECISIONS NEEDED AT IMPLEMENTATION:
+- Exact route path (`/board` vs `/boards`)
+- Card visual density (compact vs. comfortable default)
+- Filter persistence (per-user saved views? URL param? both?)
+- Whether "View All" collapses to a single combined column
+  set or shows per-client column groups
+
+IMPLEMENTATION SKETCH (post-discovery):
+- New migration: `jira_tickets` cache table — id, jira_ticket_id
+  (unique), project_key, status, summary, severity, brand_id,
+  assignee, custom_field_tags (jsonb), updated_at, raw_payload
+  (jsonb for forward compat)
+- New migration: `board_views` table for saved per-user filter
+  configs (optional v1, possible v2 punt)
+- Extend `jira-webhook/index.ts` with a third branch (after
+  milestone + rework branches) — upsert into jira_tickets cache
+  on every ticket update, not just sendbacks
+- One-time backfill script: `scripts/backfill-jira-tickets.ts`
+  pulling current state of all active tickets per project
+- New page: `/dashboard/board` with Kanban UI
+  (likely dnd-kit for v2 read-write groundwork even though v1
+  doesn't ship drag-drop)
+- New components: `BoardColumn`, `TicketCard`, `BoardFilters`,
+  `TicketDetailDrawer` (wraps existing LogDetailDrawer for
+  the logs section)
+- Filter system: extensible config-driven filter UI matching
+  Jira's filter pattern (built-in filters + user-custom saved
+  filters)
+- Nav update: add "Boards" entry to main navigation
+
+Realistic scope: 3-5 weeks for read-only v1 (lower than original
+2-4 week estimate because decisions are locked upfront vs.
+greenfield discovery during build). Read-write follow-on adds
+2-4 weeks on top.
+
+**Why high priority:** team request, replaces a daily-use external
+tool with a CRO-context-aware view, reuses CQIP's existing data
+model (quality_logs, brands, milestones) rather than duplicating it.
+
+### Batch 008 — Convert.com test deployment automation
 Big-boy integration. Director of CRO requested a tool that lets the
 team pull active A/B tests for a given brand, then convert a winning
 variation into a deployment with a single click — pause test,
@@ -1396,9 +1493,6 @@ idempotency, and rollback semantics.
 ### Ops / deferred
 - [ ] **Radara Edge Function deploy** — code committed at
       `supabase/functions/radara-sweep/index.ts` but not deployed.
-- [ ] **Jira QA-tab clear automation** — configure as Jira UI
-      Automation rule when ticket enters Dev Client Review.
-      Manual config; CQIP stays read-only against Jira.
 
 ### Randy items (Cloudflare org-level — when he's back)
 - [ ] Cloudflare Workers Paid billing transfer (currently Lacey
@@ -1693,6 +1787,15 @@ read from `alert_events`.
   009 is `'Client Coverage Drought'`. The function uses the seeded
   name (otherwise step 3 would never find the rule); the Batch 004.4
   spec language was colloquial.
+
+### Jira config — QA field auto-clear — 2026-05-06
+Long-standing CLAUDE.md §15 ops item closed. Two Jira native
+automation flows configured in Neighborly CRO space to clear all 13
+QA tab custom fields on entry to Dev QA or Dev Client Review (auto)
+or via manual button (manual). All 12 standard fields cleared via
+Edit work item fields action; Who Owns The Fix? cleared via JSON
+({"fields": {"customfield_13120": null}}) due to UI dropdown
+limitation. No code change, no migration — Jira-side only.
 
 ### Batch 004.12 — Saturday dashboard accuracy + logs page count — 2026-05-02
 Three small Saturday fixes ahead of the May 5 demo. No schema changes;
@@ -2212,4 +2315,4 @@ demo blocker.
 
 ---
 
-*Last updated: 2026-05-02 | CQIP v1.5 — comprehensive sync after Batches 004.0 through 004.12*
+*Last updated: 2026-05-06 | CQIP v1.5 — backlog reorganization (Batch 007 added: Custom Jira Boards)*
