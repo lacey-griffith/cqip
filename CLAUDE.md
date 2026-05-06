@@ -153,7 +153,9 @@ cqip/
 │   │                              editing per-brand QA-automation config; opens from
 │   │                              /dashboard/settings/coverage)
 │   ├── dashboard/               # KPI cards, ActiveAlertsPanel, SyncJiraButton, LogDrawer
-│   │                              (shared click-to-filter drawer, Batch 003)
+│   │                              (shared click-to-filter drawer, Batch 003),
+│   │                              SyncStatusPill (Batch 005.10 — pass/fail
+│   │                              indicator next to every Sync button)
 │   ├── reports/                 # Scorecard, RootCause, Client reports
 │   └── layout/                  # Nav (sticky-bottom docs + F92 atom + clouds + shooting stars),
 │                                  UserAvatar, EasterEggHost, ThemeProvider,
@@ -507,6 +509,57 @@ CREATE TABLE easter_egg_stats (
 -- Atomic increment RPC — authenticated users only, SECURITY DEFINER.
 CREATE FUNCTION increment_easter_egg(p_name TEXT) RETURNS INTEGER …
 ```
+
+### sync_runs (migration 018 — Batch 005.10)
+Persists the outcome of every `jira-sync` invocation (manual + cron)
+so the Sync with Jira pill has a durable pass/fail signal and silent
+cron failures stop being possible. Writes happen exclusively from the
+edge function via the service role (one INSERT at start, one UPDATE
+at end of each invocation).
+
+```sql
+CREATE TABLE sync_runs (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  triggered_by    TEXT NOT NULL,        -- 'manual:<email>' | 'cron:jira-sync-6h'
+  started_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  completed_at    TIMESTAMPTZ,
+  status          TEXT NOT NULL CHECK (status IN ('running','success','failed')),
+  logs_updated    INTEGER,
+  logs_failed     INTEGER,
+  error_category  TEXT CHECK (
+                    error_category IS NULL OR
+                    error_category IN ('auth_mismatch','jira_401','jira_500','network','unknown')
+                  ),
+  error_message   TEXT,
+  duration_ms     INTEGER
+);
+
+CREATE INDEX idx_sync_runs_started_at ON sync_runs(started_at DESC);
+CREATE INDEX idx_sync_runs_status ON sync_runs(status);
+```
+
+**RLS posture** matches Batch 004.6's audit_log cleanup
+(migration 016):
+- SELECT — `sync_runs_select_authenticated`. Open to all authenticated
+  users so read-only viewers see the indicator too — sync-state
+  visibility is universally useful.
+- INSERT / UPDATE / DELETE — no policy for `authenticated`. Every row
+  is written by the `jira-sync` edge function via the service role
+  (bypasses RLS).
+
+**Trigger source attribution.** The Worker proxy at `/api/jira/sync`
+forwards `X-Triggered-By: manual:<email>` (email derived server-side
+via `getChangedBy()` per §13 rule 19). The edge function reads that
+header and falls back to `cron:jira-sync-6h` when absent, so a
+missing header doesn't silently mask attribution — there's exactly
+one cron caller right now.
+
+**Auth-mismatch rows.** When inbound `CQIP_SYNC_AUTH_KEY` validation
+fails, the function still writes a one-shot `failed` row (status
+goes straight from nonexistent to failed, never running) with
+`triggered_by='unknown:auth_mismatch'`, so the UI can surface
+auth drift without the function having to authenticate the caller
+to learn who they are.
 
 ### storage: avatars bucket (migration 007)
 Public-read bucket for profile photos. Each user can only write under
@@ -1788,6 +1841,117 @@ read from `alert_events`.
   name (otherwise step 3 would never find the rule); the Batch 004.4
   spec language was colloquial.
 
+### Batch 005.10 — Sync with Jira pass/fail indicator — 2026-05-06
+First Batch 005 item shipped post-demo. Adds persistent visibility
+into jira-sync runs (both manual + cron) so admins no longer need
+to check timestamps manually to confirm syncs succeeded — and so
+silent cron failures stop being possible.
+
+- **Migration 018 — `018_sync_runs.sql`**: new `sync_runs` cache
+  table with start/completion timestamps, status, error category,
+  error message, logs_updated count, logs_failed count,
+  duration_ms. CHECK on `error_category` constrains values to the
+  five documented categories. RLS: authenticated SELECT (read-only
+  users see the indicator too — visibility is universally useful),
+  no INSERT/UPDATE/DELETE policies for `authenticated`. Service-role
+  writes from the edge function bypass RLS, matching the
+  append-only pattern set by Batch 004.6's audit_log cleanup.
+- **Edge function `jira-sync` instrumented**
+  (`supabase/functions/jira-sync/index.ts`):
+  - `recordRunStart()` inserts a `running` row at the top of every
+    successful auth gate, capturing the row id.
+  - `recordRunEnd()` updates the same row with `success` /
+    `failed`, `completed_at`, `logs_updated`, `logs_failed`,
+    `error_category`, `error_message` (capped at 2000 chars),
+    `duration_ms`.
+  - **Error categorization** via new `categorizeError()` helper:
+    - `auth_mismatch` — inbound `CQIP_SYNC_AUTH_KEY` validation
+      fails. Recorded as a one-shot `failed` row that never enters
+      `running` (the function has no triggered_by signal at that
+      point, so the row carries `triggered_by='unknown:auth_mismatch'`).
+    - `jira_401` — Jira returns 401 / 403 (token expired / invalid).
+      Per-log catch detects this on the FIRST occurrence and
+      short-circuits the loop — every subsequent log would 401 too.
+      Saves a 50× retry storm and gives the UI a tight signal.
+    - `jira_500` — Jira returns 5xx.
+    - `network` — fetch throws `TypeError` / `AbortError` (DNS,
+      TLS, connection refused, timeout).
+    - `unknown` — anything else.
+  - New `JiraHttpError` class so `categorizeError()` can extract
+    a status code without string-parsing error messages.
+  - Per-log try/catch increments `logs_updated` on success and
+    `logs_failed` on caught error so a partial outage records
+    accurate counts. Function still returns 200 on partial
+    failure — pg_cron retries would duplicate the work.
+- **Server route `/api/jira/sync`**
+  (`app/api/jira/sync/route.ts`): forwards
+  `X-Triggered-By: manual:<email>` header to the edge function.
+  Email is derived server-side via `getChangedBy()` per §13 rule
+  19 — the client never supplies it. Edge function falls back
+  to `cron:jira-sync-6h` when the header is absent, since the
+  pg_cron job is the only other caller.
+- **`SyncStatusPill` component**
+  (`components/dashboard/sync-status-pill.tsx`): client component,
+  reads the most recent `sync_runs` row on mount, polls every 30s,
+  and re-renders relative-time labels every 30s independent of
+  the data fetch. 4 display states: never synced (gray clock),
+  running (blue spinner), success (green check + log count + time
+  ago), failed (red x + time ago). Click opens a Dialog with
+  full sync detail — triggered_by, absolute timestamps, duration,
+  log counts, and on failure the error category + raw error
+  message in a scrollable code block.
+- **Stale `running` row handling**: pill fetches the top 2 rows
+  by `started_at`. If the most recent row has `status='running'`
+  and `started_at` is older than 5 minutes, the pill skips it and
+  surfaces the next-most-recent row instead — the edge function
+  exited abnormally (uncaught throw, container timeout, OOM,
+  deploy mid-run) without recording the close. Heuristic only;
+  no server-side janitor for v1. The orphan rows stay in the
+  table and are visible in raw queries; only the pill papers
+  over them. Documented in code comments on both the pill and
+  the edge function.
+- **TODO carried forward**: "View sync history" link inside the
+  pill's detail dialog. Deferred until `/dashboard/settings/system`
+  gains a sync history view. Code comment in the dialog body
+  documents the intended query (last 50 rows of `sync_runs` ORDER
+  BY `started_at` DESC) and rendering pattern (table: Time,
+  Trigger, Status, Logs Updated/Failed, Duration, Error). Decide
+  admin-only vs all-users at build time — the pill is universal,
+  but the full trail may leak more than read-only users need.
+- **Pill colors via per-theme CSS tokens**, NOT inline hex per §13
+  rule 25. `app/globals.css` extended with `--pill-blue-*` and
+  `--pill-green-*` triplets in both `:root` and
+  `:root[data-theme="dark"]`. Light mode uses 50-stop tinted fill
+  + 600-stop border + body-text color; dark mode uses deep
+  900-stop fill + 600-stop border + lighter ramp text. Both
+  modes hit WCAG AA on the warm cream / dark navy panel surfaces.
+- **`SyncJiraButton` integration**
+  (`components/dashboard/sync-jira-button.tsx`): pill rendered
+  inline next to the button, ~8px gap. **Pill visible to all
+  users**; the Sync button itself stays admin-only (existing
+  behavior). Read-only users see the pill alone; admins see
+  button + pill. Replaces the old localStorage-based
+  "Last synced: ..." paragraph (`cqip-last-sync` key) — the
+  database-backed pill is canonical now. After a manual click,
+  `pillRefreshKey` bumps before and after the network call so
+  the pill reflects `running` then `success`/`failed` without
+  waiting for the 30s poll.
+- **Surfaces**: `SyncJiraButton` is mounted on Dashboard, Logs,
+  Reports, AND Coverage (CLAUDE.md §3 listed three; Coverage was
+  already a fourth caller). Pill ships on all four since the
+  change is in the shared component.
+- **Pre-deploy ops checklist** (after this commit lands):
+  1. Run migration 018 via Supabase dashboard
+  2. `supabase functions deploy jira-sync`
+  3. Manual sync click → pill goes blue → green
+  4. Wait for next 6h cron tick → confirm pill updates with
+     `cron:jira-sync-6h` triggered_by
+  5. Force a 401 by temporarily setting wrong
+     `CQIP_SYNC_AUTH_KEY` on the Worker → pill goes red with
+     `auth_mismatch` category
+  6. Log in as read-only guest → confirm pill renders (no
+     button) and dialog opens
+
 ### Jira config — QA field auto-clear — 2026-05-06
 Long-standing CLAUDE.md §15 ops item closed. Two Jira native
 automation flows configured in Neighborly CRO space to clear all 13
@@ -2315,4 +2479,4 @@ demo blocker.
 
 ---
 
-*Last updated: 2026-05-06 | CQIP v1.5 — backlog reorganization (Batch 007 added: Custom Jira Boards)*
+*Last updated: 2026-05-06 | CQIP v1.5 — Batch 005.10 shipped (Sync with Jira pass/fail indicator)*

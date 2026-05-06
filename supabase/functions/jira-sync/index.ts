@@ -87,14 +87,39 @@ const jiraHeaders: Record<string, string> = {
   'Content-Type': 'application/json',
 };
 
+// Custom error type so the per-log catch + the outer catch can extract a
+// status code without string-parsing `Jira API request failed: 401`.
+class JiraHttpError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+    this.name = 'JiraHttpError';
+  }
+}
+
 async function getIssue(issueKey: string) {
   const response = await fetch(`${jiraBaseUrl}/rest/api/3/issue/${issueKey}`, {
     headers: jiraHeaders,
   });
   if (!response.ok) {
-    throw new Error(`Jira API request failed: ${response.status}`);
+    throw new JiraHttpError(response.status, `Jira API request failed: ${response.status}`);
   }
   return response.json();
+}
+
+// Map any thrown error from the per-log loop or the outer try to one of the
+// documented sync_runs.error_category values.
+function categorizeError(err: unknown): 'jira_401' | 'jira_500' | 'network' | 'unknown' {
+  if (err instanceof JiraHttpError) {
+    if (err.status === 401 || err.status === 403) return 'jira_401';
+    if (err.status >= 500) return 'jira_500';
+    return 'unknown';
+  }
+  // fetch() throws TypeError on DNS / connection / TLS failure; AbortError on timeout.
+  const name = (err as { name?: string } | null)?.name;
+  if (name === 'TypeError' || name === 'AbortError') return 'network';
+  return 'unknown';
 }
 
 // -------------------------------------------------------------------------
@@ -196,9 +221,71 @@ function clientDescriptor(request: Request): string {
 }
 
 // -------------------------------------------------------------------------
+// sync_runs helpers — Batch 005.10. Persists the outcome of every sync
+// invocation so the Sync with Jira UI has a durable pass/fail signal.
+// Service-role writes bypass RLS; authenticated SELECT is open per the
+// migration so every dashboard surface can render the pill.
+// -------------------------------------------------------------------------
+async function recordRunStart(triggeredBy: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('sync_runs')
+    .insert({ triggered_by: triggeredBy, status: 'running' })
+    .select('id')
+    .single();
+  if (error) {
+    console.error('[jira-sync] failed to record run start:', error);
+    return null;
+  }
+  return data.id;
+}
+
+async function recordRunEnd(
+  runId: string | null,
+  startedAtMs: number,
+  status: 'success' | 'failed',
+  logsUpdated: number,
+  logsFailed: number,
+  errorCategory: string | null,
+  errorMessage: string | null,
+): Promise<void> {
+  if (!runId) return;
+  const completedAt = new Date();
+  const { error } = await supabase
+    .from('sync_runs')
+    .update({
+      status,
+      completed_at: completedAt.toISOString(),
+      logs_updated: logsUpdated,
+      logs_failed: logsFailed,
+      error_category: errorCategory,
+      error_message: errorMessage ? errorMessage.slice(0, 2000) : null,
+      duration_ms: completedAt.getTime() - startedAtMs,
+    })
+    .eq('id', runId);
+  if (error) {
+    console.error('[jira-sync] failed to record run end:', error);
+  }
+}
+
+// -------------------------------------------------------------------------
 // Request handler (Deno / Supabase Edge entrypoint)
+//
+// Orphaned `running` rows: if this function exits abnormally (uncaught
+// throw, container timeout, OOM, deploy mid-run) the row inserted by
+// recordRunStart() will never get its closing UPDATE. The SyncStatusPill
+// component compensates by treating any `running` row older than 5
+// minutes as stale and surfacing the next-most-recent row instead. We
+// don't bother with a server-side janitor for v1 — the pill heuristic
+// is sufficient and a janitor would be more code than the failure mode
+// warrants. Revisit if orphan rows turn into a real signal-to-noise
+// problem.
 // -------------------------------------------------------------------------
 Deno.serve(async (request: Request) => {
+  // Auth gate runs before sync_runs is touched. An auth_mismatch failure
+  // still lands in sync_runs so the UI can surface it — we record after
+  // validation so we have a triggered_by value, but we DO record:
+  // recordRunStart('unknown') would mask the auth signal. Instead we
+  // INSERT a one-shot 'failed' row directly, bypassing the running state.
   if (!validateApiKey(request)) {
     const url = new URL(request.url);
     console.warn(
@@ -211,8 +298,35 @@ Deno.serve(async (request: Request) => {
         authHeaderPresent: Boolean(request.headers.get('authorization')),
       }),
     );
+    const now = new Date();
+    await supabase.from('sync_runs').insert({
+      triggered_by: 'unknown:auth_mismatch',
+      status: 'failed',
+      started_at: now.toISOString(),
+      completed_at: now.toISOString(),
+      logs_updated: 0,
+      logs_failed: 0,
+      error_category: 'auth_mismatch',
+      error_message: 'Inbound CQIP_SYNC_AUTH_KEY did not match',
+      duration_ms: 0,
+    });
     return new Response('Unauthorized', { status: 401 });
   }
+
+  // Trigger source. The Worker proxy at /api/jira/sync forwards
+  // X-Triggered-By: manual:<email>. Anything else (including pg_cron) is
+  // treated as the cron path so a missing header doesn't silently mask
+  // attribution — we have exactly one cron caller right now.
+  const triggeredByHeader = request.headers.get('x-triggered-by');
+  const triggeredBy = triggeredByHeader && triggeredByHeader.startsWith('manual:')
+    ? triggeredByHeader.slice(0, 200)
+    : 'cron:jira-sync-6h';
+
+  const startedAtMs = Date.now();
+  const runId = await recordRunStart(triggeredBy);
+
+  let logsUpdated = 0;
+  let logsFailed = 0;
 
   try {
     const { data: logs, error: fetchError } = await supabase
@@ -279,14 +393,42 @@ Deno.serve(async (request: Request) => {
               notes: 'Auto-advanced via sync',
             });
         }
+        logsUpdated += 1;
       } catch (issueError) {
+        logsFailed += 1;
         console.error(`Error syncing log ${log.id}:`, issueError);
+        // If a per-log error is a clear Jira-side auth failure, surface it
+        // on the run record so the next sync click hints at token expiry
+        // even though the loop continued and the run technically returned 200.
+        if (issueError instanceof JiraHttpError && (issueError.status === 401 || issueError.status === 403)) {
+          await recordRunEnd(
+            runId,
+            startedAtMs,
+            'failed',
+            logsUpdated,
+            logsFailed,
+            'jira_401',
+            `Jira returned ${issueError.status} on ${log.jira_ticket_id} — likely token expired/invalid`,
+          );
+          return new Response('Sync stopped: Jira auth failure', { status: 200 });
+        }
       }
     }
 
+    await recordRunEnd(runId, startedAtMs, 'success', logsUpdated, logsFailed, null, null);
     return new Response('Sync completed', { status: 200 });
   } catch (error) {
     console.error('Sync error:', error);
+    const message = error instanceof Error ? error.message : String(error);
+    await recordRunEnd(
+      runId,
+      startedAtMs,
+      'failed',
+      logsUpdated,
+      logsFailed,
+      categorizeError(error),
+      message,
+    );
     return new Response('Internal server error', { status: 500 });
   }
 });

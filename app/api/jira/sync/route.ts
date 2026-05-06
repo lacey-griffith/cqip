@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createSupabaseRouteClient } from '@/lib/supabase/server';
+import { getChangedBy } from '@/lib/audit/get-changed-by';
 
 // Proxy route for the jira-sync Supabase Edge Function. Keeps admin-only
 // gating here even though the edge function has its own auth, so an anon
@@ -49,12 +50,18 @@ export async function POST() {
 
   const functionUrl = `${supabaseUrl.replace(/\/$/, '')}/functions/v1/jira-sync?apikey=${encodeURIComponent(syncAuthKey)}`;
 
+  // Trigger source for sync_runs attribution. Per §13 rule 19 the email
+  // is derived server-side from auth.uid() — the client never supplies it.
+  // getChangedBy() returns user_profiles.email → auth.users.email → 'unknown'.
+  const triggeredByEmail = await getChangedBy(supabase);
+
   try {
     const res = await fetch(functionUrl, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${syncAuthKey}`,
         'Content-Type': 'application/json',
+        'X-Triggered-By': `manual:${triggeredByEmail}`,
       },
     });
 
