@@ -151,16 +151,6 @@ function mapJiraFields(fields: any) {
 
   const rawBrand = fields[JIRA_FIELD_MAP.nbly_brand];
   mapped.client_brand = extractBrand(rawBrand, fields.summary ?? 'unknown');
-  // Diagnostic: dump the raw shape whenever brand resolves to null, so we can
-  // see WHY on the next live ticket in Supabase logs. Remove once confirmed.
-  if (mapped.client_brand == null) {
-    console.warn('[jira-sync] client_brand resolved null', JSON.stringify({
-      ticket: fields.summary ?? 'unknown',
-      rawType: typeof rawBrand,
-      rawIsArray: Array.isArray(rawBrand),
-      rawPreview: rawBrand == null ? null : JSON.stringify(rawBrand).slice(0, 300),
-    }));
-  }
 
   return mapped;
 }

@@ -831,11 +831,6 @@ export const JIRA_FIELD_MAP = {
   — e.g. `{ value: "MRA - Mr Appliance", id: "13743" }`. NOT cascading. The
   `client_brand` column stores the full "CODE - Display Name" string.
 
-### Diagnostic logging (temporary)
-Both `jira-webhook/index.ts` and `jira-sync/index.ts` currently log a warning
-when `client_brand` resolves to null. Leave this in place for 1–2 weeks after
-the Batch 001 backfill, then remove the warn block from both functions.
-
 ---
 
 ## 8. Jira API Integration
@@ -1321,10 +1316,6 @@ additions.
       API returns 401/404 from sync or webhook. Calendar-style
       early warning. Prevents silent breakage like the 2026-04-23
       token-expiry incident.
-- [ ] **5.3 Remove diagnostic `client_brand` warns** — jira-webhook
-      and jira-sync edge functions log warnings when client_brand
-      resolves to null. Was added during Batch 001 backfill
-      diagnostics. Has been clean for ~2 weeks; safe to remove.
 - [ ] **5.4 Brands soft-delete** — only if business need emerges.
       Currently brands table uses hard delete.
 - [ ] **5.5 Investigate 12 mystery POSTs** — During 2026-04-24 sync
@@ -1840,6 +1831,24 @@ read from `alert_events`.
   009 is `'Client Coverage Drought'`. The function uses the seeded
   name (otherwise step 3 would never find the rule); the Batch 004.4
   spec language was colloquial.
+
+### Batch 005.3 — Remove diagnostic client_brand warns — 2026-05-06
+Cleanup batch. Removed the `console.warn` blocks added during Batch
+001 backfill diagnostics from `jira-webhook/index.ts` and
+`jira-sync/index.ts`. The 1-2 week cleanup window flagged in §7
+expired ~6 weeks ago; brand resolution path has been stable since
+Batch 004.1's resolveBrandId hardening. The milestone-branch
+warning (`[jira-webhook] milestone: no brand or alias match for ...`,
+Batch 002) is intentionally preserved — it's part of the milestone
+contract, not Batch 001 diagnostics. The "unexpected client_brand
+shape" warn inside `extractBrand()` is also preserved — it's a
+structural sentinel for unrecognized Jira data shapes (would catch
+a silent Jira API field-format change), not a Batch 001 backfill
+diagnostic.
+
+No code path behavior changes; only logging removed. No migration,
+no schema change, no UI change. §7's "Diagnostic logging
+(temporary)" subsection deleted.
 
 ### Batch 005.10 — Sync with Jira pass/fail indicator — 2026-05-06
 First Batch 005 item shipped post-demo. Adds persistent visibility
@@ -2479,4 +2488,4 @@ demo blocker.
 
 ---
 
-*Last updated: 2026-05-06 | CQIP v1.5 — Batch 005.10 shipped (Sync with Jira pass/fail indicator)*
+*Last updated: 2026-05-06 | CQIP v1.5 — Batch 005.3 shipped (diagnostic client_brand warns removed)*
