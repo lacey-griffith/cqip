@@ -1849,11 +1849,30 @@ read from `alert_events`.
 
 ### Batch 004.99 — Multi-Client Readiness Review — 2026-05-06
 Discovery batch. No code shipped — produced a comprehensive
-audit report at `docs/multi-client-readiness.md` (~700 lines)
-identifying every NBLY-hardcoded assumption in the codebase,
-verifying multi-tenant boundaries, and producing onboarding +
-offboarding playbooks for future CRO clients (SPL is the
-immediate downstream consumer).
+audit report at `docs/multi-client-readiness.md` (~1100 lines
+post-addendum) identifying every NBLY-hardcoded assumption in
+the codebase, verifying multi-tenant boundaries, and producing
+onboarding + offboarding playbooks for future CRO clients
+(SPL is the immediate downstream consumer).
+
+**Same-day addendum (2026-05-06):** Section 8 (Onboarding
+Playbook) was rewritten as canonical source content for a
+future Dashboard Documentation Hub — every step now stands
+alone without `CLAUDE.md` cross-references, and Step 1
+expanded to include Jira workflow alignment quick-check, QA
+tab + screen-scheme verification (the gap that surfaced for
+SPLCRO during pre-audit prep), explicit `customfield_*` ID
+inspection with REST-API guidance, and stakeholder
+confirmation. New Step 5 "Configure project board automations"
+replaced the previous SharePoint-only step and now covers
+cloning the QA-clear automations, auditing other generic vs.
+NBLY-specific CRO automation flows in the Neighborly space,
+and SharePoint as a known dependency. §10 gained a Long-term
+remediation row (L5) for the future hub batch — number TBD at
+implementation time. §11 gained a Downstream Consumers
+subsection mapping which audit sections flow into which
+external surfaces (CLAUDE.md §15 backlog, future hub UI, future
+re-audit reference).
 
 **Pre-audit verified by Lacey** (incorporated as audit
 assumptions):

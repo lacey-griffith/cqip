@@ -460,45 +460,134 @@ v1.5 multi-client scope.
 
 ## 8. Onboarding Playbook (running example: SPL)
 
+> **About this section.** Section 8 is canonical source content
+> for a future Dashboard Documentation Hub onboarding guide
+> (tracked in §10 as a Long-term remediation item). It is
+> deliberately written to stand alone — every step here can be
+> read in the dashboard without flipping back to `CLAUDE.md` or
+> any other CQIP doc. Internal `§N` cross-references point at
+> other sections of *this* report only, and those sections will
+> surface alongside the playbook in the same hub.
+
 Step-by-step procedure for adding a new CRO client to CQIP.
-Written for future-Lacey or a teammate inheriting the project.
-Each step calls out the *why* alongside the *how*. Times are
-realistic estimates including verification.
+Each step calls out the *why* alongside the *how* and includes
+realistic time estimates including verification. SPL (Jira
+project key `SPLCRO`, single brand "SPL") is the running
+example.
 
-### Step 1 — Pre-flight verification (15 min)
+### Step 1 — Pre-flight verification (Jira-side, 20–30 min)
 
-Before touching CQIP, confirm:
+Before touching CQIP, walk through the new project in Jira and
+confirm each item below. Several of these surfaced as real-world
+gaps during SPL pre-audit (2026-05-06) — including most notably
+the QA tab not being on SPLCRO's screen scheme — so don't assume
+"the project exists, ergo it's ready."
 
-- [ ] **Jira project exists** and uses the standard CRO workflow.
-      Open a ticket from the new project and verify the Status
-      dropdown contains the expected names: `Active Dev`,
-      `Dev QA`, `Dev Client Review`, `Queued`, `Live`, etc.
-      (full list in `CLAUDE.md` §6).
-      *Why:* the trigger rule (§6) matches on these exact
-      strings. A renamed status silently breaks ingestion.
-- [ ] **QA tab configured** on the new project's screen scheme.
-      Verify the QA tab is present on a Dev QA / Dev Client
-      Review ticket and that all 13 custom fields render.
-      *Why:* the Jira automation that auto-clears these fields
-      on transition is configured per-screen-scheme. If the QA
-      tab isn't on the screen scheme, the fields exist on the
-      ticket but aren't visible — and the auto-clear doesn't fire.
-- [ ] **Custom field IDs match instance-global mapping.** Use
-      Jira's "view source" / API on a ticket to confirm
-      `customfield_12906` returns Severity, `customfield_12220`
-      returns brand (or whatever brand-equivalent field the
-      client uses), `customfield_12905` returns Root Cause, etc.
-      *Why:* CQIP assumes instance-global field IDs (per
-      `CLAUDE.md` §7). A different Jira instance or remapped
-      field IDs would require a per-project field-map refactor —
-      hard prerequisite to surface before onboarding.
+- [ ] **Jira project exists.** Open
+      `https://fusion92.atlassian.net/projects/<KEY>` and confirm
+      it loads. Note the project key (the all-caps prefix on
+      ticket IDs, e.g. `SPLCRO` for SPL, `NBLYCRO` for
+      Neighborly).
+      *Why:* this is the string CQIP stores as
+      `projects.jira_project_key` in Step 2 and the value the
+      Jira webhook will report on every transition.
+
+- [ ] **Workflow alignment check.** The CRO-standard workflow
+      uses these exact status names (case-sensitive; CQIP's
+      sendback-detection rule matches on the strings):
+      `Strategy`, `Ready for Design`, `In Design`, `Active
+      Design`, `Design QA`, `Design Client Review`, `Ready for
+      Dev`, `In Development`, `Active Dev` (or `Active
+      Development`), `Dev QA`, `Dev Client Review`, `Queued`,
+      `Live`, `Reporting`, `Done`.
+      **Quick-check method:** open Project Settings → Workflows
+      → click into the active workflow. The visual diagram lists
+      every status name. Compare against the list above. A
+      renamed status (e.g. `Dev Review` instead of `Dev Client
+      Review`) silently breaks ingestion — the webhook will see
+      transitions but the trigger rule won't match.
+
+- [ ] **QA tab is on the project's screen scheme.** This was the
+      gap that surfaced for SPL on 2026-05-06 — the project
+      existed and tickets were being created, but the QA tab
+      wasn't on the screen scheme, so the 13 QA custom fields
+      existed on the issues but weren't visible to the team.
+      **How to verify:**
+      1. Project Settings → Screens.
+      2. Click into the active screen scheme.
+      3. Confirm a "QA" tab is present on each of:
+         the Default screen, the Workflow Transition screen,
+         and any per-issue-type screens.
+      4. Open a real ticket (a Dev QA or Dev Client Review
+         status one is ideal) and confirm the QA tab renders
+         with all 13 fields populated or empty.
+      **How to fix if missing:** copy the QA tab configuration
+      from NBLYCRO's screen scheme. Atlassian doesn't have a
+      one-click "clone tab" button — you'll add the tab to the
+      new screen scheme and add each field individually. The
+      field IDs are instance-global so the underlying data is
+      already present.
+      *Why:* without the QA tab on the screen scheme, the team
+      has nowhere to enter Severity / Issue Category / Root
+      Cause / etc. CQIP's webhook still ingests sendbacks
+      (those run off status changes, not field content), but
+      every log lands with empty QA fields — defeating the
+      analytics.
+
+- [ ] **Custom field ID verification.** CQIP assumes
+      instance-global custom field IDs — i.e., that
+      `customfield_12906` is Severity (CRO) on every CRO project
+      in `fusion92.atlassian.net`. This is true today across
+      NBLYCRO and SPLCRO, but it's worth verifying for any new
+      project before going live (a different Jira instance, or
+      a project set up on a non-CRO field config scheme, would
+      break this assumption).
+      **How to verify:**
+      1. Open a ticket in the new project that has the QA tab
+         visible.
+      2. Hover over (or right-click → Inspect on) the Severity
+         field label. The field's HTML element will have an
+         `id` or `data-field-id` attribute reading
+         `customfield_12906` (or whatever the actual ID is).
+      3. Alternatively, fetch the ticket via Jira REST:
+         `GET https://fusion92.atlassian.net/rest/api/3/issue/<KEY-123>`.
+         The `fields` object will have keys like
+         `customfield_12906` for every QA field. Compare the
+         IDs against this map (the canonical CQIP field
+         mapping):
+
+         | CQIP field name             | Customfield ID         |
+         |-----------------------------|------------------------|
+         | severity                    | `customfield_12906`    |
+         | issue_category              | `customfield_12871`    |
+         | issue_subtype               | `customfield_12904`    |
+         | reproducibility             | `customfield_12907`    |
+         | root_cause                  | `customfield_12905`    |
+         | root_cause_description      | `customfield_12909`    |
+         | resolution_type             | `customfield_12908`    |
+         | who_owns_fix                | `customfield_13120`    |
+         | detected_by                 | `customfield_12910`    |
+         | preventable                 | `customfield_12911`    |
+         | experiment_paused           | `customfield_12912`    |
+         | process_improvement_needed  | `customfield_12913`    |
+         | documentation_updated       | `customfield_12914`    |
+         | brand (NBLY-named)          | `customfield_12220`    |
+
+      4. **If any ID doesn't match,** stop the onboarding and
+         escalate. CQIP would need a per-project field-map
+         refactor before the new client can be ingested
+         correctly. (As of 2026-05-06, no such mismatch has
+         been encountered.)
+
 - [ ] **Stakeholder confirmation.** The CRO team using the new
-      client is ready to start QA-tagging tickets. CQIP stays
-      empty if no rework events fire.
+      client is ready to start QA-tagging tickets — i.e., they
+      know to fill in Severity / Root Cause / etc. on rework
+      events. CQIP stays empty if no rework events fire.
 
-For SPL: ✅ all four boxes confirmed pre-audit (2026-05-06,
-SPLCRO project, Severity = customfield_12906 verified, single
-brand "SPL", same workflow status names).
+For SPL: pre-audit confirmed Jira project exists, single brand
+"SPL", workflow status names match, `customfield_12906`
+matches NBLY (verified by Lacey on 2026-05-06). The QA tab on
+SPLCRO's screen scheme was confirmed before the audit ran.
 
 ### Step 2 — Add project to CQIP (5 min)
 
@@ -511,23 +600,27 @@ Two paths:
 4. Enter: `Jira project key = SPLCRO`, `Client name = SPL`,
    `Display name = SPL`, `Jira project URL =
    https://fusion92.atlassian.net/projects/SPLCRO`.
-5. Submit. Confirm row appears in the list with `is_active = ON`.
+5. Submit. Confirm the row appears in the list with `is_active`
+   set to ON.
 
-**Path B — SQL (fallback):**
+**Path B — SQL (fallback, useful when running migrations
+   alongside other onboarding state):**
 ```sql
 INSERT INTO projects (jira_project_key, client_name, display_name, jira_project_url, is_active)
 VALUES ('SPLCRO', 'SPL', 'SPL', 'https://fusion92.atlassian.net/projects/SPLCRO', TRUE);
 ```
 
-*Why this matters:* the webhook checks `projects.is_active` for
-the incoming `projectKey` and short-circuits with `'Project not
-active'` if the row is missing or `is_active = FALSE`
-(`jira-webhook/index.ts:248-256`). No `projects` row → no
-ingestion, period.
+*Why this matters:* CQIP's webhook checks
+`projects.is_active = TRUE` for the incoming project key on
+every transition. If the project row is missing, the webhook
+short-circuits with a `Project not active` 200 response and no
+log is written. **No `projects` row → no ingestion, period.**
 
 ### Step 3 — Add brand(s) (5 min — SQL only today)
 
-The brand-create UI doesn't exist yet (§6.5), so this is SQL.
+CQIP doesn't yet have a brand-create UI surface (tracked as a
+post-SPL polish item in §10). For now this step is direct SQL.
+
 For SPL's single-brand model:
 
 ```sql
@@ -538,149 +631,258 @@ VALUES ('SPLCRO', 'SPL', 'SPL - <full Jira brand string>', 'SPL', TRUE, FALSE);
 **Critical pre-step:** verify the exact `jira_value` by opening
 one SPLCRO ticket and reading `customfield_12220`'s value. The
 string must match *exactly* — `'SPL - Small Business Project
-Lab'` ≠ `'SPL'` ≠ `'SPL Project'`. If SPL tickets routinely have
-this field empty, see §4.5 for the fallback options.
+Lab'` ≠ `'SPL'` ≠ `'SPL Project'`. If SPL tickets routinely
+leave this field empty, see §4.5 for the three fallback
+approaches (alias seed, default-brand-id column, or
+single-brand projection).
 
 For multi-brand clients, repeat the INSERT once per brand. Add
-to `brand_aliases` if historical data uses different brand
-strings (e.g., name changes, typos).
+rows to `brand_aliases` if historical data used different brand
+strings (e.g., name changes, typos):
+
+```sql
+INSERT INTO brand_aliases (brand_id, jira_value, notes)
+VALUES (
+  (SELECT id FROM brands WHERE brand_code = '<CODE>'),
+  '<historical jira_value>',
+  '<rationale>'
+);
+```
 
 *Why this matters:* without a `brands` row, the webhook can't
-resolve `brand_id` for milestones. Logs still get written (via
-the `client_brand` column, which stores the verbatim string),
-but coverage tracking and drought alerts won't work.
+resolve `brand_id` for milestones. Logs still get written (the
+`quality_logs.client_brand` text column stores the verbatim
+string from the Jira field), but coverage tracking and drought
+alerts won't work because they depend on the brand FK.
 
-### Step 4 — Configure Jira webhook (10 min — Lacey-side)
+### Step 4 — Configure Jira webhook (10 min — Jira-side)
 
-Two options per §4.1:
+Two viable options. **Recommend Option A** for client isolation.
 
 **Option A (recommended): add a second webhook.** In Jira →
-Settings → System → Webhooks:
+System Settings → System → Webhooks:
 1. Create a new webhook pointing at the same URL CQIP uses for
-   NBLY (`https://hupklpjruveleaahufmw.supabase.co/functions/v1/jira-webhook?secret=<WEBHOOK_SECRET>&apikey=<ANON_KEY>`).
+   NBLY:
+   ```
+   https://hupklpjruveleaahufmw.supabase.co/functions/v1/jira-webhook?secret=<WEBHOOK_SECRET>&apikey=<ANON_KEY>
+   ```
+   (Pull the actual secret + apikey values from the existing
+   NBLYCRO webhook config — they're per-instance, not
+   per-project.)
 2. JQL: `project = SPLCRO`.
-3. Events: `Issue Updated` (only).
+3. Events: `Issue Updated` (only — others generate noise CQIP
+   ignores).
 4. Verify "Issue properties" includes `changelog` so status
-   transitions are present in the payload.
+   transitions appear in the payload (the webhook needs the
+   `changelog.items` array to detect status changes).
 
-**Option B: broaden the existing webhook.** Edit the NBLY webhook
-to JQL `project IN (NBLYCRO, SPLCRO)`. Less to maintain;
-single-point-of-failure if misconfigured.
+**Option B: broaden the existing webhook.** Edit the NBLY
+webhook to JQL `project IN (NBLYCRO, SPLCRO)`. Less to
+maintain; single point of failure if misconfigured.
 
 *Why Option A:* a misconfigured SPL webhook can't disable NBLY
 ingestion. The cost is one extra webhook per client to maintain
 in Jira's UI, which is trivial.
 
-### Step 5 — Configure SharePoint integration (Carl-dependent)
+### Step 5 — Configure project board automations (Jira-side, 20–30 min)
 
-Per §6.6: this is *not* a CQIP code blocker. CQIP ingests SPL
-data fine without it. The QA Doc URL automation:
+The new project needs the same Jira-native automation flows
+that NBLYCRO has. These are configured per-project in Jira's
+Automation rules — they don't live in CQIP code. The
+Neighborly CRO space has 12 automation flows as of 2026-05-06;
+some are NBLY-specific, some are generic CRO automations that
+every onboarding client should get.
 
-1. Carl provisions Azure app registration with `Sites.Selected`
-   on the CRO SharePoint site.
-2. The Forge QA-automation app (separate repo) reads
-   `/api/brands/SPLCRO/SPL` from CQIP for SPL's
-   `live_url_base` / `default_local_sub_areas` / etc., and
-   calls SharePoint to populate / verify the QA Doc URL field
-   on the Jira ticket.
-3. The Forge consumer is in v0.0.4 spec stage — not yet in
-   production traffic against `/api/brands/*`.
+**5a. Clone the QA-clear automations** (configured 2026-05-06,
+generic CRO):
 
-**Mark this as TODO in the SPL onboarding ticket** but proceed
-with Steps 6+. SPL's first few rework logs will land in CQIP
-with whatever the QA Doc URL field happens to contain (probably
-empty until Carl lands).
+| Flow name | Trigger | Effect |
+|---|---|---|
+| **Clear QA Fields On Transition** | Auto: ticket enters `Dev QA` or `Dev Client Review` | Clears all 13 QA tab custom fields |
+| **Manually Clear QA Fields** | Manual button (lightning bolt menu) | Same effect, on demand |
+
+**How to clone:** in NBLYCRO → Project Settings → Automation,
+locate each flow, click the ⋯ menu → "Copy to project" → pick
+SPLCRO (or the new project). Verify the rule lands with the
+correct trigger (status entry vs manual) and the same 13 field
+clears. The 12 standard fields clear via "Edit work item
+fields"; "Who Owns The Fix?" (`customfield_13120`) clears via
+JSON action because the dropdown UI doesn't permit a "set to
+empty" choice — preserve the JSON form (`{"fields":
+{"customfield_13120": null}}`) when copying.
+
+*Why these matter:* without these automations, the QA fields
+from the previous rework cycle persist on the ticket. CQIP
+will re-read the same Severity / Root Cause / etc. on every
+new sendback, polluting the data. The auto-clear is what
+guarantees each rework log captures fresh QA tagging.
+
+**5b. Audit the other CRO automations.** Open NBLYCRO →
+Project Settings → Automation. For each flow listed there,
+decide:
+
+- **Generic CRO automation** (applies to any CRO client):
+  clone to the new project. Examples include any rule that
+  works off status transitions or assignee handoffs without
+  referencing NBLY-specific fields.
+- **NBLY-specific automation** (references NBLY brands,
+  Neighborly stakeholders, NBLY-specific routing): skip.
+  These are bespoke to Neighborly's ops and don't apply to
+  other clients.
+
+When in doubt, ask Lacey or the rule's last editor (the
+audit log on each rule shows who modified it). Document any
+generic rules that should be cloned-by-default in the
+"Generic CRO automation" master list (TODO: build this
+list during SPL onboarding so Client #3+ doesn't have to
+re-audit).
+
+**5c. QA Doc URL automation (Carl-dependent — known
+dependency, not yet automatable).** This is a SharePoint /
+Azure-side integration that auto-populates the QA Doc URL
+field on each ticket from a SharePoint folder structure.
+Status as of 2026-05-06: under construction. Carl is
+configuring an Azure app registration with `Sites.Selected`
+on the CRO SharePoint site; the Forge QA-automation app
+(separate repo) will read `/api/brands/<projectKey>/<brandCode>`
+from CQIP for the brand's `live_url_base` /
+`default_local_sub_areas` / etc., and call SharePoint to
+populate the Jira ticket field.
+
+For SPL onboarding: **mark this as TODO on the onboarding
+ticket** but proceed with Steps 6+. CQIP ingestion works
+without it — the QA Doc URL field will simply be empty on
+SPL tickets until Carl's work lands. CQIP reads whatever's
+in the field at sync time and doesn't error on empty.
 
 ### Step 6 — Verify ingestion (15 min)
 
-Pick a test ticket in SPLCRO that's safe to transition. Walk it
-through:
+Pick a test ticket in the new project that's safe to
+transition. Walk it through the three CQIP-relevant scenarios:
 
 1. **Dev Client Review entry** (forward transition from
-   `In Development`): confirm a `test_milestones` row appears
-   for this ticket in CQIP (`/dashboard/coverage` →
-   "Manage Milestones" → search by ticket ID).
-   *What to expect:* row with `source = 'webhook'`,
-   `brand_id` populated (or `null` with `brand_jira_value`
-   set if brand resolution failed — see §4.5).
+   `In Development`): confirm a milestone row appears at
+   `/dashboard/coverage` → "Manage Milestones" → search by
+   ticket ID. Expected row: `source = 'webhook'`, `brand_id`
+   populated (or `null` with `brand_jira_value` set as a
+   fallback string if brand resolution didn't match a row in
+   `brands` or `brand_aliases`).
+
 2. **Sendback** (`Dev QA → Active Dev` or `Dev Client Review →
    Active Dev`): confirm a `quality_logs` row appears at
-   `/dashboard/logs`. The webhook's response body will read
-   `milestone: skipped-not-applicable; rework: created` or
-   similar — readable from the Supabase Invocations tab.
-3. **Auto-advance** (transition the ticket back to `Dev QA` after
-   the sendback): confirm the log status flips to
-   `Pending Verification` on next sync (or immediately if
-   running on-demand sync).
-4. **Backfill historical data if needed.** SPL was confirmed
-   pre-audit to have *no* CSV historical import; if SPL has
-   pre-onboarding rework events to capture, fork
-   `scripts/backfill-milestones.ts` per §2 (parameterize JQL +
-   brand-field).
+   `/dashboard/logs`. The webhook's response body in the
+   Supabase Invocations tab will read something like
+   `milestone: skipped-not-applicable; rework: created` —
+   that's success, both branches ran independently.
+
+3. **Auto-advance** (transition the ticket back to `Dev QA`
+   after the sendback): confirm the log status flips to
+   `Pending Verification` on the next 6-hour sync cron run, or
+   immediately if you click the "Sync with Jira" button on the
+   dashboard.
+
+If any branch fails to write, check:
+- Supabase Edge Function logs for the `jira-webhook` function
+  (Supabase Dashboard → Edge Functions → Logs → jira-webhook).
+- The webhook config in Jira (correct URL, correct JQL, events
+  include `Issue Updated`).
+- The `projects` row exists with `is_active = TRUE`.
+
+**Backfill historical data if needed.** If the new client has
+pre-onboarding rework events you want to capture, fork
+`scripts/backfill-milestones.ts` (parameterize the JQL and
+brand-field-id constants). Most new clients won't need this —
+SPL was confirmed pre-audit to have no historical CSV import.
 
 ### Step 7 — Configure alerts (5 min)
 
-Default `alert_rules` apply globally — no per-client config
-needed (§7). Verification:
+Default alert rules apply globally — no per-client
+configuration is needed. Verification:
 
-- **Drought rule:** confirmed firing for SPL brands once seeded.
-  The drought-evaluator daily cron iterates all non-paused
-  brands; SPL gets evaluated automatically.
+- **Drought rule:** fires automatically for the new client's
+  brands once seeded. The drought-evaluator daily cron
+  iterates all non-paused brands across all projects.
 - **Other rules** (Critical Open, High Severity Spike, Repeat
-  Root Cause, etc.): no evaluators wired (Batch 005), so they're
-  silent for everyone, NBLY and SPL alike. Will activate
-  uniformly when their evaluators ship.
-- **Teams notifications:** dispatch is Batch 006. `alert_events`
-  rows accumulate but nothing posts. Expect this for SPL too.
+  Root Cause, Repeated Sendback, Long-Running Open): no
+  evaluators are wired yet. They're silent for everyone, NBLY
+  and the new client alike. Will activate uniformly when
+  their evaluators ship.
+- **Teams notifications:** dispatch is on the Batch 006
+  backlog. `alert_events` rows accumulate in the database but
+  nothing posts to Teams. Expect this for the new client too.
+
+If the client wants per-client thresholds (e.g., a single-brand
+client wants drought threshold = 1 instead of 2), that's a
+schema change to add `project_key` to `alert_rules` — flagged
+in §10 as a long-term remediation item.
 
 ### Step 8 — User access (5 min)
 
-CQIP is single-instance — no per-client user partitioning
-(§6.3). If new CRO team members need access:
+CQIP is a single-instance tool. Every admin sees every
+client's data; there's no per-client user partitioning. If
+new CRO team members need access:
 
-1. Admin → `/dashboard/settings/users` → Add user.
-2. Username, password, role (`admin` or `read_only`).
+1. Admin → `/dashboard/settings/users` → "Add user."
+2. Enter username and password; pick role (`admin` or
+   `read_only`).
 3. They see all clients' data automatically.
 
-For SPL specifically: pre-audit confirmed all 7 existing user
-accounts are sufficient. No new users needed for SPL onboarding.
+For SPL specifically: the existing 7 user accounts (2 admins,
+5 read-only) are sufficient. No new users needed.
 
 ### Step 9 — Document onboarding (10 min)
 
-Update `CLAUDE.md`:
-- §1: add SPL to the active-clients list (currently NBLY-implicit).
-- §6: add SPLCRO to the example webhook URLs if Option A from
-  Step 4 was used.
-- §16: add a new shipped-log entry — "SPL onboarded YYYY-MM-DD,
-  single brand, Carl's SharePoint work pending."
+Update the audit + project docs so the next person to look at
+CQIP's history can find the new client:
 
-This step is durable record-keeping. The next person to onboard
-a client (or audit CQIP six months from now) reads this file
-first.
+- `CLAUDE.md` §1: add the new client to the active-clients
+  list.
+- `CLAUDE.md` §6: if Option A in Step 4 was used, add a note
+  that two webhooks exist (one per project).
+- `CLAUDE.md` §16: add a new shipped-log entry —
+  "<CLIENT> onboarded YYYY-MM-DD, <N> brand(s), notes on any
+  Carl-side dependencies still pending."
+- This audit doc (`docs/multi-client-readiness.md`) §11
+  metadata block: bump the last-audit date and note the new
+  client.
+
+This step is durable record-keeping. The next person to
+onboard a client (or audit CQIP six months from now) reads
+those docs first.
 
 ### Step 10 — Post-onboarding QA (15 min)
 
-Once Steps 1–9 are done and ingestion has been verified:
+Once Steps 1–9 are done and ingestion has been verified end-
+to-end, walk through the dashboard and confirm:
 
-- [ ] **Sync status pill (Batch 005.10):** confirm the next
-      `jira-sync-6h` cron run completes successfully with
-      SPL's logs included. Pill on Dashboard / Logs / Reports
-      should show green.
-- [ ] **Coverage page** (`/dashboard/coverage`): SPL brand
-      appears in the table. Sparkline begins populating after
-      first SPL milestone.
-- [ ] **Dashboard charts:** SPL's first rework logs appear in
-      Issue Category / Severity / Top Root Causes / Rework
-      Volume. Filter dropdowns include SPL options.
-- [ ] **Audit log** (`/dashboard/settings/audit`): SPL ticket
-      audit rows landable (search for SPL-prefixed ticket IDs).
-- [ ] **No webhook errors** in the Supabase Invocations tab for
-      SPLCRO over the next 24 hours.
+- [ ] **Sync status pill:** the next `jira-sync-6h` cron run
+      completes successfully with the new client's logs
+      included. The pill on Dashboard / Logs / Reports /
+      Coverage should show green with the run's log count.
+- [ ] **Coverage page** (`/dashboard/coverage`): the new
+      client's brand(s) appear in the table. Sparklines begin
+      populating after the first milestone is recorded.
+- [ ] **Dashboard charts:** the first rework logs from the new
+      client appear in Issue Category / Severity / Top Root
+      Causes / Rework Volume. Filter dropdowns include the new
+      brand options.
+- [ ] **Audit log** (`/dashboard/settings/audit`): new-client
+      ticket audit rows landable (search by the new ticket-key
+      prefix, e.g. `SPLCRO-`).
+- [ ] **No webhook errors** in the Supabase Invocations tab
+      for the new project key over the next 24 hours.
 
-**Rollback plan:** if any verification fails, set
-`projects.is_active = FALSE` for SPLCRO. Webhook stops accepting
-SPL transitions; brand row stays for diagnosis. Investigate, fix,
-re-enable.
+**Rollback plan.** If any verification fails, set the
+project's `is_active` to FALSE — either via
+`/dashboard/settings/projects` toggle, or:
+
+```sql
+UPDATE projects SET is_active = FALSE WHERE jira_project_key = 'SPLCRO';
+```
+
+The webhook stops accepting transitions for that project; the
+brand row stays for diagnosis. Investigate, fix, and re-enable
+when ready.
 
 ---
 
@@ -792,6 +994,7 @@ Synthesis of every actionable finding from §2–§7.
 | L2 | Per-project `JIRA_FIELD_MAP` if a future client lands on a different Jira instance (§3) | Low | 8+ hours | Substantial refactor. Defer until the need is real. |
 | L3 | `brand_aliases` admin UI (§6.5) | Low | 3 hours | Most clients won't need it. Build only when needed. |
 | L4 | `scripts/backfill-milestones.ts` parameterization (§2) | Medium | 2 hours | If SPL has historical DCR milestones to backfill. Skipped if SPL is starting fresh. |
+| L5 | **Dashboard Documentation Hub — Client Onboarding section** (future Batch 005 item, number TBD at implementation time) | Medium | 6–10 hours | New surface inside the dashboard rendering this report's §8 (onboarding) and §9 (offboarding) as canonical user-facing content. Reads from a markdown source file (this report or a hub-specific copy) and renders with anchor links, copy-to-clipboard for the SQL snippets, and a "mark step done" checklist that persists per-onboarding. **Hard dependency:** §8 of this audit must be canonical source content (already written for that purpose; addendum 2026-05-06 sharpened the prose and added the QA-tab / screen-scheme / field-ID / workflow-alignment / project-board-automations steps). When the hub batch ships, decide whether the hub reads this file directly (single source of truth, drift-free) or maintains its own copy (independent edit history, drift risk). The single-source path is preferred; if Lacey wants per-step interactive UI (checklist persistence, per-step "I did this" markers), the hub can layer that on top of a markdown source rather than forking the prose. |
 
 ### Items that need further investigation
 
@@ -873,12 +1076,35 @@ client-2 (SPL) but starts to grate by client-3 or 4.
 - **§15** — Pending TODOs. Batch 004.99 (this) + Batch 5.x items
   surfaced from §10's remediation plan.
 
+### Downstream consumers
+
+This audit is intentionally durable and is referenced from several
+other surfaces. Sections of this report flow downstream as
+follows; if any section is significantly rewritten, check the
+listed consumers for staleness.
+
+| Section | Downstream consumer | Notes |
+|---|---|---|
+| §8 (Onboarding Playbook) | **Dashboard Documentation Hub — Client Onboarding section** (future Batch 005 item; see §10 row L5) | §8 is canonical source content for the hub. Per the addendum 2026-05-06, §8 is written to stand alone — every step makes sense without reading `CLAUDE.md` alongside, since the dashboard hub user won't have it open. Internal `§N` cross-refs point at other sections of this same audit, which the hub will surface alongside §8. |
+| §9 (Offboarding Playbook) | Same hub | Pairs with §8 in the hub. Currently shorter and more SQL-focused than §8; that's appropriate — offboarding is rarer and the steps are deliberate destructive actions admins should walk through carefully, not skim. |
+| §10 (Remediation Plan) | `CLAUDE.md` §15 backlog | Items here become Batch entries when scoped (Pre-SPL → §15 immediate; Post-SPL Q* → §15 Batch 005.x; Long-term L* → §15 Batch 006+ or v1.5 candidate list). When a remediation item ships, mark it complete here AND remove it from the corresponding §15 entry. |
+| §2 (NBLY Hardcoding Inventory) | Reference for future client onboardings | When Client #3 onboards, the inventory is the starting point: re-grep with the new client's project key, confirm no new hits accumulated, update the table if any have. |
+| §3, §4, §5, §6, §7 (audit findings) | Used at audit time, surface again at re-audit time | Re-run this whole audit at major-client milestones (e.g. Client #5, or any structural Jira/CQIP change). The findings tables provide the diff target. |
+
 ### Audit metadata
 
 - **Generated:** 2026-05-06.
+- **Addendum:** 2026-05-06 — Section 8 rewritten for the future
+  Dashboard Documentation Hub destination (added QA tab + screen
+  scheme verification, custom field ID inspection with screenshot
+  guidance, workflow alignment quick-check, project-board
+  automations step covering QA-clear cloning + generic CRO
+  automation audit + SharePoint-as-known-dependency); §10 gained
+  remediation row L5 for the hub batch; §11 gained the Downstream
+  Consumers subsection.
 - **Author:** Claude Code per Batch 004.99 spec.
-- **Repo state at audit time:** branch `main`, HEAD `1b1b177`
-  (Batch 005.3 — diagnostic warns removed).
+- **Repo state at audit time:** branch `main`, HEAD `d324cb3`
+  (Batch 004.99 initial commit) → addendum applied after.
 - **Pre-audit verifications confirmed by Lacey Hay:**
   SPLCRO project key, single brand "SPL",
   `customfield_12906` (Severity) matches NBLY,
