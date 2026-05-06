@@ -110,11 +110,11 @@ source files. Column legend per the Batch 004.99 spec.
 | `supabase/functions/jira-sync/index.ts:54` | Same inlined `nbly_brand` key. | hardcode | Low | Mirrors the rename. |
 | `supabase/functions/jira-sync/index.ts:57` | Same comment. | comment | Low | Same rename. |
 | `supabase/functions/jira-sync/index.ts:152` | Same field-extraction path. | hardcode | Low | Same rename. |
-| `app/api/admin/milestones/route.ts:53` | Error string `'jira_ticket_id must look like NBLYCRO-123'`. The regex `/^[A-Z]+-\d+$/` is generic; only the error copy is NBLY-specific. | hardcode | Medium | Replace with `'jira_ticket_id must look like PROJECT-123 (e.g. NBLYCRO-123, SPLCRO-123)'` or simply `'jira_ticket_id must match PROJECT-123 format'`. |
-| `components/coverage/manage-milestones-dialog.tsx:25, 132-133` | `TICKET_PATTERN = /^[A-Z]+-\d+$/` (already generic) + toast `'❌ Ticket must look like NBLYCRO-123'`. | hardcode | Medium | Same fix as above — toast string only. |
-| `components/coverage/manage-milestones-dialog.tsx:294` | Input placeholder `"NBLYCRO-1234"` on the milestone-add form. | hardcode | Medium | Replace with `"PROJECT-1234"` or rotate examples per the active project context. |
-| `app/dashboard/settings/audit/page.tsx:211` | Audit page ticket-filter input placeholder `"NBLYCRO-"`. | hardcode | Medium | Replace with `"PROJECT-"` or similar. |
-| `app/dashboard/settings/projects/page.tsx:161` | Project key input placeholder `"e.g. NBLY"` on the add-project form. | hardcode | Low | Update to `"e.g. NBLYCRO, SPLCRO"` to better signal multi-client. |
+| `app/api/admin/milestones/route.ts:53` | Error string `'jira_ticket_id must look like NBLYCRO-123'`. The regex `/^[A-Z]+-\d+$/` is generic; only the error copy is NBLY-specific. | hardcode | Medium | Replace with `'jira_ticket_id must look like PROJECT-123 (e.g. NBLYCRO-123, SPLCRO-123)'` or simply `'jira_ticket_id must match PROJECT-123 format'`. ✅ **Shipped 2026-05-06 (Batch 005.9)** |
+| `components/coverage/manage-milestones-dialog.tsx:25, 132-133` | `TICKET_PATTERN = /^[A-Z]+-\d+$/` (already generic) + toast `'❌ Ticket must look like NBLYCRO-123'`. | hardcode | Medium | Same fix as above — toast string only. ✅ **Shipped 2026-05-06 (Batch 005.9)** |
+| `components/coverage/manage-milestones-dialog.tsx:294` | Input placeholder `"NBLYCRO-1234"` on the milestone-add form. | hardcode | Medium | Replace with `"PROJECT-1234"` or rotate examples per the active project context. ✅ **Shipped 2026-05-06 (Batch 005.9)** |
+| `app/dashboard/settings/audit/page.tsx:211` | Audit page ticket-filter input placeholder `"NBLYCRO-"`. | hardcode | Medium | Replace with `"PROJECT-"` or similar. ✅ **Shipped 2026-05-06 (Batch 005.9)** |
+| `app/dashboard/settings/projects/page.tsx:161` | Project key input placeholder `"e.g. NBLY"` on the add-project form. | hardcode | Low | Update to `"e.g. NBLYCRO, SPLCRO"` to better signal multi-client. ✅ **Shipped 2026-05-06 (Batch 005.9)** |
 | `supabase/migrations/009_client_coverage.sql:6, 31, 38-53` | Migration 009 seeds 16 NBLY brand rows. | seed | N/A (already shipped) | One-time historical seed; do not re-run. SPL gets its own analogous migration (see §8 Step 3). |
 | `supabase/migrations/010_brand_aliases.sql:1, 10, 55, 61, 68` | Migration 010 seeds NBLY brand aliases + pauses MRR-CA. | seed | N/A (already shipped) | Same — historical seed for NBLY. SPL alias seeds (if any) go in a new migration. |
 | `supabase/migrations/013_brand_qa_config.sql:67, 76, 84` | Migration 013 enables QA-automation config for GUY + RBW NBLY brands; uses `WHERE project_key = 'NBLYCRO'`. | seed | N/A (already shipped) | One-time UPDATE bounded to NBLYCRO. SPL needs no analogous statement until SPL has QA-automation-enabled brands. |
@@ -281,11 +281,11 @@ Visible-string scan across `app/` and `components/` for `NBLY`,
 
 | Location | String / Copy | Severity | Remediation |
 |---|---|---|---|
-| `app/api/admin/milestones/route.ts:53` | Error toast: `'jira_ticket_id must look like NBLYCRO-123'` | Medium | Replace with `'jira_ticket_id must match PROJECT-123 format'`. |
-| `components/coverage/manage-milestones-dialog.tsx:133` | Toast: `'❌ Ticket must look like NBLYCRO-123'` | Medium | Replace with `'❌ Ticket must match PROJECT-123 format'`. |
-| `components/coverage/manage-milestones-dialog.tsx:294` | Input placeholder `"NBLYCRO-1234"` | Medium | Replace with `"PROJECT-1234"` or rotate examples. |
-| `app/dashboard/settings/audit/page.tsx:211` | Input placeholder `"NBLYCRO-"` (audit ticket filter) | Medium | Replace with `"PROJECT-"`. |
-| `app/dashboard/settings/projects/page.tsx:161` | Input placeholder `"e.g. NBLY"` (new-project key field) | Low | Replace with `"e.g. NBLYCRO, SPLCRO"`. |
+| `app/api/admin/milestones/route.ts:53` | Error toast: `'jira_ticket_id must look like NBLYCRO-123'` | Medium | Replace with `'jira_ticket_id must match PROJECT-123 format'`. ✅ **Shipped 2026-05-06 (Batch 005.9)** |
+| `components/coverage/manage-milestones-dialog.tsx:133` | Toast: `'❌ Ticket must look like NBLYCRO-123'` | Medium | Replace with `'❌ Ticket must match PROJECT-123 format'`. ✅ **Shipped 2026-05-06 (Batch 005.9)** |
+| `components/coverage/manage-milestones-dialog.tsx:294` | Input placeholder `"NBLYCRO-1234"` | Medium | Replace with `"PROJECT-1234"` or rotate examples. ✅ **Shipped 2026-05-06 (Batch 005.9)** |
+| `app/dashboard/settings/audit/page.tsx:211` | Input placeholder `"NBLYCRO-"` (audit ticket filter) | Medium | Replace with `"PROJECT-"`. ✅ **Shipped 2026-05-06 (Batch 005.9)** |
+| `app/dashboard/settings/projects/page.tsx:161` | Input placeholder `"e.g. NBLY"` (new-project key field) | Low | Replace with `"e.g. NBLYCRO, SPLCRO"`. ✅ **Shipped 2026-05-06 (Batch 005.9)** |
 
 **Surfaces verified clean** (no NBLY/Neighborly hardcoding):
 
@@ -963,7 +963,7 @@ Synthesis of every actionable finding from §2–§7.
 
 | # | Finding | Severity | Effort | Notes |
 |---|---|---|---|---|
-| P1 | UI strings: `'NBLYCRO-123'` / `"NBLYCRO-"` placeholders (§5 — 5 strings across 4 files) | Medium | 15 min | Pure copy fix. Generic placeholder text. Bundle into a single small commit. |
+| P1 | UI strings: `'NBLYCRO-123'` / `"NBLYCRO-"` placeholders (§5 — 5 strings across 4 files) | Medium | 15 min | Pure copy fix. Generic placeholder text. Bundle into a single small commit. ✅ **Shipped 2026-05-06 (Batch 005.9)** |
 | P2 | **Confirm SPL's `customfield_12220` value** (§4.2 sub-case) | Critical operational | 5 min | One Jira API call against an SPLCRO ticket. Determines exact `jira_value` to seed. |
 | P3 | Seed `projects` row for SPLCRO (§8 Step 2) | Critical | 5 min | INSERT one row. |
 | P4 | Seed `brands` row for SPL (§8 Step 3) | Critical | 5 min | INSERT one row. Depends on P2. |

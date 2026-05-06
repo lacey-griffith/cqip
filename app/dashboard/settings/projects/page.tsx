@@ -158,7 +158,7 @@ export default function ProjectsSettingsPage() {
         <div className="grid gap-4 lg:grid-cols-4">
           <div>
             <Label htmlFor="projectKey">Jira project key</Label>
-            <Input id="projectKey" value={projectKey} onChange={e => setProjectKey(e.target.value)} placeholder="e.g. NBLY" />
+            <Input id="projectKey" value={projectKey} onChange={e => setProjectKey(e.target.value)} placeholder="e.g. NBLYCRO, SPLCRO" />
           </div>
           <div>
             <Label htmlFor="clientName">Client name</Label>

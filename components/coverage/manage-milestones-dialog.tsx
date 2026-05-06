@@ -130,7 +130,7 @@ export function ManageMilestonesDialog({ brands, initialBrandId }: ManageMilesto
 
     const ticket = addTicket.trim().toUpperCase();
     if (!TICKET_PATTERN.test(ticket)) {
-      toast('❌ Ticket must look like NBLYCRO-123');
+      toast('❌ Ticket must match PROJECT-123 format');
       return;
     }
     if (!addBrandId) {
@@ -291,7 +291,7 @@ export function ManageMilestonesDialog({ brands, initialBrandId }: ManageMilesto
               id="addTicket"
               value={addTicket}
               onChange={e => setAddTicket(e.target.value)}
-              placeholder="NBLYCRO-1234"
+              placeholder="PROJECT-1234"
               required
               className="h-9 text-sm uppercase"
             />

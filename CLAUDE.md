@@ -1415,6 +1415,30 @@ additions.
       quarterly `SELECT count(*) FROM quality_logs WHERE is_deleted =
       FALSE`. Currently ~50 logs at NBLY pilot rate; revisit when
       multi-client work (Batch 004.99) starts onboarding.
+- [ ] **5.19 SPL multi-page presence sweep** — verify SPL appears
+      correctly on every dashboard surface that displays project /
+      brand context. Specifically check:
+      - `/dashboard/coverage` — does the SPL brand row appear? Does
+        the per-column sort + sparkline render once milestones land?
+      - `/dashboard/logs` — filter pills, brand selector, project
+        filter, sendback grouping behavior
+      - Active alerts panel — brand-code rendering for SPL-scoped
+        alerts (none exist yet, but verify the code path doesn't
+        assume NBLY-prefixed `client_brand` strings)
+      - `/dashboard/reports` — filter dropdowns, saved-report scoping
+      - Dashboard chart drilldowns (`LogDrawer`, `LogDetailDrawer`)
+        — chart row activation should respect SPL ticket prefixes
+      - `/dashboard/settings/audit` — ticket-filter prefix
+        recognition for `SPLCRO-` (now generic post-Batch-005.9; this
+        verifies the search behavior, not the placeholder)
+      Anywhere a hardcoded brand or project list might exist should
+      be verified. Most surfaces auto-populate from the
+      brands/projects tables and should "just work," but a sweep
+      confirms nothing was missed. Pairs with audit Section 6.5
+      (settings UI gaps — brand-create UI, brand-aliases admin) —
+      consider fixing those at the same time to avoid multiple
+      cleanup batches. See `docs/multi-client-readiness.md` §6.5
+      for the full settings-UI gap list.
 
 ### Batch 006 (post-demo) — Teams webhook dispatch (dedicated)
 Wires `alert_events` rows to actually fire Teams notifications.
@@ -1935,6 +1959,40 @@ Jira instance), `brand_aliases` admin UI.
 The report is durable and intended for re-reading 6 months from
 now during Client #3 / #4 onboarding. Update the §11 metadata
 block on each subsequent audit.
+
+### Batch 005.9 — UI copy: remove NBLY-coded examples — 2026-05-06
+First post-SPL-onboarding polish batch. Closes audit Section 5
+(all 5 findings) and audit Section 10 row P1. All copy fixes —
+no behavior change, no schema change, no migration.
+
+- `app/api/admin/milestones/route.ts` — error string updated to
+  project-key-agnostic phrasing (`'jira_ticket_id must match
+  PROJECT-123 format'`).
+- `components/coverage/manage-milestones-dialog.tsx` — toast
+  error + add-form input placeholder updated to PROJECT-style
+  (`'❌ Ticket must match PROJECT-123 format'` and
+  `placeholder="PROJECT-1234"`).
+- `app/dashboard/settings/audit/page.tsx` — ticket-filter input
+  placeholder updated (`placeholder="PROJECT-"`).
+- `app/dashboard/settings/projects/page.tsx` — project-key input
+  placeholder shows multi-client examples (`'e.g. NBLYCRO,
+  SPLCRO'`) so the second client onboarding feels first-class
+  rather than tacked-on.
+
+The `TICKET_PATTERN = /^[A-Z]+-\d+$/` regex was already generic
+in both call sites; only the human-readable copy was NBLY-coded.
+Validation behavior is unchanged.
+
+**Closes:** audit Section 5 (all 5 findings shipped) and §10 row
+P1. `docs/multi-client-readiness.md` §2 / §5 / §10 marked with
+"✅ Shipped 2026-05-06 (Batch 005.9)" notes per row.
+
+**Backlog item carried forward:** §15 item 5.19 (SPL multi-page
+presence sweep) — verify SPL renders correctly on every
+dashboard surface that displays project/brand context. Most
+surfaces auto-populate from the brands/projects tables and
+should "just work," but a manual sweep confirms nothing was
+missed. Pairs with audit Section 6.5 settings-UI gaps.
 
 ### Batch 005.3 — Remove diagnostic client_brand warns — 2026-05-06
 Cleanup batch. Removed the `console.warn` blocks added during Batch
@@ -2592,4 +2650,4 @@ demo blocker.
 
 ---
 
-*Last updated: 2026-05-06 | CQIP v1.5 — Batch 004.99 shipped (multi-client readiness audit + SPL onboarding playbook)*
+*Last updated: 2026-05-06 | CQIP v1.5 — Batch 005.9 shipped (UI copy: NBLY-coded placeholders → PROJECT-agnostic; audit §5 closed)*

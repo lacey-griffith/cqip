@@ -208,7 +208,7 @@ export default function AuditLogPage() {
           </div>
           <div className="min-w-[10rem] flex-1">
             <Label htmlFor="auditTicket" className="text-[10px] uppercase tracking-widest text-[color:var(--f92-gray)]">Ticket</Label>
-            <Input id="auditTicket" placeholder="NBLYCRO-" value={ticketFilter} onChange={e => setTicketFilter(e.target.value)} className="h-9 text-sm" />
+            <Input id="auditTicket" placeholder="PROJECT-" value={ticketFilter} onChange={e => setTicketFilter(e.target.value)} className="h-9 text-sm" />
           </div>
         </div>
       </Card>

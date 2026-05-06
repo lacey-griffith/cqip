@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
 
   const ticket = (body.jira_ticket_id ?? '').trim().toUpperCase();
   if (!TICKET_PATTERN.test(ticket)) {
-    return NextResponse.json({ error: 'jira_ticket_id must look like NBLYCRO-123' }, { status: 400 });
+    return NextResponse.json({ error: 'jira_ticket_id must match PROJECT-123 format' }, { status: 400 });
   }
   if (!body.brand_id) {
     return NextResponse.json({ error: 'brand_id is required' }, { status: 400 });
