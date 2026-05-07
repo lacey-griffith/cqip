@@ -385,20 +385,54 @@ CREATE INDEX idx_audit_log_changed_at ON audit_log(changed_at DESC);
   dropped as vestigial. Append-only contract preserved.
 
 ### projects
-Active and inactive Jira projects being monitored.
+Active and inactive Jira projects being monitored. Migration 019
+(Batch 005.22 Phase 1) added the brand-model columns and the
+`projects_brand_model_config_chk` CHECK constraint.
 
 ```sql
 CREATE TABLE projects (
-  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  jira_project_key  TEXT UNIQUE NOT NULL,   -- e.g. 'NBLYCRO'
-  client_name       TEXT NOT NULL,
-  display_name      TEXT NOT NULL,
-  jira_project_url  TEXT,
-  is_active         BOOLEAN NOT NULL DEFAULT TRUE,
-  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  deactivated_at    TIMESTAMPTZ
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  jira_project_key      TEXT UNIQUE NOT NULL,   -- e.g. 'NBLYCRO'
+  client_name           TEXT NOT NULL,
+  display_name          TEXT NOT NULL,
+  jira_project_url      TEXT,
+  is_active             BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deactivated_at        TIMESTAMPTZ,
+  -- Migration 019 (Batch 005.22 Phase 1):
+  brand_model           brand_model_type NOT NULL DEFAULT 'multi_brand',
+  brand_jira_field_id   TEXT DEFAULT 'customfield_12220',  -- NULL for single-brand
+  default_brand_id      UUID REFERENCES brands(id) ON DELETE RESTRICT
+);
+
+-- Enum:
+CREATE TYPE brand_model_type AS ENUM ('multi_brand', 'single_brand');
+
+-- CHECK enforces config integrity:
+--   multi_brand requires brand_jira_field_id (default supplies it)
+--   single_brand requires default_brand_id
+--   multi_brand MAY also set default_brand_id (escape-hatch fallback)
+ALTER TABLE projects ADD CONSTRAINT projects_brand_model_config_chk CHECK (
+  (brand_model = 'multi_brand' AND brand_jira_field_id IS NOT NULL) OR
+  (brand_model = 'single_brand' AND default_brand_id IS NOT NULL)
 );
 ```
+
+**Seeded values:**
+- `NBLYCRO`: `brand_model='multi_brand'`,
+  `brand_jira_field_id='customfield_12220'`, `default_brand_id=NULL`.
+  Behavior identical to pre-Phase-1.
+- `SPLCRO`: `brand_model='single_brand'`, `brand_jira_field_id=NULL`,
+  `default_brand_id=<SPL brand uuid>`. The single-brand path skips
+  Jira-field extraction entirely.
+
+Migration 019 also UPDATEd the SPL brand row's `jira_value` from
+`'SPL'` (the bare brand-code shape used at SPL onboarding 2026-05-07)
+to `'SPL - Spotloan'`, aligning all brands on the
+`"CODE - Display Name"` convention. This keeps the
+`quality_logs.client_brand` ↔ `brands.jira_value` literal-string
+equality in `lib/coverage/queries.ts:168` working uniformly across
+both brand models (Option γ writeback per §13 rule 28).
 
 ### user_profiles
 Extends Supabase auth.users with role info. Auth uses `<username>@cqip.local`
@@ -767,21 +801,37 @@ The milestone branch is wrapped in try/catch and logs to
 `console.error` on failure but does not return non-200, so the rework
 branch still runs in the same invocation.
 
-### Brand Resolution Flow (used by webhook + backfill + coverage UI)
-For a Jira `customfield_12220` value (e.g. `"MRA - Mr Appliance"`):
+### Brand resolution flow (used by webhook, sync, scripts)
 
-1. `extractBrand()` normalizes the raw shape (string, single-select
-   `{value}`, cascading `{value, child:{value}}`, or array of those).
-2. Look up `brands.jira_value = <extracted>` → got `brand_id`? Done.
-3. Otherwise, look up `brand_aliases.jira_value = <extracted>` → got
+Resolution depends on the project's brand_model. Look up
+`getProjectConfig(projectKey)` first; the model determines the path.
+
+**Single-brand projects** (e.g. SPLCRO):
+1. Use `projects.default_brand_id` directly. No field is read.
+2. `quality_logs.client_brand` = the brand row's `jira_value`
+   (Option γ writeback).
+3. `test_milestones.brand_jira_value` = NULL (no field consulted).
+
+**Multi-brand projects** (e.g. NBLYCRO):
+1. Read `projects.brand_jira_field_id` from project config.
+2. Extract the brand string via `extractBrand()` (handles string,
+   single-select, cascading, array shapes).
+3. Look up `brands.jira_value = <extracted>` → got `brand_id`? Done.
+4. Otherwise, `brand_aliases.jira_value = <extracted>` → got
    `brand_id`? Done.
-4. Otherwise, log a warning (`[jira-webhook] milestone: no brand or
-   alias match for ...`) and proceed with `brand_id = NULL`.
-   `test_milestones.brand_id` is nullable, and `brand_jira_value` is
-   stored verbatim so a later alias seed can backfill the FK.
+5. Otherwise, fall back to `projects.default_brand_id` if set.
+6. Otherwise, log a warning (with project + fieldId + extracted)
+   and proceed with `brand_id = NULL`. `test_milestones.brand_jira_value`
+   stores the verbatim extracted string for later alias seeding.
 
-The backfill (`scripts/backfill-milestones.ts`) follows the same flow
-and surfaces unmatched strings so we can patch `brand_aliases`.
+`quality_logs.client_brand` always stores `brands.jira_value`
+verbatim (Option γ). `lib/coverage/queries.ts` rework counts depend
+on literal string equality between this column and the brand row's
+jira_value, so the writeback never constructs a synthetic string.
+
+The backfill scripts (`scripts/backfill-milestones.ts`,
+`scripts/backfill-brands.ts`) follow the same project-aware flow and
+surface unmatched multi-brand strings so we can patch `brand_aliases`.
 
 ### Webhook registration
 Webhook URL format (live):
@@ -825,9 +875,13 @@ export const JIRA_FIELD_MAP = {
   root_cause:                 'customfield_12905',  // Select List (multiple)
   root_cause_description:     'customfield_12909',  // Paragraph (text)
   severity:                   'customfield_12906',  // Select List (single)
-  nbly_brand:                 'customfield_12220',  // Select List (single)
 } as const;
 ```
+
+Brand field is per-project (`projects.brand_jira_field_id`); no
+longer in `JIRA_FIELD_MAP`. NBLYCRO uses `customfield_12220`;
+SPLCRO is single-brand and reads no field. See §6 brand resolution
+flow and §13 rule 28.
 
 ### Field Type Notes
 - `who_owns_fix` is a **cascading select** — returns parent/child object.
@@ -835,9 +889,11 @@ export const JIRA_FIELD_MAP = {
 - `detected_by` is a User Picker — extract: `field?.displayName ?? null`
 - Checkbox fields return an array — check `field?.length > 0` for boolean conversion
 - Multi-select fields return arrays of `{value, id}` objects — map to `value` strings
-- `nbly_brand` is a single select returning `{ value: "CODE - Display Name", id }`
-  — e.g. `{ value: "MRA - Mr Appliance", id: "13743" }`. NOT cascading. The
-  `client_brand` column stores the full "CODE - Display Name" string.
+- Brand field (per-project, NBLYCRO uses `customfield_12220`) is a
+  single select returning `{ value: "CODE - Display Name", id }` —
+  e.g. `{ value: "MRA - Mr Appliance", id: "13743" }`. NOT cascading.
+  The `quality_logs.client_brand` column stores the resolved brand
+  row's `jira_value` verbatim (Option γ writeback per §13 rule 28).
 
 ---
 
@@ -1054,9 +1110,13 @@ Resolved             → green-500
 
 13. **Brand lookup falls back through aliases.** Anywhere a brand is
     resolved from a Jira string (webhook, backfill, coverage UI),
-    follow `brands.jira_value → brand_aliases.jira_value → null`.
-    Never invent a brand row. Unmatched strings get logged and stored
-    verbatim in `brand_jira_value` so an alias seed can backfill later.
+    follow `brands.jira_value → brand_aliases.jira_value →
+    projects.default_brand_id → null` (Batch 005.22 Phase 1 added the
+    `default_brand_id` step as the final fallback for multi-brand
+    projects). Never invent a brand row. Unmatched strings get logged
+    and stored verbatim in `brand_jira_value` so an alias seed can
+    backfill later. Single-brand projects skip this chain entirely
+    and use `projects.default_brand_id` directly — see rule 28.
 
 14. **Soft-deleted milestones are recoverable.** The
     `idx_test_milestones_unique` index is partial on `is_deleted = FALSE`,
@@ -1086,17 +1146,30 @@ Resolved             → green-500
 18. **Milestone creation is independent of brand resolution.** On a
     `Dev Client Review` transition, the `test_milestones` row is ALWAYS
     inserted. Brand resolution is best-effort and must never gate the
-    insert. Order of attempts for brand value:
-    (1) webhook payload's `customfield_12220`,
+    insert. Order of attempts for brand value (multi-brand projects):
+    (1) webhook payload's configured `brand_jira_field_id`,
     (2) `getIssue()` fallback (wrapped in its own try/catch),
     (3) `null`.
-    Payload wins on conflict — it is the authoritative snapshot of the
-    transition that just happened, and matches the state Jira fired the
-    webhook from. Null `brand_id` rows are recoverable via
-    `scripts/backfill-milestones.ts`. Reason: losing the milestone fact
-    because an unrelated Jira call failed (token expiry, transient
-    outage) is unacceptable. Batch 004.1 hardening; incident
+    Single-brand projects skip steps 1–3 and resolve via
+    `projects.default_brand_id` directly (rule 28). Payload wins on
+    conflict — it is the authoritative snapshot of the transition that
+    just happened, and matches the state Jira fired the webhook from.
+    Null `brand_id` rows are recoverable via
+    `scripts/backfill-milestones.ts`. Reason: losing the milestone
+    fact because an unrelated Jira call failed (token expiry,
+    transient outage) is unacceptable. Batch 004.1 hardening; incident
     2026-04-24 NBLYCRO-1452.
+
+    **`getIssue()` summary backfill is decoupled from brand resolution
+    (Batch 005.22 Phase 1).** The webhook fetches the full issue if
+    EITHER the payload is missing summary OR the configured brand
+    field is empty; both bits of recovered data flow into the
+    milestone insert through their own paths
+    (`resolvedSummary` for summary; `resolveBrandForTicket()` for
+    brand). A `getIssue()` failure still allows a null-summary or
+    null-brand insert. The helper signature takes both
+    `payloadFields` and optional `fullIssueFields` so the caller —
+    not the resolver — owns the decision to invoke `getIssue()`.
 
 19. **Audit log writes derive `changed_by` from `auth.uid()`
     server-side.** Client-supplied `changed_by` values are ignored,
@@ -1252,6 +1325,30 @@ Resolved             → green-500
     with the new key to verify, then wait for the next scheduled
     tick and re-verify.
 
+28. **Project brand model determines brand resolution path.**
+    `multi_brand` projects extract from `projects.brand_jira_field_id`
+    then walk `brands → aliases → projects.default_brand_id → null`.
+    `single_brand` projects skip field extraction and use
+    `projects.default_brand_id` directly. The CHECK constraint on
+    `projects` enforces that each model has its required configuration.
+    `default_brand_id` is permitted on multi-brand projects too as
+    an escape-hatch fallback for tickets with empty brand fields;
+    NBLYCRO leaves it NULL today (preserving identical behavior to
+    pre-Phase-1). The `getIssue()` summary backfill is independent
+    of brand resolution and applies to both models — see rule 18.
+    `quality_logs.client_brand` writeback is always the resolved
+    brand row's `jira_value` verbatim (Option γ); never a synthetic
+    construction from `brand_code + display_name`. **Why:**
+    `lib/coverage/queries.ts` Coverage rework counts compare
+    `quality_logs.client_brand` to `brands.jira_value` via literal
+    string equality. Construction would diverge the two columns and
+    silently zero the rework column. **How to apply:** any future
+    code that writes to `quality_logs.client_brand` (webhook, sync,
+    backfill scripts) must source the string from `brands.jira_value`,
+    not construct it. New brand rows must follow the
+    `"CODE - Display Name"` convention — enforced by admin UI copy,
+    not by schema constraint.
+
 ---
 
 ## 14. What Is NOT In Scope for V1
@@ -1275,12 +1372,12 @@ Resolved             → green-500
   `supabase/functions/radara-sweep/index.ts` but not deployed.
 
 ### Identified for v1.5 (post-v1)
-- **Multi-client readiness** — extending CQIP from NBLY-only to support
-  arbitrary CRO clients without manual code changes per onboarding.
-  Batch 004.99 discovery shipped 2026-05-06 — see
-  `docs/multi-client-readiness.md` for the audit, onboarding playbook,
-  offboarding playbook, and prioritized remediation plan. The report
-  is the playbook SPL (and subsequent CRO clients) onboarding follows.
+- **Multi-client readiness** — Batch 004.99 discovery shipped
+  2026-05-06 (`docs/multi-client-readiness.md`). Phase 1 of the
+  remediation shipped 2026-05-07 as Batch 005.22 (project-aware
+  brand resolution: SPL ingestion now correct). Subsequent phases
+  (filter pills, project-create UI hardening, brand-create
+  single-brand affordances) tracked as Batch 005.22 Phases 2-5.
 - **Test milestone count exclusion flag** — admin-set
   `excluded_from_count` boolean with required reason; admin restore;
   Coverage queries respect the flag. Tracked as Batch 5.8.
@@ -1477,6 +1574,28 @@ additions.
       would have caught the drift inside 36 hours. Pairs with
       eventual Batch 006 (Teams dispatch) — alerts firing on stale
       data is worse than no alerts.
+- [x] **5.22 Phase 1: Project-aware brand resolution** — schema +
+      webhook + sync refactor making brand lookup per-project. Closes
+      audit Q2 + SPL ingestion gap. **Shipped 2026-05-07**; see §16.
+- [ ] **5.22 Phase 2: Coverage filter pills** — Coverage page gains
+      a project filter (All / NBLY / SPL) so the brand table can be
+      scoped to a single client at a time. Pairs with the existing
+      brand search/sort affordances; no schema change.
+- [ ] **5.22 Phase 3: Dashboard filter pills** — Dashboard charts
+      gain a project filter pill row (All / per-project). KPIs +
+      charts respect the filter. Builds on backlog 5.16's "global
+      filter pills" line item.
+- [ ] **5.22 Phase 4: Logs filter pills** — `/dashboard/logs` brand
+      dropdown becomes project-aware (group by project; default
+      "All projects"). Saved-report `filters` jsonb gains a
+      `project_key` slot.
+- [ ] **5.22 Phase 5: Project-create + brand-create UI hardening
+      for multi-client** — `/dashboard/settings/projects` form adds
+      `brand_model` + `brand_jira_field_id` + `default_brand_id`
+      fields (today the migration 019 default carries new projects
+      through as multi-brand). `AddBrandDrawer` adds a single-brand
+      affordance that auto-syncs `default_brand_id` on the parent
+      project. Closes the Phase 1 deferred-affordances gap.
 
 ### Batch 006 (post-demo) — Teams webhook dispatch (dedicated)
 Wires `alert_events` rows to actually fire Teams notifications.
@@ -1997,6 +2116,116 @@ Jira instance), `brand_aliases` admin UI.
 The report is durable and intended for re-reading 6 months from
 now during Client #3 / #4 onboarding. Update the §11 metadata
 block on each subsequent audit.
+
+### Batch 005.22 Phase 1 — Project-aware brand resolution — 2026-05-07
+
+Schema + webhook + sync refactor that generalizes brand resolution
+from "always read customfield_12220" to a per-project config column.
+Closes audit doc §4.5 sub-cases (single-brand fallback approaches)
+and the SPL ingestion gap. Pre-flighted by Jenny on 2026-05-07;
+spec v2 incorporated 4 Critical + 6 High + 8 Medium findings before
+implementation.
+
+- **Migration 019** — `019_project_brand_model.sql`:
+  - New enum `brand_model_type AS ENUM ('multi_brand','single_brand')`
+    (wrapped in `DO $$ BEGIN ... EXCEPTION WHEN duplicate_object`
+    for idempotency; CREATE TYPE doesn't support IF NOT EXISTS).
+  - New columns on `projects`: `brand_model` (NOT NULL DEFAULT
+    'multi_brand'), `brand_jira_field_id` (TEXT DEFAULT
+    'customfield_12220'), `default_brand_id` (UUID FK with
+    ON DELETE RESTRICT).
+  - DEFAULT on `brand_jira_field_id` is the load-bearing piece —
+    every existing multi-brand project (and every project added
+    via the existing admin UI before Phase 5 lands) auto-satisfies
+    the new CHECK constraint.
+  - SPLCRO UPDATE: `brand_model='single_brand'`,
+    `brand_jira_field_id=NULL`, `default_brand_id=<SPL brand uuid>`.
+  - SPL brand UPDATE: `jira_value='SPL'` → `'SPL - Spotloan'`,
+    aligning the single-brand format with the multi-brand
+    `"CODE - Display Name"` convention. After this, every brand's
+    jira_value follows the same shape regardless of brand_model —
+    eliminating the writeback-vs-rework-count divergence Jenny
+    flagged as Critical.
+  - CHECK constraint: `multi_brand` requires `brand_jira_field_id`
+    NOT NULL; `single_brand` requires `default_brand_id` NOT NULL;
+    multi-brand may ALSO set `default_brand_id` as an escape-hatch
+    fallback (NBLYCRO leaves it NULL today, preserving identical
+    behavior to pre-Phase-1).
+  - Conditional `quality_logs.client_brand='SPL'` → `'SPL - Spotloan'`
+    UPDATE included as a commented-out block; uncommented only if
+    the pre-migration verification's row-count query returned > 0.
+- **Webhook** (`supabase/functions/jira-webhook/index.ts`):
+  - New helpers `getProjectConfig(projectKey)` and
+    `resolveBrandForTicket(payloadFields, fullIssueFields,
+    projectConfig, ticketKey)`. The latter takes BOTH the payload
+    and the optional `getIssue()` fallback so summary-backfill stays
+    decoupled from brand resolution (rule 18 contract preserved on
+    both models).
+  - Single-brand path: skips field extraction; reads brand row by
+    `default_brand_id`; writes `brand_id` + null `brand_jira_value`
+    + `clientBrandString` from the brand row's `jira_value`.
+  - Multi-brand path: reads `payloadFields[brand_jira_field_id]`
+    (falling back to `fullIssueFields[brand_jira_field_id]`),
+    extracts via existing `extractBrand()`, walks
+    brands → aliases → default_brand_id → null. `client_brand`
+    always sourced from the resolved brand row's `jira_value`
+    (Option γ).
+  - Project-config lookup replaced the standalone `is_active`
+    short-circuit (net zero queries).
+  - Inlined `JIRA_FIELD_MAP` lost its `nbly_brand` entry;
+    `mapJiraFields()` no longer extracts brand.
+  - `resolveBrandId()`'s no-match warn moved up into
+    `resolveBrandForTicket()`'s aliases-miss path (now logs
+    project + fieldId + extracted for debug-ability).
+- **Sync** (`supabase/functions/jira-sync/index.ts`):
+  - Inlined `getProjectConfig()` + new `resolveBrandForSync(issueFields,
+    projectConfig)` helper. Project configs cached in a `Map` across
+    the sync loop (low cardinality, ~1-3 projects).
+  - Loop skips logs whose project is now inactive (no-op, not a
+    failure).
+  - `mapJiraFields()` no longer reads the brand field; brand
+    resolution moves entirely into the new helper.
+  - Inlined `JIRA_FIELD_MAP` lost its `nbly_brand` entry.
+- **Scripts**:
+  - `scripts/backfill-brands.ts` — per-log `getProjectConfig()`
+    lookup with cache. Single-brand projects skipped (their brand is
+    determined by the project, not a Jira field; null `client_brand`
+    on a single-brand log is a Phase-1 migration artifact, not a
+    backfill target).
+  - `scripts/backfill-milestones.ts` — `loadProjectConfig()` once
+    at start; per-issue branch on `brand_model`. The hardcoded
+    `JQL = 'project = NBLYCRO'` stays (one-shot historical script;
+    SPL has no pre-onboarding history). `PROJECT_KEY` is now a
+    documented top-of-file constant for any future client-3 run.
+- **`lib/jira/field-map.ts`**: `nbly_brand` entry removed (zero
+  callers post-refactor). Closes audit Q2 incidentally.
+- **`components/coverage/add-brand-drawer.tsx`**: helper text
+  rewritten to guide admins to the `"CODE - Display Name"` format
+  for `jira_value` regardless of `brand_model`. No behavior change
+  (validation regex unchanged).
+
+**Pre-migration verification** (operator runs in Supabase SQL editor
+before applying 019):
+- `SELECT * FROM projects` — expect 2 rows (NBLYCRO, SPLCRO).
+- Confirm SPL brand row exists at SPLCRO/SPL.
+- `SELECT COUNT(*) FROM quality_logs WHERE client_brand='SPL'` —
+  expect 0 (SPL onboarded 2026-05-07; if > 0, uncomment the
+  conditional `quality_logs.client_brand` UPDATE in the migration).
+
+**What's deliberately NOT in this batch:**
+- Filter pills for Coverage / Dashboard / Logs (Phases 2-4).
+- Project-create UI hardening (Phase 5) — defaults on
+  `brand_jira_field_id` + `brand_model` mean the existing UI keeps
+  working as multi-brand-by-default. Single-brand creation still
+  requires SQL until Phase 5.
+- Brand-create drawer changes for single-brand projects (Phase 5).
+- SPL milestone backfill (separate one-shot step after Phase 1
+  deploys; uses the parameterized `backfill-milestones.ts` with
+  `PROJECT_KEY` flipped to `SPLCRO`).
+
+**Closes:** audit doc §4.5 sub-cases A/B/C decision; audit Q2
+(field-map cleanup, NBLY-name removal); SPL ingestion ungated.
+§13 rule 13 expanded; rule 18 expanded; new rule 28 added.
 
 ### Batch 005.20 — Brand admin UI: create-brand drawer — 2026-05-07
 First post-multi-client-onboarding polish batch with real code
@@ -2822,4 +3051,4 @@ demo blocker.
 
 ---
 
-*Last updated: 2026-05-07 | CQIP v1.5 — drought-evaluator secret resync (no batch — hotfix)*
+*Last updated: 2026-05-07 | CQIP v1.5 — Batch 005.22 Phase 1 shipped (project-aware brand resolution; SPL ingestion correct)*

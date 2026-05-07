@@ -238,9 +238,12 @@ export function AddBrandDrawer({ open, onOpenChange, projects, onCreated }: AddB
               className="h-9 text-sm"
             />
             <p className="mt-1 text-[11px] text-[color:var(--f92-gray)]">
-              The exact string Jira returns from <code>customfield_12220</code>. For
-              single-brand clients where the field is empty on Jira tickets, use the brand
-              code (e.g. <code>SPL</code>).
+              Format: <code>CODE - Display Name</code> (e.g.{' '}
+              <code>MLY - Molly Maid</code>, <code>SPL - Spotloan</code>). For
+              multi-brand projects this must match the exact value Jira returns
+              from the project&apos;s brand custom field. For single-brand projects
+              the field isn&apos;t read at runtime, but use the same format so
+              Coverage rework counts and dashboard filters render consistently.
             </p>
           </div>
 

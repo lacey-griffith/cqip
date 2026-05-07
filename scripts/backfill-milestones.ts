@@ -1,6 +1,7 @@
 /**
- * One-time backfill: walk Jira changelogs and record the FIRST time every
- * NBLYCRO ticket entered 'Dev Client Review' as a test_milestones row.
+ * One-shot historical backfill: walk Jira changelogs and record the FIRST
+ * time every ticket in the configured project entered 'Dev Client Review'
+ * as a test_milestones row.
  *
  * Usage:
  *   npx tsx --env-file=.env.local scripts/backfill-milestones.ts
@@ -8,20 +9,37 @@
  * Requires env vars: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
  * JIRA_BASE_URL, JIRA_EMAIL, JIRA_API_TOKEN (same as .env.local).
  *
+ * Project scope: this script targets ONE project at a time, controlled
+ * by the JQL constant below. NBLYCRO is intentionally hardcoded — this
+ * is a one-shot historical script, run once for NBLY when CQIP first
+ * came online. SPL has no pre-onboarding history per the multi-client
+ * audit, so no SPL run is planned. If a future client needs a similar
+ * backfill, edit JQL + PROJECT_KEY below to point at their project; the
+ * script reads brand_jira_field_id from the projects table at runtime
+ * (Batch 005.22 Phase 1) so multi-brand vs single-brand is handled
+ * automatically — multi-brand reads the field, single-brand uses the
+ * project's default_brand_id directly.
+ *
  * Strategy:
- *   1. Page through every issue in NBLYCRO via POST /rest/api/3/search/jql
- *      with expand=changelog, 100 per page, cursor-paginated by nextPageToken.
- *   2. For each issue, scan histories in chronological order; take the
- *      FIRST history whose items include {field:'status', toString:'Dev Client Review'}.
- *   3. Resolve brand_id by matching the issue's current
- *      customfield_12220 value against the brands table.
- *   4. Insert a test_milestone with source='backfill'. The partial
+ *   1. Look up the project's brand config (brand_model + brand_jira_field_id
+ *      + default_brand_id) once at start.
+ *   2. Page through every issue in the configured project via POST
+ *      /rest/api/3/search/jql with expand=changelog, 100 per page,
+ *      cursor-paginated by nextPageToken.
+ *   3. For each issue, scan histories in chronological order; take the
+ *      FIRST history whose items include {field:'status',
+ *      toString:'Dev Client Review'}.
+ *   4. Resolve brand_id per the project's brand_model:
+ *      - multi_brand: match the issue's current brand-field value
+ *        against the brands table.
+ *      - single_brand: use the project's default_brand_id directly.
+ *   5. Insert a test_milestone with source='backfill'. The partial
  *      unique index (jira_ticket_id, milestone_type) WHERE is_deleted = FALSE
  *      silently rejects duplicates from prior webhook runs or earlier
  *      backfill passes.
- *   5. Rate-limit at 100ms between issue fetches; back off exponentially
+ *   6. Rate-limit at 100ms between issue fetches; back off exponentially
  *      on 429.
- *   6. Log any brand_jira_value that didn't match the seed list so the
+ *   7. Log any brand_jira_value that didn't match the seed list so the
  *      brands seed in migration 009 can be patched.
  */
 import { createClient } from '@supabase/supabase-js';
@@ -40,10 +58,35 @@ if (!supabaseUrl || !serviceRoleKey || !jiraBaseUrl || !jiraEmail || !jiraApiTok
 const supabase = createClient(supabaseUrl, serviceRoleKey);
 const jiraAuth = Buffer.from(`${jiraEmail}:${jiraApiToken}`).toString('base64');
 
-const NBLY_BRAND_FIELD = 'customfield_12220';
-const JQL = 'project = NBLYCRO';
+// Project scope. Intentionally hardcoded — see file header. Edit both
+// constants if running for a different project.
+const PROJECT_KEY = 'NBLYCRO';
+const JQL = `project = ${PROJECT_KEY}`;
 const PAGE_SIZE = 50;
 const REQUEST_DELAY_MS = 100;
+
+interface ProjectConfig {
+  brand_model: 'multi_brand' | 'single_brand';
+  brand_jira_field_id: string | null;
+  default_brand_id: string | null;
+}
+
+async function loadProjectConfig(): Promise<ProjectConfig> {
+  const { data, error } = await supabase
+    .from('projects')
+    .select('brand_model, brand_jira_field_id, default_brand_id')
+    .eq('jira_project_key', PROJECT_KEY)
+    .maybeSingle();
+  if (error) {
+    console.error(`failed to load project config for ${PROJECT_KEY}:`, error);
+    process.exit(1);
+  }
+  if (!data) {
+    console.error(`project ${PROJECT_KEY} not found in projects table`);
+    process.exit(1);
+  }
+  return data as ProjectConfig;
+}
 
 function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -95,12 +138,19 @@ interface JiraSearchResponse {
   isLast?: boolean;
 }
 
-async function jiraSearch(nextPageToken: string | null): Promise<JiraSearchResponse> {
+async function jiraSearch(
+  nextPageToken: string | null,
+  brandFieldId: string | null,
+): Promise<JiraSearchResponse> {
+  // For single-brand projects we don't read a field at all (brand comes
+  // from projects.default_brand_id), so the fields array drops the
+  // brand-field entry and saves a few bytes per page response.
+  const fields = brandFieldId ? ['summary', brandFieldId] : ['summary'];
   const body: Record<string, unknown> = {
     jql: JQL,
     maxResults: PAGE_SIZE,
     expand: 'changelog',
-    fields: ['summary', NBLY_BRAND_FIELD],
+    fields,
   };
   if (nextPageToken) body.nextPageToken = nextPageToken;
 
@@ -186,9 +236,23 @@ async function loadBrandMap(): Promise<Map<string, string>> {
 }
 
 async function run() {
+  console.log(`→ loading project config for ${PROJECT_KEY}…`);
+  const projectConfig = await loadProjectConfig();
+  console.log(`  brand_model=${projectConfig.brand_model}, brand_jira_field_id=${projectConfig.brand_jira_field_id ?? 'NULL'}, default_brand_id=${projectConfig.default_brand_id ?? 'NULL'}`);
+
   console.log('→ loading brands + aliases…');
   const brandMap = await loadBrandMap();
   console.log(`  loaded ${brandMap.size} jira_value → brand_id mappings`);
+
+  // For single-brand projects, every milestone resolves to the same
+  // brand_id and brand_jira_value stays NULL (consistent with the
+  // webhook's single-brand path; see §13 rule 28).
+  const isSingleBrand = projectConfig.brand_model === 'single_brand';
+  const singleBrandId = isSingleBrand ? projectConfig.default_brand_id : null;
+  if (isSingleBrand && !singleBrandId) {
+    console.error(`single_brand project ${PROJECT_KEY} has no default_brand_id — aborting`);
+    process.exit(1);
+  }
 
   let nextPageToken: string | null = null;
   let pageNum = 0;
@@ -204,7 +268,7 @@ async function run() {
   // isLast or stops returning a token.
   do {
     pageNum += 1;
-    const page = await jiraSearch(nextPageToken);
+    const page = await jiraSearch(nextPageToken, projectConfig.brand_jira_field_id);
     console.log(`→ page ${pageNum} — ${page.issues.length} issues`);
 
     for (const issue of page.issues) {
@@ -216,13 +280,21 @@ async function run() {
           continue;
         }
 
-        const rawBrand = issue.fields?.[NBLY_BRAND_FIELD];
-        const brandValue = extractBrand(rawBrand);
-        let brandId: string | null = null;
-        if (brandValue) {
-          brandId = brandMap.get(brandValue) ?? null;
-          if (!brandId) {
-            unmatchedBrands.set(brandValue, (unmatchedBrands.get(brandValue) ?? 0) + 1);
+        let brandId: string | null;
+        let brandValue: string | null;
+        if (isSingleBrand) {
+          brandId = singleBrandId;
+          brandValue = null;
+        } else {
+          const fieldId = projectConfig.brand_jira_field_id!;
+          const rawBrand = issue.fields?.[fieldId];
+          brandValue = extractBrand(rawBrand);
+          brandId = null;
+          if (brandValue) {
+            brandId = brandMap.get(brandValue) ?? null;
+            if (!brandId) {
+              unmatchedBrands.set(brandValue, (unmatchedBrands.get(brandValue) ?? 0) + 1);
+            }
           }
         }
 

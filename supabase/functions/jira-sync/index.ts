@@ -36,6 +36,8 @@ const supabase = createClient(supabaseUrl, serviceRoleKey);
 
 // -------------------------------------------------------------------------
 // Inlined: lib/jira/field-map.ts
+// nbly_brand removed in Batch 005.22 Phase 1 — brand field is now per-project,
+// looked up from `projects.brand_jira_field_id` via getProjectConfig().
 // -------------------------------------------------------------------------
 const JIRA_FIELD_MAP = {
   who_owns_fix:               'customfield_13120',
@@ -51,10 +53,9 @@ const JIRA_FIELD_MAP = {
   root_cause:                 'customfield_12905',
   root_cause_description:     'customfield_12909',
   severity:                   'customfield_12906',
-  nbly_brand:                 'customfield_12220',
 } as const;
 
-// The NBLY brand field can come back as a string, a single-select { value },
+// The brand field can come back as a string, a single-select { value },
 // a cascading select { value, child: { value } }, or an array of those.
 // Resolve the string in any of those shapes; log when it's a surprise type.
 function extractBrand(raw: unknown, ticketId: string): string | null {
@@ -149,8 +150,9 @@ function mapJiraFields(fields: any) {
 
   mapped.root_cause_final = fields[JIRA_FIELD_MAP.root_cause]?.map((item: any) => item.value) ?? [];
 
-  const rawBrand = fields[JIRA_FIELD_MAP.nbly_brand];
-  mapped.client_brand = extractBrand(rawBrand, fields.summary ?? 'unknown');
+  // client_brand is no longer extracted here — brand resolution moved
+  // to resolveBrandForSync() in Batch 005.22 Phase 1 so the sync loop
+  // can do project-aware lookups (single-brand vs multi-brand).
 
   return mapped;
 }
@@ -208,6 +210,92 @@ function clientDescriptor(request: Request): string {
     'unknown';
   const ua = request.headers.get('user-agent') || 'unknown';
   return `${ip} | ${ua}`;
+}
+
+// -------------------------------------------------------------------------
+// Project-aware brand resolution (Batch 005.22 Phase 1, §13 rule 28).
+// Mirrors the canonical helpers in jira-webhook/index.ts. Deno doesn't
+// share modules, so this is an inlined copy — keep the two in sync if
+// the resolution chain ever changes. The webhook copy has a richer
+// payload-vs-fullIssue dual-source variant; sync only needs the
+// fullIssue version because every sync log already round-trips through
+// getIssue() at the top of the per-log loop.
+// -------------------------------------------------------------------------
+
+interface ProjectConfig {
+  jira_project_key: string;
+  brand_model: 'multi_brand' | 'single_brand';
+  brand_jira_field_id: string | null;
+  default_brand_id: string | null;
+  is_active: boolean;
+}
+
+async function getProjectConfig(projectKey: string): Promise<ProjectConfig | null> {
+  const { data, error } = await supabase
+    .from('projects')
+    .select('jira_project_key, brand_model, brand_jira_field_id, default_brand_id, is_active')
+    .eq('jira_project_key', projectKey)
+    .maybeSingle();
+  if (error) {
+    console.warn('[jira-sync] project config lookup failed', error.message);
+    return null;
+  }
+  return (data as ProjectConfig | null) ?? null;
+}
+
+async function resolveBrandForSync(
+  issueFields: Record<string, unknown>,
+  projectConfig: ProjectConfig,
+): Promise<{ brandId: string | null; clientBrandString: string | null }> {
+  // Single-brand: project IS the brand. Skip field extraction.
+  if (projectConfig.brand_model === 'single_brand') {
+    if (!projectConfig.default_brand_id) return { brandId: null, clientBrandString: null };
+    const { data: brand } = await supabase
+      .from('brands')
+      .select('id, jira_value')
+      .eq('id', projectConfig.default_brand_id)
+      .maybeSingle();
+    return { brandId: brand?.id ?? null, clientBrandString: brand?.jira_value ?? null };
+  }
+
+  // Multi-brand: read configured field, walk brands → aliases →
+  // default_brand_id → null. clientBrandString always sourced from
+  // the resolved brand row's jira_value (Option γ).
+  const fieldId = projectConfig.brand_jira_field_id!;
+  const raw = issueFields[fieldId];
+  const ticketLabel = (issueFields.summary as string | undefined) ?? 'unknown';
+  const extracted = extractBrand(raw, ticketLabel);
+
+  if (extracted) {
+    const { data: byValue } = await supabase
+      .from('brands')
+      .select('id, jira_value')
+      .eq('jira_value', extracted)
+      .maybeSingle();
+    if (byValue) return { brandId: byValue.id, clientBrandString: byValue.jira_value };
+
+    const { data: byAlias } = await supabase
+      .from('brand_aliases')
+      .select('brand_id, brands(jira_value)')
+      .eq('jira_value', extracted)
+      .maybeSingle();
+    if (byAlias?.brand_id) {
+      const brandJiraValue = (byAlias as { brands?: { jira_value?: string } }).brands?.jira_value ?? null;
+      return { brandId: byAlias.brand_id, clientBrandString: brandJiraValue };
+    }
+  }
+
+  // Final fallback: project's default_brand_id if configured.
+  if (projectConfig.default_brand_id) {
+    const { data: brand } = await supabase
+      .from('brands')
+      .select('id, jira_value')
+      .eq('id', projectConfig.default_brand_id)
+      .maybeSingle();
+    return { brandId: brand?.id ?? null, clientBrandString: brand?.jira_value ?? null };
+  }
+
+  return { brandId: null, clientBrandString: null };
 }
 
 // -------------------------------------------------------------------------
@@ -318,6 +406,12 @@ Deno.serve(async (request: Request) => {
   let logsUpdated = 0;
   let logsFailed = 0;
 
+  // Cache project configs across the loop. Cardinality is small
+  // (~1-3 projects) so the cache is bounded; lazy-populates on first
+  // log per project. `undefined` = not-yet-fetched, `null` = fetched
+  // but missing/inactive (skip the log).
+  const projectConfigCache = new Map<string, ProjectConfig | null>();
+
   try {
     const { data: logs, error: fetchError } = await supabase
       .from('quality_logs')
@@ -331,12 +425,28 @@ Deno.serve(async (request: Request) => {
 
     for (const log of logs ?? []) {
       try {
+        let config = projectConfigCache.get(log.project_key);
+        if (config === undefined) {
+          config = await getProjectConfig(log.project_key);
+          projectConfigCache.set(log.project_key, config);
+        }
+        if (!config?.is_active) {
+          // Project missing or inactive — skip this log without
+          // counting as a failure. Logs whose project was deactivated
+          // post-creation shouldn't keep round-tripping through Jira.
+          continue;
+        }
+
         const issue = await getIssue(log.jira_ticket_id);
         const mappedFields = mapJiraFields(issue.fields);
+        const resolvedBrand = await resolveBrandForSync(
+          issue.fields as Record<string, unknown>,
+          config,
+        );
 
         const updateData = {
           jira_summary: issue.fields.summary,
-          client_brand: mappedFields.client_brand,
+          client_brand: resolvedBrand.clientBrandString,
           detected_by: mappedFields.detected_by,
           experiment_paused: mappedFields.experiment_paused,
           issue_category: mappedFields.issue_category,

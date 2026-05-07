@@ -12,5 +12,6 @@ export const JIRA_FIELD_MAP = {
   root_cause:                 'customfield_12905',
   root_cause_description:     'customfield_12909',
   severity:                   'customfield_12906',
-  nbly_brand:                 'customfield_12220',
+  // nbly_brand removed — brand field is per-project; see
+  // projects.brand_jira_field_id (Batch 005.22 Phase 1).
 } as const;

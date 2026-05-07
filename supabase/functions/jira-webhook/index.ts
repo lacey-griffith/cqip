@@ -22,6 +22,8 @@ const supabase = createClient(supabaseUrl, serviceRoleKey);
 
 // -------------------------------------------------------------------------
 // Inlined: lib/jira/field-map.ts
+// nbly_brand removed in Batch 005.22 Phase 1 — brand field is now per-project,
+// looked up from `projects.brand_jira_field_id` via getProjectConfig().
 // -------------------------------------------------------------------------
 const JIRA_FIELD_MAP = {
   who_owns_fix:               'customfield_13120',
@@ -37,10 +39,9 @@ const JIRA_FIELD_MAP = {
   root_cause:                 'customfield_12905',
   root_cause_description:     'customfield_12909',
   severity:                   'customfield_12906',
-  nbly_brand:                 'customfield_12220',
 } as const;
 
-// The NBLY brand field can come back as a string, a single-select { value },
+// The brand field can come back as a string, a single-select { value },
 // a cascading select { value, child: { value } }, or an array of those.
 // Resolve the string in any of those shapes; log when it's a surprise type.
 function extractBrand(raw: unknown, ticketId: string): string | null {
@@ -102,8 +103,155 @@ async function resolveBrandId(brandValue: string): Promise<string | null> {
     .maybeSingle();
   if (alias?.brand_id) return alias.brand_id as string;
 
-  console.warn('[jira-webhook] milestone: no brand or alias match for', brandValue);
   return null;
+}
+
+// -------------------------------------------------------------------------
+// Project-aware brand resolution (Batch 005.22 Phase 1, §13 rule 28).
+//
+// `getProjectConfig(projectKey)` is the single source of truth for what
+// kind of brand model a project follows. The webhook calls it once per
+// invocation — replaces the prior standalone `is_active` lookup, net
+// zero queries.
+//
+// `resolveBrandForTicket(payloadFields, fullIssueFields, projectConfig)`
+// returns the resolved brandId + brandJiraValue (verbatim Jira string
+// for test_milestones; NULL for single-brand) + clientBrandString
+// (brands.jira_value verbatim for quality_logs.client_brand — Option γ
+// per §13 rule 28). The helper takes BOTH the payload and the optional
+// getIssue() fallback so the webhook's caller decides whether to fetch
+// the full issue independently of brand resolution (rule 18 contract).
+// -------------------------------------------------------------------------
+
+interface ProjectConfig {
+  jira_project_key: string;
+  brand_model: 'multi_brand' | 'single_brand';
+  brand_jira_field_id: string | null;
+  default_brand_id: string | null;
+  is_active: boolean;
+}
+
+async function getProjectConfig(projectKey: string): Promise<ProjectConfig | null> {
+  const { data, error } = await supabase
+    .from('projects')
+    .select('jira_project_key, brand_model, brand_jira_field_id, default_brand_id, is_active')
+    .eq('jira_project_key', projectKey)
+    .maybeSingle();
+  if (error) {
+    console.warn('[jira-webhook] project config lookup failed', error.message);
+    return null;
+  }
+  return (data as ProjectConfig | null) ?? null;
+}
+
+interface ResolvedBrand {
+  brandId: string | null;
+  brandJiraValue: string | null;
+  clientBrandString: string | null;
+}
+
+async function resolveBrandForTicket(
+  payloadFields: Record<string, unknown> | undefined,
+  fullIssueFields: Record<string, unknown> | undefined,
+  projectConfig: ProjectConfig,
+  ticketKey: string,
+): Promise<ResolvedBrand> {
+  // Single-brand path: project IS the brand. Skip field extraction
+  // entirely. brand_jira_value stays NULL (we didn't consult any field).
+  // client_brand string comes from the brand row's jira_value (which
+  // migration 019 normalized to "CODE - Display Name" shape).
+  if (projectConfig.brand_model === 'single_brand') {
+    if (!projectConfig.default_brand_id) {
+      // CHECK constraint should prevent this state; defensive log
+      // in case a config update raced.
+      console.warn('[jira-webhook] single_brand project missing default_brand_id', {
+        project: projectConfig.jira_project_key,
+      });
+      return { brandId: null, brandJiraValue: null, clientBrandString: null };
+    }
+    const { data: brand } = await supabase
+      .from('brands')
+      .select('id, jira_value')
+      .eq('id', projectConfig.default_brand_id)
+      .maybeSingle();
+    return {
+      brandId: brand?.id ?? null,
+      brandJiraValue: null,
+      clientBrandString: brand?.jira_value ?? null,
+    };
+  }
+
+  // Multi-brand path: read the configured field, normalize via
+  // existing extractBrand(), then walk brands → aliases →
+  // default_brand_id → null.
+  const fieldId = projectConfig.brand_jira_field_id!;  // CHECK guarantees non-null
+  const rawFromPayload = payloadFields?.[fieldId];
+  const rawFromIssue = fullIssueFields?.[fieldId];
+  const rawValue = rawFromPayload ?? rawFromIssue ?? null;
+  const extracted = extractBrand(rawValue, ticketKey);
+
+  if (!extracted) {
+    // No field value at all. If the project has a default_brand_id
+    // (escape-hatch fallback per §13 rule 28), use it.
+    if (projectConfig.default_brand_id) {
+      const { data: brand } = await supabase
+        .from('brands')
+        .select('id, jira_value')
+        .eq('id', projectConfig.default_brand_id)
+        .maybeSingle();
+      return {
+        brandId: brand?.id ?? null,
+        brandJiraValue: null,
+        clientBrandString: brand?.jira_value ?? null,
+      };
+    }
+    return { brandId: null, brandJiraValue: null, clientBrandString: null };
+  }
+
+  // brands.jira_value → brand_aliases.jira_value chain (preserved from
+  // Batch 004.1's resolveBrandId). On a hit, source clientBrandString
+  // from the resolved brand row (Option γ writeback).
+  const brandId = await resolveBrandId(extracted);
+  if (brandId) {
+    const { data: brand } = await supabase
+      .from('brands')
+      .select('jira_value')
+      .eq('id', brandId)
+      .maybeSingle();
+    return {
+      brandId,
+      brandJiraValue: extracted,
+      clientBrandString: brand?.jira_value ?? extracted,
+    };
+  }
+
+  // brands + aliases miss → final fallback to default_brand_id if
+  // configured, else null. brand_jira_value preserves the verbatim
+  // unmatched string for later alias seeding.
+  if (projectConfig.default_brand_id) {
+    console.warn('[jira-webhook] brand resolution fell back to default_brand_id', {
+      project: projectConfig.jira_project_key,
+      fieldId,
+      extracted,
+    });
+    const { data: brand } = await supabase
+      .from('brands')
+      .select('id, jira_value')
+      .eq('id', projectConfig.default_brand_id)
+      .maybeSingle();
+    return {
+      brandId: brand?.id ?? null,
+      brandJiraValue: extracted,
+      clientBrandString: brand?.jira_value ?? null,
+    };
+  }
+
+  console.warn('[jira-webhook] no brand or alias match', {
+    project: projectConfig.jira_project_key,
+    fieldId,
+    extracted,
+  });
+  return { brandId: null, brandJiraValue: extracted, clientBrandString: null };
 }
 
 // -------------------------------------------------------------------------
@@ -195,8 +343,9 @@ function mapJiraFields(fields: any) {
   mapped.root_cause_initial = rootCause;
   mapped.root_cause_final = rootCause;
 
-  const rawBrand = fields[JIRA_FIELD_MAP.nbly_brand];
-  mapped.client_brand = extractBrand(rawBrand, fields.summary ?? 'unknown');
+  // client_brand is no longer extracted here — brand resolution moved
+  // to resolveBrandForTicket() in Batch 005.22 Phase 1 so the webhook
+  // can do project-aware lookups (single-brand vs multi-brand).
 
   return mapped;
 }
@@ -245,13 +394,8 @@ Deno.serve(async (request: Request) => {
     const issue = payload.issue;
     const projectKey = issue.fields.project.key;
 
-    const { data: project } = await supabase
-      .from('projects')
-      .select('is_active')
-      .eq('jira_project_key', projectKey)
-      .single();
-
-    if (!project?.is_active) {
+    const projectConfig = await getProjectConfig(projectKey);
+    if (!projectConfig?.is_active) {
       return new Response('Project not active', { status: 200 });
     }
 
@@ -290,41 +434,51 @@ Deno.serve(async (request: Request) => {
       if (existing) {
         milestoneOutcome = 'skipped-duplicate';
       } else {
-        // Payload-first: the webhook payload already snapshots the
-        // transition's fields, so skip the Jira round-trip when we can.
-        let brandValue = extractBrand(
-          issue.fields?.[JIRA_FIELD_MAP.nbly_brand],
-          issue.key,
-        );
-        let jiraSummary: string | null = issue.fields?.summary ?? null;
+        // Decide whether we need to fetch the full issue. Summary +
+        // brand both come from the payload first; getIssue() runs only
+        // when the payload is missing summary OR (for multi-brand
+        // projects) the brand custom field. The fetch is wrapped in
+        // its own try/catch — Jira outages must not drop the milestone
+        // (rule 18: milestone independence).
+        const payloadFields = issue.fields as Record<string, unknown>;
+        let resolvedSummary: string | null = issue.fields?.summary ?? null;
+        const fieldKey = projectConfig.brand_jira_field_id;
+        const payloadHasBrand =
+          projectConfig.brand_model === 'single_brand' ||
+          (fieldKey != null && payloadFields[fieldKey] != null);
+        const needsFallback = !resolvedSummary || !payloadHasBrand;
 
-        // Fall back to getIssue ONLY when the payload didn't include the
-        // brand. Wrap only this API call so a Jira failure degrades to a
-        // null-brand milestone rather than skipping the milestone entirely.
-        if (!brandValue) {
+        let fullIssueFields: Record<string, unknown> | undefined;
+        if (needsFallback) {
           try {
             const fullIssue = await getIssue(issue.key);
-            brandValue = extractBrand(
-              fullIssue.fields?.[JIRA_FIELD_MAP.nbly_brand],
-              issue.key,
-            );
-            jiraSummary = fullIssue.fields?.summary ?? jiraSummary;
+            fullIssueFields = fullIssue.fields as Record<string, unknown>;
+            if (!resolvedSummary && typeof fullIssue.fields?.summary === 'string') {
+              resolvedSummary = fullIssue.fields.summary;
+            }
           } catch (err) {
             console.warn('[jira-webhook] milestone: getIssue fallback failed', err);
-            // Continue — brandValue stays null; we still insert below.
+            // Continue with payload-only data; the resolver tolerates
+            // a missing fullIssueFields and the insert tolerates a
+            // null brand (rule 18).
           }
         }
 
-        const brandId = brandValue ? await resolveBrandId(brandValue) : null;
+        const resolved = await resolveBrandForTicket(
+          payloadFields,
+          fullIssueFields,
+          projectConfig,
+          issue.key,
+        );
 
         const { error: milestoneError } = await supabase
           .from('test_milestones')
           .insert({
             jira_ticket_id: issue.key,
             jira_ticket_url: `${jiraBaseUrl}/browse/${issue.key}`,
-            jira_summary: jiraSummary,
-            brand_id: brandId,
-            brand_jira_value: brandValue,
+            jira_summary: resolvedSummary,
+            brand_id: resolved.brandId,
+            brand_jira_value: resolved.brandJiraValue,
             source: 'webhook',
             created_by: 'system',
           });
@@ -336,7 +490,7 @@ Deno.serve(async (request: Request) => {
           console.warn('[jira-webhook] milestone insert failed', milestoneError.message);
           milestoneOutcome = 'error-insert';
         } else {
-          milestoneOutcome = brandId ? 'recorded' : 'recorded-no-brand';
+          milestoneOutcome = resolved.brandId ? 'recorded' : 'recorded-no-brand';
         }
       }
     }
@@ -351,6 +505,18 @@ Deno.serve(async (request: Request) => {
     const fullIssue = await getIssue(issue.key);
     const mappedFields = mapJiraFields(fullIssue.fields);
 
+    // Brand resolution is project-aware (Batch 005.22 Phase 1). The
+    // rework branch always has fullIssue available, so pass both the
+    // payload fields and the full-issue fields to the resolver. The
+    // returned clientBrandString is brands.jira_value verbatim per
+    // §13 rule 28 (Option γ writeback).
+    const resolved = await resolveBrandForTicket(
+      issue.fields as Record<string, unknown>,
+      fullIssue.fields as Record<string, unknown>,
+      projectConfig,
+      issue.key,
+    );
+
     const hasDeploymentLabel = fullIssue.fields.labels?.includes('Deployment');
     const testType = hasDeploymentLabel ? 'Deployment' : 'A/B';
 
@@ -361,7 +527,7 @@ Deno.serve(async (request: Request) => {
       jira_ticket_url: `${jiraBaseUrl}/browse/${issue.key}`,
       jira_summary: issue.fields.summary,
       project_key: projectKey,
-      client_brand: mappedFields.client_brand,
+      client_brand: resolved.clientBrandString,
       trigger_from_status: statusChange.fromString,
       trigger_to_status: statusChange.toString,
       log_number: logNumber,
