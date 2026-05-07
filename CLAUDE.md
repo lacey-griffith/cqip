@@ -1232,6 +1232,26 @@ Resolved             → green-500
     unconditionally (Radix handles stacking) — don't try to
     coordinate state to "hide" the underlying drawer.
 
+27. **Custom auth keys must rotate atomically across both sides.**
+    Any function using a custom shared secret
+    (`CQIP_SYNC_AUTH_KEY`, `CQIP_DROUGHT_AUTH_KEY`,
+    `CQIP_BRANDS_API_TOKEN`, future ones) has the secret set in
+    two places: the consumer (Worker, pg_cron command, or external
+    integration) and the producer (Supabase Edge Functions
+    secrets). When rotating, BOTH sides must change in the same
+    change window. **Why:** pg_cron logs HTTP 4xx responses as
+    "succeeded" (any HTTP response counts as success at the cron
+    layer), so a one-sided rotation produces silent failure that
+    can persist for days. The 2026-05-07 drought incident
+    exemplified this — a partial rotation created 7 days of silent
+    failure caught only during an unrelated sweep. **How to apply:**
+    treat key rotation as a coordinated procedure, not two
+    independent operations. Document the new value in both places
+    before either side is updated. For pg_cron-invoked functions,
+    after rotation manually invoke the function once via `curl`
+    with the new key to verify, then wait for the next scheduled
+    tick and re-verify.
+
 ---
 
 ## 14. What Is NOT In Scope for V1
@@ -1443,6 +1463,20 @@ additions.
       consider fixing those at the same time to avoid multiple
       cleanup batches. See `docs/multi-client-readiness.md` §6.5
       for the full settings-UI gap list.
+- [ ] **5.21 Cron-silence monitor** — extend the `sync_runs` pattern
+      from Batch 005.10 to all cron-driven functions, OR add a
+      Settings → System card showing last-activity-per-cron derived
+      from `audit_log` (e.g., `MAX(changed_at) WHERE changed_by LIKE
+      'system:%'` grouped by cron name). Surface a warning when
+      last-activity exceeds a per-cron expected window (e.g.,
+      drought-evaluator >36h since last activity = stale). The
+      2026-05-07 drought-evaluator silent-failure incident persisted
+      for 7 days because pg_cron's `cron.job_run_details` only logs
+      HTTP response receipt, not function correctness. Either
+      approach (generic `cron_runs` table OR audit_log query card)
+      would have caught the drift inside 36 hours. Pairs with
+      eventual Batch 006 (Teams dispatch) — alerts firing on stale
+      data is worse than no alerts.
 
 ### Batch 006 (post-demo) — Teams webhook dispatch (dedicated)
 Wires `alert_events` rows to actually fire Teams notifications.
@@ -2038,6 +2072,45 @@ client onboardings (client-3+) don't need a SQL detour.
 **Closes:** `docs/multi-client-readiness.md` §6.5 brand-create
 gap row + §10 row Q1. `docs/multi-client-readiness.md` §11
 metadata block updated with the Batch 005.20 ship line.
+
+### Hotfix — drought-evaluator secret resync — 2026-05-07
+Drought-evaluator edge function silently 401'd on every cron
+invocation between 2026-05-01 and 2026-05-07 inclusive. Root
+cause: `CQIP_DROUGHT_AUTH_KEY` value drifted between Supabase
+Edge Functions secrets and the value baked into the pg_cron
+command. pg_cron logs HTTP 4xx responses as `succeeded` (any
+HTTP response is treated as success at the cron layer), so the
+failure was silent — `cron.job_run_details` showed clean runs
+daily, but the function never executed past its auth gate.
+Function code, `config.toml`, deployed version, JWT-verification
+toggle all verified correct.
+
+Caught during SPL multi-page presence sweep (informal,
+post-Batch 005.20) when SPL appeared as drought in the Coverage
+page brand drawer (render-time computation against
+`test_milestones`) but NOT in the active alerts panel (read from
+`alert_events`). Investigation traced silent failure across
+audit_log gap dates.
+
+Fix: `supabase secrets set
+CQIP_DROUGHT_AUTH_KEY=<value-matching-cron-command>`.
+Config-only change; no code, no migration, no redeploy. Function
+picks up new env on next cold start. Manual invocation 2026-05-07
+17:08 UTC produced response `{"evaluated":13,"droughts_started":2,
+"droughts_ended":0,"skipped_paused":4,"errors":0}` — wrote 2
+drought CREATE rows for SPL and MOJ. Audit_log write contract
+verified intact. Cron-driven verification: next scheduled tick
+2026-05-08 10:00 UTC must produce a successful function execution
+and audit-log activity if any state changes occurred.
+
+Side discovery: MOJ silently slid back into drought during the
+silent-failure window after recovering 2026-04-30. Surfaced as a
+new drought during the catch-up run rather than a continuation
+of the pre-recovery alert. Informational; no team action
+required.
+
+Followups added: §13 rule 27 (secret-rotation atomicity), §15
+item 5.21 (cron-silence monitor).
 
 ### Batch 005.9 — UI copy: remove NBLY-coded examples — 2026-05-06
 First post-SPL-onboarding polish batch. Closes audit Section 5
@@ -2729,4 +2802,4 @@ demo blocker.
 
 ---
 
-*Last updated: 2026-05-07 | CQIP v1.5 — Batch 005.20 shipped (brand-create admin UI; audit Q1 closed)*
+*Last updated: 2026-05-07 | CQIP v1.5 — drought-evaluator secret resync (no batch — hotfix)*
