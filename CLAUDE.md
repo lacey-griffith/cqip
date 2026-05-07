@@ -2085,6 +2085,19 @@ daily, but the function never executed past its auth gate.
 Function code, `config.toml`, deployed version, JWT-verification
 toggle all verified correct.
 
+Karen's first diagnostic pass blamed `verify_jwt` config drift on
+Supabase's side, which would have manifested as gateway-level
+rejection before the function ever ran. The `x-deno-execution-id`
+header on the 401 responses ruled that out — its presence proved
+the function executed; the 401 came from inside the function's
+own auth gate. With the gateway hypothesis eliminated, the next
+step was comparing the secret values themselves. SHA-256 of the
+cron's Bearer token was `050ae193...`; the digest of
+`CQIP_DROUGHT_AUTH_KEY` shown by `supabase secrets list` was
+`3d448f33...`. The two values had drifted — the function's
+timing-safe-compare correctly rejected a token that didn't equal
+the stored secret.
+
 Caught during SPL multi-page presence sweep (informal,
 post-Batch 005.20) when SPL appeared as drought in the Coverage
 page brand drawer (render-time computation against
@@ -2111,6 +2124,13 @@ required.
 
 Followups added: §13 rule 27 (secret-rotation atomicity), §15
 item 5.21 (cron-silence monitor).
+
+**Lesson worth keeping:** when an edge function returns 401, look
+at the response headers BEFORE diagnosing the auth path. Presence
+of `x-deno-execution-id` means the function ran; the 401 came
+from inside the code. Absence means the gateway rejected before
+the function got a chance. Misreading that signal cost most of
+the diagnostic effort on this incident.
 
 ### Batch 005.9 — UI copy: remove NBLY-coded examples — 2026-05-06
 First post-SPL-onboarding polish batch. Closes audit Section 5
