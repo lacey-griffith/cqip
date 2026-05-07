@@ -13,6 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { BackToSettings } from '@/components/ui/back-to-settings';
 import { ManageMilestonesDialog } from '@/components/coverage/manage-milestones-dialog';
 import { EditBrandQaConfigDrawer, type BrandQaConfig } from '@/components/coverage/edit-brand-qa-config-drawer';
+import { AddBrandDrawer, type ProjectOption } from '@/components/coverage/add-brand-drawer';
 import type { Brand } from '@/lib/coverage/queries';
 
 type BrandWithQa = Brand & BrandQaConfig;
@@ -35,12 +36,25 @@ function CoverageSettingsBody() {
   const [qaDrawerBrand, setQaDrawerBrand] = useState<BrandQaConfig | null>(null);
   const [qaDrawerOpen, setQaDrawerOpen] = useState(false);
 
+  // Add-brand drawer state (Batch 005 — closes audit Q1)
+  const [addDrawerOpen, setAddDrawerOpen] = useState(false);
+  const [projectOptions, setProjectOptions] = useState<ProjectOption[]>([]);
+
   const loadBrands = useCallback(async () => {
     const { data: brandsData } = await supabase
       .from('brands')
       .select('id, brand_code, jira_value, display_name, is_active, is_paused, paused_reason, qa_automation_enabled, live_url_base, default_local_sub_areas, client_contact_name, client_contact_jira_account_id, url_pattern, notes')
       .order('display_name');
     setBrands((brandsData ?? []) as BrandWithQa[]);
+  }, []);
+
+  const loadProjects = useCallback(async () => {
+    const { data } = await supabase
+      .from('projects')
+      .select('jira_project_key, display_name')
+      .eq('is_active', true)
+      .order('display_name');
+    setProjectOptions((data as ProjectOption[]) ?? []);
   }, []);
 
   function openQaDrawer(brand: BrandWithQa) {
@@ -76,12 +90,12 @@ function CoverageSettingsBody() {
       setIsAdmin(admin);
 
       if (admin) {
-        await loadBrands();
+        await Promise.all([loadBrands(), loadProjects()]);
       }
       setLoading(false);
     }
     init();
-  }, [loadBrands]);
+  }, [loadBrands, loadProjects]);
 
   async function togglePause(brand: BrandWithQa, nextPaused: boolean, reason: string) {
     if (pauseSubmitting) return;
@@ -154,11 +168,18 @@ function CoverageSettingsBody() {
     <div className="space-y-6">
       <BackToSettings />
       <div className="rounded-3xl border border-[color:var(--f92-border)] bg-white p-8 shadow-sm">
-        <p className="text-sm uppercase tracking-[0.3em] text-[color:var(--f92-navy)]">Settings</p>
-        <h1 className="mt-3 text-3xl font-semibold text-[color:var(--f92-dark)]">Coverage Management</h1>
-        <p className="mt-2 text-sm text-[color:var(--f92-gray)]">
-          Manually add, edit, or delete test milestones. Use sparingly — milestones are normally captured automatically from Jira.
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-sm uppercase tracking-[0.3em] text-[color:var(--f92-navy)]">Settings</p>
+            <h1 className="mt-3 text-3xl font-semibold text-[color:var(--f92-dark)]">Coverage Management</h1>
+            <p className="mt-2 text-sm text-[color:var(--f92-gray)]">
+              Manually add, edit, or delete test milestones. Use sparingly — milestones are normally captured automatically from Jira.
+            </p>
+          </div>
+          <Button onClick={() => setAddDrawerOpen(true)} disabled={loading}>
+            Add brand
+          </Button>
+        </div>
       </div>
 
       {loading ? (
@@ -302,6 +323,13 @@ function CoverageSettingsBody() {
           if (!open) setQaDrawerBrand(null);
         }}
         onSaved={() => { void loadBrands(); }}
+      />
+
+      <AddBrandDrawer
+        open={addDrawerOpen}
+        onOpenChange={setAddDrawerOpen}
+        projects={projectOptions}
+        onCreated={() => { void loadBrands(); }}
       />
     </div>
   );

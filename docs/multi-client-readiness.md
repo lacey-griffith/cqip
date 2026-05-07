@@ -398,7 +398,7 @@ low-cost (one nullable column on `projects`).
 |---|---|---|---|
 | `/dashboard/settings/projects` | ✅ Add new project supported. Form takes project key, client name, display name, Jira URL. | n/a | None. |
 | `/dashboard/settings/projects` | ❌ No surface for setting `is_active = FALSE` from the form (Switch toggles active state per existing project per row — verified in code). | n/a | Already supported via the Switch. ✓ |
-| `/dashboard/settings/coverage` | ❌ **No "Add brand" UI.** Brand rows are seeded via SQL migration only. Pause/unpause + edit-QA-config exist; create + delete do not. | **High** | Build a brand-create form on `/dashboard/settings/coverage` (project_key dropdown, brand_code, jira_value, display_name). Until then, SPL brand seeding is SQL-only. |
+| `/dashboard/settings/coverage` | ❌ **No "Add brand" UI.** Brand rows are seeded via SQL migration only. Pause/unpause + edit-QA-config exist; create + delete do not. | **High** | Build a brand-create form on `/dashboard/settings/coverage` (project_key dropdown, brand_code, jira_value, display_name). Until then, SPL brand seeding is SQL-only. ✅ **Shipped 2026-05-07 (Batch 005.20)** — `AddBrandDrawer` + `POST /api/admin/brands`. Delete still deferred to backlog 5.4. |
 | `/dashboard/settings/coverage` | ❌ No brand soft-delete or full delete. | Low | Tracked as Batch 005 item 5.4 — only if business need emerges. |
 | `/dashboard/settings/coverage` | ❌ No brand-aliases admin UI. Aliases are seeded by SQL too. | Medium | Most clients won't need aliases (they're for historical data normalization). Build only when needed. |
 | `/dashboard/settings/audit` | Audit ticket-filter input has the NBLYCRO placeholder (Medium copy fix from §5). | Medium | Generic placeholder. |
@@ -981,7 +981,7 @@ Synthesis of every actionable finding from §2–§7.
 
 | # | Finding | Severity | Effort | Notes |
 |---|---|---|---|---|
-| Q1 | Brand-create admin UI on `/dashboard/settings/coverage` (§6.5) | High | 4 hours | Form: project_key dropdown, brand_code, jira_value, display_name. Mirrors the existing pause/QA-config drawer pattern. |
+| Q1 | Brand-create admin UI on `/dashboard/settings/coverage` (§6.5) | High | 4 hours | Form: project_key dropdown, brand_code, jira_value, display_name. Mirrors the existing pause/QA-config drawer pattern. ✅ **Shipped 2026-05-07 (Batch 005.20)** — `AddBrandDrawer` + `POST /api/admin/brands` with admin gate, validation (regex on brand_code, project FK check, duplicate detection on (project_key, brand_code) and jira_value), and per-field audit_log writes via `getChangedBy()`. Delete still deferred to backlog item 5.4. |
 | Q2 | Rename `nbly_brand` → `client_brand_field` in `JIRA_FIELD_MAP` (§3) | Low | 30 min | Cosmetic. Lockstep update across `lib/jira/field-map.ts` + both edge functions + scripts. |
 | Q3 | Decide on per-client Teams channel (§6.4) — single channel for v1.5; revisit when first request lands | Medium | 0 (decision only) | Document the call in CLAUDE.md. |
 | Q4 | Decide on brand-resolution fallback approach for single-brand clients (§4.5) — Recommend (A) for SPL; (B) when a second single-brand client lands | Medium | 0 today, ~3 hours when (B) becomes the call | Adds `projects.default_brand_id` column + edge function update. |
@@ -1102,6 +1102,11 @@ listed consumers for staleness.
   automation audit + SharePoint-as-known-dependency); §10 gained
   remediation row L5 for the hub batch; §11 gained the Downstream
   Consumers subsection.
+- **2026-05-07 — Q1 shipped (Batch 005.20):** brand-create admin
+  UI landed at `/dashboard/settings/coverage`. §6.5 + §10 row Q1
+  marked complete. Future client onboardings can seed brand rows
+  via UI; SQL fallback still works for migrations / scripted
+  setups. Brand delete remains deferred (backlog 5.4).
 - **Author:** Claude Code per Batch 004.99 spec.
 - **Repo state at audit time:** branch `main`, HEAD `d324cb3`
   (Batch 004.99 initial commit) → addendum applied after.

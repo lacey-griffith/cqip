@@ -131,6 +131,7 @@ cqip/
 │   └── api/
 │       ├── admin/
 │       │   ├── brands/
+│       │   │   ├── route.ts                # Batch 005.20: POST — create brand
 │       │   │   ├── pause/route.ts          # Batch 004.3: server-side pause/unpause
 │       │   │   └── qa-config/route.ts      # Batch 004.5: brand QA config UPDATE
 │       │   ├── milestones/
@@ -151,7 +152,10 @@ cqip/
 │   ├── coverage/                # BrandDetailDrawer, ManageMilestonesDialog, Sparkline (Batch 002),
 │   │                              EditBrandQaConfigDrawer (Batch 004.5 — sheet drawer for
 │   │                              editing per-brand QA-automation config; opens from
-│   │                              /dashboard/settings/coverage)
+│   │                              /dashboard/settings/coverage),
+│   │                              AddBrandDrawer (Batch 005.20 — sheet drawer for
+│   │                              creating a brand row, closes audit Q1 / brand-create
+│   │                              UI gap)
 │   ├── dashboard/               # KPI cards, ActiveAlertsPanel, SyncJiraButton, LogDrawer
 │   │                              (shared click-to-filter drawer, Batch 003),
 │   │                              SyncStatusPill (Batch 005.10 — pass/fail
@@ -1960,6 +1964,81 @@ The report is durable and intended for re-reading 6 months from
 now during Client #3 / #4 onboarding. Update the §11 metadata
 block on each subsequent audit.
 
+### Batch 005.20 — Brand admin UI: create-brand drawer — 2026-05-07
+First post-multi-client-onboarding polish batch with real code
+content. Closes audit Q1 (`docs/multi-client-readiness.md` §10
++ §6.5) — the biggest operational gap flagged by the multi-client
+readiness review. Brand seeding has been SQL-only since
+migration 009; this batch lifts that into the admin UI so future
+client onboardings (client-3+) don't need a SQL detour.
+
+- **New server route**: `app/api/admin/brands/route.ts` POST
+  handler. Validates admin session via cookie-bound supabase
+  client. Field-level validation: `project_key` must exist in
+  `projects` and be active; `brand_code` matches
+  `/^[A-Z0-9-]{1,32}$/` and is upper-cased before insert;
+  `jira_value` and `display_name` non-empty after trim. Two
+  duplicate checks: `(project_key, brand_code)` to prevent
+  same-brand-twice on a project, and `jira_value` global
+  uniqueness (matches the existing schema UNIQUE on
+  `brands.jira_value`). Both surface as 409 with actionable
+  error messages. Insert via service role; returns the inserted
+  row so the client can optimistically render. Per §13 rule 19,
+  this is the **third call site** of `getChangedBy()` (after
+  qa-config and pause routes) — `changed_by` is server-derived;
+  any client-supplied `changed_by` body key is `console.warn`'d
+  and discarded.
+- **Audit writes**: one `audit_log` row per submitted field
+  (`project_key`, `brand_code`, `jira_value`, `display_name`,
+  `is_active`, `is_paused`) with `target_type='brand'`,
+  `target_id=<new brand id>`, `action='CREATE'`, `old_value=null`
+  (row didn't exist before), `new_value=<serialized value>`,
+  `changed_by` from the helper. If audit insert fails the brand
+  row is preserved and the response surfaces `auditError` —
+  same recovery shape as qa-config.
+- **New component**: `components/coverage/add-brand-drawer.tsx`.
+  Sheet-based drawer matching the `EditBrandQaConfigDrawer` /
+  `BrandDetailDrawer` pattern. Form fields: project Select
+  (populated from active projects), brand-code Input
+  (`autoCapitalize="characters"`, font-mono), jira-value Input,
+  display-name Input, two Switches for `is_active` (default ON)
+  and `is_paused` (default OFF). Submit button reads "Add brand"
+  / "Adding…" while in flight; gated by required-field validity
+  + the brand-code regex check. On 4xx the drawer keeps state
+  so the admin can adjust without re-typing; on success the
+  drawer closes, a success toast confirms, and the parent's
+  `loadBrands()` callback re-fetches. CSS tokens per §13 rule 25.
+- **`/dashboard/settings/coverage` integration**: "Add brand"
+  button in the page header card alongside the title. New
+  state slots: `addDrawerOpen`, `projectOptions` (loaded
+  alongside brands on admin init via `loadProjects()`).
+  `AddBrandDrawer` is mounted at the bottom of the JSX next
+  to `EditBrandQaConfigDrawer`. Successful create calls
+  `loadBrands()` which propagates into the existing QA-config
+  list and the paused-brands section.
+- **No migration**, no schema change. The brand row inserts via
+  service role per the existing pattern.
+
+**What's deliberately NOT in this batch:**
+- **Brand soft-delete or hard-delete** — tracked as backlog
+  item 5.4 ("only if business need emerges"). Today's
+  workaround for an unwanted brand is `is_active = FALSE` via
+  the existing pause flow; that hides it from coverage and
+  alerts while preserving historical data.
+- **Coverage + Settings UX redesign** — tracked as backlog
+  item 5.1. The unified brand-admin drawer planned there will
+  consolidate the create + pause + edit-QA flows into a single
+  drawer; this batch's standalone `AddBrandDrawer` is the
+  minimal viable piece that unblocks Q1 without preempting that
+  redesign.
+- **Coverage page → Settings page link in the admin header** —
+  deferred for the 5.1 unified-drawer landing instead of
+  polishing the current split.
+
+**Closes:** `docs/multi-client-readiness.md` §6.5 brand-create
+gap row + §10 row Q1. `docs/multi-client-readiness.md` §11
+metadata block updated with the Batch 005.20 ship line.
+
 ### Batch 005.9 — UI copy: remove NBLY-coded examples — 2026-05-06
 First post-SPL-onboarding polish batch. Closes audit Section 5
 (all 5 findings) and audit Section 10 row P1. All copy fixes —
@@ -2650,4 +2729,4 @@ demo blocker.
 
 ---
 
-*Last updated: 2026-05-06 | CQIP v1.5 — Batch 005.9 shipped (UI copy: NBLY-coded placeholders → PROJECT-agnostic; audit §5 closed)*
+*Last updated: 2026-05-07 | CQIP v1.5 — Batch 005.20 shipped (brand-create admin UI; audit Q1 closed)*
