@@ -32,7 +32,11 @@ rework-volume rows, stacked LogDetailDrawer over chart drawer —
 2026-05-01), Batch 004.12 (Saturday dashboard accuracy + logs page
 count: dashboard charts now read all-time data, "Total Logs" KPI
 relabeled to "Logs This Month", filtered row count on /dashboard/logs
-— 2026-05-02). All migrations 001-017 have run against production.
+— 2026-05-02), Batch 005.9 (UI copy: remove NBLY-coded examples —
+2026-05-06), Batch 005.10 (Sync with Jira pass/fail indicator —
+2026-05-06), Batch 005.20 (brand-create admin UI — 2026-05-07),
+Batch 005.21 (SharePoint integration groundwork docs —
+2026-05-11). All migrations 001-017 have run against production.
 Batch 004.4.5 produced a UX discovery plan for Coverage + Settings
 reorg (Batch 005 implementation). See §16 for full shipped log.
 
@@ -1370,6 +1374,15 @@ Resolved             → green-500
   expires (prompted the 2026-04-23 incident). Planned Batch 005.
 - **Radara Edge Function deploy** — code is committed at
   `supabase/functions/radara-sweep/index.ts` but not deployed.
+- **SharePoint integration** — Azure app "CQIP Dashboard -
+  SharePoint Integration" (client_id
+  6aa464c1-4eb9-4d94-b087-6eebe4fa8cb6) provisioned and
+  Postman-verified 2026-05-02 / 2026-05-03 against the CRO
+  SharePoint site. Microsoft Graph reachability confirmed.
+  Architecture decisions deferred to Batch 009 design work
+  (proxy shape, endpoint count, sync vs pass-through
+  semantics, write scope for v1). Two Azure follow-ups
+  outstanding — see §15 "Awaiting external action".
 
 ### Identified for v1.5 (post-v1)
 - **Multi-client readiness** — Batch 004.99 discovery shipped
@@ -1396,10 +1409,18 @@ Batch 004.10 UX polish on 2026-05-01.)
       platform) is drafting v0.0.4 spec. No production traffic on
       `/api/brands/*` until Forge consumer goes live. Tracked
       cross-project; not actionable on dashboard side.
-- [ ] **SharePoint integration** — Carl is configuring Azure
-      application registration with `Sites.Selected` scope on the
-      CRO site. Blocked on his timeline. Not actionable on
-      dashboard side until Azure is ready.
+- [ ] **SharePoint integration** — Azure app provisioned and
+      Postman-verified 2026-05-02 / 2026-05-03 (see §14).
+      Production integration deferred to Batch 009. Two
+      Azure follow-ups below are prerequisites.
+- [ ] **Reclaim Owner access on Azure app** — "CQIP Dashboard
+      - SharePoint Integration" (client_id
+      6aa464c1-4eb9-4d94-b087-6eebe4fa8cb6). Gates the client
+      secret rotation below. Lacey-side Azure portal task.
+- [ ] **Rotate Azure client secret** — Current secret was
+      visible in 2026-05-02/03 verification screenshots and
+      is compromised-by-default until rotated. Sequenced
+      behind Owner access reclaim above.
 
 ### Batch 004.99 (post-Batch-004) — Multi-Client Readiness Review — shipped 2026-05-06
 Discovery batch. Identifies all NBLY-hardcoded assumptions in CQIP
@@ -1730,6 +1751,61 @@ Realistic scope: 2-4 week build, not a weekend project. The
 "single push" hides a multi-step orchestrator with error handling,
 idempotency, and rollback semantics.
 
+### Batch 009 — SharePoint integration
+Planned post-006. Wires the CQIP Dashboard to the CRO
+SharePoint site via Microsoft Graph for document
+storage / retrieval surface area (exact scope deferred to
+design).
+
+**Status:** groundwork complete. Azure app "CQIP Dashboard -
+SharePoint Integration" (client_id
+6aa464c1-4eb9-4d94-b087-6eebe4fa8cb6) provisioned and
+Postman-verified 2026-05-02 / 2026-05-03. Microsoft Graph
+reachability confirmed end-to-end.
+
+**Prerequisites (Azure side, Lacey-owned):**
+- [ ] Reclaim Owner access on Azure app (see §15
+      "Awaiting external action")
+- [ ] Rotate client secret (compromised-by-default; sequenced
+      behind Owner access)
+
+**Architecture decisions PENDING — to be made in Batch 009
+design session, not assumed here:**
+- Proxy endpoint shape (single endpoint with mode parameter
+  vs. multiple endpoints by resource type)
+- Sync semantics (pass-through proxy vs. server-side
+  structured response with caching)
+- Write scope for v1 (read-only first, matching the Boards
+  pattern from Batch 007, or read-write from day one)
+- Microsoft Graph scope set (`Sites.Selected` is Carl's
+  current direction — confirm at design time)
+- Failure / rotation semantics (Graph token refresh,
+  401 handling, retry strategy)
+
+**Decisions locked at groundwork time (2026-05-11):**
+- Auth pattern will mirror brands API: separate Bearer token
+  `CQIP_SHAREPOINT_API_TOKEN` (NOT shared with
+  `CQIP_BRANDS_API_TOKEN`; separate blast radius per §4 token
+  conventions), timing-safe compare server-side, set on both
+  Worker (wrangler secret) and Forge (encrypted variable).
+- Server-side proxy through Worker to Microsoft Graph — no
+  direct Forge → Graph calls. Keeps Graph credentials behind
+  the Worker.
+
+**Priority order locked (2026-05-11):** 006 → 009 → 007 → 008.
+SharePoint moves ahead of Boards because (a) the integration
+groundwork is already done, (b) it unblocks a CRO team
+workflow currently blocked on SharePoint manual access, and
+(c) Boards has a hard prereq on SPL onboarding finishing
+first regardless.
+
+IMPLEMENTATION SKETCH (post-design):
+- New env var: `CQIP_SHAREPOINT_API_TOKEN`
+- New Worker route(s) under `/api/sharepoint/...`
+- Microsoft Graph client in `lib/graph/client.ts` (or
+  edge-function equivalent — TBD at design time)
+- Forge consumer integration (AC's surface — separate repo)
+
 ### Ops / deferred
 - [ ] **Radara Edge Function deploy** — code committed at
       `supabase/functions/radara-sweep/index.ts` but not deployed.
@@ -1745,6 +1821,49 @@ idempotency, and rollback semantics.
 ---
 
 ## 16. Shipped Features Log
+
+### Batch 005.21 — SharePoint integration groundwork docs — 2026-05-11
+Docs-only commit. Records SharePoint integration groundwork
+state ahead of Batch 009 design work. No code change, no
+schema change, no migration. Per §13 rule 23: docs-only
+commits are explicitly called out in the commit message —
+this one is `docs: lock SharePoint architecture (Batch 009);
+no code change`.
+
+**What this batch captures:**
+- §14 entry for SharePoint integration with the Postman
+  verification dates (2026-05-02 / 2026-05-03) and Azure app
+  identifier
+- §15 "Awaiting external action" — two new checkbox lines
+  for Owner-access reclaim and client-secret rotation; the
+  pre-existing SharePoint line updated to remove the
+  Carl-blocking framing now that Postman verification is
+  complete
+- §15 new Batch 009 entry — placeholder for the SharePoint
+  integration batch, with prerequisites, pending decisions,
+  and the two decisions actually locked at groundwork time
+  (separate token, server-side proxy)
+- §15 priority order updated: 006 → 009 → 007 → 008
+  (was: 006 → 007 → 008, with 009 unplaced)
+
+**What this batch deliberately does NOT capture:**
+- SharePoint proxy endpoint shape (single vs multi)
+- Microsoft Graph scope decisions
+- Sync vs pass-through semantics
+- Write scope for v1
+These are real architectural decisions and deferred to the
+Batch 009 design session itself. Sunday's claim that "Batch
+009 architecture is locked" was overconfident; the only
+thing actually locked at that point was the Postman win
+plus the two auth-pattern decisions noted above. Recording
+that truthfully is the point of this commit.
+
+**Cross-project relay:** AC (Forge-side Claude) is the
+downstream consumer of the eventual SharePoint proxy. Per
+handoff convention principle 5 (contract-surface changes get
+a 1-3 line relay on ship day): the SharePoint proxy contract
+does not yet exist — AC continues with placeholder shape in
+the Forge architecture doc until Batch 009 design lands.
 
 ### v1.0 — Foundation (pre-April 2026)
 Initial schema, auth, Jira webhook, dashboard KPIs + charts, logs table,
@@ -3051,4 +3170,4 @@ demo blocker.
 
 ---
 
-*Last updated: 2026-05-07 | CQIP v1.5 — Batch 005.22 Phase 1 shipped (project-aware brand resolution; SPL ingestion correct)*
+*Last updated: 2026-05-11 | CQIP v1.5 — Batch 005.21 shipped (SharePoint integration groundwork docs; Batch 009 entry placeholder, architecture decisions deferred)*
