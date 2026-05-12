@@ -36,7 +36,8 @@ relabeled to "Logs This Month", filtered row count on /dashboard/logs
 2026-05-06), Batch 005.10 (Sync with Jira pass/fail indicator —
 2026-05-06), Batch 005.20 (brand-create admin UI — 2026-05-07),
 Batch 005.21 (SharePoint integration groundwork docs —
-2026-05-11). All migrations 001-017 have run against production.
+2026-05-11), Batch 005.23 (§15 pending-rotations restructure
+docs — 2026-05-12). All migrations 001-017 have run against production.
 Batch 004.4.5 produced a UX discovery plan for Coverage + Settings
 reorg (Batch 005 implementation). See §16 for full shipped log.
 
@@ -1404,23 +1405,44 @@ Resolved             → green-500
 Batch 004.10 UX polish on 2026-05-01.)
 
 ### Awaiting external action
-- [ ] **Forge consumer integration** — dashboard side of the brands
-      API is shipped; Forge app (separate repo, Atlassian Forge
-      platform) is drafting v0.0.4 spec. No production traffic on
+
+**Forge integration**
+- [ ] **Forge consumer integration** — dashboard side of the
+      brands API is shipped; Forge app (separate repo,
+      Atlassian Forge platform) drafting v0.0.4 SPEC_phase1.
+      CQIP_BRANDS_API_TOKEN installed on Forge dev + prod
+      variables 2026-05-12. No production traffic on
       `/api/brands/*` until Forge consumer goes live. Tracked
       cross-project; not actionable on dashboard side.
+
+**SharePoint integration**
 - [ ] **SharePoint integration** — Azure app provisioned and
       Postman-verified 2026-05-02 / 2026-05-03 (see §14).
-      Production integration deferred to Batch 009. Two
-      Azure follow-ups below are prerequisites.
+      Production integration deferred to Batch 009.
+      Prerequisites tracked under "Pending rotations" below.
+
+**Pending rotations (live, both sides)**
 - [ ] **Reclaim Owner access on Azure app** — "CQIP Dashboard
       - SharePoint Integration" (client_id
-      6aa464c1-4eb9-4d94-b087-6eebe4fa8cb6). Gates the client
+      6aa464c1-4eb9-4d94-b087-6eebe4fa8cb6). Gates the Azure
       secret rotation below. Lacey-side Azure portal task.
 - [ ] **Rotate Azure client secret** — Current secret was
       visible in 2026-05-02/03 verification screenshots and
       is compromised-by-default until rotated. Sequenced
       behind Owner access reclaim above.
+- [ ] **Rotate CQIP_BRANDS_API_TOKEN** — In circulation since
+      brands API initial setup (Batch 005.13-005.14 timeframe).
+      Never rotated. Not known to be compromised — rotation
+      is hygiene per §13 rule 27 (secret rotation atomicity).
+      Lives on three surfaces:
+        - Worker secret (set via `wrangler secret put`)
+        - DC local .env on Dashboard repo
+        - Forge variables (dev + prod, installed 2026-05-12)
+      Atomic rotation required: all three surfaces within a
+      single window. Lacey kicks off; DC + AC walk their
+      respective sides. AC mirror tracked under AC §15
+      "Pending rotations (live, both sides)" — relay
+      2026-05-12.
 
 ### Batch 004.99 (post-Batch-004) — Multi-Client Readiness Review — shipped 2026-05-06
 Discovery batch. Identifies all NBLY-hardcoded assumptions in CQIP
@@ -1821,6 +1843,37 @@ IMPLEMENTATION SKETCH (post-design):
 ---
 
 ## 16. Shipped Features Log
+
+### Batch 005.23 — §15 restructure: pending rotations subsection — 2026-05-12
+
+Docs-only commit. Restructures §15 "Awaiting external action"
+into named subsections (Forge integration, SharePoint
+integration, Pending rotations (live, both sides)). Adds
+CQIP_BRANDS_API_TOKEN as a tracked rotation item — in
+circulation since brands API initial setup, never rotated,
+rotation is hygiene per §13 rule 27.
+
+**Context:** AC (Forge-side Claude) shipped a parallel §15
+restructure on the cqip-qa-automation repo earlier today
+(2026-05-12), introducing the same "Pending rotations (live,
+both sides)" subsection. This commit mirrors that
+restructure on the Dashboard side for symmetry across the
+two project surfaces. Per handoff convention 6 (cross-
+project rule numbering): AC's parallel rules are AC §13 rule
+9 + AC §12 rule 3; the DC equivalent is §13 rule 27.
+
+**CQIP_BRANDS_API_TOKEN status as of this ship:**
+- Installed on Worker (since brands API initial setup)
+- Stored in DC local .env (verified 2026-05-12)
+- Installed on Forge development + production variables
+  (set 2026-05-12 per AC relay)
+- Phase 1 of Forge consumer integration not yet live;
+  no production traffic on /api/brands/* yet
+- Rotation NOT scheduled — tracked as hygiene item until
+  coordinated with future Azure rotation window
+
+Per §13 rule 23: docs-only commit. No migration, no code,
+no schema change.
 
 ### Batch 005.21 — SharePoint integration groundwork docs — 2026-05-11
 Docs-only commit. Records SharePoint integration groundwork
@@ -3170,4 +3223,4 @@ demo blocker.
 
 ---
 
-*Last updated: 2026-05-11 | CQIP v1.5 — Batch 005.21 shipped (SharePoint integration groundwork docs; Batch 009 entry placeholder, architecture decisions deferred)*
+*Last updated: 2026-05-12 | CQIP v1.5 — Batch 005.23 shipped (§15 pending-rotations restructure)*
