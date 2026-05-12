@@ -137,15 +137,16 @@ Spans both projects. Last locked 2026-05-12.
 
 | # | Owner | Item | Status |
 |---|-------|------|--------|
-| 1 | DC | 5.19 SPL multi-page presence sweep | next |
-| 2 | DC | Batch 009 SharePoint integration | post-5.19 |
-| 3 | AC | Phase 1.5 implementation | parallel with DC 009 design |
-| 4 | DC | Batch 006 Teams dispatch | post-009 |
-| 5 | DC | Batch 010 UI polish | post-006 |
-| 6 | DC | Batch 011 Coverage redesign | post-010 |
-| 7 | AC | Phase 2 (after DC 009 ships) | gated on DC 009 |
-| 8 | DC | Batch 007 Custom Jira Boards | post-Phase-2 |
-| 9 | DC | Batch 008 Convert.com automation | last |
+| 1 | DC | 5.19 SPL multi-page presence sweep | ✅ done 2026-05-12 |
+| 2 | DC | Batch 005.25 — brand dropdown fix + client_brand normalization | next |
+| 3 | DC | Batch 009 SharePoint integration | post-005.25 |
+| 4 | AC | Phase 1.5 implementation | parallel with DC 009 design |
+| 5 | DC | Batch 006 Teams dispatch | post-009 |
+| 6 | DC | Batch 010 UI polish | post-006 |
+| 7 | DC | Batch 011 Coverage redesign | post-010 |
+| 8 | AC | Phase 2 (after DC 009 ships) | gated on DC 009 |
+| 9 | DC | Batch 007 Custom Jira Boards | post-Phase-2 |
+| 10 | DC | Batch 008 Convert.com automation | last |
 
 ---
 
@@ -187,6 +188,23 @@ project's CLAUDE.md §16.
   (mirror requests evaluated for fit; fetch joint doc at
   session start). AC endorses; AC CLAUDE_RULES.md draft
   (pending) will mirror R16.
+- **DC** ran 5.19 SPL multi-page presence sweep. Six surfaces
+  swept; four PASS (coverage, alerts panel, chart drilldowns,
+  audit page) and two FAIL (/logs + /reports brand dropdowns
+  exclude newly-onboarded brands without active quality_logs).
+  Two findings captured: F1 (data-driven dropdown excludes
+  SPL) and F2 (pre-Phase-1 brand-code duplicates).
+- **DC** noted that SPL's audit log contains soft-deleted
+  historical quality_logs entries (SPLCRO-107, SPLCRO-108).
+  Confirmed with Lacey 2026-05-12: these were intentional
+  test-cleanup deletions during Phase 1 verification, not
+  real CRO work. Logging for future-DC clarity so any future
+  sweep doesn't surface them as anomalies.
+- **DC** shipped Batch 005.25 scoping (this commit): 5.19
+  closed in §15, Batch 005.25 entry added covering brand
+  dropdown source-of-truth refactor + idempotent
+  client_brand backfill script + code-grep verifications.
+  Priority order updated; 005.25 slots between 5.19 and 009.
 
 ### 2026-05-11 — cross-Claude coordination day
 - **DC** shipped Batch 005.21: SharePoint integration
@@ -301,5 +319,5 @@ project's CLAUDE.md §16.
 
 ---
 
-*Last updated: 2026-05-12 | Initial version, shipped as part of
-Batch 005.24*
+*Last updated: 2026-05-12 | Updated by Batch 005.25 scoping
+commit (5.19 done, 005.25 slotted)*

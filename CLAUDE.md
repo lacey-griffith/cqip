@@ -39,8 +39,9 @@ Batch 005.21 (SharePoint integration groundwork docs —
 2026-05-11), Batch 005.23 (§15 pending-rotations restructure
 + CLAUDE_RULES.md companion file — 2026-05-12), Batch 005.24
 (joint cross-project doc at /docs/CROSS_CLAUDE.md + R16/R17
-added to CLAUDE_RULES.md — 2026-05-12). All migrations
-001-017 have run against production.
+added to CLAUDE_RULES.md — 2026-05-12), Batch 005.25 scoping
+(5.19 sweep closed + Batch 005.25 entry added — 2026-05-12).
+All migrations 001-017 have run against production.
 Batch 004.4.5 produced a UX discovery plan for Coverage + Settings
 reorg (Batch 005 implementation). See §16 for full shipped log.
 
@@ -1582,7 +1583,7 @@ additions.
       quarterly `SELECT count(*) FROM quality_logs WHERE is_deleted =
       FALSE`. Currently ~50 logs at NBLY pilot rate; revisit when
       multi-client work (Batch 004.99) starts onboarding.
-- [ ] **5.19 SPL multi-page presence sweep** — verify SPL appears
+- [x] **5.19 SPL multi-page presence sweep** — verify SPL appears
       correctly on every dashboard surface that displays project /
       brand context. Specifically check:
       - `/dashboard/coverage` — does the SPL brand row appear? Does
@@ -1606,6 +1607,27 @@ additions.
       consider fixing those at the same time to avoid multiple
       cleanup batches. See `docs/multi-client-readiness.md` §6.5
       for the full settings-UI gap list.
+
+      **Shipped 2026-05-12.** Sweep findings:
+      - PASS: /dashboard/coverage (SPL row + drawer + sparkline
+        render correctly), Active alerts panel (NBLY drought
+        pills render cleanly via extractBrandCode), Dashboard
+        chart drilldowns (no SPL data; NBLY renders unaffected),
+        /dashboard/settings/audit (ticket filter recognizes
+        SPLCRO- prefix, returns matching audit rows).
+      - FAIL: /dashboard/logs and /dashboard/reports brand
+        dropdowns. Two findings captured for Batch 005.25:
+        (F1 HIGH) dropdowns populate from DISTINCT client_brand
+        in quality_logs, excluding any brand without active
+        non-deleted logs — SPL invisible; (F2 MEDIUM) historical
+        pre-Phase-1 quality_logs rows have raw brand codes
+        (e.g., 'ASV'), post-Phase-1 rows have full Phase-1
+        format (e.g., 'ASV - Aire Serv') — surface as duplicate
+        dropdown entries.
+      - DEFERRED: code-grep verification of extractBrandCode()
+        prefix-agnosticism and chart drilldown routing
+        hardcoded-NBLYCRO check — folded into Batch 005.25
+        scope.
 - [ ] **5.21 Cron-silence monitor** — extend the `sync_runs` pattern
       from Batch 005.10 to all cron-driven functions, OR add a
       Settings → System card showing last-activity-per-cron derived
@@ -1642,6 +1664,43 @@ additions.
       through as multi-brand). `AddBrandDrawer` adds a single-brand
       affordance that auto-syncs `default_brand_id` on the parent
       project. Closes the Phase 1 deferred-affordances gap.
+
+### Batch 005.25 — Brand dropdown fix + client_brand normalization
+
+Closes 5.19 sweep findings F1 + F2. Small targeted batch.
+Scoped 2026-05-12; not yet started.
+
+- [ ] Refactor /dashboard/logs brand dropdown to source
+      from brands table (filtered by is_active = TRUE),
+      not from DISTINCT client_brand in quality_logs.
+- [ ] Same refactor for /dashboard/reports brand dropdown.
+- [ ] Consider a shared <BrandSelector> component if /logs
+      and /reports dropdowns warrant consolidation
+      (decision at implementation — not pre-locking).
+- [ ] One-shot script: scripts/normalize-client-brand.ts —
+      backfills historical quality_logs.client_brand strings
+      to the canonical brands.jira_value format (CODE -
+      Display Name). Uses brand_code lookup via brands
+      table. Logs unmatched rows for manual review.
+      Idempotent.
+- [ ] Code-grep verification: extractBrandCode() helper is
+      prefix-agnostic (handles 'SPL - Spotloan' as well as
+      'MRR - Mr Rooter Plumbing'). Add a regression test
+      if one doesn't exist.
+- [ ] Code-grep verification: LogDrawer / LogDetailDrawer
+      routing has zero hardcoded 'NBLYCRO' references.
+      Should pass; this is a sanity check after the §13
+      rule 28 work.
+
+Realistic scope: half-day. No migration. No schema change.
+
+Pairs with: Batch 005.22 Phase 4 (Logs filter pills),
+which builds project-aware filtering on top of the now-
+clean brand dropdown.
+
+Does NOT address: future /dashboard/reports redesign
+vision (pre-built templates, chart picker, component
+library). That's its own future batch when scoped.
 
 ### Batch 006 (post-demo) — Teams webhook dispatch (dedicated)
 Wires `alert_events` rows to actually fire Teams notifications.
@@ -1817,7 +1876,15 @@ design session, not assumed here:**
   direct Forge → Graph calls. Keeps Graph credentials behind
   the Worker.
 
-**Priority order locked (2026-05-11):** 006 → 009 → 007 → 008.
+**Priority order locked (updated 2026-05-12):**
+5.19 (done) → Batch 005.25 → Batch 009 → Batch 006 →
+Batch 010 → Batch 011 → Batch 007 → Batch 008. Batch
+005.25 moves ahead of 009 because the brand dropdown
+bug is top-of-mind from 5.19 sweep findings, small
+scope (half-day), and unblocks /logs + /reports
+usability for newly-onboarded clients (SPL today;
+future clients tomorrow).
+
 SharePoint moves ahead of Boards because (a) the integration
 groundwork is already done, (b) it unblocks a CRO team
 workflow currently blocked on SharePoint manual access, and
@@ -1846,6 +1913,33 @@ IMPLEMENTATION SKETCH (post-design):
 ---
 
 ## 16. Shipped Features Log
+
+### Batch 005.25 scoping — 5.19 sweep closure + Batch 005.25 entry — 2026-05-12
+
+Docs-only commit. Two related changes shipped atomically.
+
+**5.19 closure:** SPL multi-page presence sweep ran
+2026-05-12, six surfaces verified. Four PASS, two FAIL
+(dropdowns on /logs and /reports), all findings captured
+for Batch 005.25 follow-up. Full sweep report appended to
+the 5.19 §15 entry. 5.19 marked complete.
+
+**Batch 005.25 scoped:** New §15 entry covers F1 (brand
+dropdowns source from quality_logs DISTINCT, excluding
+SPL) and F2 (legacy client_brand string duplicates from
+pre-Phase-1 data). Five sub-tasks scoped including a
+shared component decision and an idempotent backfill
+script. Priority order updated: 005.25 lands between 5.19
+and 009.
+
+**Context:** SPL's audit log shows soft-deleted historical
+quality_logs entries (SPLCRO-107, SPLCRO-108). These were
+intentional test-cleanup deletions during Phase 1
+verification, not real CRO work. Confirmed with Lacey
+2026-05-12. Logged to CROSS_CLAUDE.md for future
+reference.
+
+Per §13 rule 23: docs-only commit, no code change.
 
 ### Batch 005.24 — Joint cross-project doc + R16/R17 — 2026-05-12
 
@@ -3257,4 +3351,4 @@ demo blocker.
 
 ---
 
-*Last updated: 2026-05-12 | CQIP v1.5 — Batch 005.24 shipped (joint cross-project doc + R16/R17 added)*
+*Last updated: 2026-05-12 | CQIP v1.5 — Batch 005.25 scoping shipped (5.19 sweep closed; Batch 005.25 entry added for brand dropdown fix)*
