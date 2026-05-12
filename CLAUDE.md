@@ -37,7 +37,8 @@ relabeled to "Logs This Month", filtered row count on /dashboard/logs
 2026-05-06), Batch 005.20 (brand-create admin UI — 2026-05-07),
 Batch 005.21 (SharePoint integration groundwork docs —
 2026-05-11), Batch 005.23 (§15 pending-rotations restructure
-docs — 2026-05-12). All migrations 001-017 have run against production.
++ CLAUDE_RULES.md companion file — 2026-05-12). All
+migrations 001-017 have run against production.
 Batch 004.4.5 produced a UX discovery plan for Coverage + Settings
 reorg (Batch 005 implementation). See §16 for full shipped log.
 
@@ -1844,36 +1845,33 @@ IMPLEMENTATION SKETCH (post-design):
 
 ## 16. Shipped Features Log
 
-### Batch 005.23 — §15 restructure: pending rotations subsection — 2026-05-12
+### Batch 005.23 — §15 restructure + CLAUDE_RULES.md companion — 2026-05-12
 
-Docs-only commit. Restructures §15 "Awaiting external action"
+Docs-only commit. Two related additions:
+
+**§15 restructure:** "Awaiting external action" reorganized
 into named subsections (Forge integration, SharePoint
-integration, Pending rotations (live, both sides)). Adds
-CQIP_BRANDS_API_TOKEN as a tracked rotation item — in
-circulation since brands API initial setup, never rotated,
-rotation is hygiene per §13 rule 27.
+integration, Pending rotations (live, both sides)). New
+rotation item: CQIP_BRANDS_API_TOKEN — hygiene rotation,
+not known compromised, lives on three surfaces (Worker,
+DC .env, Forge dev + prod). Mirrors AC's parallel §15
+restructure on cqip-qa-automation repo earlier today
+(2026-05-12).
 
-**Context:** AC (Forge-side Claude) shipped a parallel §15
-restructure on the cqip-qa-automation repo earlier today
-(2026-05-12), introducing the same "Pending rotations (live,
-both sides)" subsection. This commit mirrors that
-restructure on the Dashboard side for symmetry across the
-two project surfaces. Per handoff convention 6 (cross-
-project rule numbering): AC's parallel rules are AC §13 rule
-9 + AC §12 rule 3; the DC equivalent is §13 rule 27.
-
-**CQIP_BRANDS_API_TOKEN status as of this ship:**
-- Installed on Worker (since brands API initial setup)
-- Stored in DC local .env (verified 2026-05-12)
-- Installed on Forge development + production variables
-  (set 2026-05-12 per AC relay)
-- Phase 1 of Forge consumer integration not yet live;
-  no production traffic on /api/brands/* yet
-- Rotation NOT scheduled — tracked as hygiene item until
-  coordinated with future Azure rotation window
+**CLAUDE_RULES.md companion file:** New file at repo root.
+Companion to CLAUDE.md — project context lives in CLAUDE.md,
+behavior rules live in CLAUDE_RULES.md. 15 rules covering
+session opening, communication, state management, ship
+discipline, drift prevention. Drafted Monday 2026-05-11 to
+formalize practices that emerged from the cross-Claude
+coordination day (drift incident, confabulation incident,
+handoff principle development). Will be mirrored AC-side in
+a separate Forge-repo commit by AC.
 
 Per §13 rule 23: docs-only commit. No migration, no code,
-no schema change.
+no schema change. Per handoff convention 6 (cross-project
+rule numbering): AC's §13 rules 9 + §12 rule 3 cited as
+parallel-not-identical to DC §13 rule 27.
 
 ### Batch 005.21 — SharePoint integration groundwork docs — 2026-05-11
 Docs-only commit. Records SharePoint integration groundwork
@@ -3223,4 +3221,4 @@ demo blocker.
 
 ---
 
-*Last updated: 2026-05-12 | CQIP v1.5 — Batch 005.23 shipped (§15 pending-rotations restructure)*
+*Last updated: 2026-05-12 | CQIP v1.5 — Batch 005.23 shipped (§15 pending-rotations restructure + CLAUDE_RULES.md companion file)*
