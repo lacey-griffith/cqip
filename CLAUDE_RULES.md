@@ -82,7 +82,22 @@ rather than assuming continuity.
 cross-Claude communication goes through Lacey as
 human-in-the-loop. Revisit when patterns are stable.
 
+## Cross-project coordination
+
+**R16** Mirror requests from other Claudes are evaluated for
+fit, not auto-applied. If AC asks DC to mirror a structure that
+doesn't map cleanly to DC's doc shape, push back and propose a
+smaller / different mirror. Source-of-truth lives where it
+natively belongs. Cross-project state goes in
+`/docs/CROSS_CLAUDE.md`, not in DC's CLAUDE.md.
+
+**R17** Fetch `/docs/CROSS_CLAUDE.md` at session start alongside
+CLAUDE.md and CLAUDE_RULES.md. URL:
+`https://github.com/lacey-griffith/cqip/blob/main/docs/CROSS_CLAUDE.md`
+Cross-project state (roster, conventions, contract surfaces,
+rotations, priority order, event log) lives there. State commit
+hash / footer date being read.
+
 ---
 
-*Last updated: 2026-05-12 | Initial version, shipped as
-part of Batch 005.23*
+*Last updated: 2026-05-12 | R16 + R17 added in Batch 005.24*

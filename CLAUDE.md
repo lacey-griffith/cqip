@@ -37,8 +37,10 @@ relabeled to "Logs This Month", filtered row count on /dashboard/logs
 2026-05-06), Batch 005.20 (brand-create admin UI — 2026-05-07),
 Batch 005.21 (SharePoint integration groundwork docs —
 2026-05-11), Batch 005.23 (§15 pending-rotations restructure
-+ CLAUDE_RULES.md companion file — 2026-05-12). All
-migrations 001-017 have run against production.
++ CLAUDE_RULES.md companion file — 2026-05-12), Batch 005.24
+(joint cross-project doc at /docs/CROSS_CLAUDE.md + R16/R17
+added to CLAUDE_RULES.md — 2026-05-12). All migrations
+001-017 have run against production.
 Batch 004.4.5 produced a UX discovery plan for Coverage + Settings
 reorg (Batch 005 implementation). See §16 for full shipped log.
 
@@ -1845,6 +1847,40 @@ IMPLEMENTATION SKETCH (post-design):
 
 ## 16. Shipped Features Log
 
+### Batch 005.24 — Joint cross-project doc + R16/R17 — 2026-05-12
+
+Docs-only commit. Two parts shipped atomically.
+
+**NEW FILE /docs/CROSS_CLAUDE.md:** Joint coordination doc
+for DC + AC. Six sections: Roster (DC, AC, Claudette,
+agents); Handoff Conventions (7 conventions locked Monday-
+Tuesday); Contract Surfaces (brands API live, SharePoint
+proxy planned); Pending Rotations (mirrored from DC §15 + AC
+§15); Cross-Project Priority Order; Append-Only Event Log
+(covers 2026-04-23 forward). Replaces ad-hoc cross-project
+state tracking that previously lived in chat memory and
+asymmetric DC/AC CLAUDE.md sections.
+
+**R16 + R17 added to CLAUDE_RULES.md** under new section
+"Cross-project coordination." R16 codifies push-back on
+mirror requests that don't map cleanly to DC's doc shape
+(lesson from AC's 2026-05-12 mirror request). R17 formalizes
+fetching the joint doc at session start.
+
+**Why now:** AC's 2026-05-12 Phase 1.5 scope shift asked DC
+to mirror Forge phasing into DC's CLAUDE.md, but DC's doc
+shape doesn't have phase tracking — it describes Dashboard.
+Asymmetric mirror requests like this would compound over
+time if not addressed structurally. Joint doc + R16/R17
+gives cross-project state its own home.
+
+**AC side:** AC endorses the joint doc. AC CLAUDE_RULES.md
+not yet drafted; AC will fetch joint doc manually until
+AC's R1-equivalent lands. AC will append AC-relevant events
+to the log starting with the Phase 1.5 scope shift.
+
+Per §13 rule 23: docs-only commit, no code change.
+
 ### Batch 005.23 — §15 restructure + CLAUDE_RULES.md companion — 2026-05-12
 
 Docs-only commit. Two related additions:
@@ -3221,4 +3257,4 @@ demo blocker.
 
 ---
 
-*Last updated: 2026-05-12 | CQIP v1.5 — Batch 005.23 shipped (§15 pending-rotations restructure + CLAUDE_RULES.md companion file)*
+*Last updated: 2026-05-12 | CQIP v1.5 — Batch 005.24 shipped (joint cross-project doc + R16/R17 added)*
