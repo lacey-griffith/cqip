@@ -27,9 +27,30 @@ function pickFirst<T>(rel: Maybe<T>): T | undefined {
   return rel;
 }
 
-// Pull just the brand code out of a full client_brand string. The DB
-// stores it as "MRR - Mr Rooter Plumbing"; we want "MRR" for the pill.
-// Falls back to the original string if the format doesn't split cleanly.
+// extractBrandCode — contract:
+//   Input  | Output
+//   -------|--------
+//   "MRR - Mr Rooter Plumbing" | "MRR"
+//   "ASV - Aire Serv"          | "ASV"
+//   "SPL - Spotloan"           | "SPL"
+//   "ASV" (raw, pre-Phase-1)   | "ASV"   <- fallback to raw
+//   null | undefined            | null
+//
+// CONTRACT GUARANTEES (per Batch 005.25 sub-task 6):
+// - Prefix-agnostic: splits on first " - ", never assumes
+//   any specific prefix ("NBLY", "SPL", future client codes).
+// - Lossy-safe: an input lacking " - " falls through as-is,
+//   so historical raw-code rows render correctly.
+// - Pure: no I/O, no state, no side effects.
+//
+// DO NOT add prefix-specific logic. The brand catalog now
+// spans multiple project_keys (NBLY + SPL today, client-3+
+// future). Any prefix dependency here would silently
+// regress §13 rule 28's Option γ writeback guarantee.
+//
+// No automated test exists for this function. If you change
+// this function, manually verify against the input table
+// above.
 function extractBrandCode(clientBrand: string | null | undefined): string | null {
   if (!clientBrand) return null;
   const code = clientBrand.split(' - ')[0]?.trim();

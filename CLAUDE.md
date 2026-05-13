@@ -40,7 +40,9 @@ Batch 005.21 (SharePoint integration groundwork docs —
 + CLAUDE_RULES.md companion file — 2026-05-12), Batch 005.24
 (joint cross-project doc at /docs/CROSS_CLAUDE.md + R16/R17
 added to CLAUDE_RULES.md — 2026-05-12), Batch 005.25 scoping
-(5.19 sweep closed + Batch 005.25 entry added — 2026-05-12).
+(5.19 sweep closed + Batch 005.25 entry added — 2026-05-12),
+Batch 005.25 (brand dropdown fix + client_brand
+normalization — 2026-05-13).
 All migrations 001-017 have run against production.
 Batch 004.4.5 produced a UX discovery plan for Coverage + Settings
 reorg (Batch 005 implementation). See §16 for full shipped log.
@@ -1628,6 +1630,8 @@ additions.
         prefix-agnosticism and chart drilldown routing
         hardcoded-NBLYCRO check — folded into Batch 005.25
         scope.
+
+      F1 + F2 closed by Batch 005.25 (2026-05-13).
 - [ ] **5.21 Cron-silence monitor** — extend the `sync_runs` pattern
       from Batch 005.10 to all cron-driven functions, OR add a
       Settings → System card showing last-activity-per-cron derived
@@ -1670,24 +1674,24 @@ additions.
 Closes 5.19 sweep findings F1 + F2. Small targeted batch.
 Scoped 2026-05-12; not yet started.
 
-- [ ] Refactor /dashboard/logs brand dropdown to source
+- [x] Refactor /dashboard/logs brand dropdown to source
       from brands table (filtered by is_active = TRUE),
       not from DISTINCT client_brand in quality_logs.
-- [ ] Same refactor for /dashboard/reports brand dropdown.
-- [ ] Consider a shared <BrandSelector> component if /logs
+- [x] Same refactor for /dashboard/reports brand dropdown.
+- [x] Consider a shared <BrandSelector> component if /logs
       and /reports dropdowns warrant consolidation
       (decision at implementation — not pre-locking).
-- [ ] One-shot script: scripts/normalize-client-brand.ts —
+- [x] One-shot script: scripts/normalize-client-brand.ts —
       backfills historical quality_logs.client_brand strings
       to the canonical brands.jira_value format (CODE -
       Display Name). Uses brand_code lookup via brands
       table. Logs unmatched rows for manual review.
       Idempotent.
-- [ ] Code-grep verification: extractBrandCode() helper is
+- [x] Code-grep verification: extractBrandCode() helper is
       prefix-agnostic (handles 'SPL - Spotloan' as well as
       'MRR - Mr Rooter Plumbing'). Add a regression test
       if one doesn't exist.
-- [ ] Code-grep verification: LogDrawer / LogDetailDrawer
+- [x] Code-grep verification: LogDrawer / LogDetailDrawer
       routing has zero hardcoded 'NBLYCRO' references.
       Should pass; this is a sanity check after the §13
       rule 28 work.
@@ -1701,6 +1705,9 @@ clean brand dropdown.
 Does NOT address: future /dashboard/reports redesign
 vision (pre-built templates, chart picker, component
 library). That's its own future batch when scoped.
+
+**Shipped 2026-05-13** as commit e8f935e.
+See §16 entry below.
 
 ### Batch 006 (post-demo) — Teams webhook dispatch (dedicated)
 Wires `alert_events` rows to actually fire Teams notifications.
@@ -1913,6 +1920,76 @@ IMPLEMENTATION SKETCH (post-design):
 ---
 
 ## 16. Shipped Features Log
+
+### Batch 005.25 — Brand dropdown fix + client_brand normalization — 2026-05-13
+
+Closes 5.19 sweep findings F1 + F2. Half-day batch. No
+migration, no schema change.
+
+**Commit 1 (earlier 2026-05-13):** `scripts/normalize-client-brand.ts`
+landed and executed. 32 historical quality_logs rows updated
+from raw codes (e.g. 'ASV', 'MRR') to canonical brands.jira_value
+format ('ASV - Aire Serv', 'MRR - Mr Rooter Plumbing'). 14 rows
+already canonical (post-Phase-1 webhook writes). Zero unmatched,
+zero ambiguous. Idempotent — re-run produces zero updates. Audit
+trail: 32 audit_log rows with changed_by='system:normalize-client-brand'
+in a ~4.3s window. Per-row updated_at uses a single batch-marker
+timestamp (forensic-friendly).
+
+**Commit 2 (this commit):** Dropdown refactor + verification.
+
+- **New file `components/filters/brand-selector.tsx`** — shared
+  brand filter wrapping the existing Combobox. Sources from
+  brands table (is_active=TRUE), emits brands.jira_value
+  verbatim. Exports canonical sentinel BRAND_SELECTOR_ALL =
+  '__all__' so consumers stop redefining local ALL constants.
+  Optional projectKey prop is a hook for Batch 005.22 Phase 4
+  (project-aware dropdown); unused by 005.25 callers.
+
+- **`app/dashboard/logs/page.tsx`** — replaced the
+  useMemo(clientBrands) DISTINCT-derivation pattern with
+  <BrandSelector>. SPL (and any future newly-onboarded brand)
+  now appears in the dropdown without requiring active
+  non-deleted logs. Closes F1 on logs.
+
+- **`app/dashboard/reports/page.tsx`** — same refactor.
+  fetchFilterOptions() no longer pulls client_brand from
+  quality_logs at all; the latent .limit(500) bug that would
+  have silently truncated brand options once quality_logs
+  exceeded 500 rows is mooted for brands. (Other filter
+  options still flow through that query and remain capped;
+  enum-bounded so cap is harmless. Tracked indirectly as
+  Phase 4 scope.) Upgrade side effect: reports page now has
+  typeahead on the brand filter (was a no-typeahead shadcn
+  Select).
+
+- **`components/dashboard/active-alerts-panel.tsx`** —
+  extractBrandCode() function body unchanged. Comment block
+  expanded to a full contract specification (input/output
+  table, prefix-agnosticism guarantee, lossy-safe behavior,
+  do-not-add-prefix-logic warning). Per Batch 005.25
+  sub-task 6: no test runner exists in this codebase, so
+  the contract is locked via documentation. Future edits
+  must manually verify against the input table.
+
+- **Verified zero hits** for hardcoded 'NBLYCRO' in
+  components/dashboard/log-drawer.tsx and
+  components/logs/log-detail-drawer.tsx (per sub-task 7).
+  §13 rule 28 cleanup work left these clean; this commit
+  confirms.
+
+**Side observations during 005.25:**
+- Three different env-loading patterns exist across
+  scripts/ (Node --env-file flag, manual fs reads, dotenv
+  package). Backlog hygiene item; not addressed here.
+- backfill-brands.ts and backfill-milestones.ts do not
+  write audit rows. Latent §13 rule 2 cleanup; not
+  addressed here, not propagated by the new normalize
+  script.
+
+**Pairs with:** Batch 005.22 Phase 4 (Logs filter pills,
+backlog) which will add project-aware grouping on top of
+this now-clean dropdown via the existing projectKey prop.
 
 ### Batch 005.25 scoping — 5.19 sweep closure + Batch 005.25 entry — 2026-05-12
 
@@ -3351,4 +3428,4 @@ demo blocker.
 
 ---
 
-*Last updated: 2026-05-12 | CQIP v1.5 — Batch 005.25 scoping shipped (5.19 sweep closed; Batch 005.25 entry added for brand dropdown fix)*
+*Last updated: 2026-05-13 | CQIP v1.5 — Batch 005.25 shipped (brand dropdown refactor + client_brand normalization)*

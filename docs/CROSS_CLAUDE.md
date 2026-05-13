@@ -26,10 +26,11 @@ in place.
 Currently active Claude sessions in the CQIP program:
 
 | Handle | Surface | Environment | Repo |
-|--------|---------|-------------|------|
+| --- | --- | --- | --- |
 | **DC** | Dashboard backend, schema, edge functions, brands API | claude.ai web/desktop | lacey-griffith/cqip |
 | **AC** | Forge consumer app, Jira-side automations | claude.ai web/desktop | cqip-qa-automation |
-| **Claudette** | Dashboard repo command-line execution | Claude Code in terminal | lacey-griffith/cqip |
+| **Claudette** | DC's terminal partner, Dashboard repo command-line execution | Claude Code in terminal | lacey-griffith/cqip |
+| **Claudia** | AC's terminal partner, Forge repo command-line execution | Claude Code in terminal | cqip-qa-automation |
 | **Karen, Jenny, Radara** | Agent personas invoked by Claude Code for specific roles (reality check, spec verification, triage) | Invoked via Claude Code | both repos |
 
 **Disambiguation rules:**
@@ -133,13 +134,13 @@ sides within a single deploy window per DC §13 rule 27 / AC §13 rule 9.
 
 ## 5. Cross-Project Priority Order
 
-Spans both projects. Last locked 2026-05-12.
+Spans both projects. Last locked 2026-05-13.
 
 | # | Owner | Item | Status |
-|---|-------|------|--------|
-| 1 | DC | 5.19 SPL multi-page presence sweep | ✅ done 2026-05-12 |
-| 2 | DC | Batch 005.25 — brand dropdown fix + client_brand normalization | next |
-| 3 | DC | Batch 009 SharePoint integration | post-005.25 |
+| --- | --- | --- | --- |
+| 1 | DC | 5.19 SPL multi-page presence sweep | ✅ done |
+| 2 | DC | Batch 005.25 brand dropdown fix | ✅ done |
+| 3 | DC | Batch 009 SharePoint integration | next |
 | 4 | AC | Phase 1.5 implementation | parallel with DC 009 design |
 | 5 | DC | Batch 006 Teams dispatch | post-009 |
 | 6 | DC | Batch 010 UI polish | post-006 |
@@ -156,6 +157,27 @@ Cross-project events worth durable record. Newest at top.
 Covers events from 2026-04-23 forward (start of the drift-
 prevention era). Project-internal events stay in each
 project's CLAUDE.md §16.
+
+### 2026-05-13
+
+- **DC** shipped Batch 005.25: brand dropdown fix + historical
+  client_brand normalization. Closes 5.19 sweep findings F1
+  (dropdowns sourced from DISTINCT quality_logs.client_brand,
+  excluding SPL) + F2 (raw-code historical strings duplicating
+  canonical jira_value entries). New shared `<BrandSelector>`
+  component at `components/filters/brand-selector.tsx`; one-shot
+  `scripts/normalize-client-brand.ts` ran successfully (32
+  rows updated, 14 already canonical, zero unmatched). No
+  migration, no schema change. Commits: c6cb40c7
+  (Commit 1, normalize script), e8f935e (Commit 2,
+  refactor + atomic docs).
+- **DC** noted three env-loading patterns across
+  cqip/scripts/ (Node --env-file, manual fs reads, dotenv
+  package). Filed as backlog hygiene; not addressed in 005.25.
+- **DC** noted backfill-brands.ts and backfill-milestones.ts
+  do not write audit_log rows (latent §13 rule 2 gap). Not
+  propagated by the new normalize script. Filed as backlog
+  hygiene; not addressed in 005.25.
 
 ### 2026-05-12
 - **AC** scope shift: Phase 1 (template-with-placeholders) →
@@ -325,5 +347,6 @@ project's CLAUDE.md §16.
 
 ---
 
-*Last updated: 2026-05-12 | Updated by Batch 005.25 scoping
-commit (5.19 done, 005.25 slotted)*
+*Last updated: 2026-05-13 | §1 roster updated (Claudia
+added), §5 priority order updated (Batch 005.25 marked
+complete), §6 event log appended (Batch 005.25 ship)*

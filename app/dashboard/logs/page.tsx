@@ -9,7 +9,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Combobox } from '@/components/ui/combobox';
+import { BrandSelector, BRAND_SELECTOR_ALL } from '@/components/filters/brand-selector';
 import { EditLogDialog, type EditableLog } from '@/components/logs/edit-log-dialog';
 import { ConfirmDeleteDialog } from '@/components/logs/confirm-delete-dialog';
 import { TicketLink } from '@/components/logs/ticket-link';
@@ -163,19 +163,6 @@ export default function LogsPage() {
 
     loadData();
   }, []);
-
-  const clientBrands = useMemo(
-    () => Array.from(new Set(logs.map(log => log.client_brand ?? '').filter(Boolean))).sort(),
-    [logs],
-  );
-
-  const clientBrandOptions = useMemo(
-    () => [
-      { value: ALL, label: 'All brands' },
-      ...clientBrands.map(b => ({ value: b, label: b })),
-    ],
-    [clientBrands],
-  );
 
   const filteredLogs = useMemo(() => {
     return logs.filter(log => {
@@ -573,12 +560,9 @@ export default function LogsPage() {
                 </div>
                 <div className="min-w-[10rem] flex-1">
                   <Label htmlFor="clientBrand" className="text-[10px] uppercase tracking-widest text-[color:var(--f92-gray)]">Brand</Label>
-                  <Combobox
-                    value={clientBrand || ALL}
-                    onChange={v => setClientBrand(v === ALL ? '' : v)}
-                    options={clientBrandOptions}
-                    placeholder="All brands"
-                    emptyLabel="No matching brand"
+                  <BrandSelector
+                    value={clientBrand || BRAND_SELECTOR_ALL}
+                    onChange={v => setClientBrand(v === BRAND_SELECTOR_ALL ? '' : v)}
                   />
                 </div>
                 <div className="min-w-[9rem] flex-1">

@@ -16,6 +16,7 @@ import { ScorecardReport } from '@/components/reports/scorecard-report';
 import { RootCauseReport } from '@/components/reports/root-cause-report';
 import { ClientReport } from '@/components/reports/client-report';
 import { SyncJiraButton } from '@/components/dashboard/sync-jira-button';
+import { BrandSelector, BRAND_SELECTOR_ALL } from '@/components/filters/brand-selector';
 import type { DateRange } from '@/components/reports/common';
 
 const ALL = '__all__';
@@ -62,7 +63,6 @@ export default function ReportsPage() {
   const [savedReports, setSavedReports] = useState<SavedReport[]>([]);
   const [creatorNames, setCreatorNames] = useState<Record<string, string>>({});
   const [filterOptions, setFilterOptions] = useState({
-    clientBrands: [] as string[],
     severities: [] as string[],
     statuses: [] as string[],
     issueCategories: [] as string[],
@@ -123,7 +123,7 @@ export default function ReportsPage() {
   async function fetchFilterOptions() {
     const { data, error } = await supabase
       .from('quality_logs')
-      .select('client_brand,severity,log_status,issue_category,root_cause_final,who_owns_fix,test_type')
+      .select('severity,log_status,issue_category,root_cause_final,who_owns_fix,test_type')
       .is('is_deleted', false)
       .limit(500);
 
@@ -132,7 +132,6 @@ export default function ReportsPage() {
       return;
     }
 
-    const clientBrands = new Set<string>();
     const severities = new Set<string>();
     const statuses = new Set<string>();
     const issueCategories = new Set<string>();
@@ -141,7 +140,6 @@ export default function ReportsPage() {
     const testTypes = new Set<string>();
 
     (data || []).forEach((row: any) => {
-      if (row.client_brand) clientBrands.add(row.client_brand);
       if (row.severity) severities.add(row.severity);
       if (row.log_status) statuses.add(row.log_status);
       if (row.issue_category) row.issue_category.forEach((value: string) => issueCategories.add(value));
@@ -151,7 +149,6 @@ export default function ReportsPage() {
     });
 
     setFilterOptions({
-      clientBrands: Array.from(clientBrands).sort(),
       severities: Array.from(severities).sort(),
       statuses: Array.from(statuses).sort(),
       issueCategories: Array.from(issueCategories).sort(),
@@ -481,20 +478,15 @@ export default function ReportsPage() {
           </div>
           <div>
             <Label htmlFor="clientBrand">Client brand</Label>
-            <Select
-              value={selectValue(filters.clientBrand)}
-              onValueChange={value => handleFilterChange('clientBrand', value)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="All brands" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL}>All brands</SelectItem>
-                {filterOptions.clientBrands.map(brand => (
-                  <SelectItem key={brand} value={brand}>{brand}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <BrandSelector
+              value={filters.clientBrand || BRAND_SELECTOR_ALL}
+              onChange={value =>
+                handleFilterChange(
+                  'clientBrand',
+                  value === BRAND_SELECTOR_ALL ? '' : value
+                )
+              }
+            />
           </div>
           <div>
             <Label htmlFor="severity">Severity</Label>
