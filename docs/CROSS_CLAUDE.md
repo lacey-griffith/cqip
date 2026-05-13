@@ -205,6 +205,12 @@ project's CLAUDE.md §16.
   dropdown source-of-truth refactor + idempotent
   client_brand backfill script + code-grep verifications.
   Priority order updated; 005.25 slots between 5.19 and 009.
+- **AC** shipped CLAUDE_RULES.md at repo root
+  (cqip-qa-automation), 17 rules mirroring DC's
+  CLAUDE_RULES.md from Batch 005.24. R1/R3/R7/R11/R12
+  adjusted for AC scope per R16 (mirror-with-fit-check).
+  Closes the "AC CLAUDE_RULES.md draft (pending)" item
+  above. AC commit: 55753aa.
 
 ### 2026-05-11 — cross-Claude coordination day
 - **DC** shipped Batch 005.21: SharePoint integration
