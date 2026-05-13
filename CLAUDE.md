@@ -1706,7 +1706,7 @@ Does NOT address: future /dashboard/reports redesign
 vision (pre-built templates, chart picker, component
 library). That's its own future batch when scoped.
 
-**Shipped 2026-05-13** as commit e8f935e.
+**Shipped 2026-05-13** as commit 35f0dfc.
 See §16 entry below.
 
 ### Batch 006 (post-demo) — Teams webhook dispatch (dedicated)

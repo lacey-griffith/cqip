@@ -169,7 +169,7 @@ project's CLAUDE.md §16.
   `scripts/normalize-client-brand.ts` ran successfully (32
   rows updated, 14 already canonical, zero unmatched). No
   migration, no schema change. Commits: c6cb40c7
-  (Commit 1, normalize script), e8f935e (Commit 2,
+  (Commit 1, normalize script), 35f0dfc (Commit 2,
   refactor + atomic docs).
 - **DC** noted three env-loading patterns across
   cqip/scripts/ (Node --env-file, manual fs reads, dotenv
