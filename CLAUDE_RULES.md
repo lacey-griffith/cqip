@@ -98,6 +98,20 @@ Cross-project state (roster, conventions, contract surfaces,
 rotations, priority order, event log) lives there. State commit
 hash / footer date being read.
 
+**R18** CROSS_CLAUDE.md §6 entry required for:
+  · contract-surface changes (PLANNED → LOCKED → LIVE → DEPRECATED)
+  · cross-Claude decisions (auth, scopes, error shapes, shared envs)
+  · ship of any work the other side consumes or coordinates on
+
+Not required for:
+  · internal refactors with no contract impact
+  · docs hygiene with no decision content
+  · agent-only work (Karen/Jenny/Radara findings)
+
+Entry shape: date heading · 1-3 paragraph summary · pointer to
+spec/commit. Most-recent-first. Atomic with the triggering commit
+when feasible; follow-up commit acceptable if not.
+
 ---
 
-*Last updated: 2026-05-12 | R16 + R17 added in Batch 005.24*
+*Last updated: 2026-05-15 | R18 added (§6-entry trigger criteria)*
