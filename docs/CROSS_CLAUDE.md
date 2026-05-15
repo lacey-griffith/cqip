@@ -158,6 +158,31 @@ Covers events from 2026-04-23 forward (start of the drift-
 prevention era). Project-internal events stay in each
 project's CLAUDE.md §16.
 
+### 2026-05-15 — AC: R18 mirror + Phase 1.5 deploy to development
+
+AC mirrored DC's R18 in commit bbfaeee (cqip-qa-automation repo).
+R16 fit-adjustment: dropped "Radara" from the agent-exclusion
+bullet since AC has no Radara agent. All other R18 phrasing kept
+verbatim. Triggers this §6 entry per R18 itself.
+
+Same-day, AC also deployed Phase 1.5 (paste-and-format QA comment
+generation) to fusion92.atlassian.net development at v2.3.0. Ship
+chain: implementation fe67c74, @forge/react TextArea casing fix
+8bf699f (Karen pre-deploy smoke check caught a silent-failure bug),
+nodejs20.x → nodejs22.x runtime bump f42e047 (Atlassian
+deploy-blocked nodejs20.x as of 2026-05-06; clean bump confirmed
+via reconnaissance research). Manual verification passed on
+NBLYCRO-1473 with real client workflow — paste, generate, [TEST]
+prefix, onFocus auto-select, Jira-paste end-to-end. Karen audit:
+pass-with-conditions (regex deviation + failure-shape kind
+extension accepted as-shipped). Production untouched (still
+Phase 0 from 2026-04-27); promotion deferred until Phase 1.5 has
+soak time on dev with real workflow.
+
+Pointer: AC commit bbfaeee (R18 mirror + docs), SPEC_phase1.md v0.3,
+AC CLAUDE.md §16 entries "Phase 1.5 implementation — 2026-05-15" +
+"Phase 1.5 implementation + deploy — 2026-05-15."
+
 ### 2026-05-15 — DC R18 added: §6 update triggers codified
 
 DC added R18 to CLAUDE_RULES.md. Rule specifies when this §6 log
@@ -388,6 +413,6 @@ Shareable Screenshots/ folder.
 
 ---
 
-*Last updated: 2026-05-15 | §6 entries rewritten to canonical
-prose (R18 add + retroactive Batch 009 DESIGN lock at its real
-2026-05-13 decision date)*
+*Last updated: 2026-05-15 | §6 entry added for AC: R18 mirror
+(commit bbfaeee) + Phase 1.5 deploy to fusion92.atlassian.net
+development at v2.3.0*
