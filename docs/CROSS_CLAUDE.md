@@ -158,42 +158,46 @@ Covers events from 2026-04-23 forward (start of the drift-
 prevention era). Project-internal events stay in each
 project's CLAUDE.md §16.
 
-### 2026-05-15
+### 2026-05-15 — DC R18 added: §6 update triggers codified
 
-- **DC** added **R18** to CLAUDE_RULES.md formalizing when a
-  §6 entry is required. Triggers: contract-surface PLANNED →
-  LOCKED → LIVE → DEPRECATED transitions; cross-Claude
-  decisions (auth, scopes, error shapes, shared envs); ship
-  of work the other side consumes. Internal refactors, docs
-  hygiene, and agent findings don't trigger. Entry shape:
-  date heading · 1-3 paragraph summary · pointer to
-  spec/commit. Atomic with triggering commit when feasible;
-  follow-up acceptable if not. **Why now:** the Batch 009
-  DESIGN-lock commit (`ce397fa`, two days ago) was a
-  textbook cross-Claude decision — endpoint shape, error
-  envelope, auth pattern AC consumes — and shipped without
-  a §6 entry. R18 codifies the trigger so future cross-Claude
-  decisions don't slip through. AC should mirror at AC's
-  discretion per R16 (mirror-with-fit-check).
-- **DC** locked **Batch 009 SharePoint integration DESIGN**
-  on 2026-05-13 (commit `ce397fa`, pushed 2026-05-15).
-  Retroactive §6 entry per R18 follow-up clause. Full spec
-  at `docs/batch-009-sharepoint-spec.md`. Locked decisions
-  AC needs: (1) read-only v1, no writes; (2) Microsoft Graph
-  scope `Sites.Selected`; (3) three GET routes
-  (`/api/sharepoint/folder`, `/xlsx`, `/image`), one per
-  resource type; (4) structured response + 60s per-call
-  cache on folder + xlsx (images pass through); (5) fresh
-  Graph token per call, 401→502 with auth-error envelope,
-  `?nocache=1` cache bypass. Auth: separate Bearer token
-  `CQIP_SHAREPOINT_API_TOKEN` (NOT shared with
-  `CQIP_BRANDS_API_TOKEN`), four-surface atomic rotation
-  per DC §13 rule 27. Error envelope shape locked (9
-  error codes with HTTP statuses + context fields; see
-  spec §4). Soft-fail warnings on empty/missing
-  `Shareable Screenshots/`. SHIP gated on two Azure
-  prereqs: Owner reclaim → client secret rotation. CROSS
-  §3 row stays PLANNED until SHIP (per spec §11).
+DC added R18 to CLAUDE_RULES.md. Rule specifies when this §6 log
+gets an entry (contract-surface changes, cross-Claude decisions,
+ship of work the other side consumes) and when it doesn't (internal
+refactors, docs hygiene, agent-only work).
+
+Mirror request pending to AC/Claudia. Verbatim text recommended;
+DC + Lacey didn't know AC-side terminology well enough to fit-adjust.
+
+Trigger for the rule: DC missed a §6 entry for Batch 009 DESIGN
+lock on 2026-05-13. Retroactive entry below.
+
+### 2026-05-13 — Batch 009 SharePoint integration DESIGN locked
+
+DC + Lacey + AC (consulted via Lacey-relay) ran a design session
+for Batch 009. Five architecture decisions locked:
+
+  1. v1 scope        read-only (write deferred)
+  2. Graph scope     Sites.Selected
+  3. Endpoint shape  3 routes — /api/sharepoint/folder, /xlsx, /image
+  4. Sync semantics  structured response + 60s per-call cache
+  5. Failure         fresh Graph token per call · 401→502 with
+                     sharepoint_auth envelope · 1 retry on 5xx ·
+                     CQIP_SHAREPOINT_API_TOKEN rotates atomically
+                     per DC §13 r27
+
+Full spec at docs/batch-009-sharepoint-spec.md (commit ce397fa).
+CLAUDE.md §14 + §15 updated atomically in same commit.
+
+SHIP still gated on Azure Owner reclaim + client secret rotation
+(Lacey-side, unchanged). §3 of this doc remains PLANNED for
+/api/sharepoint/* — flips to LIVE at SHIP, not at DESIGN, per
+spec §11.
+
+AC's day-one Phase 2 needs surfaced via Lacey-relay are folded
+into the spec: folder enumeration with filtering rules, xlsx
+Preview Links parsing, image bytes with 25MB cap, error codes
+distinguishing auth vs not-found, soft-fail on empty/missing
+Shareable Screenshots/ folder.
 
 ### 2026-05-13
 
@@ -384,6 +388,6 @@ project's CLAUDE.md §16.
 
 ---
 
-*Last updated: 2026-05-15 | §6 event log appended (R18 added
-to CLAUDE_RULES.md; retroactive Batch 009 DESIGN-lock entry
-per R18 follow-up clause)*
+*Last updated: 2026-05-15 | §6 entries rewritten to canonical
+prose (R18 add + retroactive Batch 009 DESIGN lock at its real
+2026-05-13 decision date)*
