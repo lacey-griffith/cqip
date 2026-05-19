@@ -9,6 +9,10 @@ import { Card } from '@/components/ui/card';
 import { Sparkline } from '@/components/coverage/sparkline';
 import { BrandDetailDrawer } from '@/components/coverage/brand-detail-drawer';
 import { SyncJiraButton } from '@/components/dashboard/sync-jira-button';
+import {
+  ProjectBrandFilter,
+  type FilterValue,
+} from '@/components/filters/project-brand-filter';
 import { downloadBrandedXlsx } from '@/lib/export/branded-xlsx';
 import {
   buildCoverageRows,
@@ -52,6 +56,12 @@ function ratioSortValue(tests: number, rework: number): number {
   return rework / tests;
 }
 
+interface ProjectRow {
+  jira_project_key: string;
+  client_name: string;
+  display_name: string;
+}
+
 function formatRatio(tests: number, rework: number): string {
   if (tests === 0) return '—';
   return (rework / tests).toFixed(2);
@@ -59,6 +69,7 @@ function formatRatio(tests: number, rework: number): string {
 
 export default function CoveragePage() {
   const [brands, setBrands] = useState<Brand[]>([]);
+  const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [logs, setLogs] = useState<QualityLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -68,12 +79,14 @@ export default function CoveragePage() {
   const [sortKey, setSortKey] = useState<SortKey>('status');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [showPaused, setShowPaused] = useState(false);
+  const [filter, setFilter] = useState<FilterValue>({ projectKeys: [], brandCodes: [] });
   const [drawerRow, setDrawerRow] = useState<CoverageRow | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const refetchAll = useCallback(async () => {
-    const [brandsRes, milestonesRes, logsRes] = await Promise.all([
-      supabase.from('brands').select('id, brand_code, jira_value, display_name, is_active, is_paused, paused_reason').order('display_name'),
+    const [brandsRes, projectsRes, milestonesRes, logsRes] = await Promise.all([
+      supabase.from('brands').select('id, project_key, brand_code, jira_value, display_name, is_active, is_paused, paused_reason').order('display_name'),
+      supabase.from('projects').select('jira_project_key, client_name, display_name').eq('is_active', true).order('display_name'),
       supabase.from('test_milestones').select('id, jira_ticket_id, jira_ticket_url, jira_summary, brand_id, brand_jira_value, milestone_type, reached_at, source, created_by, notes, is_deleted').eq('is_deleted', false),
       supabase.from('quality_logs').select('id, client_brand, triggered_at, is_deleted').eq('is_deleted', false),
     ]);
@@ -81,6 +94,7 @@ export default function CoveragePage() {
     // Surface partial failures so the page doesn't silently render as empty.
     const failures: string[] = [];
     if (brandsRes.error) failures.push(`brands: ${brandsRes.error.message}`);
+    if (projectsRes.error) failures.push(`projects: ${projectsRes.error.message}`);
     if (milestonesRes.error) failures.push(`test_milestones: ${milestonesRes.error.message}`);
     if (logsRes.error) failures.push(`quality_logs: ${logsRes.error.message}`);
     if (failures.length > 0) {
@@ -91,6 +105,7 @@ export default function CoveragePage() {
     }
 
     setBrands((brandsRes.data ?? []) as Brand[]);
+    setProjects((projectsRes.data ?? []) as ProjectRow[]);
     setMilestones((milestonesRes.data ?? []) as Milestone[]);
     setLogs((logsRes.data ?? []) as QualityLog[]);
   }, []);
@@ -151,7 +166,15 @@ export default function CoveragePage() {
   const rows = useMemo(() => buildCoverageRows(brands, milestones, logs), [brands, milestones, logs]);
 
   const visibleRows = useMemo(() => {
-    const filtered = showPaused ? rows : rows.filter(r => !r.brand.is_paused);
+    // Project + brand filter (Batch 005.22 Phase 2). Applied BEFORE
+    // the paused-row toggle so the paused-set logic still keys off
+    // the project-scoped view, not the global brand list.
+    const filteredByProjectBrand = rows.filter(r => {
+      if (filter.projectKeys.length > 0 && !filter.projectKeys.includes(r.brand.project_key)) return false;
+      if (filter.brandCodes.length > 0 && !filter.brandCodes.includes(r.brand.brand_code)) return false;
+      return true;
+    });
+    const filtered = showPaused ? filteredByProjectBrand : filteredByProjectBrand.filter(r => !r.brand.is_paused);
     const sorted = [...filtered];
     const dirMul = sortDir === 'asc' ? 1 : -1;
     const alphaTieBreak = (a: CoverageRow, b: CoverageRow) => a.brand.display_name.localeCompare(b.brand.display_name);
@@ -190,7 +213,7 @@ export default function CoveragePage() {
       return alphaTieBreak(a, b);
     });
     return sorted;
-  }, [rows, sortKey, sortDir, showPaused]);
+  }, [rows, sortKey, sortDir, showPaused, filter]);
 
   function toggleSort(key: SortKey) {
     if (key === sortKey) {
@@ -356,6 +379,14 @@ export default function CoveragePage() {
               </Card>
             ))}
       </div>
+
+      <ProjectBrandFilter
+        storageKey="cqip-filter-coverage"
+        projects={projects}
+        brands={brands}
+        value={filter}
+        onChange={setFilter}
+      />
 
       <Card className="sticky top-2 z-10 p-3 md:p-4">
         <div className="flex flex-wrap items-end gap-3">

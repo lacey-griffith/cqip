@@ -43,7 +43,7 @@ function CoverageSettingsBody() {
   const loadBrands = useCallback(async () => {
     const { data: brandsData } = await supabase
       .from('brands')
-      .select('id, brand_code, jira_value, display_name, is_active, is_paused, paused_reason, qa_automation_enabled, live_url_base, default_local_sub_areas, client_contact_name, client_contact_jira_account_id, url_pattern, notes')
+      .select('id, project_key, brand_code, jira_value, display_name, is_active, is_paused, paused_reason, qa_automation_enabled, live_url_base, default_local_sub_areas, client_contact_name, client_contact_jira_account_id, url_pattern, notes')
       .order('display_name');
     setBrands((brandsData ?? []) as BrandWithQa[]);
   }, []);

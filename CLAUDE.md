@@ -42,7 +42,8 @@ Batch 005.21 (SharePoint integration groundwork docs —
 added to CLAUDE_RULES.md — 2026-05-12), Batch 005.25 scoping
 (5.19 sweep closed + Batch 005.25 entry added — 2026-05-12),
 Batch 005.25 (brand dropdown fix + client_brand
-normalization — 2026-05-13).
+normalization — 2026-05-13), Batch 005.22 Phase 2
+(shared project+brand filter on Coverage — 2026-05-19).
 All migrations 001-017 have run against production.
 Batch 004.4.5 produced a UX discovery plan for Coverage + Settings
 reorg (Batch 005 implementation). See §16 for full shipped log.
@@ -172,6 +173,13 @@ cqip/
 │   │                              SyncStatusPill (Batch 005.10 — pass/fail
 │   │                              indicator next to every Sync button)
 │   ├── reports/                 # Scorecard, RootCause, Client reports
+│   ├── filters/                 # BrandSelector (Batch 005.25 — shared
+│   │                              brand-dropdown component; sources from
+│   │                              brands table not DISTINCT quality_logs),
+│   │                              ProjectBrandFilter (Batch 005.22 Phase 2 —
+│   │                              shared multi-select project+brand pill
+│   │                              filter; sessionStorage persistence per
+│   │                              page; first mount on /dashboard/coverage)
 │   └── layout/                  # Nav (sticky-bottom docs + F92 atom + clouds + shooting stars),
 │                                  UserAvatar, EasterEggHost, ThemeProvider,
 │                                  F92Logo (inline SVG atom), IdleTimeout, Toaster
@@ -1653,10 +1661,17 @@ additions.
 - [x] **5.22 Phase 1: Project-aware brand resolution** — schema +
       webhook + sync refactor making brand lookup per-project. Closes
       audit Q2 + SPL ingestion gap. **Shipped 2026-05-07**; see §16.
-- [ ] **5.22 Phase 2: Coverage filter pills** — Coverage page gains
+- [x] **5.22 Phase 2: Coverage filter pills** — Coverage page gains
       a project filter (All / NBLY / SPL) so the brand table can be
       scoped to a single client at a time. Pairs with the existing
       brand search/sort affordances; no schema change.
+      **Shipped 2026-05-19** as Cluster A Phase 2 (proposed batch
+      number 005.26 — Lacey may renumber). New shared component
+      `components/filters/project-brand-filter.tsx` with
+      sessionStorage persistence per `storageKey`; Coverage mount
+      keys at `cqip-filter-coverage`. KPI cards stay full-scope
+      (program-health boundary, locked with Lacey); table re-scopes.
+      See §16.
 - [ ] **5.22 Phase 3: Dashboard filter pills** — Dashboard charts
       gain a project filter pill row (All / per-project). KPIs +
       charts respect the filter. Builds on backlog 5.16's "global
@@ -1951,6 +1966,103 @@ memory ceiling vs 25 MB image cap.
 ---
 
 ## 16. Shipped Features Log
+
+### Batch 005.22 Phase 2 — Shared project+brand filter + Coverage mount — 2026-05-19
+
+First batch in Cluster A (Phases 2-5 of 005.22). Phase 2 builds
+the shared multi-select project + brand filter and mounts it on
+`/dashboard/coverage`. No schema change. No migration. Proposed
+batch number 005.26 — Lacey may renumber on ship.
+
+- **New shared component**:
+  `components/filters/project-brand-filter.tsx`. Client component;
+  the parent owns state via `value` / `onChange`. Persists the
+  latest value into `sessionStorage` under a per-mount
+  `storageKey` (Coverage uses `cqip-filter-coverage`). Hydrates
+  from storage on mount via a `didHydrate` ref so the initial
+  empty-array props never overwrite saved state. Defensive
+  validation on read: must be an object with `projectKeys[]` +
+  `brandCodes[]` of strings; anything else is ignored.
+  `FilterValue` shape locked: `{ projectKeys: string[];
+  brandCodes: string[] }`. Empty arrays = implicit all (Variant A,
+  locked with Lacey — no explicit "ALL" pill).
+- **Visual treatment**:
+  - Project row labeled `Project` (uppercase eyebrow); pills use
+    the existing CQIP convention from `/dashboard/logs` —
+    rounded-full, orange-filled when active with a Check icon,
+    transparent + border when inactive.
+  - Brand row labeled `Brand`, visible only when ≥1 project is
+    selected. Horizontally scrollable; chevron-right indicator
+    fades in via a fixed gradient when scroll overflow is
+    detected (ResizeObserver + scroll listener on the row).
+  - "Select all N" three-state ghost pill (dashed border, tint
+    fill) at the start of the brand row: `none → select all`,
+    `some → fill in the rest`, `all → clear all`. Pool count
+    derives from the brands reachable under the current project
+    selection.
+  - When 2+ projects are selected, brand pills are grouped by
+    project with small project-code dividers (uppercase tracking
+    badges) matching the brand-chip style used in the Coverage
+    table.
+  - Status line below the pills (`aria-live="polite"`):
+    `Filtering to: NBLY (MDG, MOJ) · Clear` — renders only when
+    at least one filter is active. Project short codes are
+    derived by stripping the trailing `CRO` suffix from
+    `jira_project_key`, falling back to the raw key for projects
+    that don't end in CRO.
+  - All pill colors via existing F92 tokens (no inline hex per
+    §13 rule 25). `aria-pressed` reflects selection state on
+    every pill button.
+- **Stale-code cleanup on project deselection**: when a project
+  is toggled off, any brand codes whose only project_key was
+  the dropped project are removed from `brandCodes`. Codes that
+  also live in another still-selected project (defensive — not
+  observed today but possible if multiple clients share a code
+  in the future) are preserved.
+- **Coverage page wiring** (`app/dashboard/coverage/page.tsx`):
+  - `brands` select string adds `project_key`.
+  - New `projects` query (`jira_project_key, client_name,
+    display_name` where `is_active = TRUE`) added to
+    `refetchAll()` alongside brands / milestones / logs; partial
+    failure surfaces in the same `failures[]` error array.
+  - New `filter` state slot of type `FilterValue`.
+  - `<ProjectBrandFilter storageKey="cqip-filter-coverage" ... />`
+    mounted ABOVE the existing sticky filter card so the
+    project/brand controls are positioned as the primary scoping
+    affordance.
+  - `visibleRows` memo adds a `filteredByProjectBrand` step
+    BEFORE the existing `showPaused` filter; `filter` added to
+    the memo deps.
+- **KPI / filter boundary (locked, reused in Phase 3+)**:
+  `crossBrand` and `deliveredCards` continue to compute from
+  the full `milestones` array regardless of filter. Above the
+  filter card = program-health view (full scope); below = filter-
+  scoped current view. Coverage table re-scopes; KPIs do not.
+  This boundary was locked with Lacey in the Cluster A scope
+  session and applies to all future filter mounts (Phase 3
+  Dashboard, Phase 4 Logs).
+- **`lib/coverage/queries.ts`** `Brand` interface gains a
+  non-nullable `project_key: string` field. Mirror update on
+  `/dashboard/settings/coverage` page's local brands fetch:
+  the select string adds `project_key` so the `as BrandWithQa[]`
+  cast stays honest (preserves the "no `as Brand` fib" comment
+  intent from Batch 004.5).
+- **Pattern decision (deferred, not codified yet)**: §13 rule
+  for "page filters persist via sessionStorage with per-page
+  keys" was considered but skipped — this is the first mount
+  and not yet enough data points to lock a rule. Decision
+  revisited at Phase 3 ship.
+- **What's deliberately NOT in this batch**: Phase 3
+  (Dashboard mount), Phase 4 (Logs mount), Phase 5 (project +
+  brand create UI hardening), Reports filter mount, audit page
+  filter mount, active alerts panel changes, any KPI re-scoping
+  (locked: KPIs stay full).
+- **Verification**: `npm run build` green; TypeScript clean
+  across the changed files. Pre-existing lint errors in
+  `app/dashboard/coverage/page.tsx` (inner-function
+  `SortableHeader` / `SortIcon` flagged by
+  `react-hooks/static-components`) are out of scope and
+  predate this batch.
 
 ### Batch 005.25 — Brand dropdown fix + client_brand normalization — 2026-05-13
 
@@ -3459,4 +3571,4 @@ demo blocker.
 
 ---
 
-*Last updated: 2026-05-15 | CQIP v1.5 — Batch 009 DESIGN locked (SharePoint integration spec at docs/batch-009-sharepoint-spec.md; SHIP gated on Azure prereqs)*
+*Last updated: 2026-05-19 | CQIP v1.5 — Batch 005.22 Phase 2 shipped (shared project+brand filter on Coverage)*

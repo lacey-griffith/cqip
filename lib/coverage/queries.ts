@@ -5,6 +5,7 @@
 
 export interface Brand {
   id: string;
+  project_key: string;
   brand_code: string;
   jira_value: string;
   display_name: string;
