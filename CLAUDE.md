@@ -43,7 +43,9 @@ added to CLAUDE_RULES.md — 2026-05-12), Batch 005.25 scoping
 (5.19 sweep closed + Batch 005.25 entry added — 2026-05-12),
 Batch 005.25 (brand dropdown fix + client_brand
 normalization — 2026-05-13), Batch 005.22 Phase 2
-(shared project+brand filter on Coverage — 2026-05-19).
+(shared project+brand filter on Coverage — 2026-05-19),
+Batch 005.22 Phase 2.1 (paused-brand hide + single-brand
+row skip + status separator — 2026-05-19).
 All migrations 001-017 have run against production.
 Batch 004.4.5 produced a UX discovery plan for Coverage + Settings
 reorg (Batch 005 implementation). See §16 for full shipped log.
@@ -1967,6 +1969,94 @@ memory ceiling vs 25 MB image cap.
 
 ## 16. Shipped Features Log
 
+### Batch 005.22 Phase 2.1 — Paused-brand hide + single-brand row skip — 2026-05-19
+
+Same-day follow-up to Phase 2 (commit 7c6dbbe). Two findings
+from Lacey's visual test pass against /dashboard/coverage,
+plus one corner-case fix surfaced during the implementation.
+Proposed batch number 005.26 (continuing Phase 2's
+proposal) — Lacey may renumber on ship.
+
+- **Fix 1 — Paused brands hidden from filter**:
+  `ProjectBrandFilterBrand` interface gains
+  `is_paused: boolean`. New `pickableBrands` memo at the
+  top of derived state filters `brands` to non-paused
+  brands AND brands not belonging to a single-brand project
+  (covers Fix 2 in the same derivation). `brandPool`,
+  `grouped` (via brandPool), and `toggleProject`'s
+  still-reachable lookup all consume `pickableBrands`. The
+  "Select all N" count and three-state derivation therefore
+  reflect the pickable population, not the full brands array.
+  Auto-recovery: when a brand is unpaused via
+  `/dashboard/settings/coverage`, the next Coverage refetch
+  re-derives pickableBrands and the brand pill returns
+  without explicit invalidation.
+- **Fix 2 — Single-brand projects skip the brand row**:
+  `ProjectBrandFilterProject` interface gains `brand_model`.
+  `singleBrandProjectKeys` set is built from `projects` and
+  consumed by `pickableBrands` (single-brand projects'
+  brands are excluded from the pool entirely). A
+  single-brand project can still be picked as a project pill,
+  but its brand has no pill to toggle. If only single-brand
+  projects are selected the brand row doesn't render at all
+  (pool is empty → `value.projectKeys.length > 0` gate still
+  shows the row, but the `poolCodes.length > 0` gate hides
+  the "Select all N" pill and `grouped` is empty). Mixed
+  selection (NBLY + SPL) renders NBLY's brand group only.
+- **Status line phrasing updated** per Lacey-locked spec
+  (option A, comma separator):
+  - Multi-brand project, no brand selection: `NBLY`
+  - Multi-brand project, brand selection: `NBLY (MDG, MOJ)`
+  - Single-brand project: `SPL` (no parens regardless of
+    brandCodes state; project IS the filter)
+  - Two projects: `NBLY (MDG, MOJ), SPL`
+  - Project-entry separator changed from ` · ` to `, ` in
+    the JSX join.
+  - Status lookup keeps the raw `brands` prop (not
+    `pickableBrands`) so a brand selection made just before
+    a brand was paused still renders its label in the status
+    line — prevents in-flight UI from going blank during a
+    pause race.
+- **Hydration-time prune effect** (new): after `didHydrate`
+  flips and once `brands` / `projects` arrive, the effect
+  drops any `brandCodes` whose only home is now non-pickable.
+  "Non-pickable" = paused, OR belongs to a single-brand
+  project, OR belongs to a project no longer in `projects[]`.
+  Convergent in at most two ticks (prune triggers onChange,
+  next render re-runs the effect as a no-op once value
+  matches the valid set). Same effect also serves as
+  ambient cleanup mid-session when a brand pauses /
+  unpauses or a project deactivates.
+- **Corner-case fix in Coverage's visibleRows** (deviation
+  from Phase 2.1 spec assumption — flagged here): the
+  kickoff stated "no filtering-logic change needed" because
+  single-brand projects would have empty brandCodes. That
+  holds when a single-brand project is the ONLY selection.
+  In the mixed case (e.g., user picks NBLY brands + SPL),
+  `brandCodes` is populated by the NBLY selection AND SPL's
+  brand_code is NOT in it, so the original
+  `brandCodes.includes(r.brand.brand_code)` check would have
+  silently hidden the SPL row. Fix: build a
+  `singleBrandProjectKeys` set on the Coverage page and
+  short-circuit the brandCodes check for any row whose
+  project is single-brand. Three-line change in the
+  `filteredByProjectBrand` step. Without this, picking
+  NBLY+SPL with any NBLY brand subset would have hidden
+  SPL — direct contradiction of user intent.
+- **Coverage projects query**: `app/dashboard/coverage/page.tsx`
+  `refetchAll()` select string for `projects` adds
+  `brand_model`. `ProjectRow` interface gains the field.
+- **What's deliberately NOT in this batch**: Phase 3/4/5
+  mounts, FilterValue shape changes, `lib/coverage/queries.ts`
+  changes, any schema change, status-line styling, KPI
+  rescoping (still locked: KPIs stay full-scope).
+- **Verification**: `npm run build` green; TypeScript clean
+  across the changed files. Pre-existing 8 `react-hooks/
+  static-components` lint errors in `coverage/page.tsx`
+  (the `SortableHeader` / `SortIcon` inner-function pattern)
+  still out of scope and predate this batch — same
+  background as the Phase 2 ship.
+
 ### Batch 005.22 Phase 2 — Shared project+brand filter + Coverage mount — 2026-05-19
 
 First batch in Cluster A (Phases 2-5 of 005.22). Phase 2 builds
@@ -3571,4 +3661,4 @@ demo blocker.
 
 ---
 
-*Last updated: 2026-05-19 | CQIP v1.5 — Batch 005.22 Phase 2 shipped (shared project+brand filter on Coverage)*
+*Last updated: 2026-05-19 | CQIP v1.5 — Batch 005.22 Phase 2.1 shipped (paused-brand hide + single-brand row skip)*

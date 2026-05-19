@@ -29,6 +29,7 @@ export interface FilterValue {
 export interface ProjectBrandFilterProject {
   jira_project_key: string;
   display_name: string;
+  brand_model: 'multi_brand' | 'single_brand';
 }
 
 export interface ProjectBrandFilterBrand {
@@ -36,6 +37,7 @@ export interface ProjectBrandFilterBrand {
   project_key: string;
   brand_code: string;
   display_name: string;
+  is_paused: boolean;
 }
 
 interface ProjectBrandFilterProps {
@@ -108,15 +110,59 @@ export function ProjectBrandFilter({
     }
   }, [storageKey, value]);
 
+  // --- Stale-state prune ----------------------------------------
+  // After hydration + once brands/projects load, drop any brandCodes
+  // that no longer reference a pickable brand (paused, or belonging
+  // to a single-brand project, or belonging to a project no longer
+  // in projects[]). Convergent in at most two ticks: prune triggers
+  // an onChange, which renders again with the clean value, which
+  // re-runs this effect as a no-op.
+  useEffect(() => {
+    if (!didHydrate.current) return;
+    if (value.brandCodes.length === 0) return;
+    if (brands.length === 0 || projects.length === 0) return;
+
+    const multiBrandProjectKeys = new Set(
+      projects.filter(p => p.brand_model === 'multi_brand').map(p => p.jira_project_key),
+    );
+    const validCodes = new Set<string>();
+    for (const b of brands) {
+      if (b.is_paused) continue;
+      if (!multiBrandProjectKeys.has(b.project_key)) continue;
+      validCodes.add(b.brand_code);
+    }
+    const pruned = value.brandCodes.filter(c => validCodes.has(c));
+    if (pruned.length !== value.brandCodes.length) {
+      onChange({ projectKeys: value.projectKeys, brandCodes: pruned });
+    }
+  }, [brands, projects, value, onChange]);
+
   // --- Derived state ---------------------------------------------
+  // Pickable brands = the user-facing pool. Paused brands and brands
+  // belonging to single-brand projects are excluded from rendering.
+  // Single-brand projects use the project pill as their entire filter
+  // affordance — no per-brand control. The raw `brands` prop is kept
+  // for status-line label lookups in case a brand was just paused
+  // mid-session and value.brandCodes still references it.
+  const singleBrandProjectKeys = useMemo(
+    () => new Set(projects.filter(p => p.brand_model === 'single_brand').map(p => p.jira_project_key)),
+    [projects],
+  );
+  const pickableBrands = useMemo(
+    () => brands.filter(b => !b.is_paused && !singleBrandProjectKeys.has(b.project_key)),
+    [brands, singleBrandProjectKeys],
+  );
+
   // Pool of brands actually reachable given the current project
-  // selection. If no projects selected, the brand row is hidden so
-  // pool is irrelevant; we compute it anyway because the "select
-  // all N" pill needs the count.
+  // selection. Single-brand projects contribute no pool entries
+  // (handled via the pickableBrands filter above). If no projects
+  // are selected the brand row is hidden, so the pool is irrelevant;
+  // we compute it anyway because the "select all N" pill needs the
+  // count.
   const brandPool = useMemo(() => {
     if (value.projectKeys.length === 0) return [];
-    return brands.filter(b => value.projectKeys.includes(b.project_key));
-  }, [brands, value.projectKeys]);
+    return pickableBrands.filter(b => value.projectKeys.includes(b.project_key));
+  }, [pickableBrands, value.projectKeys]);
 
   const poolCodes = useMemo(
     () => brandPool.map(b => b.brand_code),
@@ -171,15 +217,15 @@ export function ProjectBrandFilter({
     let nextBrandCodes = value.brandCodes;
     if (isSelected) {
       const droppedCodes = new Set(
-        brands
+        pickableBrands
           .filter(b => b.project_key === jiraProjectKey)
           .map(b => b.brand_code),
       );
       // Keep brand codes that ALSO belong to another still-selected
-      // project. Only drop codes whose only home was the deselected
-      // project.
+      // pickable project. Only drop codes whose only home was the
+      // deselected project.
       const stillReachable = new Set(
-        brands
+        pickableBrands
           .filter(b => nextProjectKeys.includes(b.project_key))
           .map(b => b.brand_code),
       );
@@ -252,8 +298,18 @@ export function ProjectBrandFilter({
 
   const statusFragments = useMemo(() => {
     if (!hasAnyFilter) return [];
+    // Project model lookup. Single-brand projects render as just
+    // the project short code — the project IS the filter, no
+    // brand sub-list applies.
+    const modelByKey = new Map<string, 'multi_brand' | 'single_brand'>();
+    for (const p of projects) modelByKey.set(p.jira_project_key, p.brand_model);
     return value.projectKeys.map(pk => {
       const shortCode = projectShortCode(pk);
+      if (modelByKey.get(pk) === 'single_brand') return shortCode;
+      // Multi-brand: list selected brand codes if any. Status looks
+      // up against the raw `brands` prop (not pickableBrands) so an
+      // in-flight selection for a brand that was just paused still
+      // renders its label rather than silently disappearing.
       const projectBrandCodes = brands
         .filter(b => b.project_key === pk)
         .map(b => b.brand_code);
@@ -263,7 +319,7 @@ export function ProjectBrandFilter({
       if (selectedHere.length === 0) return shortCode;
       return `${shortCode} (${selectedHere.join(', ')})`;
     });
-  }, [hasAnyFilter, value.projectKeys, value.brandCodes, brands]);
+  }, [hasAnyFilter, value.projectKeys, value.brandCodes, brands, projects]);
 
   // --- Render ----------------------------------------------------
   return (
@@ -404,7 +460,7 @@ export function ProjectBrandFilter({
             Filtering to:{' '}
             <span className="font-medium text-[color:var(--f92-dark)]">
               {statusFragments.length > 0
-                ? statusFragments.join(' · ')
+                ? statusFragments.join(', ')
                 : value.brandCodes.join(', ')}
             </span>
           </span>

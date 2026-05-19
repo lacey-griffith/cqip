@@ -60,6 +60,7 @@ interface ProjectRow {
   jira_project_key: string;
   client_name: string;
   display_name: string;
+  brand_model: 'multi_brand' | 'single_brand';
 }
 
 function formatRatio(tests: number, rework: number): string {
@@ -86,7 +87,7 @@ export default function CoveragePage() {
   const refetchAll = useCallback(async () => {
     const [brandsRes, projectsRes, milestonesRes, logsRes] = await Promise.all([
       supabase.from('brands').select('id, project_key, brand_code, jira_value, display_name, is_active, is_paused, paused_reason').order('display_name'),
-      supabase.from('projects').select('jira_project_key, client_name, display_name').eq('is_active', true).order('display_name'),
+      supabase.from('projects').select('jira_project_key, client_name, display_name, brand_model').eq('is_active', true).order('display_name'),
       supabase.from('test_milestones').select('id, jira_ticket_id, jira_ticket_url, jira_summary, brand_id, brand_jira_value, milestone_type, reached_at, source, created_by, notes, is_deleted').eq('is_deleted', false),
       supabase.from('quality_logs').select('id, client_brand, triggered_at, is_deleted').eq('is_deleted', false),
     ]);
@@ -165,12 +166,25 @@ export default function CoveragePage() {
 
   const rows = useMemo(() => buildCoverageRows(brands, milestones, logs), [brands, milestones, logs]);
 
+  const singleBrandProjectKeys = useMemo(
+    () => new Set(projects.filter(p => p.brand_model === 'single_brand').map(p => p.jira_project_key)),
+    [projects],
+  );
+
   const visibleRows = useMemo(() => {
     // Project + brand filter (Batch 005.22 Phase 2). Applied BEFORE
     // the paused-row toggle so the paused-set logic still keys off
     // the project-scoped view, not the global brand list.
+    //
+    // Single-brand projects (Phase 2.1) are exempt from the
+    // brandCodes check — the project pill IS the entire filter
+    // affordance for them. Without this exemption, selecting both
+    // a multi-brand project's brand codes AND a single-brand project
+    // would hide the single-brand project's row, which is not the
+    // user's intent.
     const filteredByProjectBrand = rows.filter(r => {
       if (filter.projectKeys.length > 0 && !filter.projectKeys.includes(r.brand.project_key)) return false;
+      if (singleBrandProjectKeys.has(r.brand.project_key)) return true;
       if (filter.brandCodes.length > 0 && !filter.brandCodes.includes(r.brand.brand_code)) return false;
       return true;
     });
@@ -213,7 +227,7 @@ export default function CoveragePage() {
       return alphaTieBreak(a, b);
     });
     return sorted;
-  }, [rows, sortKey, sortDir, showPaused, filter]);
+  }, [rows, sortKey, sortDir, showPaused, filter, singleBrandProjectKeys]);
 
   function toggleSort(key: SortKey) {
     if (key === sortKey) {
