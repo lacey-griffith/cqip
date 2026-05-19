@@ -158,6 +158,17 @@ Covers events from 2026-04-23 forward (start of the drift-
 prevention era). Project-internal events stay in each
 project's CLAUDE.md §16.
 
+### 2026-05-19 — Azure secret rotation: API path also walled
+
+Tried Graph addPassword per Carl's recommendation. 403
+Authorization_RequestDenied. Carl hits same wall. Likely
+cause: servicePrincipalLockConfiguration on the app
+(visible in GET response, credentialsWithUsageSign: true).
+Carl working on PIM-elevated access.
+
+Don't re-try the API path expecting different results.
+Rotation stays blocked until F92 institutional unlock.
+
 ### 2026-05-15 — AC: R18 mirror + Phase 1.5 deploy to development
 
 AC mirrored DC's R18 in commit bbfaeee (cqip-qa-automation repo).
