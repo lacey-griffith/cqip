@@ -59,6 +59,17 @@
   --pill-green-bg:     #E6F4EA;
   --pill-green-border: #15803D;
   --pill-green-fg:     #1A1A2E;
+
+  /* Filter pills (project + brand multi-select) — Option F, light mode.
+     Unselected = subtle navy tint with navy text; selected = orange/white
+     (handled in JSX via --f92-orange). Hover = slightly stronger tint.
+     Paused = dashed border in a more visible navy tint (still passes
+     against the unselected fill). */
+  --pill-filter-bg:                     rgba(30, 45, 107, 0.08);
+  --pill-filter-bg-hover:               rgba(30, 45, 107, 0.14);
+  --pill-filter-fg:                     #1E2D6B;
+  --pill-filter-paused-border:          rgba(30, 45, 107, 0.35);
+  --pill-filter-selected-paused-border: rgba(255, 255, 255, 0.5);
 }
 
 :root[data-theme="dark"] {
@@ -112,6 +123,18 @@
   --pill-green-bg:     #0F2A1A;
   --pill-green-border: #22A559;
   --pill-green-fg:     #A8D5BA;
+
+  /* Filter pills — Option F, dark mode. Unselected = navy tint at 35%
+     against the dark surface, with a light-blue ramp for the text so
+     pills read clearly without going stark white. Selected stays
+     orange/white (handled in JSX). Paused border uses a soft
+     light-blue tint at 0.4 opacity so the dashed line is visible
+     against the unselected fill. */
+  --pill-filter-bg:                     rgba(30, 45, 107, 0.35);
+  --pill-filter-bg-hover:               rgba(30, 45, 107, 0.45);
+  --pill-filter-fg:                     #B5D4F4;
+  --pill-filter-paused-border:          rgba(181, 212, 244, 0.4);
+  /* --pill-filter-selected-paused-border inherits from :root (white@50%) */
 }
 
 @theme inline {

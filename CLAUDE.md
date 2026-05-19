@@ -45,7 +45,10 @@ Batch 005.25 (brand dropdown fix + client_brand
 normalization — 2026-05-13), Batch 005.22 Phase 2
 (shared project+brand filter on Coverage — 2026-05-19),
 Batch 005.22 Phase 2.1 (paused-brand hide + single-brand
-row skip + status separator — 2026-05-19).
+row skip + status separator — 2026-05-19),
+Batch 005.22 Phase 2.1 polish round 1 (showPaused prop +
+Option F pill redesign + status-line removal + Clear in
+project row + "Select all" without count — 2026-05-19).
 All migrations 001-017 have run against production.
 Batch 004.4.5 produced a UX discovery plan for Coverage + Settings
 reorg (Batch 005 implementation). See §16 for full shipped log.
@@ -1969,6 +1972,111 @@ memory ceiling vs 25 MB image cap.
 
 ## 16. Shipped Features Log
 
+### Batch 005.22 Phase 2.1 polish round 1 — pill redesign + UX trim — 2026-05-19
+
+Same-day follow-up to 8b7e4bd. Five UX adjustments from
+Lacey's second visual test pass. All component-internal
+except the Coverage page wiring one new prop. No schema,
+no migration, no shape changes to FilterValue. Proposed
+batch number 005.27 (continuing the Phase 2 sequence) —
+Lacey may renumber on ship.
+
+- **Fix 1 — Paused brands behind a prop**: refactored the
+  hard "always hide paused" behavior from 8b7e4bd into an
+  opt-in `showPaused?: boolean` prop (default false). When
+  the prop is false, paused brands are excluded from the
+  pickable pool just like the previous behavior. When true,
+  they appear in the brand row with a visible "paused"
+  treatment (dashed border + 0.7 opacity, both selected and
+  unselected variants — see Fix 5 for the token wiring).
+  Coverage wires this prop from its existing local
+  `showPaused` state. Phase 3 / Phase 4 mounts leave the
+  prop off — paused brands stay hidden everywhere except
+  the Coverage page where the user has explicitly opted in.
+- **Fix 2 — Single-brand row skip** stays as shipped in
+  8b7e4bd. No code change in this round; verified the
+  refactored `pickableBrands` derivation still excludes
+  single-brand projects unconditionally (single-brand
+  projects don't get a per-brand filter affordance under
+  any prop value).
+- **Fix 3 — Select all without count**: the ghost pill in
+  the brand row now reads `Select all` / `Clear all` —
+  the trailing `N` is dropped from the visible label. The
+  three-state behavior (none → select all in pool; some →
+  fill in the rest; all → clear) is unchanged. The count
+  survives in the pill's `aria-label`
+  (`Select all 16 brands` / `Clear all 16 brands`) so
+  screen-reader users still hear the population size.
+- **Fix 4 — Status line removed, Clear relocated**: the
+  former `Filtering to: NBLY (MDG, MOJ) · Clear` line is
+  gone entirely. The `Clear` affordance moved to the right
+  edge of the project pill row, rendered only when
+  `hasAnyFilter` is true. Phrasing is just `Clear` —
+  text-orange, hover-underline, no surrounding text. A
+  visually-hidden `aria-live="polite"` region (the existing
+  sr-only pattern) replaces the status line for assistive
+  tech: `Filter updated. N projects, M brands selected.`
+  on every value change; `Filter cleared.` when the filter
+  goes empty. Less visual noise; same accessibility.
+- **Fix 5 — Pill redesign (Option F)**: project + brand
+  pills now use a navy-ghost ↔ orange-solid identity instead
+  of the previous transparent-with-orange-border ↔
+  orange-solid pair. Five new CSS tokens in
+  `app/globals.css`, per-theme:
+  - `--pill-filter-bg` — unselected fill. Light mode
+    `rgba(30, 45, 107, 0.08)`; dark mode
+    `rgba(30, 45, 107, 0.35)`.
+  - `--pill-filter-bg-hover` — slightly stronger tint on
+    hover (`+0.06` opacity each mode).
+  - `--pill-filter-fg` — unselected text. Light mode
+    `#1E2D6B` (navy); dark mode `#B5D4F4` (light-blue ramp
+    for legibility against the dark surface).
+  - `--pill-filter-paused-border` — dashed-border color for
+    unselected paused pills. Light:
+    `rgba(30, 45, 107, 0.35)`; dark:
+    `rgba(181, 212, 244, 0.4)`.
+  - `--pill-filter-selected-paused-border` — dashed-border
+    color for selected paused pills. `rgba(255,255,255,0.5)`
+    in both modes (defined in `:root`; dark inherits).
+  Selected pills are unchanged: `var(--f92-orange)` fill,
+  `text-white`, `hover:brightness-95`. Per §13 rule 25, no
+  inline hex in JSX — all colors land through these tokens.
+  WCAG AA verified on both themes against the Coverage card
+  surface. Implementation lives in a local `pillClass()`
+  helper inside the component, called by both project and
+  brand pill render paths so the paused / selected variants
+  stay consistent.
+- **Hydration prune respects showPaused**: the post-hydrate
+  prune effect now keys off `pickableBrands` (the showPaused-
+  aware derivation) instead of recomputing a "valid codes"
+  set independently. When `showPaused=false` a paused
+  brand's code gets pruned; when `showPaused=true` it's
+  preserved. Same convergence guarantee (≤2 ticks, only
+  calls onChange when length differs from value). Mid-session
+  effect: toggling Coverage's showPaused while filter codes
+  are populated either drops or restores affected codes
+  automatically on the next render.
+- **The "Brand row visibility" gate** was tightened from
+  `value.projectKeys.length > 0` to `value.projectKeys.length
+  > 0 && (poolCodes.length > 0 || grouped.length > 0)` so a
+  single-brand-only selection (e.g. SPL alone) renders no
+  empty brand row — was a small visual regression in the
+  previous shipping pass.
+- **Coverage page wiring** (`app/dashboard/coverage/page.tsx`):
+  one prop addition (`showPaused={showPaused}`). No other
+  Coverage-side changes. The 8b7e4bd `singleBrandProjectKeys`
+  exemption in `visibleRows` stays in place — Jenny
+  endorsed it last round and it remains correct here.
+- **What's NOT in this batch**: Phase 3/4/5 mounts,
+  FilterValue shape changes, any schema or migration,
+  any change to KPI scope (still locked: KPIs stay
+  full-scope program-health view).
+- **Verification**: `npm run build` green; TypeScript +
+  ESLint clean across the changed files. Pre-existing 8
+  `react-hooks/static-components` lint errors in
+  `coverage/page.tsx` (`SortableHeader` / `SortIcon`
+  inner-function pattern) still out of scope.
+
 ### Batch 005.22 Phase 2.1 — Paused-brand hide + single-brand row skip — 2026-05-19
 
 Same-day follow-up to Phase 2 (commit 7c6dbbe). Two findings
@@ -3661,4 +3769,4 @@ demo blocker.
 
 ---
 
-*Last updated: 2026-05-19 | CQIP v1.5 — Batch 005.22 Phase 2.1 shipped (paused-brand hide + single-brand row skip)*
+*Last updated: 2026-05-19 | CQIP v1.5 — Batch 005.22 Phase 2.1 polish round 1 shipped (Option F pills + UX trim)*

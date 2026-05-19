@@ -46,6 +46,12 @@ interface ProjectBrandFilterProps {
   brands: ProjectBrandFilterBrand[];
   value: FilterValue;
   onChange: (next: FilterValue) => void;
+  // When true, paused brands appear as pickable pills (with a dashed
+  // border + dimmed opacity). When false (default), they're hidden
+  // from the pill row entirely. Coverage opts in by wiring its
+  // existing showPaused state through; Dashboard / Logs mounts
+  // leave this off.
+  showPaused?: boolean;
 }
 
 // Strip the "CRO" suffix common to CQIP-monitored Jira project keys
@@ -66,12 +72,39 @@ function arraysShallowEqual<T>(a: T[], b: T[]): boolean {
   return true;
 }
 
+// Pill class builders. Kept local so the visual rules live next to
+// the markup that consumes them, and so paused-state styling is the
+// same shape for project and brand pills.
+function pillClass({
+  selected,
+  paused = false,
+}: {
+  selected: boolean;
+  paused?: boolean;
+}): string {
+  const base =
+    'inline-flex shrink-0 items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)] focus-visible:ring-offset-1';
+  // Option F: navy ghost (unselected) + orange solid (selected).
+  // Border is transparent in both base states; paused pills swap
+  // border to dashed + a paused-specific token so the dashing reads.
+  const stateColors = selected
+    ? 'border-transparent bg-[color:var(--f92-orange)] text-white hover:brightness-95'
+    : 'border-transparent bg-[color:var(--pill-filter-bg)] text-[color:var(--pill-filter-fg)] hover:bg-[color:var(--pill-filter-bg-hover)]';
+  const pausedExtra = paused
+    ? selected
+      ? 'border-dashed border-[color:var(--pill-filter-selected-paused-border)] opacity-70'
+      : 'border-dashed border-[color:var(--pill-filter-paused-border)] opacity-70'
+    : '';
+  return cn(base, stateColors, pausedExtra);
+}
+
 export function ProjectBrandFilter({
   storageKey,
   projects,
   brands,
   value,
   onChange,
+  showPaused = false,
 }: ProjectBrandFilterProps) {
   // --- Hydration / persistence -----------------------------------
   // Read once on mount; subsequent value changes flow back to storage.
@@ -110,55 +143,49 @@ export function ProjectBrandFilter({
     }
   }, [storageKey, value]);
 
+  // --- Derived sets ---------------------------------------------
+  // Single-brand projects: brand-row affordance doesn't apply
+  // (the project pill IS the entire filter for them).
+  const singleBrandProjectKeys = useMemo(
+    () => new Set(projects.filter(p => p.brand_model === 'single_brand').map(p => p.jira_project_key)),
+    [projects],
+  );
+
+  // Pickable brands = the user-facing pool for the brand pill row.
+  // Conditionally excludes paused brands depending on `showPaused`.
+  // Single-brand projects never contribute pool entries — their
+  // brand has no per-brand filter affordance, period.
+  const pickableBrands = useMemo(
+    () => brands.filter(b => {
+      if (singleBrandProjectKeys.has(b.project_key)) return false;
+      if (!showPaused && b.is_paused) return false;
+      return true;
+    }),
+    [brands, singleBrandProjectKeys, showPaused],
+  );
+
   // --- Stale-state prune ----------------------------------------
-  // After hydration + once brands/projects load, drop any brandCodes
-  // that no longer reference a pickable brand (paused, or belonging
-  // to a single-brand project, or belonging to a project no longer
-  // in projects[]). Convergent in at most two ticks: prune triggers
-  // an onChange, which renders again with the clean value, which
-  // re-runs this effect as a no-op.
+  // After hydration + once brands/projects load, drop brandCodes
+  // whose referent is no longer pickable: paused (when
+  // !showPaused), single-brand-project, or no longer in
+  // projects[]. Convergent in ≤2 ticks because we only call
+  // onChange when the cleaned list actually differs from value.
   useEffect(() => {
     if (!didHydrate.current) return;
     if (value.brandCodes.length === 0) return;
     if (brands.length === 0 || projects.length === 0) return;
 
-    const multiBrandProjectKeys = new Set(
-      projects.filter(p => p.brand_model === 'multi_brand').map(p => p.jira_project_key),
-    );
-    const validCodes = new Set<string>();
-    for (const b of brands) {
-      if (b.is_paused) continue;
-      if (!multiBrandProjectKeys.has(b.project_key)) continue;
-      validCodes.add(b.brand_code);
-    }
+    const validCodes = new Set(pickableBrands.map(b => b.brand_code));
     const pruned = value.brandCodes.filter(c => validCodes.has(c));
     if (pruned.length !== value.brandCodes.length) {
       onChange({ projectKeys: value.projectKeys, brandCodes: pruned });
     }
-  }, [brands, projects, value, onChange]);
+  }, [brands, projects, pickableBrands, value, onChange]);
 
-  // --- Derived state ---------------------------------------------
-  // Pickable brands = the user-facing pool. Paused brands and brands
-  // belonging to single-brand projects are excluded from rendering.
-  // Single-brand projects use the project pill as their entire filter
-  // affordance — no per-brand control. The raw `brands` prop is kept
-  // for status-line label lookups in case a brand was just paused
-  // mid-session and value.brandCodes still references it.
-  const singleBrandProjectKeys = useMemo(
-    () => new Set(projects.filter(p => p.brand_model === 'single_brand').map(p => p.jira_project_key)),
-    [projects],
-  );
-  const pickableBrands = useMemo(
-    () => brands.filter(b => !b.is_paused && !singleBrandProjectKeys.has(b.project_key)),
-    [brands, singleBrandProjectKeys],
-  );
-
-  // Pool of brands actually reachable given the current project
-  // selection. Single-brand projects contribute no pool entries
-  // (handled via the pickableBrands filter above). If no projects
-  // are selected the brand row is hidden, so the pool is irrelevant;
-  // we compute it anyway because the "select all N" pill needs the
-  // count.
+  // Pool of pickable brands actually reachable given the current
+  // project selection. If no projects are selected the brand row
+  // is hidden, so the pool is irrelevant; we compute it anyway
+  // because the "Select all" pill state derives from it.
   const brandPool = useMemo(() => {
     if (value.projectKeys.length === 0) return [];
     return pickableBrands.filter(b => value.projectKeys.includes(b.project_key));
@@ -169,7 +196,6 @@ export function ProjectBrandFilter({
     [brandPool],
   );
 
-  // Three-state derivation for the "Select all N" pill.
   const selectAllState = useMemo<'none' | 'some' | 'all'>(() => {
     if (poolCodes.length === 0) return 'none';
     const selectedInPool = value.brandCodes.filter(c =>
@@ -180,7 +206,6 @@ export function ProjectBrandFilter({
     return 'some';
   }, [poolCodes, value.brandCodes]);
 
-  // Group brand pool by project (for divider headers when 2+ projects).
   const grouped = useMemo(() => {
     const byProject = new Map<string, ProjectBrandFilterBrand[]>();
     for (const b of brandPool) {
@@ -188,7 +213,6 @@ export function ProjectBrandFilter({
       list.push(b);
       byProject.set(b.project_key, list);
     }
-    // Preserve project ordering from the projects prop (already sorted).
     return value.projectKeys
       .filter(pk => byProject.has(pk))
       .map(pk => ({
@@ -209,11 +233,6 @@ export function ProjectBrandFilter({
       ? value.projectKeys.filter(k => k !== jiraProjectKey)
       : [...value.projectKeys, jiraProjectKey];
 
-    // When a project is deselected, drop any of its brand codes
-    // from brandCodes so state stays coherent. (A brand code can
-    // legitimately exist in multiple projects, but the filter
-    // applies project + brand together, so only the codes of
-    // brands still in the pool are meaningful.)
     let nextBrandCodes = value.brandCodes;
     if (isSelected) {
       const droppedCodes = new Set(
@@ -221,9 +240,6 @@ export function ProjectBrandFilter({
           .filter(b => b.project_key === jiraProjectKey)
           .map(b => b.brand_code),
       );
-      // Keep brand codes that ALSO belong to another still-selected
-      // pickable project. Only drop codes whose only home was the
-      // deselected project.
       const stillReachable = new Set(
         pickableBrands
           .filter(b => nextProjectKeys.includes(b.project_key))
@@ -249,15 +265,12 @@ export function ProjectBrandFilter({
   }
 
   function clickSelectAll() {
-    // 'all' → deselect all in pool; 'none' or 'some' → fill in.
     if (selectAllState === 'all') {
       onChange({
         projectKeys: value.projectKeys,
         brandCodes: value.brandCodes.filter(c => !poolCodes.includes(c)),
       });
     } else {
-      // Preserve any brandCodes outside the pool (shouldn't exist
-      // post-toggleProject, but defensive) and add every pool code.
       const outsidePool = value.brandCodes.filter(c => !poolCodes.includes(c));
       onChange({
         projectKeys: value.projectKeys,
@@ -292,81 +305,81 @@ export function ProjectBrandFilter({
     };
   }, [grouped, value.projectKeys.length]);
 
-  // --- Status line content ---------------------------------------
+  // --- Aria-live announcement ------------------------------------
+  // Visual status line was removed in Phase 2.1 (Option F); the
+  // screen-reader announcement region is kept as sr-only so AT
+  // users still hear what changed.
   const hasAnyFilter =
     value.projectKeys.length > 0 || value.brandCodes.length > 0;
 
-  const statusFragments = useMemo(() => {
-    if (!hasAnyFilter) return [];
-    // Project model lookup. Single-brand projects render as just
-    // the project short code — the project IS the filter, no
-    // brand sub-list applies.
-    const modelByKey = new Map<string, 'multi_brand' | 'single_brand'>();
-    for (const p of projects) modelByKey.set(p.jira_project_key, p.brand_model);
-    return value.projectKeys.map(pk => {
-      const shortCode = projectShortCode(pk);
-      if (modelByKey.get(pk) === 'single_brand') return shortCode;
-      // Multi-brand: list selected brand codes if any. Status looks
-      // up against the raw `brands` prop (not pickableBrands) so an
-      // in-flight selection for a brand that was just paused still
-      // renders its label rather than silently disappearing.
-      const projectBrandCodes = brands
-        .filter(b => b.project_key === pk)
-        .map(b => b.brand_code);
-      const selectedHere = value.brandCodes.filter(c =>
-        projectBrandCodes.includes(c),
-      );
-      if (selectedHere.length === 0) return shortCode;
-      return `${shortCode} (${selectedHere.join(', ')})`;
-    });
-  }, [hasAnyFilter, value.projectKeys, value.brandCodes, brands, projects]);
+  const announcement = useMemo(() => {
+    if (!hasAnyFilter) return 'Filter cleared.';
+    const n = value.projectKeys.length;
+    const m = value.brandCodes.length;
+    const proj = n === 1 ? '1 project' : `${n} projects`;
+    const brnd = m === 1 ? '1 brand' : `${m} brands`;
+    return `Filter updated. ${proj}, ${brnd} selected.`;
+  }, [hasAnyFilter, value.projectKeys.length, value.brandCodes.length]);
+
+  const selectAllAriaLabel =
+    selectAllState === 'all'
+      ? `Clear all ${poolCodes.length} brand${poolCodes.length === 1 ? '' : 's'}`
+      : `Select all ${poolCodes.length} brand${poolCodes.length === 1 ? '' : 's'}`;
 
   // --- Render ----------------------------------------------------
   return (
     <Card className="p-3 md:p-4">
-      {/* Project row */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <span className="min-w-[3.5rem] text-[10px] font-semibold uppercase tracking-widest text-[color:var(--f92-gray)]">
-          Project
-        </span>
-        <div
-          className="flex flex-wrap gap-1.5"
-          role="group"
-          aria-label="Project filter"
-        >
-          {projects.length === 0 ? (
-            <span className="text-xs text-[color:var(--f92-gray)]">
-              No active projects.
-            </span>
-          ) : (
-            projects.map(p => {
-              const selected = value.projectKeys.includes(p.jira_project_key);
-              const code = projectShortCode(p.jira_project_key);
-              return (
-                <button
-                  key={p.jira_project_key}
-                  type="button"
-                  onClick={() => toggleProject(p.jira_project_key)}
-                  aria-pressed={selected}
-                  title={p.display_name}
-                  className={cn(
-                    'inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)] focus-visible:ring-offset-1',
-                    selected
-                      ? 'border-[color:var(--f92-orange)] bg-[color:var(--f92-orange)] text-white'
-                      : 'border-[color:var(--f92-border)] bg-transparent text-[color:var(--f92-dark)] hover:border-[color:var(--f92-orange)] hover:text-[color:var(--f92-orange)]',
-                  )}
-                >
-                  {selected ? <Check className="h-3 w-3" aria-hidden="true" /> : null}
-                  {code}
-                </button>
-              );
-            })
-          )}
+      {/* Project row with Clear at the right edge */}
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <span className="min-w-[3.5rem] text-[10px] font-semibold uppercase tracking-widest text-[color:var(--f92-gray)]">
+            Project
+          </span>
+          <div
+            className="flex flex-wrap gap-1.5"
+            role="group"
+            aria-label="Project filter"
+          >
+            {projects.length === 0 ? (
+              <span className="text-xs text-[color:var(--f92-gray)]">
+                No active projects.
+              </span>
+            ) : (
+              projects.map(p => {
+                const selected = value.projectKeys.includes(p.jira_project_key);
+                const code = projectShortCode(p.jira_project_key);
+                return (
+                  <button
+                    key={p.jira_project_key}
+                    type="button"
+                    onClick={() => toggleProject(p.jira_project_key)}
+                    aria-pressed={selected}
+                    title={p.display_name}
+                    className={pillClass({ selected })}
+                  >
+                    {selected ? <Check className="h-3 w-3" aria-hidden="true" /> : null}
+                    {code}
+                  </button>
+                );
+              })
+            )}
+          </div>
         </div>
+        {hasAnyFilter ? (
+          <button
+            type="button"
+            onClick={clearAll}
+            className="text-xs font-medium text-[color:var(--f92-orange)] transition hover:underline focus-visible:outline-none focus-visible:underline"
+          >
+            Clear
+          </button>
+        ) : null}
       </div>
 
-      {/* Brand row — only when ≥1 project selected */}
-      {value.projectKeys.length > 0 ? (
+      {/* Brand row — only when ≥1 project selected AND that project
+          has pickable brands (single-brand-only selections render no
+          brand row even if projects are picked). */}
+      {value.projectKeys.length > 0 && (poolCodes.length > 0 || grouped.length > 0) ? (
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
           <span className="min-w-[3.5rem] text-[10px] font-semibold uppercase tracking-widest text-[color:var(--f92-gray)]">
             Brand
@@ -378,22 +391,21 @@ export function ProjectBrandFilter({
               role="group"
               aria-label="Brand filter"
             >
-              {/* Select all N — three-state ghost pill */}
+              {/* Select all — three-state ghost pill, label without count */}
               {poolCodes.length > 0 ? (
                 <button
                   type="button"
                   onClick={clickSelectAll}
                   aria-pressed={selectAllState === 'all'}
+                  aria-label={selectAllAriaLabel}
                   className={cn(
                     'inline-flex shrink-0 items-center gap-1 rounded-full border border-dashed px-3 py-1 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)] focus-visible:ring-offset-1',
                     selectAllState === 'all'
-                      ? 'border-[color:var(--f92-orange)] bg-[color:var(--f92-tint)] text-[color:var(--f92-orange)]'
-                      : 'border-[color:var(--f92-border)] bg-[color:var(--f92-tint)] text-[color:var(--f92-dark)] hover:border-[color:var(--f92-orange)] hover:text-[color:var(--f92-orange)]',
+                      ? 'border-[color:var(--f92-orange)] bg-[color:var(--pill-filter-bg)] text-[color:var(--f92-orange)]'
+                      : 'border-[color:var(--pill-filter-paused-border)] bg-[color:var(--pill-filter-bg)] text-[color:var(--pill-filter-fg)] hover:border-[color:var(--f92-orange)] hover:text-[color:var(--f92-orange)]',
                   )}
                 >
-                  {selectAllState === 'all'
-                    ? `Clear all ${poolCodes.length}`
-                    : `Select all ${poolCodes.length}`}
+                  {selectAllState === 'all' ? 'Clear all' : 'Select all'}
                 </button>
               ) : null}
 
@@ -403,7 +415,7 @@ export function ProjectBrandFilter({
                   className="flex shrink-0 items-center gap-1.5"
                 >
                   {showProjectDividers ? (
-                    <span className="ml-1 shrink-0 rounded-full border border-[color:var(--f92-border)] bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest text-[color:var(--f92-gray)]">
+                    <span className="ml-1 shrink-0 rounded-full border border-[color:var(--f92-border)] bg-[color:var(--f92-surface)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest text-[color:var(--f92-gray)]">
                       {group.shortCode}
                     </span>
                   ) : null}
@@ -416,12 +428,7 @@ export function ProjectBrandFilter({
                         onClick={() => toggleBrand(b.brand_code)}
                         aria-pressed={selected}
                         title={b.display_name}
-                        className={cn(
-                          'inline-flex shrink-0 items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)] focus-visible:ring-offset-1',
-                          selected
-                            ? 'border-[color:var(--f92-orange)] bg-[color:var(--f92-orange)] text-white'
-                            : 'border-[color:var(--f92-border)] bg-transparent text-[color:var(--f92-dark)] hover:border-[color:var(--f92-orange)] hover:text-[color:var(--f92-orange)]',
-                        )}
+                        className={pillClass({ selected, paused: b.is_paused })}
                       >
                         {selected ? (
                           <Check className="h-3 w-3" aria-hidden="true" />
@@ -450,30 +457,11 @@ export function ProjectBrandFilter({
         </div>
       ) : null}
 
-      {/* Status line */}
-      {hasAnyFilter ? (
-        <div
-          className="mt-3 flex flex-wrap items-center gap-2 text-xs text-[color:var(--f92-gray)]"
-          aria-live="polite"
-        >
-          <span>
-            Filtering to:{' '}
-            <span className="font-medium text-[color:var(--f92-dark)]">
-              {statusFragments.length > 0
-                ? statusFragments.join(', ')
-                : value.brandCodes.join(', ')}
-            </span>
-          </span>
-          <span aria-hidden="true">·</span>
-          <button
-            type="button"
-            onClick={clearAll}
-            className="text-xs font-medium text-[color:var(--f92-orange)] transition hover:text-[color:var(--f92-navy)] focus-visible:outline-none focus-visible:underline"
-          >
-            Clear
-          </button>
-        </div>
-      ) : null}
+      {/* Screen-reader announcement (sr-only). Visual status line was
+          removed in Phase 2.1; AT users still get a polite update. */}
+      <div className="sr-only" aria-live="polite" role="status">
+        {announcement}
+      </div>
     </Card>
   );
 }

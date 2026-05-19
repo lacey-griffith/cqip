@@ -400,6 +400,7 @@ export default function CoveragePage() {
         brands={brands}
         value={filter}
         onChange={setFilter}
+        showPaused={showPaused}
       />
 
       <Card className="sticky top-2 z-10 p-3 md:p-4">
