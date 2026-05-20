@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { BarChart, Bar, PieChart, Pie, Cell, Sector, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { ArrowDown, ArrowRight, ArrowUp, LineChart } from 'lucide-react';
 import { Card } from '@/components/ui/card';
-import { ActiveAlertsPanel } from '@/components/dashboard/active-alerts-panel';
+import { ActiveAlertsPanel, extractBrandCode } from '@/components/dashboard/active-alerts-panel';
 import { CollapsibleCard } from '@/components/dashboard/collapsible-card';
 import { useTheme } from '@/components/layout/theme-provider';
 import { useToast } from '@/components/layout/toaster';
@@ -12,15 +12,13 @@ import { useLoadingMessage } from '@/lib/easter-eggs/use-loading-message';
 import { SyncJiraButton } from '@/components/dashboard/sync-jira-button';
 import { LogDrawer, type LogDrawerQualityLog } from '@/components/dashboard/log-drawer';
 import { LogDetailDrawer } from '@/components/logs/log-detail-drawer';
+import {
+  ProjectBrandFilter,
+  type FilterValue,
+  type ProjectBrandFilterBrand,
+  type ProjectBrandFilterProject,
+} from '@/components/filters/project-brand-filter';
 
-// Dashboard-local log shape: everything LogDrawer needs to render a row
-// plus the filter-only arrays the charts aggregate over. The drawer
-// itself accepts the narrower LogDrawerQualityLog shape — the extras
-// are only read inside the click handlers on this page.
-type DashboardLog = LogDrawerQualityLog & {
-  issue_category: string[] | null;
-  root_cause_final: string[] | null;
-};
 import {
   countInWindow,
   endOfLastWeek,
@@ -30,6 +28,17 @@ import {
 } from '@/lib/coverage/queries';
 import { supabase } from '@/lib/supabase/client';
 
+// Dashboard-local log shape: everything LogDrawer needs to render a row
+// plus the filter-only fields used by the chart aggregations and the
+// project + brand filter. The drawer itself accepts the narrower
+// LogDrawerQualityLog shape — the extras are only read inside the
+// chart aggregations and click handlers on this page.
+type DashboardLog = LogDrawerQualityLog & {
+  project_key: string;
+  issue_category: string[] | null;
+  root_cause_final: string[] | null;
+};
+
 interface KPIData {
   totalLogsThisMonth: number;
   openCount: number;
@@ -37,13 +46,6 @@ interface KPIData {
   criticalIssuesOpen: number;
   agingCount: number;
   mostFrequentRootCause: string | null;
-}
-
-interface ChartData {
-  volumeByWeek: Array<{ week: string; weekStartIso: string; count: number }>;
-  issueCategory: Array<{ name: string; value: number }>;
-  severityDistribution: Array<{ severity: string; count: number }>;
-  rootCauseFrequency: Array<{ cause: string; count: number }>;
 }
 
 function LoadingPanel() {
@@ -110,26 +112,30 @@ export default function DashboardPage() {
       mostFrequentRootCause: null,
     });
 
-  const [charts, setCharts] = useState<ChartData>({
-    volumeByWeek: [],
-    issueCategory: [],
-    severityDistribution: [],
-    rootCauseFrequency: [],
-  });
-
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [testsThisWeek, setTestsThisWeek] = useState(0);
   const [testsLastWeek, setTestsLastWeek] = useState(0);
   const [testsLoadFailed, setTestsLoadFailed] = useState(false);
 
-  // Lifted to state so the chart onClick handlers can filter against the
-  // same array the charts aggregate. All-time, no date filter — the
+  // Lifted to state so the chart aggregations + onClick handlers run
+  // over the same source array. All-time, no date filter — the
   // distribution charts (Issue Category, Severity, Top Root Causes) need
   // the full history (CSV-imported logs back through 2024 included) to
-  // be accurate. Rework Volume slices its own bucket list to the last
-  // 26 weeks at render time so the bar chart stays legible.
+  // be accurate. Rework Volume slices its bucket list to the last 26
+  // weeks at render time so the bar chart stays legible.
   const [chartLogs, setChartLogs] = useState<DashboardLog[]>([]);
+
+  // Phase 3: shared project + brand filter scopes the four chart
+  // aggregations. KPI strip + Active Alerts panel deliberately stay
+  // full-scope ("program-health view" boundary locked Tuesday — above
+  // the filter card, full scope; below, filter-scoped current view).
+  const [projects, setProjects] = useState<ProjectBrandFilterProject[]>([]);
+  const [brands, setBrands] = useState<ProjectBrandFilterBrand[]>([]);
+  const [filter, setFilter] = useState<FilterValue>({
+    projectKeys: [],
+    brandCodes: [],
+  });
 
   // Drawer state — charts call openDrawer to populate and reveal.
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -261,6 +267,29 @@ export default function DashboardPage() {
 
         if (openError) throw openError;
 
+        // Phase 3: project + brand fetches for the shared filter. Same
+        // shape Coverage uses; partial failure throws like the existing
+        // fetches above. is_active = TRUE on both so deactivated rows
+        // never enter the pill row.
+        const [{ data: projectsData, error: projectsError }, { data: brandsData, error: brandsError }] = await Promise.all([
+          supabase
+            .from('projects')
+            .select('jira_project_key, display_name, brand_model')
+            .eq('is_active', true)
+            .order('display_name'),
+          supabase
+            .from('brands')
+            .select('id, project_key, brand_code, jira_value, display_name, is_paused')
+            .eq('is_active', true)
+            .order('display_name'),
+        ]);
+
+        if (projectsError) throw projectsError;
+        if (brandsError) throw brandsError;
+
+        setProjects((projectsData ?? []) as ProjectBrandFilterProject[]);
+        setBrands((brandsData ?? []) as ProjectBrandFilterBrand[]);
+
         // Calculate KPIs — Open / In Progress / Critical use openLogs
         // (all-time currently-open) rather than monthLogs. Otherwise items
         // from previous months that haven't been closed silently disappear
@@ -302,96 +331,11 @@ export default function DashboardPage() {
           mostFrequentRootCause,
         });
 
-        // Prepare chart data
+        // Stash the raw logs; the four chart aggregations are derived
+        // via useMemo over a filter-scoped slice so changing the filter
+        // re-derives without a refetch (Phase 3).
         if (allLogs && allLogs.length > 0) {
-          // Stash the raw logs so chart onClick handlers can filter against
-          // the same array that fed the aggregations.
           setChartLogs(allLogs as DashboardLog[]);
-
-          // Rework volume by week — keyed by ISO Sunday date so the click
-          // handler can reconstruct the exact [start, end) window. Display
-          // label derived from the same key.
-          const weekBuckets: Record<string, { count: number; weekStart: Date }> = {};
-          (allLogs || []).forEach(log => {
-            const date = new Date(log.triggered_at);
-            const weekStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-            weekStart.setDate(weekStart.getDate() - weekStart.getDay()); // Sunday
-            const iso = weekStart.toISOString();
-            const bucket = weekBuckets[iso] ?? { count: 0, weekStart };
-            bucket.count += 1;
-            weekBuckets[iso] = bucket;
-          });
-
-          // Render the last 26 weeks of activity (~6 months) so the bar
-          // chart stays legible even when chartLogs spans years of CSV
-          // history. The click-drill still filters chartLogs by the
-          // displayed week, so accuracy is preserved within the rendered
-          // range. .slice(-26) is "last 26 active weeks" — weeks with
-          // zero logs aren't bucketed and don't take a slot.
-          setCharts(prev => ({
-            ...prev,
-            volumeByWeek: Object.entries(weekBuckets)
-              .map(([weekStartIso, { count, weekStart }]) => ({
-                week: weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-                weekStartIso,
-                count,
-              }))
-              .sort((a, b) => new Date(a.weekStartIso).getTime() - new Date(b.weekStartIso).getTime())
-              .slice(-26),
-          }));
-
-          // Issue category breakdown
-          const categoryCount: { [key: string]: number } = {};
-          (allLogs || []).forEach(log => {
-            if (log.issue_category && Array.isArray(log.issue_category)) {
-              log.issue_category.forEach((cat: string) => {
-                categoryCount[cat] = (categoryCount[cat] || 0) + 1;
-              });
-            }
-          });
-
-          setCharts(prev => ({
-            ...prev,
-            issueCategory: Object.entries(categoryCount).map(([name, value]) => ({ name, value })),
-          }));
-
-          // Severity distribution
-          const severityCount: { [key: string]: number } = {};
-          (allLogs || []).forEach(log => {
-            const severity = log.severity || 'Unknown';
-            severityCount[severity] = (severityCount[severity] || 0) + 1;
-          });
-
-          const severityOrder = ['Low', 'Medium', 'High', 'Critical'];
-          const severityRows = severityOrder
-            .filter(s => severityCount[s] !== undefined)
-            .map(s => ({ severity: s, count: severityCount[s] }));
-          const unknownExtras = Object.entries(severityCount)
-            .filter(([s]) => !severityOrder.includes(s))
-            .map(([severity, count]) => ({ severity, count }));
-
-          setCharts(prev => ({
-            ...prev,
-            severityDistribution: [...severityRows, ...unknownExtras],
-          }));
-
-          // Root cause frequency
-          const rootCauseCount: { [key: string]: number } = {};
-          (allLogs || []).forEach(log => {
-            if (log.root_cause_final && Array.isArray(log.root_cause_final)) {
-              log.root_cause_final.forEach((cause: string) => {
-                rootCauseCount[cause] = (rootCauseCount[cause] || 0) + 1;
-              });
-            }
-          });
-
-          setCharts(prev => ({
-            ...prev,
-            rootCauseFrequency: Object.entries(rootCauseCount)
-              .map(([cause, count]) => ({ cause, count }))
-              .sort((a, b) => b.count - a.count)
-              .slice(0, 8),
-          }));
         }
       } catch (err) {
         console.error('Error fetching dashboard data:', err);
@@ -440,6 +384,96 @@ export default function DashboardPage() {
       setCleanStreakDays(days);
     })();
   }, []);
+
+  // Phase 3: filter-scoped chart source. Empty filter arrays = no
+  // filter applied (Variant A per FilterValue contract); both axes
+  // must be satisfied when populated. Brand code is derived via the
+  // shared extractBrandCode helper from active-alerts-panel.tsx
+  // (locked in Batch 005.25 — prefix-agnostic, lossy-safe).
+  const scopedChartLogs = useMemo<DashboardLog[]>(() => {
+    if (filter.projectKeys.length === 0 && filter.brandCodes.length === 0) {
+      return chartLogs;
+    }
+    return chartLogs.filter(log => {
+      if (filter.projectKeys.length > 0 && !filter.projectKeys.includes(log.project_key)) {
+        return false;
+      }
+      if (filter.brandCodes.length > 0) {
+        const code = extractBrandCode(log.client_brand);
+        if (!code || !filter.brandCodes.includes(code)) return false;
+      }
+      return true;
+    });
+  }, [chartLogs, filter]);
+
+  // Rework volume by week — keyed by ISO Sunday so the click handler
+  // can reconstruct the exact [start, end) window. .slice(-26) keeps
+  // the bar chart legible even when the underlying logs span years of
+  // CSV history; weeks with zero scoped logs aren't bucketed and don't
+  // take a slot.
+  const volumeByWeek = useMemo(() => {
+    const weekBuckets: Record<string, { count: number; weekStart: Date }> = {};
+    scopedChartLogs.forEach(log => {
+      const date = new Date(log.triggered_at);
+      const weekStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+      const iso = weekStart.toISOString();
+      const bucket = weekBuckets[iso] ?? { count: 0, weekStart };
+      bucket.count += 1;
+      weekBuckets[iso] = bucket;
+    });
+    return Object.entries(weekBuckets)
+      .map(([weekStartIso, { count, weekStart }]) => ({
+        week: weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        weekStartIso,
+        count,
+      }))
+      .sort((a, b) => new Date(a.weekStartIso).getTime() - new Date(b.weekStartIso).getTime())
+      .slice(-26);
+  }, [scopedChartLogs]);
+
+  const issueCategory = useMemo(() => {
+    const categoryCount: { [key: string]: number } = {};
+    scopedChartLogs.forEach(log => {
+      if (log.issue_category && Array.isArray(log.issue_category)) {
+        log.issue_category.forEach(cat => {
+          categoryCount[cat] = (categoryCount[cat] || 0) + 1;
+        });
+      }
+    });
+    return Object.entries(categoryCount).map(([name, value]) => ({ name, value }));
+  }, [scopedChartLogs]);
+
+  const severityDistribution = useMemo(() => {
+    const severityCount: { [key: string]: number } = {};
+    scopedChartLogs.forEach(log => {
+      const severity = log.severity || 'Unknown';
+      severityCount[severity] = (severityCount[severity] || 0) + 1;
+    });
+    const severityOrder = ['Low', 'Medium', 'High', 'Critical'];
+    const severityRows = severityOrder
+      .filter(s => severityCount[s] !== undefined)
+      .map(s => ({ severity: s, count: severityCount[s] }));
+    const unknownExtras = Object.entries(severityCount)
+      .filter(([s]) => !severityOrder.includes(s))
+      .map(([severity, count]) => ({ severity, count }));
+    return [...severityRows, ...unknownExtras];
+  }, [scopedChartLogs]);
+
+  const rootCauseFrequency = useMemo(() => {
+    const rootCauseCount: { [key: string]: number } = {};
+    scopedChartLogs.forEach(log => {
+      if (log.root_cause_final && Array.isArray(log.root_cause_final)) {
+        log.root_cause_final.forEach(cause => {
+          rootCauseCount[cause] = (rootCauseCount[cause] || 0) + 1;
+        });
+      }
+    });
+    return Object.entries(rootCauseCount)
+      .map(([cause, count]) => ({ cause, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 8);
+  }, [scopedChartLogs]);
 
   const severityColors: { [key: string]: string } = {
     Critical: '#DC2626',
@@ -533,6 +567,11 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* Active Alerts Panel — Phase 3: promoted above the KPI strip so
+          incident-flavored signal lands before scoreboard signal. Stays
+          full-scope; not affected by the project + brand filter below. */}
+      <ActiveAlertsPanel />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-7">
@@ -635,8 +674,18 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Active Alerts Panel */}
-      <ActiveAlertsPanel />
+      {/* Phase 3: shared project + brand filter. Scopes the four chart
+          aggregations below via scopedChartLogs. showPaused deliberately
+          omitted — Dashboard hides paused brands; only Coverage opts in
+          to surfacing them. sessionStorage key is per-page so each
+          mount keeps its own scoping. */}
+      <ProjectBrandFilter
+        storageKey="cqip-filter-dashboard"
+        projects={projects}
+        brands={brands}
+        value={filter}
+        onChange={setFilter}
+      />
 
       {/* Charts Grid.
           Each chart wraps its Recharts tree in a role='region' with an
@@ -648,10 +697,10 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Rework Volume by Week */}
         <CollapsibleCard title="Rework Volume (Weekly)">
-          {charts.volumeByWeek.length > 0 ? (
+          {volumeByWeek.length > 0 ? (
             <div role="region" aria-label="Rework Volume by Week. Click a bar to see tickets.">
               <ResponsiveContainer width="100%" height={240}>
-                <BarChart data={charts.volumeByWeek}>
+                <BarChart data={volumeByWeek}>
                   <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                   <XAxis dataKey="week" fontSize={12} stroke={axisColor} tick={{ fill: axisColor }} />
                   <YAxis fontSize={12} stroke={axisColor} tick={{ fill: axisColor }} />
@@ -672,7 +721,7 @@ export default function DashboardPage() {
                       const weekStart = new Date(iso);
                       const weekEnd = new Date(weekStart);
                       weekEnd.setDate(weekEnd.getDate() + 7);
-                      const filtered = chartLogs.filter(log => {
+                      const filtered = scopedChartLogs.filter(log => {
                         const t = new Date(log.triggered_at).getTime();
                         return t >= weekStart.getTime() && t < weekEnd.getTime();
                       });
@@ -691,7 +740,7 @@ export default function DashboardPage() {
 
         {/* Issue Category Breakdown */}
         <CollapsibleCard title="Issue Category Breakdown">
-          {charts.issueCategory.length > 0 ? (
+          {issueCategory.length > 0 ? (
             <div className="relative" role="region" aria-label="Issue Category Breakdown. Click a slice to see tickets.">
               {pieHover ? (
                 <div
@@ -703,7 +752,7 @@ export default function DashboardPage() {
                   <p className="mt-0.5 text-[color:var(--f92-dark)]">
                     {pieHover.value}{' '}
                     <span className="text-[color:var(--f92-gray)]">
-                      ({((pieHover.value / charts.issueCategory.reduce((s, c) => s + c.value, 0)) * 100).toFixed(1)}%)
+                      ({((pieHover.value / issueCategory.reduce((s, c) => s + c.value, 0)) * 100).toFixed(1)}%)
                     </span>
                   </p>
                 </div>
@@ -711,7 +760,7 @@ export default function DashboardPage() {
               <ResponsiveContainer width="100%" height={240} className="donut-chart">
                 <PieChart>
                   <Pie
-                    data={charts.issueCategory}
+                    data={issueCategory}
                     cx="50%"
                     cy="50%"
                     labelLine={false}
@@ -729,7 +778,7 @@ export default function DashboardPage() {
                     onClick={(slice: { name?: string }) => {
                       const category = slice.name;
                       if (!category) return;
-                      const filtered = chartLogs.filter(log =>
+                      const filtered = scopedChartLogs.filter(log =>
                         Array.isArray(log.issue_category) && log.issue_category.includes(category),
                       );
                       openDrawer(
@@ -740,7 +789,7 @@ export default function DashboardPage() {
                       );
                     }}
                   >
-                    {charts.issueCategory.map((_, index) => (
+                    {issueCategory.map((_, index) => (
                       <Cell
                         key={`cell-${index}`}
                         fill={categoryColors[index % categoryColors.length]}
@@ -758,10 +807,10 @@ export default function DashboardPage() {
 
         {/* Severity Distribution */}
         <CollapsibleCard title="Severity Distribution">
-          {charts.severityDistribution.length > 0 ? (
+          {severityDistribution.length > 0 ? (
             <div role="region" aria-label="Severity Distribution. Click a bar to see tickets.">
             <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={charts.severityDistribution}>
+              <BarChart data={severityDistribution}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                 <XAxis dataKey="severity" fontSize={12} stroke={axisColor} tick={{ fill: axisColor }} />
                 <YAxis fontSize={12} stroke={axisColor} tick={{ fill: axisColor }} />
@@ -779,7 +828,7 @@ export default function DashboardPage() {
                   onClick={(data: { payload?: { severity?: string } }) => {
                     const severity = data.payload?.severity;
                     if (!severity) return;
-                    const filtered = chartLogs.filter(log => {
+                    const filtered = scopedChartLogs.filter(log => {
                       if (severity === 'Unknown') return log.severity == null;
                       return log.severity === severity;
                     });
@@ -791,7 +840,7 @@ export default function DashboardPage() {
                     );
                   }}
                 >
-                  {charts.severityDistribution.map((item, index) => (
+                  {severityDistribution.map((item, index) => (
                     <Cell
                       key={`cell-${index}`}
                       fill={severityColors[item.severity] || severityColors['Unknown']}
@@ -808,11 +857,11 @@ export default function DashboardPage() {
 
         {/* Root Cause Frequency */}
         <CollapsibleCard title="Top Root Causes">
-          {charts.rootCauseFrequency.length > 0 ? (
+          {rootCauseFrequency.length > 0 ? (
             <div role="region" aria-label="Top Root Causes. Click a bar to see tickets.">
             <ResponsiveContainer width="100%" height={240}>
               <BarChart
-                data={charts.rootCauseFrequency}
+                data={rootCauseFrequency}
                 layout="vertical"
                 margin={{ top: 5, right: 30, left: 200, bottom: 5 }}
               >
@@ -833,7 +882,7 @@ export default function DashboardPage() {
                   onClick={(data: { payload?: { cause?: string } }) => {
                     const cause = data.payload?.cause;
                     if (!cause) return;
-                    const filtered = chartLogs.filter(log =>
+                    const filtered = scopedChartLogs.filter(log =>
                       Array.isArray(log.root_cause_final) && log.root_cause_final.includes(cause),
                     );
                     openDrawer(

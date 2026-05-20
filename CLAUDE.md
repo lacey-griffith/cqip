@@ -48,7 +48,10 @@ Batch 005.22 Phase 2.1 (paused-brand hide + single-brand
 row skip + status separator — 2026-05-19),
 Batch 005.22 Phase 2.1 polish round 1 (showPaused prop +
 Option F pill redesign + status-line removal + Clear in
-project row + "Select all" without count — 2026-05-19).
+project row + "Select all" without count — 2026-05-19),
+Batch 005.22 Phase 3 (dashboard mount + layout reorder +
+chart re-scope + ActiveAlertsPanel overflow peek-arrow +
+height-preserving empty state — 2026-05-20).
 All migrations 001-017 have run against production.
 Batch 004.4.5 produced a UX discovery plan for Coverage + Settings
 reorg (Batch 005 implementation). See §16 for full shipped log.
@@ -1677,10 +1680,9 @@ additions.
       keys at `cqip-filter-coverage`. KPI cards stay full-scope
       (program-health boundary, locked with Lacey); table re-scopes.
       See §16.
-- [ ] **5.22 Phase 3: Dashboard filter pills** — Dashboard charts
-      gain a project filter pill row (All / per-project). KPIs +
-      charts respect the filter. Builds on backlog 5.16's "global
-      filter pills" line item.
+- [x] **5.22 Phase 3: Dashboard filter pills** — Dashboard charts
+      gain the shared project + brand filter; KPIs + Active Alerts
+      stay full-scope. **Shipped 2026-05-20.** See §16.
 - [ ] **5.22 Phase 4: Logs filter pills** — `/dashboard/logs` brand
       dropdown becomes project-aware (group by project; default
       "All projects"). Saved-report `filters` jsonb gains a
@@ -1971,6 +1973,109 @@ memory ceiling vs 25 MB image cap.
 ---
 
 ## 16. Shipped Features Log
+
+### Batch 005.22 Phase 3 — Dashboard mount + layout reorder + chart re-scope — 2026-05-20
+
+Second batch in Cluster A. Phase 3 mounts the shared
+ProjectBrandFilter on `/dashboard`, reorders the page layout,
+re-scopes the four charts to the filter, and polishes the
+ActiveAlertsPanel with overflow peek-arrow + height-preserving
+empty state. No schema change. No migration. References
+Phase 2 commits 7c6dbbe / 8b7e4bd / 1550ff3.
+
+- **Layout reorder** (`app/dashboard/page.tsx`). Final
+  top-to-bottom: header card (unchanged) → Active Alerts
+  Panel (promoted) → KPI strip (demoted) → ProjectBrandFilter
+  (new mount) → charts grid (unchanged) → drawers. The order
+  groups incident-flavored signal (active alerts) above
+  scoreboard signal (KPIs), then puts user-controlled scope
+  (filter) immediately above the scoped views (charts).
+- **Two new data fetches** added alongside the existing
+  monthLogs / allLogs / openLogs fetches inside
+  `fetchDashboardData`:
+  - `projects` — `jira_project_key, display_name, brand_model`
+    where `is_active = TRUE`.
+  - `brands` — `id, project_key, brand_code, jira_value,
+    display_name, is_paused` where `is_active = TRUE`.
+  Both throw on error so the existing loading/error gate
+  surfaces partial failure. Mirrors Coverage's pattern from
+  Batch 005.22 Phase 2.
+- **Filter state mount**: new `filter` slot of type
+  `FilterValue`; `ProjectBrandFilter` mounted between the KPI
+  strip and the charts grid with `storageKey="cqip-filter-dashboard"`.
+  `showPaused` prop deliberately omitted — Dashboard hides
+  paused brands; only Coverage opts in to surfacing them (per
+  the Phase 2.1 polish round 1 lock).
+- **Chart aggregation refactor** — the four chart datasets
+  were previously computed imperatively inside
+  `fetchDashboardData` and pushed via `setCharts(prev => ...)`.
+  That structure couldn't re-derive on filter change. Phase 3
+  drops the `charts` state slot and the `ChartData` interface
+  entirely; each of `volumeByWeek`, `issueCategory`,
+  `severityDistribution`, `rootCauseFrequency` is now a
+  `useMemo` over a new `scopedChartLogs` memo. Filter changes
+  re-derive without a refetch.
+- **scopedChartLogs**: `useMemo<DashboardLog[]>` that filters
+  `chartLogs` by `filter.projectKeys` AND
+  `filter.brandCodes`. Empty filter arrays short-circuit
+  return the source array (Variant A contract). Brand code
+  is derived via `extractBrandCode` imported from
+  `components/dashboard/active-alerts-panel.tsx` — the
+  helper was promoted from file-local to a named export to
+  keep the contract single-sourced. Its body is unchanged
+  (still the Batch 005.25 prefix-agnostic / lossy-safe
+  spec).
+- **`DashboardLog` type** extended with `project_key: string`
+  so the filter can reach the column without a cast. The
+  existing `select('*')` on quality_logs already returns the
+  field; the type just makes it visible to TypeScript.
+- **Chart onClick handlers** switched from
+  `chartLogs.filter(...)` to `scopedChartLogs.filter(...)`.
+  A drilldown opened after a filter is applied shows scoped
+  rows only — e.g. "Week of X" on an NBLY-only filter never
+  surfaces SPL tickets.
+- **ActiveAlertsPanel overflow peek-arrow**
+  (`components/dashboard/active-alerts-panel.tsx`). Pill row
+  switched from `flex flex-wrap gap-2` to a single-row
+  `overflow-x-auto whitespace-nowrap` container. New
+  `pillRowRef` + `canScrollRight` state + ResizeObserver
+  effect drives a chevron-right indicator that fades in via a
+  fixed gradient over the right edge when pills exceed the
+  panel width. Same pattern as the brand row in
+  `components/filters/project-brand-filter.tsx`.
+- **ActiveAlertsPanel empty state** restructured to share the
+  same Card + heading shell as the populated state. Content
+  row mirrors pill vertical metric (`px-3 py-1`) so the panel
+  height stays constant when alerts toggle between empty and
+  non-empty — page below no longer jumps. Phrasing kept
+  ("All systems normal — no active alerts").
+- **`extractBrandCode` export**. Promoted from file-local to
+  named export. Single import site for now (Dashboard); Phase
+  4 (Logs filter mount) will be the second.
+- **KPI / Active Alerts full-scope confirmation**: both
+  surfaces continue to read their own state (kpi from
+  monthLogs/openLogs, alerts from `alert_events`) without
+  consulting `filter`. This matches the Cluster A boundary
+  locked Tuesday: above the filter card = program-health
+  view (full scope); below = filter-scoped current view.
+- **What's deliberately NOT in this batch**: Phase 4 (Logs
+  filter mount), Phase 5 (project + brand create UI
+  hardening), Reports filter mount, audit page filter mount,
+  ActiveAlertsPanel filter-awareness (Tuesday-locked
+  full-scope), KPI re-scoping (Tuesday-locked full-scope),
+  any schema or migration, any FilterValue shape change,
+  relocation of `extractBrandCode` out of
+  `active-alerts-panel.tsx`, codification of the
+  sessionStorage convention as a §13 rule (deferred —
+  Phase 3 is the second mount; revisit once Phase 4 ships
+  for a third data point).
+- **Verification**: `npm run build` green; TypeScript clean.
+  Lint pass introduces zero new findings; the pre-existing
+  `(props: any)` error on `renderActiveCategory` and the
+  three pre-existing unused-import warnings in
+  `active-alerts-panel.tsx` (Badge, getSeverityVariant,
+  describeBrandAlert) are all on HEAD before this batch
+  and out of scope.
 
 ### Batch 005.22 Phase 2.1 polish round 1 — pill redesign + UX trim — 2026-05-19
 
@@ -3769,4 +3874,4 @@ demo blocker.
 
 ---
 
-*Last updated: 2026-05-19 | CQIP v1.5 — Batch 005.22 Phase 2.1 polish round 1 shipped (Option F pills + UX trim)*
+*Last updated: 2026-05-20 | CQIP v1.5 — Batch 005.22 Phase 3 shipped (Dashboard mount + layout reorder + chart re-scope + ActiveAlertsPanel polish)*

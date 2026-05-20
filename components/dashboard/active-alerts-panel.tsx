@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, ChevronRight } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/lib/supabase/client';
@@ -51,7 +51,7 @@ function pickFirst<T>(rel: Maybe<T>): T | undefined {
 // No automated test exists for this function. If you change
 // this function, manually verify against the input table
 // above.
-function extractBrandCode(clientBrand: string | null | undefined): string | null {
+export function extractBrandCode(clientBrand: string | null | undefined): string | null {
   if (!clientBrand) return null;
   const code = clientBrand.split(' - ')[0]?.trim();
   return code || clientBrand;
@@ -95,6 +95,13 @@ export function ActiveAlertsPanel() {
   const [alerts, setAlerts] = useState<AlertEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Pill row overflow affordance — same pattern as the brand row in
+  // components/filters/project-brand-filter.tsx. When the row overflows
+  // the panel width, a chevron-right indicator fades in over the right
+  // edge so the additional pills are discoverable.
+  const pillRowRef = useRef<HTMLDivElement | null>(null);
+  const [canScrollRight, setCanScrollRight] = useState(false);
 
   useEffect(() => {
     async function fetchActiveAlerts() {
@@ -166,6 +173,24 @@ export function ActiveAlertsPanel() {
     };
   }, []);
 
+  useEffect(() => {
+    const el = pillRowRef.current;
+    if (!el) return;
+    function update() {
+      if (!el) return;
+      const overflowing = el.scrollLeft + el.clientWidth < el.scrollWidth - 1;
+      setCanScrollRight(overflowing);
+    }
+    update();
+    el.addEventListener('scroll', update, { passive: true });
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => {
+      el.removeEventListener('scroll', update);
+      ro.disconnect();
+    };
+  }, [alerts]);
+
   const severityVariant: Record<string, 'critical' | 'high' | 'medium' | 'low' | 'default'> = {
     Critical: 'critical',
     High: 'high',
@@ -218,20 +243,29 @@ export function ActiveAlertsPanel() {
     );
   }
 
+  // Shared shell — empty and populated states use the same Card +
+  // heading + content-row structure so the panel height is preserved
+  // when alerts toggle between empty and non-empty. The content row
+  // height is driven by pill intrinsic size in the populated state;
+  // the empty state mirrors the same vertical padding so the page
+  // below doesn't jump as alerts come and go.
   if (alerts.length === 0) {
     return (
-      <div
+      <Card
         key="empty"
-        role="status"
+        role="region"
+        aria-label="Active alerts"
         aria-live="polite"
-        className="flex items-center gap-3 rounded-2xl border border-[color:var(--f92-border)] bg-white px-5 py-3 shadow-sm cqip-fade-in"
+        className="border-[color:var(--f92-border)] bg-white p-4 shadow-sm cqip-fade-in"
       >
-        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-green-100 text-green-700">
-          <CheckCircle2 className="h-4 w-4" />
-        </span>
-        <span className="text-sm font-medium text-[color:var(--f92-dark)]">All systems normal</span>
-        <span className="text-xs text-[color:var(--f92-gray)]">— no active alerts</span>
-      </div>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-[color:var(--f92-navy)]">Active Alerts</h3>
+        </div>
+        <div className="flex items-center gap-2 px-3 py-1" role="status">
+          <CheckCircle2 className="h-4 w-4 text-green-600" aria-hidden="true" />
+          <span className="text-xs text-[color:var(--f92-gray)]">All systems normal — no active alerts</span>
+        </div>
+      </Card>
     );
   }
 
@@ -247,7 +281,11 @@ export function ActiveAlertsPanel() {
         <h3 className="text-sm font-semibold text-[color:var(--f92-navy)]">Active Alerts</h3>
       </div>
 
-<div className="flex flex-wrap gap-2">
+      <div className="relative min-w-0">
+        <div
+          ref={pillRowRef}
+          className="flex items-center gap-2 overflow-x-auto whitespace-nowrap pb-1"
+        >
         {alerts.map((alert) => {
           // Source of truth for "which kind of alert" is the FK on
           // alert_events itself, not the joined data shape — protects against
@@ -349,6 +387,20 @@ export function ActiveAlertsPanel() {
             </span>
           );
         })}
+        </div>
+
+        {canScrollRight ? (
+          <div
+            className="pointer-events-none absolute inset-y-0 right-0 flex items-center pl-6 pr-1"
+            style={{
+              background:
+                'linear-gradient(to right, transparent, var(--f92-bg) 60%)',
+            }}
+            aria-hidden="true"
+          >
+            <ChevronRight className="h-4 w-4 text-[color:var(--f92-gray)]" />
+          </div>
+        ) : null}
       </div>
     </Card>
   );
