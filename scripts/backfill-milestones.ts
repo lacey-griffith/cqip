@@ -60,7 +60,7 @@ const jiraAuth = Buffer.from(`${jiraEmail}:${jiraApiToken}`).toString('base64');
 
 // Project scope. Intentionally hardcoded — see file header. Edit both
 // constants if running for a different project.
-const PROJECT_KEY = 'NBLYCRO';
+const PROJECT_KEY = 'NBLYCRO'; //'SPLCRO'
 const JQL = `project = ${PROJECT_KEY}`;
 const PAGE_SIZE = 50;
 const REQUEST_DELAY_MS = 100;
