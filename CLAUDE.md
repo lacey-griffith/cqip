@@ -51,7 +51,14 @@ Option F pill redesign + status-line removal + Clear in
 project row + "Select all" without count — 2026-05-19),
 Batch 005.22 Phase 3 (dashboard mount + layout reorder +
 chart re-scope + ActiveAlertsPanel overflow peek-arrow +
-height-preserving empty state — 2026-05-20).
+height-preserving empty state — 2026-05-20),
+Batch 005.28 (Option B taxonomy hardening — migration 020
+quality_log_taxonomy + quality_logs.needs_review,
+scripts/normalize-quality-log-fields.ts, constrained
+multi-select edit dialog with server-side taxonomy
+validation, /dashboard/logs Needs-review worklist filter +
+row badge, /dashboard/docs/qa-fields docs hub page, R29 —
+2026-05-20).
 All migrations 001-017 have run against production.
 Batch 004.4.5 produced a UX discovery plan for Coverage + Settings
 reorg (Batch 005 implementation). See §16 for full shipped log.
@@ -239,9 +246,13 @@ cqip/
 │   │   │                                    + GUY/RBW seed + admin UPDATE RLS policy
 │   │   ├── 014_audit_log_security_cleanup.sql # Batch 004.3: audit_log_admin_insert
 │   │   │                                        rewritten to use public.is_admin()
-│   │   └── 015_alert_events_brand_id.sql # Batch 004.4: alert_events.brand_id +
-│   │                                        CHECK + indexes; audit_log target-shape
-│   │                                        CHECK extended to allow 'alert_event'
+│   │   ├── 015_alert_events_brand_id.sql # Batch 004.4: alert_events.brand_id +
+│   │   │                                    CHECK + indexes; audit_log target-shape
+│   │   │                                    CHECK extended to allow 'alert_event'
+│   │   └── 020_quality_log_taxonomy.sql # Batch 005.28: quality_log_taxonomy
+│   │                                        reference table (61 seed rows across
+│   │                                        4 fields, Jira-verbatim) +
+│   │                                        quality_logs.needs_review column
 │   └── functions/               # Deno Edge Functions
 │       ├── jira-webhook/index.ts       # Receives Jira webhook events. Two branches:
 │       │                                 (1) milestone branch — first-time entry into
@@ -266,12 +277,20 @@ cqip/
 │   ├── backfill-milestones.ts        # On-demand: backfills historical Dev Client Review
 │   │                                   milestones; loads aliases into brand map; logs
 │   │                                   unmatched brand_jira_value strings
+│   ├── normalize-quality-log-fields.ts # One-shot (Batch 005.28): maps historical
+│   │                                   drift on issue_category / issue_subtype /
+│   │                                   root_cause_initial / root_cause_final /
+│   │                                   resolution_type to Jira-verbatim canonicals.
+│   │                                   Idempotent, audit-logged, --dry-run default.
 │   └── gen-build-info.js             # Prebuild: stamps build metadata for Settings → System
 │
 ├── docs/
 │   ├── multi-client-readiness.md      # Batch 004.99: multi-client audit + SPL onboarding/offboarding playbooks
 │   ├── batch-009-sharepoint-spec.md   # Batch 009: SharePoint integration SPEC (DESIGN locked 2026-05-13)
 │   ├── CROSS_CLAUDE.md                # Joint coordination doc for DC + AC (Batch 005.24)
+│   ├── root-cause-audit-2026-05-20.md # Batch 005.28 audit findings + Option A/B/C recommendation
+│   ├── root-cause-taxonomy-mapping.md # Batch 005.28: variant→canonical map (drives normalize script)
+│   ├── qa-field-reference.md          # Batch 005.28: living definition of every QA log field
 │   └── ux-plans/                      # UX redesign plans (Coverage + Settings reorg, etc.)
 │
 └── .claude/
@@ -369,7 +388,8 @@ CREATE TABLE quality_logs (
   ai_suggested_root_cause     TEXT[],    -- reserved for future AI classification
   ai_confidence_score         NUMERIC,   -- reserved for future AI classification
   notes                       TEXT,
-  is_deleted                  BOOLEAN NOT NULL DEFAULT FALSE
+  is_deleted                  BOOLEAN NOT NULL DEFAULT FALSE,
+  needs_review                BOOLEAN NOT NULL DEFAULT FALSE  -- migration 020 (Batch 005.28)
 );
 
 CREATE INDEX idx_quality_logs_ticket ON quality_logs(jira_ticket_id);
@@ -379,7 +399,17 @@ CREATE INDEX idx_quality_logs_status ON quality_logs(log_status);
 CREATE INDEX idx_quality_logs_severity ON quality_logs(severity);
 CREATE INDEX idx_quality_logs_triggered_at ON quality_logs(triggered_at DESC);
 CREATE INDEX idx_quality_logs_not_deleted ON quality_logs(is_deleted) WHERE is_deleted = FALSE;
+CREATE INDEX idx_quality_logs_needs_review                       -- migration 020 (Batch 005.28)
+  ON quality_logs(needs_review) WHERE needs_review = TRUE;
 ```
+
+`needs_review` is set TRUE by `scripts/normalize-quality-log-fields.ts`
+when a historical value was auto-mapped to a default during taxonomy
+normalization (Interpretation C), or by the normalizer's cross-field-
+pollution path when a value was found in the wrong column. The flag is
+cleared by `/api/logs/edit` whenever an admin saves the row — the edit
+IS the review decision. `/dashboard/logs` has a "Needs review" worklist
+filter pill that scopes the table to flagged rows.
 
 ### audit_log
 Every create/update/delete/status-change on quality_logs is recorded here.
@@ -752,6 +782,58 @@ The unique index is partial on `is_deleted = FALSE`. This is intentional:
 soft-deleted rows do not block re-creation when an admin re-adds the
 milestone. The webhook's duplicate-check SELECT also filters on
 `is_deleted = FALSE` before inserting.
+
+### quality_log_taxonomy (migration 020 — Batch 005.28)
+Canonical option list for the 4 multi-select taxonomy fields on
+`quality_logs`. The edit dialog and the server-side validator in
+`/api/logs/edit` both read from this table; the seed mirrors Jira's
+option strings verbatim (per N2 Policy A, locked 2026-05-20) so values
+arriving via webhook pass the same validation as values entered via the
+dashboard.
+
+```sql
+CREATE TABLE quality_log_taxonomy (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  field_name      TEXT NOT NULL
+                    CHECK (field_name IN (
+                      'issue_category',
+                      'issue_subtype',
+                      'root_cause',
+                      'resolution_type'
+                    )),
+  canonical_value TEXT NOT NULL,
+  description     TEXT,
+  is_active       BOOLEAN NOT NULL DEFAULT TRUE,
+  sort_order      INTEGER NOT NULL DEFAULT 0,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX idx_taxonomy_field_value
+  ON quality_log_taxonomy(field_name, canonical_value);
+
+CREATE INDEX idx_taxonomy_active
+  ON quality_log_taxonomy(field_name, sort_order)
+  WHERE is_active = TRUE;
+```
+
+**Seed:** 61 rows total — 9 `issue_category`, 38 `issue_subtype`,
+14 `root_cause` (used for BOTH `root_cause_initial` and
+`root_cause_final` columns since they share customfield_12905 in Jira),
+9 `resolution_type`. Sourced from a live Jira fetch 2026-05-20.
+
+**RLS posture** (matches Batch 004.6 audit_log cleanup):
+- SELECT — `quality_log_taxonomy_select_authenticated` (all
+  authenticated users; the dashboard edit dialog reads from this,
+  and read-only users benefit from the docs-hub rendering).
+- INSERT / UPDATE / DELETE — no `authenticated` policy. Taxonomy
+  additions land via SQL editor (admin UI deferred — backlog item).
+  Service-role writers bypass RLS.
+
+**Adding a new canonical value:** when Lacey adds an option in Jira,
+add a sibling row to `quality_log_taxonomy` with the same string and a
+`sort_order` slot. There is no live sync from Jira to this table; the
+two stay aligned by human discipline.
 
 ### audit_log generalization (migrations 011 + 012 — Batch 002.5b)
 Original `audit_log` had `log_entry_id NOT NULL` with FK to
@@ -1378,6 +1460,35 @@ Resolved             → green-500
     `"CODE - Display Name"` convention — enforced by admin UI copy,
     not by schema constraint.
 
+29. **Taxonomy-backed multi-select fields are constrained at every
+    write surface.** The five quality_logs array columns
+    `issue_category`, `issue_subtype`, `root_cause_initial`,
+    `root_cause_final`, `resolution_type` may only contain strings
+    that exist in `quality_log_taxonomy` (where `field_name` matches
+    and `is_active = TRUE`). The edit dialog
+    (`components/logs/edit-log-dialog.tsx`) renders these as
+    `MultiCombobox` instances sourced from the taxonomy. The server
+    route `/api/logs/edit` validates every submitted value against
+    the taxonomy before write; unknown values return 400 with an
+    actionable message. The webhook and sync edge functions write
+    Jira-verbatim strings, which match the taxonomy seed verbatim
+    (N2 Policy A, locked Batch 005.28). **Why:** before Batch 005.28
+    the dialog's free-text input on `root_cause_final` and the CSV
+    import's free-text passthrough on the other four fields created
+    18+ near-duplicate variants in production (`Missing /
+    Miscommunicated Info` vs `Missing or Miscommunicated
+    Information` etc.) — silently splitting charts and breaking the
+    Repeat Root Cause alert's exact-string match. **How to apply:**
+    new options are added via SQL editor on
+    `quality_log_taxonomy` (admin UI deferred — §15 backlog).
+    `root_cause_initial` remains frozen at log creation per rule 3
+    and is NOT editable through the dialog or the route; the route's
+    ALLOWED_FIELDS whitelist excludes it deliberately. Saving any
+    row with `needs_review = TRUE` clears the flag — the edit IS
+    the review decision per Interpretation C; the route emits a
+    dedicated audit_log row for that transition with
+    `field_name='needs_review'`.
+
 ---
 
 ## 14. What Is NOT In Scope for V1
@@ -1694,6 +1805,19 @@ additions.
       through as multi-brand). `AddBrandDrawer` adds a single-brand
       affordance that auto-syncs `default_brand_id` on the parent
       project. Closes the Phase 1 deferred-affordances gap.
+- [ ] **5.29 Taxonomy admin UI** — managing `quality_log_taxonomy`
+      rows from the dashboard instead of via SQL editor. Add an
+      admin surface (likely `/dashboard/settings/taxonomy` or a tab
+      on Coverage's existing admin page) that lists current
+      canonical values per field, lets admins add new options,
+      toggle `is_active`, and tweak `sort_order` / `description`.
+      Why: when Lacey adds a new option in Jira today, she also has
+      to run a one-line SQL INSERT against the dashboard's taxonomy
+      table to keep validation aligned (§13 r29). A small admin
+      surface removes the SQL step and makes the workflow
+      self-service. Deferred from Batch 005.28's ship so the
+      taxonomy table could land first and prove itself in
+      production; the admin UI is purely operational on top of it.
 
 ### Batch 005.25 — Brand dropdown fix + client_brand normalization
 
@@ -1973,6 +2097,184 @@ memory ceiling vs 25 MB image cap.
 ---
 
 ## 16. Shipped Features Log
+
+### Batch 005.28 — Taxonomy hardening + normalization + docs hub — 2026-05-20
+
+Implements Option B from the 2026-05-20 root cause audit
+(`docs/root-cause-audit-2026-05-20.md`). Closes the free-text
+drift hole on the 4 multi-select fields
+(`issue_category`, `issue_subtype`, `root_cause_*`,
+`resolution_type`). Migration + schema + script + dialog refactor
++ server validation + worklist UI + docs hub, atomically.
+
+- **Migration 020** — `020_quality_log_taxonomy.sql`:
+  - New `quality_log_taxonomy` reference table
+    (`field_name` CHECK-constrained to the 4 taxonomy fields,
+    `canonical_value`, `description`, `is_active`, `sort_order`,
+    `created_at`, `updated_at`). Unique on
+    `(field_name, canonical_value)`; partial index on
+    `(field_name, sort_order)` where `is_active = TRUE`.
+  - New `quality_logs.needs_review BOOLEAN NOT NULL DEFAULT FALSE`
+    column + partial index where TRUE. `COMMENT` documents the
+    flag lifecycle (set by normalization, cleared by edit-dialog
+    save).
+  - RLS: SELECT open to authenticated; no INSERT/UPDATE/DELETE
+    policies — additions land via SQL editor with service-role.
+  - Seed: 61 rows total (9 / 38 / 14 / 9) from a fresh live Jira
+    fetch on 2026-05-20. Strings are Jira-verbatim per N2
+    Policy A — including the inconsistent `X/ Y` spacing on
+    several options (e.g. `Process/ Communication`,
+    `Missing Assets/ Info`, `CSS/ Styling Issue`). The dialog
+    dropdown renders these unmodified so values stay aligned
+    with what Jira fires via webhook.
+  - Fully idempotent (`IF NOT EXISTS` + `ON CONFLICT DO NOTHING`
+    on seed rows). Re-running is a no-op.
+- **Normalization script**:
+  `scripts/normalize-quality-log-fields.ts`. Hand-coded
+  `FIELD_MAPPINGS` object mirrors
+  `docs/root-cause-taxonomy-mapping.md` (DC + Lacey-resolved
+  variant→canonical map). Modes:
+  `--dry-run` (report only) · default (prompt
+  `"Type 'yes' to proceed"`) · `--yes` (skip prompt).
+  Idempotent. Per-row audit_log rows with
+  `target_type='quality_log'`,
+  `changed_by='system:normalize-quality-log-fields'`,
+  plus a dedicated `field_name='needs_review'` row when the
+  normalizer flagged a row. Per-element handling for arrays:
+  canonical values pass through; legacy values map mechanically;
+  Interpretation C defaults set `needs_review = TRUE`;
+  cross-field pollution removes the element entirely and flags
+  the row.
+- **MultiCombobox primitive**: new `components/ui/multi-combobox.tsx`
+  — searchable multi-select with pill display below the trigger.
+  Sibling to the existing single-select `Combobox`. Used by the
+  edit dialog; reusable for future multi-select needs.
+- **Edit dialog refactor**: `components/logs/edit-log-dialog.tsx`
+  loses its free-text `<Input>` for `root_cause_final` (the
+  audit's call-out as the live drift source). Replaces it with
+  4 `MultiCombobox` instances — `issue_category`,
+  `issue_subtype`, `root_cause_final`, `resolution_type` —
+  sourced from a single taxonomy fetch cached for the dialog's
+  lifetime. `root_cause_initial` remains frozen per §13 r3 and
+  is intentionally not edited here. Dialog header surfaces a
+  "Needs review — saving clears the flag" pill when the row is
+  flagged. Save propagates the new fields through to
+  `EditableLog` and clears `needs_review` locally to keep the
+  worklist count in sync without a refetch.
+- **`EditableLog` interface** extended with `issue_category`,
+  `issue_subtype`, `resolution_type`, `needs_review`. `LogEntry`
+  on `/dashboard/logs` mirrors the additions and the page's
+  Supabase select adds the four new columns.
+- **Server-side validation**
+  (`app/api/logs/edit/route.ts`):
+  - `ALLOWED_FIELDS` extended to include the four new editable
+    columns.
+  - New `TAXONOMY_VALIDATION` map drives a per-field validation
+    pass against `quality_log_taxonomy` (service-role lookup so
+    RLS doesn't gate it). Submitted values not in the active
+    taxonomy return 400 with
+    `"Value 'X' not found in canonical taxonomy for field 'Y'.
+    Pick from the dropdown."` — defense in depth against stale
+    browser bundles or direct API callers.
+  - On every successful save the route reads the pre-update
+    `needs_review` state. If TRUE, the save additionally sets
+    `needs_review = false` and emits a dedicated audit_log row
+    with `field_name='needs_review'`, `old_value='true'`,
+    `new_value='false'`, attributing to the admin via
+    `getChangedBy()` per §13 r19. The edit IS the review
+    decision per Interpretation C.
+- **Worklist UI** on `/dashboard/logs`:
+  - "Needs review" pill in the existing filter pill row,
+    separated from date presets by a thin divider. Defaults
+    OFF — Lacey explicitly opts in. Label includes count when
+    `> 0` (e.g. `Needs review (15)`); count derives from a
+    `useMemo` over `logs` (no separate query — `loadData`
+    already fetches every non-deleted row via the existing
+    `.range(0, 9999)` pattern). When `count = 0` AND filter
+    is ON, the row-count slot reads
+    `All caught up — no reviews pending`.
+  - Row-level badge near the ticket link (collapsed view):
+    `✏️ review` in `--pill-amber-*` tokens. Clickable for
+    admins (opens the edit dialog targeted at the first
+    `needs_review` entry in the group); informational only
+    for read-only users. Expanded entry rows render a
+    smaller `✏️` badge next to the entry's `#log_number`.
+  - `resetAllFilters()` and the active-filter count both
+    pick up the new filter slot.
+- **Docs hub page**: new
+  `app/dashboard/docs/qa-fields/page.tsx`. Inline JSX
+  rendering of `docs/qa-field-reference.md`'s content
+  (project has no MDX/remark setup; matches the existing
+  `/dashboard/docs` pattern). Sections: Identification,
+  Classification, Analysis, Resolution, Ownership. Anchor-
+  linked TOC at the top. Taxonomy fields render as actual
+  HTML `<table>` elements with Jira-verbatim canonical
+  values + descriptions. Accessible to all authenticated
+  users. The existing `/dashboard/docs` page gains an
+  "Open QA Field Reference →" CTA button.
+- **`docs/qa-field-reference.md`** canonical-list tables
+  updated to Jira-verbatim per N2 (`Process/ Communication`,
+  `Missing Assets/ Info`, `CSS/ Styling Issue`, etc.).
+  Prose around the tables keeps human-readable spacing for
+  copy quality. `Targeting / Audience` removed from Issue
+  Category (it was removed from Jira along with
+  `Analytics/ Tracking` and `Design/ Visual`); the §6 plan
+  named one of the wrong removals — actual change confirmed
+  via re-fetch). The new subtype `OS or Device Updates`
+  spelled with trailing `s` per Jira.
+- **`docs/root-cause-taxonomy-mapping.md`**: variant tables
+  populated by Claudette earlier in the session (commit
+  `88f1c2e`). DC + Lacey resolved N1-N4 questions same day;
+  document updated with Jira-verbatim canonical strings
+  throughout.
+- **N3 reconciliation**: §6 of the Option B directive named
+  "Incorrect Traffic Allocation" as a removal from Issue
+  Category but that value was always in Issue Subtype. Actual
+  Issue Category removals (verified via fresh Jira fetch):
+  `Analytics/ Tracking`, `Design/ Visual`, `Targeting/ Audience`.
+  Added: `External Factor`. Net 11 → 9. Issue Subtype goes
+  35 → 38 (only adds, no removes). Root Cause goes 10 → 14
+  (5 adds, 1 remove). Resolution Type unchanged at 9.
+- **§13 r29 added** documenting the constrained-dialog
+  contract and the `needs_review` clear-on-save semantics.
+- **§15 backlog**: new item 5.29 (Taxonomy admin UI) — when
+  Lacey adds a Jira option today she also has to run a SQL
+  INSERT on `quality_log_taxonomy`; the admin UI would
+  collapse that to a click. Deferred from this ship so the
+  table could land first.
+- **Verification**: `npm run build` green. TypeScript clean
+  across changed files. Lint pass introduces zero new
+  findings; the 4 pre-existing
+  `react-hooks/static-components` errors in
+  `app/dashboard/logs/page.tsx` (`SortableHeader` /
+  `SortIcon` inner-function pattern, same shape as
+  Coverage's pre-existing 8) are on HEAD before this batch
+  and out of scope.
+- **What's deliberately NOT in this batch**:
+  - `root_cause_initial` is NOT editable through the dialog
+    (frozen at creation per §13 r3 — by design, not a gap).
+  - Admin UI for managing `quality_log_taxonomy` rows
+    (5.29 — backlog).
+  - Taxonomy versioning / history (not yet needed; YAGNI).
+  - Bulk worklist actions (mass-clear, mass-reassign) — the
+    per-row edit dialog is sufficient at the 49-row scale we
+    have today.
+- **Pre-deploy ops checklist** (after this commit lands):
+  1. Run migration 020 via Supabase dashboard SQL editor
+  2. Confirm row counts:
+     `SELECT field_name, COUNT(*) FROM quality_log_taxonomy GROUP BY field_name;`
+     Expect 9 / 38 / 14 / 9.
+  3. `npx tsx --env-file=.env.local scripts/normalize-quality-log-fields.ts --dry-run`
+     to preview changes. Expect ~46 of the 49 non-deleted rows to
+     change (3 already canonical), ~31 to be newly flagged
+     `needs_review`.
+  4. Re-run without `--dry-run` to apply (prompts "Type 'yes' to
+     proceed"). Confirm summary matches the dry-run.
+  5. Open `/dashboard/logs`, toggle the "Needs review" pill,
+     confirm flagged rows surface. Edit one of them, save, confirm
+     the flag clears and the worklist count decrements.
+  6. Visit `/dashboard/docs/qa-fields` and confirm the docs hub
+     renders with all sections present.
 
 ### Batch 005.22 Phase 3 — Dashboard mount + layout reorder + chart re-scope — 2026-05-20
 
@@ -3874,4 +4176,4 @@ demo blocker.
 
 ---
 
-*Last updated: 2026-05-20 | CQIP v1.5 — Batch 005.22 Phase 3 shipped (Dashboard mount + layout reorder + chart re-scope + ActiveAlertsPanel polish)*
+*Last updated: 2026-05-20 | CQIP v1.5 — Batch 005.28 shipped (taxonomy hardening + normalization + docs hub; R29 added)*

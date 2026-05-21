@@ -32,11 +32,14 @@ interface LogEntry {
   severity: string | null;
   log_status: string;
   issue_category: string[] | null;
+  issue_subtype: string[] | null;
   root_cause_final: string[] | null;
+  resolution_type: string[] | null;
   who_owns_fix: string | null;
   log_number: number;
   notes: string | null;
   resolution_notes: string | null;
+  needs_review: boolean;
 }
 
 interface UserProfile {
@@ -98,6 +101,11 @@ export default function LogsPage() {
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
   const [activePill, setActivePill] = useState<DatePill | null>('60');
+  // Batch 005.28 worklist. Pill defaults OFF — Lacey explicitly opts in
+  // to see auto-flagged rows from the normalization run. Count is derived
+  // from local state so it stays accurate as edits clear the flag (no
+  // separate query: loadData already fetches every non-deleted row).
+  const [needsReviewFilter, setNeedsReviewFilter] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(true);
 
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -128,7 +136,7 @@ export default function LogsPage() {
       // page needs real pagination, not a higher cap.
       const { data: logsData } = await supabase
         .from('quality_logs')
-        .select('id, triggered_at, jira_ticket_id, jira_ticket_url, jira_summary, client_brand, severity, log_status, issue_category, root_cause_final, who_owns_fix, log_number, notes, resolution_notes')
+        .select('id, triggered_at, jira_ticket_id, jira_ticket_url, jira_summary, client_brand, severity, log_status, issue_category, issue_subtype, root_cause_final, resolution_type, who_owns_fix, log_number, notes, resolution_notes, needs_review')
         .eq('is_deleted', false)
         .order('triggered_at', { ascending: false })
         .range(0, 9999);
@@ -164,8 +172,14 @@ export default function LogsPage() {
     loadData();
   }, []);
 
+  const needsReviewCount = useMemo(
+    () => logs.reduce((acc, l) => acc + (l.needs_review ? 1 : 0), 0),
+    [logs],
+  );
+
   const filteredLogs = useMemo(() => {
     return logs.filter(log => {
+      if (needsReviewFilter && !log.needs_review) return false;
       if (clientBrand && log.client_brand !== clientBrand) return false;
       if (severity && log.severity !== severity) return false;
       if (status && log.log_status !== status) return false;
@@ -173,7 +187,7 @@ export default function LogsPage() {
       if (endDate && new Date(log.triggered_at) > new Date(endDate)) return false;
       return true;
     });
-  }, [logs, clientBrand, severity, status, startDate, endDate]);
+  }, [logs, needsReviewFilter, clientBrand, severity, status, startDate, endDate]);
 
   const groupedTickets = useMemo<TicketGroup[]>(() => {
     const map = new Map<string, LogEntry[]>();
@@ -253,6 +267,7 @@ export default function LogsPage() {
     setClientBrand('');
     setSeverity('');
     setStatus('');
+    setNeedsReviewFilter(false);
     setActivePill('all');
   }
 
@@ -260,7 +275,8 @@ export default function LogsPage() {
     (startDate || endDate ? 1 : 0) +
     (clientBrand ? 1 : 0) +
     (severity ? 1 : 0) +
-    (status ? 1 : 0);
+    (status ? 1 : 0) +
+    (needsReviewFilter ? 1 : 0);
 
   // Row count of the FILTERED log set — reflects whatever the user is
   // currently looking at (so toggling a pill, picking a brand, or
@@ -291,9 +307,13 @@ export default function LogsPage() {
       log_status: log.log_status,
       severity: log.severity,
       who_owns_fix: log.who_owns_fix,
+      issue_category: log.issue_category,
+      issue_subtype: log.issue_subtype,
       root_cause_final: log.root_cause_final,
+      resolution_type: log.resolution_type,
       resolution_notes: log.resolution_notes,
       notes: log.notes,
+      needs_review: log.needs_review,
     });
     setEditOpen(true);
   }
@@ -388,13 +408,20 @@ export default function LogsPage() {
               log_status: updated.log_status,
               severity: updated.severity,
               who_owns_fix: updated.who_owns_fix,
+              issue_category: updated.issue_category,
+              issue_subtype: updated.issue_subtype,
               root_cause_final: updated.root_cause_final,
+              resolution_type: updated.resolution_type,
               resolution_notes: updated.resolution_notes,
               notes: updated.notes,
+              needs_review: updated.needs_review,
             }
           : l,
       ),
     );
+    // Worklist count derives from `logs` via useMemo; no explicit refresh
+    // needed — the setLogs above (which writes needs_review: false from
+    // the EditableLog) re-runs the memo on the next render.
   }
 
   function SortIcon({ active }: { active: boolean }) {
@@ -470,19 +497,28 @@ export default function LogsPage() {
                 a one-click reset since a typical 0 result means filters
                 are too narrow, not that the dashboard is broken. */}
             {loading ? null : filteredLogs.length === 0 ? (
-              <span
-                className="text-xs font-medium text-[color:var(--f92-gray)]"
-                aria-live="polite"
-              >
-                0 logs ·{' '}
-                <button
-                  type="button"
-                  onClick={resetAllFilters}
-                  className="text-[color:var(--f92-orange)] transition hover:underline focus-visible:outline-none focus-visible:underline"
+              needsReviewFilter && needsReviewCount === 0 ? (
+                <span
+                  className="text-xs font-medium text-[color:var(--f92-gray)]"
+                  aria-live="polite"
                 >
-                  clear filters to see all
-                </button>
-              </span>
+                  All caught up — no reviews pending
+                </span>
+              ) : (
+                <span
+                  className="text-xs font-medium text-[color:var(--f92-gray)]"
+                  aria-live="polite"
+                >
+                  0 logs ·{' '}
+                  <button
+                    type="button"
+                    onClick={resetAllFilters}
+                    className="text-[color:var(--f92-orange)] transition hover:underline focus-visible:outline-none focus-visible:underline"
+                  >
+                    clear filters to see all
+                  </button>
+                </span>
+              )
             ) : (
               <span
                 className="text-xs font-medium text-[color:var(--f92-gray)]"
@@ -514,7 +550,7 @@ export default function LogsPage() {
           <div className="overflow-hidden">
             <div className="pt-3">
               {/* Quick filter pills */}
-              <div className="flex flex-wrap gap-1.5" role="group" aria-label="Date range presets">
+              <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Quick filters">
                 {PILL_OPTIONS.map(opt => {
                   const active = activePill === opt.id;
                   return (
@@ -534,6 +570,21 @@ export default function LogsPage() {
                     </button>
                   );
                 })}
+                <span aria-hidden className="mx-1 h-4 w-px bg-[color:var(--f92-border)]" />
+                <button
+                  type="button"
+                  onClick={() => setNeedsReviewFilter(v => !v)}
+                  aria-pressed={needsReviewFilter}
+                  title="Auto-mapped during taxonomy normalization. Confirm or update the values via the edit dialog."
+                  className={cn(
+                    'rounded-full border px-3 py-1 text-xs font-medium transition',
+                    needsReviewFilter
+                      ? 'border-[color:var(--f92-orange)] bg-[color:var(--f92-orange)] text-white'
+                      : 'border-[color:var(--pill-filter-paused-border)] bg-[color:var(--pill-filter-bg)] text-[color:var(--pill-filter-fg)] hover:bg-[color:var(--pill-filter-bg-hover)]',
+                  )}
+                >
+                  Needs review{needsReviewCount > 0 ? ` (${needsReviewCount})` : ''}
+                </button>
               </div>
 
               {/* Compact filter row */}
@@ -706,6 +757,30 @@ export default function LogsPage() {
                               setDetailOpen(true);
                             }}
                           />
+                          {group.entries.some(e => e.needs_review) ? (
+                            isAdmin ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const target = group.entries.find(e => e.needs_review) ?? latest;
+                                  openEditDialog(target);
+                                }}
+                                title="Auto-mapped during taxonomy normalization. Confirm or update the values via the edit dialog."
+                                className="inline-flex items-center gap-1 rounded-full bg-[color:var(--pill-amber-bg)] px-2 py-0.5 text-xs font-medium text-[color:var(--pill-amber-fg)] ring-1 ring-inset ring-[color:var(--pill-amber-border)] hover:opacity-85"
+                              >
+                                <span aria-hidden>✏️</span>
+                                <span>review</span>
+                              </button>
+                            ) : (
+                              <span
+                                title="Auto-mapped during taxonomy normalization. An admin will confirm or update."
+                                className="inline-flex items-center gap-1 rounded-full bg-[color:var(--pill-amber-bg)] px-2 py-0.5 text-xs font-medium text-[color:var(--pill-amber-fg)] ring-1 ring-inset ring-[color:var(--pill-amber-border)]"
+                              >
+                                <span aria-hidden>✏️</span>
+                                <span>review</span>
+                              </span>
+                            )
+                          ) : null}
                           {(auditCounts[latest.id] ?? 0) > 5 ? (
                             <span
                               role="img"
@@ -810,17 +885,28 @@ export default function LogsPage() {
                                     <tr key={entry.id} className="border-t border-[color:var(--f92-border)]">
                                       <td className="px-2 py-2 align-top">{formatTriggeredDate(entry.triggered_at)}</td>
                                       <td className="px-2 py-2 align-top">
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setDetailLogId(entry.id);
-                                            setDetailOpen(true);
-                                          }}
-                                          className="font-medium text-[color:var(--f92-orange)] hover:underline focus-visible:outline-none focus-visible:underline"
-                                          aria-label={`Open sendback #${entry.log_number} details`}
-                                        >
-                                          #{entry.log_number}
-                                        </button>
+                                        <div className="flex items-center gap-1">
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setDetailLogId(entry.id);
+                                              setDetailOpen(true);
+                                            }}
+                                            className="font-medium text-[color:var(--f92-orange)] hover:underline focus-visible:outline-none focus-visible:underline"
+                                            aria-label={`Open sendback #${entry.log_number} details`}
+                                          >
+                                            #{entry.log_number}
+                                          </button>
+                                          {entry.needs_review ? (
+                                            <span
+                                              title="Auto-mapped during taxonomy normalization. Confirm or update via the edit dialog."
+                                              aria-label="Needs review"
+                                              className="inline-flex items-center rounded-full bg-[color:var(--pill-amber-bg)] px-1.5 py-0.5 text-[10px] font-medium text-[color:var(--pill-amber-fg)] ring-1 ring-inset ring-[color:var(--pill-amber-border)]"
+                                            >
+                                              <span aria-hidden>✏️</span>
+                                            </span>
+                                          ) : null}
+                                        </div>
                                       </td>
                                       <td className="px-2 py-2 align-top">{entry.client_brand ?? '—'}</td>
                                       <td className="px-2 py-2 align-top">

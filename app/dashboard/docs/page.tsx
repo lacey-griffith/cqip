@@ -36,6 +36,12 @@ export default function DocsPage() {
           importantly — how to fill out the Jira QA tab when you send a ticket back so the
           rest of the team gets useful reports.
         </p>
+        <a
+          href="/dashboard/docs/qa-fields"
+          className="mt-4 inline-flex items-center gap-2 rounded-full bg-[color:var(--f92-orange)] px-4 py-2 text-sm font-semibold text-white hover:brightness-95"
+        >
+          Open QA Field Reference →
+        </a>
       </div>
 
       <Section id="what-is-cqip" title="What is CQIP?">

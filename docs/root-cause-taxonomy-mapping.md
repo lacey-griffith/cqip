@@ -3,8 +3,9 @@
 **Date:** 2026-05-20
 **Author:** DC + Lacey
 **Status:** Variant tables populated 2026-05-20 by Claudette.
-Open questions in §"Population notes" pending DC + Lacey
-review before the normalization script runs.
+DC + Lacey resolved N1-N4 same day; canonical lists updated to
+Jira-verbatim per Policy A; counts reconciled to fresh Jira
+fetch. Ready to drive the normalization script.
 **Pairs with:** `docs/root-cause-audit-2026-05-20.md` (Claudette's
 audit findings) and `docs/qa-field-reference.md` (canonical
 definitions)
@@ -29,28 +30,39 @@ contract historically.
 
 ## Field 1: `issue_category` (Jira customfield_12871)
 
-### Canonical Jira options (10 after cleanup)
+### Canonical Jira options (9, post-Lacey-changes, verbatim per N2 Policy A)
 
 ```
 CRO Implementation
 Experiment Configuration
-Targeting / Audience
 Client Website Code
-Client Data / Feed
+Client Data/Feed
 Third Party Tool
-Process / Communication
-Experiment Concept
+Process/ Communication
 Missing Information / Access
+Experiment Concept
 External Factor                          ← new, post-Phase-1
 ```
+
+Verified by re-fetch from Jira on 2026-05-20 via
+`/rest/api/3/field/customfield_12871/context/14166/option`.
+The verbatim spelling — including the no-space-before-slash on
+`Process/ Communication` and the no-spaces-at-all on
+`Client Data/Feed` — is the taxonomy table seed (Policy A locked).
 
 ### Removed from Jira (post-cleanup, ship day)
 
 ```
-Incorrect Traffic Allocation             → moved to Issue Subtype only
-Analytics / Tracking                     → symptom, lives in Subtype
-Design / Visual                          → symptom, lives in Subtype
+Analytics/ Tracking                      → symptom, lives in Subtype
+Design/ Visual                           → symptom, lives in Subtype
+Targeting/ Audience                      → symptom, lives in Subtype
 ```
+
+(Three options removed, not the two Analytics + Design/ Visual
+named in the original §6 plan. `Targeting/ Audience` also went;
+the audit's `Targeting / Audience` mention in the original spec
+was the third removal not the canonical kept list. Net change:
+11 → 9 with 1 new option = 9. Confirmed by re-fetch.)
 
 ### Variant → canonical mapping (historical drift)
 
@@ -64,9 +76,9 @@ default).
 |---------------------|-------------|---------|------------|-------|
 | `CRO - Frontend Issue` | 11 | `CRO Implementation` | Mechanical | Legacy "Type of Issue" string; direct match in legacy table |
 | `Convert Configuration` | 6 | `Experiment Configuration` | Mechanical | Legacy table; Convert is the experiment tool |
-| `Process/Communication Issue` | 6 | `Process / Communication` | Mechanical | Legacy table; spacing + "Issue" suffix removed |
+| `Process/Communication Issue` | 6 | `Process/ Communication` | Mechanical | Legacy table; "Issue" suffix removed. Jira-verbatim target string (Policy A) — no space before slash. |
 | `Client - Frontend Issue` | 5 | `Client Website Code` | Mechanical | Legacy table; frontend granularity preserved at Subtype |
-| `Client - Data/Source File Issue` | 2 | `Client Data / Feed` | Mechanical | Legacy table; direct rename |
+| `Client - Data/Source File Issue` | 2 | `Client Data/Feed` | Mechanical | Legacy table; Jira-verbatim target (no spaces around slash on this one) |
 | `Design/ Visual` | 2 | `null` (+ needs_review) | Semantic | Removed canonical (per §6 Jira changes). Symptom lives in Subtype but the actual subtype value isn't determinable from this row alone. Per cross-field pollution rule: null + needs_review. Lacey picks correct Subtype value via dialog. |
 | `External Dependency Change` | 2 | `External Factor` | Mechanical | Legacy table; new canonical absorbs legacy concept |
 | `Client Website Code` | 1 | `Client Website Code` | – | Already canonical, no change |
@@ -101,9 +113,9 @@ Sourced from `NBLY_QualityTrackingLog_Tools___Definitions_.csv`.
 | CRO - Frontend Issue | CRO Implementation | CRO-authored code |
 | Convert Configuration | Experiment Configuration | Convert is the experiment tool |
 | Missing Information | Missing Information / Access | Direct rename |
-| Client - Data/Source File Issue | Client Data / Feed | Direct rename |
+| Client - Data/Source File Issue | Client Data/Feed | Jira-verbatim target per Policy A (no spaces around slash on this one) |
 | Scope/Requirement Change | Experiment Concept | See note below — also maps to a Root Cause value |
-| Process/Communication Issue | Process / Communication | Direct rename |
+| Process/Communication Issue | Process/ Communication | Jira-verbatim target per Policy A |
 | External Dependency Change | External Factor | New category, see Field 3 |
 
 **Note on "Scope/Requirement Change":** the legacy column "Type
@@ -118,16 +130,16 @@ mapping session.
 
 ## Field 2: `root_cause_final` and `root_cause_initial` (Jira customfield_12905)
 
-### Canonical Jira options (13 after cleanup)
+### Canonical Jira options (14, post-Lacey-changes, verbatim per N2 Policy A)
 
 ```
-Existing (10 kept):
+Existing (9 kept):
   CRO Code Error
   Experiment Setup Error
   Process Gap
   QA Gap
   Client Side Code Issue
-  Client Data / Feed Issue
+  Client Data/ Feed Issue
   Third Party Tool Change
   Requirement or Scope Change
   Client Request
@@ -136,12 +148,18 @@ Removed (replaced by 3-way split):
   Missing or Miscommunicated Information   ← split, see below
 
 Added (post-Phase-1, ship day):
-  Unknown / Needs Investigation
-  External Factor / Environment Change
-  Missing Assets / Info
-  Unclear / Conflicting Requirements
-  Late Assets / Info
+  Unknown/ Needs Investigation
+  External Factor/ Environment Change
+  Missing Assets/ Info
+  Unclear/ Conflicting Requirements
+  Late Assets/ Info
 ```
+
+Verified by re-fetch from Jira on 2026-05-20. Note the
+no-space-before-slash spelling on the five additions and
+`Client Data/ Feed Issue`. Per N2 Policy A, these are the
+exact seed strings for the taxonomy table and the exact target
+strings for the normalization script.
 
 ### The 3-way split of "Missing or Miscommunicated Information"
 
@@ -194,41 +212,43 @@ in either side means the variant didn't appear in that field.
 
 | Variant in database | Occurrences (final / initial) | Maps to | Confidence | Notes |
 |---------------------|-------------------------------|---------|------------|-------|
-| `Missing / Miscommunicated Info` | 12 / 12 | `Missing Assets / Info` | Semantic (Interp C default) | + needs_review. 3-way split default; Lacey reviews per-row whether `Unclear / Conflicting Requirements` or `Late Assets / Info` fits better |
-| `Missing or Miscommunicated Information` | 3 / – | `Missing Assets / Info` | Semantic (Interp C default) | + needs_review. Same family as above; this is the deprecated Jira canonical that's being removed per §6 |
+| `Missing / Miscommunicated Info` | 12 / 12 | `Missing Assets/ Info` | Semantic (Interp C default) | + needs_review. 3-way split default; Lacey reviews per-row whether `Unclear/ Conflicting Requirements` or `Late Assets/ Info` fits better. Jira-verbatim target. |
+| `Missing or Miscommunicated Information` | 3 / – | `Missing Assets/ Info` | Semantic (Interp C default) | + needs_review. Same family as above; this is the deprecated Jira canonical that was removed per §6 |
 | `CRO Code / Configuration Error` | 6 / 8 | `CRO Code Error` | Mechanical | Legacy table; direct match. (Experiment Setup Error is the alternative if the issue was setup/config not code — Lacey can reclassify per-row, no auto-flag since legacy table treats this as mechanical) |
 | `CRO Code / Config Error` | 6 / 7 | `CRO Code Error` | Mechanical | Same family as above; abbreviated spelling |
 | `Client Request` | 6 / 1 | `Client Request` | – | Already canonical, no change |
-| `External Dependency Change` | 2 / 2 | `External Factor / Environment Change` | Mechanical | Legacy table; new canonical absorbs legacy concept (same mapping logic as Field 1) |
+| `External Dependency Change` | 2 / 2 | `External Factor/ Environment Change` | Mechanical | Legacy table; new canonical absorbs legacy concept. Jira-verbatim target. |
 | `Process / QA Gap` | 2 / 1 | `Process Gap` | Semantic (Interp C default) | + needs_review. Process/QA split default; Lacey reclassifies to `QA Gap` per row when appropriate |
 | `Requirement or Scope Change` | 2 / – | `Requirement or Scope Change` | – | Already canonical, no change |
 | `Requirement / Scope Change` | 1 / 1 | `Requirement or Scope Change` | Mechanical | Legacy table; slash vs "or" |
 | `Design/Visual` | 2 / – | `null` (+ needs_review) | Cross-field | Issue Category value (and being removed from Jira). Per pollution rule: null + needs_review. Original preserved in audit_log notes. |
 | `CRO Implementation` | 1 / – | `null` (+ needs_review) | Cross-field | Issue Category canonical value mistakenly stored in root_cause. Per pollution rule. |
-| `CRO Code` | 1 / – | `CRO Code Error` | Semantic | + needs_review. Ambiguous: could be `CRO Code Error` or `Experiment Setup Error` from a one-word free-text edit. Default to `CRO Code Error` (the broader canonical) and flag. **DC TO CONFIRM.** |
+| `CRO Code` | 1 / – | `CRO Code Error` | Semantic (DC confirmed 2026-05-20) | + needs_review. Ambiguous one-word free-text edit (could be `CRO Code Error` or `Experiment Setup Error`); DC confirmed default to `CRO Code Error` and let Lacey reclassify per-row. |
 | `CRO Code Error` | 1 / 2 | `CRO Code Error` | – | Already canonical, no change |
-| `Client Code` | 1 / – | `Client Side Code Issue` | Semantic | + needs_review. Ambiguous between root_cause `Client Side Code Issue` and Issue Category `Client Website Code`. Default to root_cause canonical since this row landed in root_cause_final. **DC TO CONFIRM.** |
+| `Client Code` | 1 / – | `Client Side Code Issue` | Mechanical (DC confirmed 2026-05-20) | Only canonical option for client-side code problems; DC confirmed mechanical mapping. needs_review NOT set (mechanical). |
 | `Client Code / Backend Error` | 1 / 1 | `Client Side Code Issue` | Mechanical | Legacy table; direct rename |
-| `Data / Mapping Issue` | 1 / 2 | `Client Data / Feed Issue` | Mechanical | Legacy table; direct rename |
+| `Data / Mapping Issue` | 1 / 2 | `Client Data/ Feed Issue` | Mechanical | Legacy table; Jira-verbatim target |
 | `Process Gap` | 1 / – | `Process Gap` | – | Already canonical, no change |
 | `QA Gap` | 1 / 2 | `QA Gap` | – | Already canonical, no change |
-| `Unknown / Needs Investigation` | – / 2 | `Unknown / Needs Investigation` | Mechanical | Re-added to Jira per §6. Direct match. |
+| `Unknown / Needs Investigation` | – / 2 | `Unknown/ Needs Investigation` | Mechanical | Re-added to Jira per §6; Jira-verbatim target |
 
 **Population summary (Field 2):**
 - 19 distinct variants across the two fields (49 row-occurrences
   in `root_cause_final`, 41 in `root_cause_initial`)
-- 6 already-canonical variants (no change): `Client Request`,
+- 5 already-canonical variants (no change): `Client Request`,
   `Requirement or Scope Change`, `CRO Code Error`,
-  `Process Gap`, `QA Gap`, `Unknown / Needs Investigation`
-- 9 mechanical map (legacy table or direct rename)
+  `Process Gap`, `QA Gap`
+- 11 mechanical map (legacy table or direct rename, includes
+  `Unknown/ Needs Investigation` re-added per §6 and `Client Code`
+  → `Client Side Code Issue` per DC's N1 confirmation)
 - 2 Interpretation C defaults with needs_review:
   `Missing / Miscommunicated Info` family (15 + 12 = 27
   occurrences), `Process / QA Gap` family (3 occurrences)
 - 2 cross-field pollution null-outs with needs_review:
   `Design/Visual` (2), `CRO Implementation` (1)
-- 2 semantic single-row flags with needs_review:
-  `CRO Code` (1), `Client Code` (1) — **DC review of
-  defaults before run**
+- 1 semantic single-row default with needs_review:
+  `CRO Code` (1) — per DC's N1 confirmation, defaults to
+  `CRO Code Error` and Lacey reclassifies if needed
 
 ### Legacy "Root Cause - Final" → Jira translation
 
@@ -238,13 +258,13 @@ Sourced from CSV.
 |--------------|----------------|-----------|
 | Client Code / Backend Error | Client Side Code Issue | Direct rename |
 | CRO Code / Configuration Error | CRO Code Error | Direct match (Experiment Setup Error is the alternative if the issue was setup/config, not code — needs per-row read) |
-| Data / Mapping Issue | Client Data / Feed Issue | Direct rename |
+| Data / Mapping Issue | Client Data/ Feed Issue | Jira-verbatim target per Policy A |
 | Requirement / Scope Change | Requirement or Scope Change | Direct rename |
-| Missing / Miscommunicated Info | Missing Assets / Info | Default per Interpretation C; needs_review flag set |
-| Environment / External Factors | External Factor / Environment Change | New canonical option mirrors legacy concept |
+| Missing / Miscommunicated Info | Missing Assets/ Info | Default per Interpretation C; needs_review flag set. Jira-verbatim target. |
+| Environment / External Factors | External Factor/ Environment Change | New canonical option mirrors legacy concept; Jira-verbatim target |
 | Process / QA Gap | Process Gap | Default per Interpretation C; needs_review flag set |
-| Unknown / Needs Investigation | Unknown / Needs Investigation | Direct match (re-added to Jira) |
-| External Dependency Change | External Factor / Environment Change | Conceptually same as legacy "Environment / External Factors"; new canonical absorbs both |
+| Unknown / Needs Investigation | Unknown/ Needs Investigation | Direct match (re-added to Jira); Jira-verbatim target |
+| External Dependency Change | External Factor/ Environment Change | Conceptually same as legacy "Environment / External Factors"; new canonical absorbs both. Jira-verbatim target. |
 
 **Note — "CRO - Frontend Issue" (11 occurrences in audit):**
 This is a legacy "Type of Issue" string that appears to have
@@ -295,15 +315,11 @@ values across 3 rows; all are clean post-Phase-1 system writes.
 |---------------------|-------------|---------|------------|-------|
 | `API Failure` | 1 | `API Failure` | – | Already canonical, no change |
 | `Change not Communicated` | 1 | `Change not Communicated` | – | Already canonical, no change |
-| `CSS/ Styling Issue` | 1 | `CSS / Styling Issue` | Mechanical (spacing) | DB stores `CSS/ Styling` (no space before slash, Jira's current live spelling); doc canonical is `CSS / Styling Issue` (spaces both sides). **DC TO CONFIRM** whether this row gets rewritten to the doc-spaced form, or whether the taxonomy seed adopts Jira's exact verbatim spelling. See spacing open question in §"Population notes" below. |
+| `CSS/ Styling Issue` | 1 | `CSS/ Styling Issue` | – | Already canonical (Policy A locked 2026-05-20 — Jira-verbatim spacing is the canonical form; no rewrite needed) |
 
 **Population summary (Field 3):**
 - 3 distinct variants across 3 row-occurrences
-- 2 already-canonical (no change)
-- 1 spacing mismatch — **policy question pending DC review**
-  (this is the same call as Issue Category `Process/ Communication`
-  → `Process / Communication` etc. — needs to be made consistently
-  across all four fields)
+- All 3 already canonical (no change). Field is clean.
 
 ---
 
@@ -389,41 +405,30 @@ top of a first guess.
 
 ## Population notes (Claudette, 2026-05-20)
 
-Items I encountered while filling in the variant tables that
-DC + Lacey should resolve before the normalization script
-runs. Listed in priority order.
+**All four open questions resolved.** DC + Lacey confirmed
+decisions in the follow-up message; updates in-place above.
+Notes retained below for forensic record.
 
-### N1 — DC TO CONFIRM: ambiguous single-row variants (Field 2)
+### N1 — RESOLVED: ambiguous single-row variants (Field 2)
 
-Two variants in `root_cause_final` are single-occurrence and
-not on the legacy translation table. Defaults applied but
-flagged for review:
+Two variants in `root_cause_final` were single-occurrence and
+not on the legacy translation table. **DC confirmed
+2026-05-20:**
 
-- **`CRO Code` (1 occurrence, 2026-05-11).** Likely a one-word
-  free-text edit via the unconstrained dialog. Plausibly maps
-  to either `CRO Code Error` (broader) or `Experiment Setup
-  Error` (if the issue was setup/config rather than code). I
-  defaulted to `CRO Code Error` since the legacy translation
-  for the `CRO Code / Configuration Error` family lands there,
-  and flagged `needs_review = TRUE`. If DC prefers
-  `Experiment Setup Error` as the default — or wants to
-  null-out + needs_review instead — say so.
+- **`CRO Code` → `CRO Code Error`** with `needs_review = TRUE`.
+  Lacey reviews per the flag.
 
-- **`Client Code` (1 occurrence, 2026-05-19).** Likely a
-  one-word free-text edit. Could mean root_cause
-  `Client Side Code Issue` (most natural reading), Issue
-  Category `Client Website Code` (cross-field pollution), or
-  something else. I defaulted to `Client Side Code Issue`
-  since the value landed in root_cause_final and flagged
-  `needs_review = TRUE`. If DC prefers null-out + needs_review,
-  say so.
+- **`Client Code` → `Client Side Code Issue`** as a clean
+  mechanical mapping (only canonical option for client-side
+  code problems). No needs_review flag — mechanical means no
+  review needed.
 
-Both have audit_log timestamps from the system era (2026-05),
+Both had audit_log timestamps from the system era (2026-05),
 so they came through the admin edit dialog rather than CSV
-import. The needs_review flag will surface them to Lacey
-naturally in the new worklist UI.
+import. The CRO Code row will surface to Lacey via the worklist
+once normalization runs.
 
-### N2 — DC + Lacey: spacing normalization policy
+### N2 — RESOLVED: spacing normalization policy
 
 DC's docs use the spaced form `X / Y` (e.g., `Process /
 Communication`, `Client Data / Feed`, `CSS / Styling Issue`),
@@ -448,60 +453,34 @@ spacing-normalization to the §6 Jira change list:
 Taxonomy seed uses the doc spelling. Re-fetch the Jira
 option list after Lacey renames to confirm before seeding.
 
-Policy A is lower-risk (no Jira changes needed beyond §6's
-existing list). Policy B is more aesthetic but adds Jira-side
-work and a re-fetch step before the migration ships.
-**Recommend Policy A** for this batch; if DC wants Policy B,
-add the renames to §6 and re-run the audit's Jira-options
-fetch before I seed.
+**DC locked Policy A on 2026-05-20.** Taxonomy seed and all
+mapping targets use Jira's verbatim option strings, including
+the inconsistent `X/ Y` spacing. Edit dialog dropdown renders
+strings unmodified. qa-field-reference.md prose keeps human-
+readable spacing for user-facing copy, but its canonical lists
+are updated to match Jira verbatim in the docs-hub step of
+this batch.
 
-This affects the `CSS/ Styling Issue` row in Field 3
-(spacing-mismatch flag) and the `Process/Communication
-Issue` mapping in Field 1 (the no-space variant in audit
-is a casing difference, not pollution — but the canonical
-to map TO depends on which policy we pick).
+### N3 — RESOLVED: canonical-count inconsistencies in source docs
 
-### N3 — DC: canonical-count inconsistencies in source docs
+DC's call (per N3 reply 2026-05-20): source of truth is the
+re-fetched Jira state TODAY, post-changes. Counts reconciled:
 
-While populating, I noticed a few internal counting
-inconsistencies in DC's draft and §6 of the Option B
-directive. Not blocking my work; flagging for cleanup before
-shipping:
+- **Issue Category — 9** (was 11, removed
+  `Analytics/ Tracking`, `Design/ Visual`, AND
+  `Targeting/ Audience`; added `External Factor`. Original §6
+  removal list named "Incorrect Traffic Allocation" but that
+  was always in Issue Subtype not Category — actual third
+  removal was `Targeting/ Audience`).
+- **Issue Subtype — 38** (35 existing + 3 added; "29" / "26"
+  numbers in DC's draft and §6 were stale).
+- **Root Cause — 14** (10 existing + 5 added − 1 removed;
+  matches §6 math).
+- **Resolution Type — 9** (unchanged).
 
-- **Field 1 Issue Category** — section header says "10 after
-  cleanup" and the bullet list shows 10 items ✓. Matches §6
-  ("final 10"). Matches qa-field-reference.md (10 items in
-  the table). **OK.**
-
-- **Field 2 Root Cause** — section header says "13 after
-  cleanup" and the bullet list shows 14 (9 existing kept + 5
-  added). §6 says "final 13" (9 - 1 + 5 = 13 ✓ matches §6
-  math). qa-field-reference.md table has 14 entries (matches
-  the bullet list, not the header). Possibly the doc's header
-  "13" is the final count after the "Missing or
-  Miscommunicated Information" removal, while the bullet
-  list above accidentally still includes it (it's listed
-  under "Removed" but the math is off by one). **Recommend:**
-  DC reconciles to 13 or 14. The mapping I produced treats
-  the audit's `Missing or Miscommunicated Information` rows
-  as already-removed (mapping to `Missing Assets / Info`
-  with needs_review), consistent with §6.
-
-- **Field 3 Issue Subtype** — section header says "29 after
-  additions" and the bullet list itemizes 35 "Existing"
-  entries + 3 "Added" = 38. qa-field-reference.md tables
-  total 38 entries. §6 says "final 29" but lists 3 additions
-  with 0 removals (starting from a baseline of 35 in my
-  pre-change Jira fetch, that yields 38, not 29). Either
-  (a) the "29" / "26" labels are stale from an earlier draft
-  and the canonical count is actually 38, or (b) some
-  removals are implied but not listed in §6. **Recommend:**
-  DC clarifies. The mapping I produced doesn't depend on
-  this — Field 3 has zero drift in the data, so the
-  variant table is trivial. But the taxonomy seed count
-  has to match reality.
-
-- **Field 4 Resolution Type** — 9 in all sources ✓. **OK.**
+Migration 020 seed values match these counts exactly. The
+post-update Field 1 / Field 2 / Field 3 sections above show
+the correct canonical lists verbatim.
 
 ### N4 — Heads-up: `Browser Update` and friends won't appear in legacy audit data
 
@@ -535,4 +514,4 @@ mapping object that mirrors these tables). The script:
 
 ---
 
-*Last updated: 2026-05-20 | Variant tables populated by Claudette; open questions N1-N4 await DC + Lacey review*
+*Last updated: 2026-05-20 | N1-N4 resolved by DC + Lacey; canonical lists Jira-verbatim per Policy A; ready for normalize-quality-log-fields.ts*

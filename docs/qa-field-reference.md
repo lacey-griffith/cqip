@@ -122,15 +122,19 @@ across multiple open issues and drives alert escalation.
 Broad bucket describing what kind of problem this is. Use the
 category to triage; use Subtype to pinpoint.
 
+Canonical values below are Jira-verbatim per N2 Policy A (Batch
+005.28). Spacing reflects Jira's option strings exactly so the
+dashboard edit dialog and the Jira QA tab share the same option
+list literally (§13 rule 29).
+
 | Value | Meaning |
 |-------|---------|
 | **CRO Implementation** | Issues introduced by CRO-authored variation code, snippets, injected CSS, or DOM manipulation. The variation itself is the source. |
 | **Experiment Configuration** | Problems within the experiment platform setup (Convert, etc.) — targeting, audience, goals, activation conditions, snippet behavior. |
-| **Targeting / Audience** | Issues with audience definition, device/location targeting, cookie or session logic. The right variation showed to the wrong people, or vice versa. |
 | **Client Website Code** | Issues in the client's baseline site (CSS, JS, layout, backend) that interrupt CRO work or variation behavior. Granularity (frontend vs backend) lives in Subtype. |
-| **Client Data / Feed** | Inconsistent, incorrect, or unclean data provided by the client. Includes mismatched slugs, phone numbers, source-file discrepancies, low-quality assets. |
+| **Client Data/Feed** | Inconsistent, incorrect, or unclean data provided by the client. Includes mismatched slugs, phone numbers, source-file discrepancies, low-quality assets. |
 | **Third Party Tool** | Issues caused by a known vendor relationship — Convert, GA, a CDP, etc. A vendor we have a contact with and can engage. |
-| **Process / Communication** | Delays or errors from miscommunication, unclear handoffs, or workflow breakdowns. Mislabeled tasks, missing QA details, incorrect status movement. |
+| **Process/ Communication** | Delays or errors from miscommunication, unclear handoffs, or workflow breakdowns. Mislabeled tasks, missing QA details, incorrect status movement. |
 | **Experiment Concept** | The test's direction, functionality, or expectations changed after work began. Often paired with a "Requirement or Scope Change" root cause. |
 | **Missing Information / Access** | Required information, assets, instructions, or credentials weren't provided. Use the Subtype to specify what was missing. |
 | **External Factor** | Issues caused by uncontrollable environmental shifts — browser updates, network/CDN changes, OS updates. Distinct from Third Party Tool: no vendor relationship to engage. |
@@ -150,11 +154,11 @@ or Client Website Code typically)
 | Value | Meaning |
 |-------|---------|
 | Javascript Error | JS exception thrown, console error, broken behavior |
-| CSS / Styling Issue | Visual styles wrong, missing, or conflicting |
+| CSS/ Styling Issue | Visual styles wrong, missing, or conflicting |
 | Layout Broken | Page or component layout collapsed or shifted |
 | Element Not Loading | Expected element doesn't appear on the page |
 | Content Missing | Copy, image, or other content absent from rendered page |
-| Page Flash / Flicker | Visible flash of original content before variation applies |
+| Page Flash/ Flicker | Visible flash of original content before variation applies |
 | Variation Not Rendering | The variation code ran but its changes aren't visible |
 | Visual Overlap | Elements rendering on top of each other or misaligned |
 
@@ -178,8 +182,8 @@ or Client Website Code typically)
 |-------|---------|
 | Device Targeting Issue | Mobile/desktop/tablet targeting misfiring |
 | Location Targeting Issue | Geo-targeting includes or excludes wrong locations |
-| Mobile / Responsive Issue | Layout/behavior breaks on specific viewports or devices |
-| Cookie / Session Logic Issue | Session detection, cookie handling, or persistence broken |
+| Mobile/ Responsive Issue | Layout/behavior breaks on specific viewports or devices |
+| Cookie/ Session Logic Issue | Session detection, cookie handling, or persistence broken |
 
 **Integration & data symptoms**
 | Value | Meaning |
@@ -207,14 +211,14 @@ or Client Website Code typically)
 | Change not Communicated | A change happened upstream but wasn't relayed to team |
 | Incorrect Instructions | Provided instructions led to a different outcome than intended |
 | Missing Assets | Required creative, copy, or files weren't provided |
-| Missing Access / Credentials | Required logins, API keys, or access not granted |
+| Missing Access/ Credentials | Required logins, API keys, or access not granted |
 
 **Environmental symptoms** (where Category = External Factor)
 | Value | Meaning |
 |-------|---------|
 | Browser Update | A browser update broke something we depend on |
-| Network / CDN Issue | Transient network problem, CDN propagation lag, or routing issue |
-| OS or Device Update | A device OS update changed behavior we depend on |
+| Network/ CDN Issue | Transient network problem, CDN propagation lag, or routing issue |
+| OS or Device Updates | A device OS update changed behavior we depend on |
 
 ---
 
@@ -282,6 +286,8 @@ Use the same option list as Root Cause - Final.
 The confirmed root cause after investigation or resolution.
 This is what gets reported.
 
+Canonical values below are Jira-verbatim per N2 Policy A.
+
 | Value | Meaning |
 |-------|---------|
 | **CRO Code Error** | A bug in CRO-authored variation code (logic error, missing case, type bug). |
@@ -289,15 +295,15 @@ This is what gets reported.
 | **Process Gap** | The workflow / process itself had a flaw — missing step, unclear ownership, no QA checkpoint where one was needed. |
 | **QA Gap** | A QA step existed but failed to catch the issue — reviewer missed it, test was incomplete, edge case not covered. |
 | **Client Side Code Issue** | The client's baseline website code (HTML, CSS, JS, CMS, backend) caused the problem. |
-| **Client Data / Feed Issue** | The client-provided data was incorrect, incomplete, or malformed. |
+| **Client Data/ Feed Issue** | The client-provided data was incorrect, incomplete, or malformed. |
 | **Third Party Tool Change** | A known vendor (Convert, GA, etc.) changed their behavior. We have a relationship to engage. |
 | **Requirement or Scope Change** | Requirements changed after work began. The work was correct against the original spec. |
 | **Client Request** | The client explicitly asked for a change that introduced the issue or required rework. |
-| **Missing Assets / Info** | Required assets, copy, or instructions were never provided. Work couldn't proceed because something didn't exist. |
-| **Unclear / Conflicting Requirements** | Information WAS provided but was ambiguous, incomplete, or led to a different outcome than intended. |
-| **Late Assets / Info** | Information was provided eventually but past the point of usefulness — a timing/sequencing failure rather than a content failure. |
-| **External Factor / Environment Change** | Browser, OS, network, CDN, or other uncontrollable environmental shift. No vendor to engage. |
-| **Unknown / Needs Investigation** | Root cause not yet determined. Use this when investigation is genuinely incomplete — don't use as a default for unclear cases. |
+| **Missing Assets/ Info** | Required assets, copy, or instructions were never provided. Work couldn't proceed because something didn't exist. |
+| **Unclear/ Conflicting Requirements** | Information WAS provided but was ambiguous, incomplete, or led to a different outcome than intended. |
+| **Late Assets/ Info** | Information was provided eventually but past the point of usefulness — a timing/sequencing failure rather than a content failure. |
+| **External Factor/ Environment Change** | Browser, OS, network, CDN, or other uncontrollable environmental shift. No vendor to engage. |
+| **Unknown/ Needs Investigation** | Root cause not yet determined. Use this when investigation is genuinely incomplete — don't use as a default for unclear cases. |
 
 ---
 
@@ -417,4 +423,4 @@ https://chromewebstore.google.com/detail/gofullpage-full-page-scre/fdpohaocaechi
 
 ---
 
-*Last updated: 2026-05-20*
+*Last updated: 2026-05-20 | Batch 005.28 — canonical lists updated to Jira-verbatim per N2 Policy A; Targeting / Audience removed from Issue Category; OS or Device Update renamed to OS or Device Updates*
