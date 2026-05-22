@@ -1,0 +1,73 @@
+name: Deploy to Cloudflare Workers
+
+# Every push to main that touches application code triggers a
+# Cloudflare Workers deploy. Docs-only commits skip via paths-ignore.
+# Manual runs available from the Actions tab via workflow_dispatch.
+#
+# Required repo secrets (Settings → Secrets and variables → Actions):
+#   CLOUDFLARE_API_TOKEN          — token with Workers Scripts:Edit scope
+#   CLOUDFLARE_ACCOUNT_ID         — Cloudflare account ID (also visible
+#                                   in `npx wrangler whoami`)
+#   NEXT_PUBLIC_SUPABASE_URL      — inlined into the Next bundle AND
+#                                   into next.config.ts CSP at build time;
+#                                   missing → production CSP blocks
+#                                   Supabase REST + realtime calls
+#   NEXT_PUBLIC_SUPABASE_ANON_KEY — inlined into the Next bundle at
+#                                   build time
+#
+# Runtime-only secrets (JIRA_API_TOKEN, CQIP_SYNC_AUTH_KEY, etc.) live
+# on the Worker via `wrangler secret put` — NOT needed here.
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/**'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Build & deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build & deploy to Cloudflare Workers
+        run: npm run deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+
+      - name: Post-deploy smoke check
+        run: |
+          sleep 10
+          status=$(curl -fsS -o /dev/null -w "%{http_code}" https://cqip.l-hay.workers.dev/login)
+          echo "GET /login → $status"
+          if [ "$status" != "200" ]; then
+            echo "Smoke check failed: expected 200, got $status"
+            exit 1
+          fi

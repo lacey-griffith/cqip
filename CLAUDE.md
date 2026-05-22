@@ -63,7 +63,11 @@ Batch 005.29 (additive taxonomy seed — migration 021:
 Client Request issue category + 6 client-change-request
 issue subtypes; flagged unannounced "Base: New Account
 Support" Category placeholder for DC + Lacey review —
-2026-05-22).
+2026-05-22),
+Batch 005.31 (GitHub Actions auto-deploy workflow at
+.github/workflows/deploy.yml; closes the 2026-05-19 →
+2026-05-22 deploy gap where 3 batches landed in main but
+never reached production — 2026-05-22).
 All migrations 001-017 have run against production.
 Batch 004.4.5 produced a UX discovery plan for Coverage + Settings
 reorg (Batch 005 implementation). See §16 for full shipped log.
@@ -101,7 +105,7 @@ automates that entirely and adds analytics, alerts, and historical pattern detec
 | Backend + DB + Auth | Supabase | Edge Functions (webhook/sync logic), Postgres, Auth |
 | Hosting | Cloudflare Workers (via @opennextjs/cloudflare) | Deployed with `npm run deploy`. Workers + Assets — NOT Pages. Pages is incompatible with Next 16. |
 | Notifications | Microsoft Teams Incoming Webhooks | In-app alerts + Teams only. NO email. |
-| Source + CI/CD | GitHub + GitHub Actions | Auto-deploy on push to main |
+| Source + CI/CD | GitHub + GitHub Actions | Auto-deploy on push to main via `.github/workflows/deploy.yml` (Batch 005.31). Docs-only commits skip via paths-ignore. Manual `npm run deploy` still works for local testing. |
 
 **No separate backend server.** All serverless logic runs in Supabase Edge Functions.
 **No email alerts.** Teams + in-app only.
@@ -129,6 +133,12 @@ cqip/
 ├── wrangler.toml                # Cloudflare Workers config
 ├── open-next.config.ts          # @opennextjs/cloudflare adapter config
 ├── components.json              # shadcn config
+│
+├── .github/
+│   └── workflows/
+│       └── deploy.yml           # Batch 005.31: auto-deploy to Cloudflare Workers
+│                                  on push to main; docs-only commits skipped via
+│                                  paths-ignore. Also exposes workflow_dispatch.
 │
 ├── app/                         # Next.js App Router
 │   ├── layout.tsx
@@ -1499,6 +1509,31 @@ Resolved             → green-500
     dedicated audit_log row for that transition with
     `field_name='needs_review'`.
 
+30. **Every push to main that touches application code triggers an
+    automated Cloudflare Workers deploy** via
+    `.github/workflows/deploy.yml`. Docs-only commits skip the deploy
+    via the `paths-ignore` filter (`**.md`, `docs/**`, `.github/**`).
+    Manual `npm run deploy` is still available for local testing but
+    should not be the primary deploy path. **Why:** the 2026-05-19 →
+    2026-05-22 deploy gap — three batches landed in main (Phase 3 on
+    2026-05-20, Batch 005.28 on 2026-05-20, Batch 005.29 on
+    2026-05-22), none reached production — demonstrated that
+    "documented but unimplemented" auto-deploy is worse than "no
+    auto-deploy claim". The docs claim made the team trust deploys
+    were happening when they weren't; Lacey caught up production with
+    a manual `npm run deploy` on 2026-05-22 (commit ea12fb9). **How
+    to apply:** when adding a new branch deploy, staging environment,
+    or preview deploy, extend this workflow file rather than creating
+    parallel deploy paths. Required repo secrets:
+    `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`,
+    `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` —
+    the last two are inlined into the Next bundle AND into
+    `next.config.ts` CSP at build time, so missing them at build
+    time will produce a Worker that blocks Supabase calls via CSP.
+    Runtime-only secrets (`JIRA_API_TOKEN`, `CQIP_SYNC_AUTH_KEY`,
+    etc.) live on the Worker via `wrangler secret put` and are NOT
+    in the workflow env.
+
 ---
 
 ## 14. What Is NOT In Scope for V1
@@ -2095,6 +2130,16 @@ memory ceiling vs 25 MB image cap.
 ### Ops / deferred
 - [ ] **Radara Edge Function deploy** — code committed at
       `supabase/functions/radara-sweep/index.ts` but not deployed.
+- [ ] **Deploy smoke check via `/api/health`** — the Batch 005.31
+      auto-deploy workflow's post-deploy smoke check curls `/login`
+      (the cheapest known-200 URL on the Worker). A dedicated
+      `/api/health` endpoint that returns a structured body
+      (e.g. commit SHA from build-info + Supabase reachability ping)
+      would catch a wider class of "deploy succeeded but Worker is
+      wedged" failures than a static page fetch. Half-day batch:
+      `app/api/health/route.ts` + workflow swap from `/login` to
+      `/api/health`. Not gating any other work — the `/login` check
+      is good enough for v1 auto-deploy.
 
 ### Randy items (Cloudflare org-level — when he's back)
 - [ ] Cloudflare Workers Paid billing transfer (currently Lacey
@@ -2107,6 +2152,143 @@ memory ceiling vs 25 MB image cap.
 ---
 
 ## 16. Shipped Features Log
+
+### Batch 005.31 — GitHub Actions auto-deploy to Cloudflare Workers — 2026-05-22
+
+Closes the deploy gap that surfaced between 2026-05-19 and 2026-05-22.
+CLAUDE.md §2 has claimed "auto-deploy on push to main" since v1, but
+the workflow file never actually existed. Three batches shipped to
+main during the gap (Phase 3 on 2026-05-20, Batch 005.28 on 2026-05-20,
+Batch 005.29 earlier 2026-05-22) without reaching production. Lacey
+ran a manual `npm run deploy` 2026-05-22 to catch the Worker up to
+commit ea12fb9; this batch makes the deploy permanent so future
+commits don't drift again.
+
+- **New file `.github/workflows/deploy.yml`**:
+  - **Trigger:** `push` on `main` plus `workflow_dispatch` for
+    manual / first-run triggering from the Actions tab.
+  - **paths-ignore:** `**.md`, `docs/**`, `.github/**`. Docs-only
+    commits (e.g. CROSS_CLAUDE.md updates, CLAUDE.md edits without
+    a code change) skip the deploy entirely. The `.github/**` entry
+    means edits to the workflow file itself don't trigger a deploy —
+    use workflow_dispatch to test workflow changes.
+  - **Concurrency:** `group: deploy-${{ github.ref }}` with
+    `cancel-in-progress: true`. If a newer commit lands on main
+    while an older one is still building / deploying, the older run
+    is cancelled and the newer one supersedes it. Saves CI minutes
+    and prevents racing deploys.
+  - **Permissions:** `contents: read` at the workflow level
+    (least-privilege; no GITHUB_TOKEN write access needed for a
+    deploy-only workflow).
+  - **Steps:** `actions/checkout@v4` → `actions/setup-node@v4` with
+    `node-version: '20'` and `cache: 'npm'` → `npm ci` → `npm run
+    deploy` under env-injected secrets → smoke check curl against
+    `https://cqip.l-hay.workers.dev/login`.
+  - **Timeout:** 15 min. The repo's build + opennext + wrangler
+    deploy cycle is ~3-5 min today; 15 min is comfortable headroom
+    without leaving a stuck deploy hanging.
+- **Deploy command choice:** `npm run deploy` (the existing script:
+  `opennextjs-cloudflare build && wrangler deploy`) over
+  `cloudflare/wrangler-action`. Reason: the workflow ships the same
+  artifact via the same command path as Lacey's manual `npm run
+  deploy`, so a deploy that works locally works in CI and
+  vice-versa. wrangler-action would introduce a second deploy code
+  path with its own version-pinning surface — strictly more drift
+  risk than reusing the existing script. wrangler reads
+  `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` from env
+  automatically; no extra flags needed.
+- **Required repo secrets** (Lacey adds these per §4 below):
+  - `CLOUDFLARE_API_TOKEN` — Workers Scripts:Edit scope
+  - `CLOUDFLARE_ACCOUNT_ID` — Cloudflare account ID (also surfaced
+    by `npx wrangler whoami`)
+  - `NEXT_PUBLIC_SUPABASE_URL` — **build-time critical**
+  - `NEXT_PUBLIC_SUPABASE_ANON_KEY` — **build-time critical**
+- **Build-time env var discovery (worth keeping):** an audit of
+  `NEXT_PUBLIC_` usage at build time surfaced that
+  `next.config.ts:3` itself reads `NEXT_PUBLIC_SUPABASE_URL` to
+  compute the production CSP (`connect-src` + `img-src` allow the
+  Supabase origin). If the workflow ran `npm run deploy` without
+  that env set, the build would succeed BUT the resulting Worker
+  would ship a CSP missing the Supabase origin — the browser would
+  block every Supabase REST + realtime call from the production
+  bundle, with no obvious deploy-time error. So both Supabase vars
+  must be in the workflow env even though they're Supabase's public
+  anon-key (not "secret" in the traditional sense). The middleware
+  bundle, the client.ts bundle, and the server.ts bundle all also
+  consume these at build time. Runtime-only secrets
+  (`JIRA_API_TOKEN`, `CQIP_SYNC_AUTH_KEY`,
+  `CQIP_BRANDS_API_TOKEN`, `CQIP_DROUGHT_AUTH_KEY`,
+  `SUPABASE_SERVICE_ROLE_KEY`, `WEBHOOK_SECRET`, `JIRA_EMAIL`,
+  `JIRA_BASE_URL`, `TEAMS_WEBHOOK_URL`) stay on the Worker via
+  `wrangler secret put` and are deliberately NOT in the workflow
+  env — exposing them as repo secrets would expand the blast
+  radius for no reason.
+- **Smoke check:** `curl -fsS` against
+  `https://cqip.l-hay.workers.dev/login` after a 10s sleep. The
+  spec offered `/api/health` as preferred — no such endpoint exists
+  today. `/login` is the cheapest reliable 200 (returns the login
+  page for unauthenticated users; that's literally its purpose) and
+  catches the worst failure modes: Worker not deployed (DNS/404),
+  Worker deployed but module-level throw → 500, Worker routing
+  broken. The spec's fallback ("use a known-200 URL like the
+  /login page") is exactly this path. A dedicated `/api/health`
+  endpoint is filed as §15 Ops/deferred backlog — would catch
+  Supabase-reachability failures the `/login` check can't.
+- **CLAUDE.md §2** Tech Stack row updated — the row claim now
+  references the actual workflow file. Honest-rule fix: prior to
+  this batch, the row was aspirational; now it matches reality.
+- **CLAUDE.md §3** file tree extended with the `.github/workflows/`
+  directory.
+- **CLAUDE.md §13 rule 30** added documenting the deploy contract.
+  Spec phrasing locked: "every push to main that touches application
+  code triggers an automated Cloudflare Workers deploy." Captures
+  the build-time CSP gotcha so future-DC doesn't have to
+  rediscover it.
+- **CLAUDE.md §15 Ops/deferred** new line for the `/api/health`
+  follow-up (non-gating).
+- **Pre-merge verification** (this commit):
+  - `npm run build` green; TypeScript clean across changed files.
+  - YAML structurally valid (15 sanity checks pass: triggers,
+    paths-ignore, concurrency, permissions, steps, env vars,
+    smoke check).
+  - Lint: zero new findings (the YAML file is ignored by ESLint;
+    repo's pre-existing lint baseline at 1190 errors / 37732
+    warnings, dominated by the Deno edge functions in
+    `supabase/functions/`, is unchanged).
+- **Pre-deploy ops (Lacey, post-merge):**
+  1. Cloudflare dashboard → My Profile → API Tokens → Create
+     Token → "Edit Cloudflare Workers" template (or custom token
+     with Workers Scripts:Edit + Account:Read + User:Read).
+     Copy the token (only shown once).
+  2. Cloudflare dashboard → any zone → right sidebar → copy
+     Account ID. Or `npx wrangler whoami` from the cqip directory.
+  3. github.com/lacey-griffith/cqip → Settings → Secrets and
+     variables → Actions → New repository secret. Add all four:
+     `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`,
+     `NEXT_PUBLIC_SUPABASE_URL` (`https://hupklpjruveleaahufmw.supabase.co`),
+     `NEXT_PUBLIC_SUPABASE_ANON_KEY` (the anon key from `.env.local`).
+  4. Trigger the first run via Actions tab → Run workflow
+     manually (workflow_dispatch). Should complete in 3-5 min.
+  5. Hard-refresh https://cqip.l-hay.workers.dev/dashboard and
+     confirm latest changes are live.
+  6. Sanity-check the paths-ignore filter: a follow-up docs-only
+     commit (e.g. a CLAUDE.md edit) should NOT trigger the
+     workflow. Confirm in the Actions tab.
+- **What's deliberately NOT in this batch:**
+  - Staging environment / preview deploys — single-environment
+    setup; PR-level deploys would need a separate Worker and a
+    different routing scheme.
+  - Branch protection / required status checks — repo settings
+    change, not a code change. Lacey can wire "deploy must pass
+    before merge" from the GitHub repo settings if desired.
+  - Slack/Teams notification on deploy success/failure — not yet
+    wired; the workflow log + GitHub email notifications are the
+    signal for now.
+  - Rollback automation — manual rollback via `wrangler` rolling
+    back to a prior version remains the v1 plan.
+  - `/api/health` endpoint — see §15 Ops/deferred above.
+  - Build cache optimization beyond what `actions/setup-node`'s
+    npm cache provides.
 
 ### Batch 005.29 — Client Request category + 6 client-change-request subtypes — 2026-05-22
 
@@ -4265,4 +4447,4 @@ demo blocker.
 
 ---
 
-*Last updated: 2026-05-22 | CQIP v1.5 — Batch 005.29 shipped (Client Request category + 6 client-change-request subtypes; placeholder Category flagged for DC + Lacey review)*
+*Last updated: 2026-05-22 | CQIP v1.5 — Batch 005.31 shipped (GitHub Actions auto-deploy workflow; closes the documented-but-unimplemented gap that let 3 batches drift from main to production)*
