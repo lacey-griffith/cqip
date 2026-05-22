@@ -138,6 +138,7 @@ list literally (§13 rule 29).
 | **Experiment Concept** | The test's direction, functionality, or expectations changed after work began. Often paired with a "Requirement or Scope Change" root cause. |
 | **Missing Information / Access** | Required information, assets, instructions, or credentials weren't provided. Use the Subtype to specify what was missing. |
 | **External Factor** | Issues caused by uncontrollable environmental shifts — browser updates, network/CDN changes, OS updates. Distinct from Third Party Tool: no vendor relationship to engage. |
+| **Client Request** | The client explicitly asked for a change that introduced the issue or required rework. Use the Subtype to specify what kind of change (Copy, Image / Asset, Link / URL, Styling, Layout, Functionality). |
 
 ---
 
@@ -219,6 +220,16 @@ or Client Website Code typically)
 | Browser Update | A browser update broke something we depend on |
 | Network/ CDN Issue | Transient network problem, CDN propagation lag, or routing issue |
 | OS or Device Updates | A device OS update changed behavior we depend on |
+
+**Client change requests** (where Category = Client Request)
+| Value | Meaning |
+|-------|---------|
+| Copy Change Request | Client requested a change to text, copy, headlines, body content, or labels. |
+| Image / Asset Change Request | Client requested a change to images, logos, videos, or downloadable files. |
+| Link / URL Change Request | Client requested a change to internal or external links, anchor targets, or URL structures. |
+| Styling Change Request | Client requested a change to color, font, visual treatment, or spacing. |
+| Layout Change Request | Client requested a change to page structure, grid, or element positioning. |
+| Functionality Change Request | Client requested a change to behavior, interactions, form fields, or other functional elements. |
 
 ---
 
@@ -423,4 +434,4 @@ https://chromewebstore.google.com/detail/gofullpage-full-page-scre/fdpohaocaechi
 
 ---
 
-*Last updated: 2026-05-20 | Batch 005.28 — canonical lists updated to Jira-verbatim per N2 Policy A; Targeting / Audience removed from Issue Category; OS or Device Update renamed to OS or Device Updates*
+*Last updated: 2026-05-22 | Batch 005.29 — Client Request category + 6 client-change-request subtypes added (additive; no historical drift)*

@@ -58,7 +58,12 @@ scripts/normalize-quality-log-fields.ts, constrained
 multi-select edit dialog with server-side taxonomy
 validation, /dashboard/logs Needs-review worklist filter +
 row badge, /dashboard/docs/qa-fields docs hub page, R29 —
-2026-05-20).
+2026-05-20),
+Batch 005.29 (additive taxonomy seed — migration 021:
+Client Request issue category + 6 client-change-request
+issue subtypes; flagged unannounced "Base: New Account
+Support" Category placeholder for DC + Lacey review —
+2026-05-22).
 All migrations 001-017 have run against production.
 Batch 004.4.5 produced a UX discovery plan for Coverage + Settings
 reorg (Batch 005 implementation). See §16 for full shipped log.
@@ -249,10 +254,15 @@ cqip/
 │   │   ├── 015_alert_events_brand_id.sql # Batch 004.4: alert_events.brand_id +
 │   │   │                                    CHECK + indexes; audit_log target-shape
 │   │   │                                    CHECK extended to allow 'alert_event'
-│   │   └── 020_quality_log_taxonomy.sql # Batch 005.28: quality_log_taxonomy
-│   │                                        reference table (61 seed rows across
-│   │                                        4 fields, Jira-verbatim) +
-│   │                                        quality_logs.needs_review column
+│   │   ├── 020_quality_log_taxonomy.sql # Batch 005.28: quality_log_taxonomy
+│   │   │                                    reference table (61 seed rows across
+│   │   │                                    4 fields, Jira-verbatim) +
+│   │   │                                    quality_logs.needs_review column
+│   │   └── 021_client_request_taxonomy.sql # Batch 005.29: +8 taxonomy rows
+│   │                                        (1 Client Request category + 6
+│   │                                        client-change-request subtypes + 1
+│   │                                        unannounced "Base: New Account
+│   │                                        Support" category placeholder)
 │   └── functions/               # Deno Edge Functions
 │       ├── jira-webhook/index.ts       # Receives Jira webhook events. Two branches:
 │       │                                 (1) milestone branch — first-time entry into
@@ -2097,6 +2107,85 @@ memory ceiling vs 25 MB image cap.
 ---
 
 ## 16. Shipped Features Log
+
+### Batch 005.29 — Client Request category + 6 client-change-request subtypes — 2026-05-22
+
+Additive follow-on to Batch 005.28. Closes a usability gap surfaced
+post-005.28 ship: `Client Request` existed as a Root Cause canonical
+(customfield_12905) but had no Issue Category equivalent, so logs
+couldn't bucket "client asked for a change" at the top level. Six new
+Issue Subtypes capture what KIND of client change drove the rework
+(Copy / Image-or-Asset / Link-or-URL / Styling / Layout / Functionality).
+No schema change. No data migration. No historical normalization (these
+are net-new canonical values; no quality_log has ever held them).
+
+- **Migration 021** — `021_client_request_taxonomy.sql`:
+  - 7 directive-authorized rows: 1 Issue Category
+    (`Client Request`) + 6 Issue Subtypes
+    (`Copy Change Request`, `Image / Asset Change Request`,
+    `Link / URL Change Request`, `Styling Change Request`,
+    `Layout Change Request`, `Functionality Change Request`).
+  - Jira-verbatim strings per N2 Policy A — note the two
+    slash-containing subtypes carry spaces both sides of the
+    slash, matching Jira's actual option spelling unlike most
+    other slash-containing options in this taxonomy.
+  - Sort orders: Category 100/110, Subtype 390-440 (continues
+    the migration 020 sequence in steps of 10).
+  - Fully idempotent via `ON CONFLICT (field_name,
+    canonical_value) DO NOTHING` against migration 020's
+    unique index.
+- **`docs/qa-field-reference.md`**: new row in Issue Category
+  table for `Client Request`; new "Client change requests"
+  sub-group at the bottom of the Issue Subtype section with
+  the 6 new entries.
+- **`app/dashboard/docs/qa-fields/page.tsx`**: inline JSX
+  mirror updated identically (per the existing docs-hub
+  pattern; no MDX/runtime fetch).
+- **Verification**: `npm run build` green. Counts at deploy
+  time will be: issue_category=11 (10 directive + 1 placeholder
+  — see below), issue_subtype=44, root_cause=14,
+  resolution_type=9. Total 78 active taxonomy rows.
+
+**⚠ UNANNOUNCED ADDITION FLAGGED FOR DC + LACEY REVIEW**
+
+The 2026-05-22 re-fetch surfaced an 8th net-new option in Jira's
+Issue Category list that was NOT in this batch's directive:
+`Base: New Account Support` (position 10 in Jira's return, just
+before `Client Request` at position 11). Three options were on
+the table when this was discovered:
+
+1. **Skip seeding it.** Would leave it as drift — webhook writes
+   carrying this value would land in `quality_logs` but any
+   subsequent admin edit on the row would fail
+   `/api/logs/edit` validation (§13 r29 server-side check).
+2. **Seed with a confident description.** Would require guessing
+   what the option means without context. R11 prohibits that.
+3. **Seed with a clearly-marked placeholder description.**
+   Validates correctly; flags the row in-text for follow-up.
+
+Picked option 3. The row is seeded in migration 021 with
+`canonical_value = 'Base: New Account Support'`,
+`is_active = TRUE`, `sort_order = 100`, and a description that
+starts with `PLACEHOLDER —` and explicitly calls out the
+out-of-scope status. The dialog dropdown will show this
+description until DC + Lacey replace it via SQL UPDATE (the same
+admin-SQL workflow used to add taxonomy rows pre-5.29 UI).
+
+If the option was added by mistake and should be backed out:
+`UPDATE quality_log_taxonomy SET is_active = FALSE WHERE
+field_name = 'issue_category' AND canonical_value =
+'Base: New Account Support';` and remove from Jira. The
+deactivation path doesn't break existing rows; it just hides
+the option from new selections in the edit dialog.
+
+**What's deliberately NOT in this batch:**
+- "Other" catch-all subtype — explicitly rejected by DC; free-text
+  notes capture the rare cases.
+- Any change to the normalize-quality-log-fields.ts script — net-new
+  values don't have historical drift to normalize.
+- Admin UI for managing `quality_log_taxonomy` (still backlog 5.29).
+- Resolving the `Base: New Account Support` placeholder
+  description (DC + Lacey side, follow-up SQL).
 
 ### Batch 005.28 — Taxonomy hardening + normalization + docs hub — 2026-05-20
 
@@ -4176,4 +4265,4 @@ demo blocker.
 
 ---
 
-*Last updated: 2026-05-20 | CQIP v1.5 — Batch 005.28 shipped (taxonomy hardening + normalization + docs hub; R29 added)*
+*Last updated: 2026-05-22 | CQIP v1.5 — Batch 005.29 shipped (Client Request category + 6 client-change-request subtypes; placeholder Category flagged for DC + Lacey review)*

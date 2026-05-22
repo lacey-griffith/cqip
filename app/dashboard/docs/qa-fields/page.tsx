@@ -77,6 +77,7 @@ export default function QaFieldsPage() {
           <tr><td className="font-mono">Missing Information / Access</td><td>Required information, assets, instructions, or credentials weren&apos;t provided. Use the Subtype to specify what was missing.</td></tr>
           <tr><td className="font-mono">Experiment Concept</td><td>The test&apos;s direction, functionality, or expectations changed after work began. Often paired with a &ldquo;Requirement or Scope Change&rdquo; root cause.</td></tr>
           <tr><td className="font-mono">External Factor</td><td>Uncontrollable environmental shifts — browser updates, network/CDN changes, OS updates. Distinct from Third Party Tool: no vendor relationship to engage.</td></tr>
+          <tr><td className="font-mono">Client Request</td><td>The client explicitly asked for a change that introduced the issue or required rework. Use the Subtype to specify what kind of change (Copy, Image / Asset, Link / URL, Styling, Layout, Functionality).</td></tr>
         </Table>
 
         <h3>Issue Subtype (issue_subtype)</h3>
@@ -150,6 +151,16 @@ export default function QaFieldsPage() {
           <tr><td className="font-mono">Browser Update</td><td>A browser update broke something we depend on</td></tr>
           <tr><td className="font-mono">Network/ CDN Issue</td><td>Transient network problem, CDN propagation lag, or routing issue</td></tr>
           <tr><td className="font-mono">OS or Device Updates</td><td>A device OS update changed behavior we depend on</td></tr>
+        </Table>
+
+        <p className="mt-3 font-semibold text-[color:var(--f92-navy)]">Client change requests (Category = Client Request)</p>
+        <Table headers={['Value', 'Meaning']}>
+          <tr><td className="font-mono">Copy Change Request</td><td>Client requested a change to text, copy, headlines, body content, or labels.</td></tr>
+          <tr><td className="font-mono">Image / Asset Change Request</td><td>Client requested a change to images, logos, videos, or downloadable files.</td></tr>
+          <tr><td className="font-mono">Link / URL Change Request</td><td>Client requested a change to internal or external links, anchor targets, or URL structures.</td></tr>
+          <tr><td className="font-mono">Styling Change Request</td><td>Client requested a change to color, font, visual treatment, or spacing.</td></tr>
+          <tr><td className="font-mono">Layout Change Request</td><td>Client requested a change to page structure, grid, or element positioning.</td></tr>
+          <tr><td className="font-mono">Functionality Change Request</td><td>Client requested a change to behavior, interactions, form fields, or other functional elements.</td></tr>
         </Table>
 
         <h3>Reproducibility (reproducibility)</h3>
