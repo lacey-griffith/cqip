@@ -1,6 +1,6 @@
 # SPEC: Batch 009 — SharePoint Integration
 
-**Status:** DESIGN locked 2026-05-13. SHIP gated on Azure prereqs (Owner reclaim → client secret rotation).
+**Status:** DESIGN locked 2026-05-13. Build path clear — Azure setup re-verified 2026-05-26 (admin consent + per-site CRO grant already in place).
 **Owner:** DC (Dashboard backend).
 **Consumer:** AC (Forge consumer, Phase 2).
 **Companion docs:** CLAUDE.md §14 + §15 (Batch 009 entry), CROSS_CLAUDE.md §3 (`/api/sharepoint/*` contract surface), DC §13 rules 21 + 27.
@@ -226,14 +226,19 @@ Two distinct secrets, **not shared**:
 
 ---
 
-## 9. Prerequisites (gating SHIP, not DESIGN)
+## 9. Prerequisites
 
-Both Lacey-side, both already tracked in CLAUDE.md §15 and CROSS_CLAUDE.md §4:
+**Verified 2026-05-26.** Lacey ran end-to-end Microsoft Graph curl against the CRO SharePoint site:
 
-1. **Reclaim Owner access** on Azure app "CQIP Dashboard - SharePoint Integration" (`client_id 6aa464c1-4eb9-4d94-b087-6eebe4fa8cb6`).
-2. **Rotate Azure client secret** (compromised-by-default since 2026-05-02/03 verification screenshots; sequenced behind Owner reclaim).
+| Operation | Endpoint | Result |
+|---|---|---|
+| Token | `POST /{tenant}/oauth2/v2.0/token` | 200 |
+| Site metadata | `GET /sites/fusion92.sharepoint.com:/sites/CRO` | 200 with full site object |
+| Drive enumeration | `GET /sites/{site-id}/drive/root/children` | 200 with full folder + file listing |
 
-Without (1), DC can't grant `Sites.Selected` permission. Without (2), the secret in `wrangler secret put` is the same one visible in screenshots.
+Admin consent on `Sites.Selected` and the per-site CRO grant are both already in place (the app's `selectedsites` count returned 1, matching the design). No outstanding Azure access work; the current `AZURE_CLIENT_SECRET` is functional for all three operations this batch needs.
+
+**Hygiene follow-up (non-blocking):** the Azure client secret was visible in 2026-05-02/03 verification screenshots and in the 2026-05-26 verification curl. Rotation is Carl-executable (Worker-only per §7) and tracked in CLAUDE.md §15 / CROSS_CLAUDE.md §5 as hygiene-deferred, not as a SHIP gate.
 
 ---
 
@@ -268,7 +273,7 @@ lib/api/
 ```
 CQIP_SHAREPOINT_API_TOKEN   # AC ↔ Worker bearer
 AZURE_CLIENT_ID             # From Azure app registration
-AZURE_CLIENT_SECRET         # Rotated post-Owner-reclaim
+AZURE_CLIENT_SECRET         # Current secret functional (verified 2026-05-26); hygiene rotation target week of 2026-06-01
 AZURE_TENANT_ID             # Fusion92 tenant
 SHAREPOINT_SITE_HOSTNAME    # e.g. "fusion92.sharepoint.com"
 SHAREPOINT_SITE_PATH        # e.g. "/sites/CRO"
@@ -283,7 +288,7 @@ SHAREPOINT_SITE_PATH        # e.g. "/sites/CRO"
 - Unit: folder filter (ignores assets/, ignores bugs/, identifies single xlsx, handles 0/2+ xlsx).
 - Unit: xlsx parser (skip rows 1-3, stop at empty Col A, null local_url handling).
 - Unit: error envelope shape for each error code.
-- Integration: live-Azure smoke test against one known good NBLYCRO ticket folder, post-Owner-reclaim. NOT in CI — manual step on the SHIP commit.
+- Integration: live-Azure smoke test against one known good NBLYCRO ticket folder. NOT in CI — manual step on the SHIP commit.
 
 ---
 
@@ -303,10 +308,11 @@ CROSS_CLAUDE.md §3 also gets updated: `/api/sharepoint/*` moves from PLANNED to
 
 ## 12. Open questions for SHIP-day (not blocking design)
 
-- Does the Azure app's `Sites.Selected` grant need per-site admin consent through SharePoint admin, or just Azure admin consent? (Likely both. Verify post-Owner-reclaim.)
 - Site URL hardcoded as env var (`SHAREPOINT_SITE_HOSTNAME` + `SHAREPOINT_SITE_PATH`) for v1. Multi-site support would mean accepting the host+path in the request URL and resolving site-id dynamically per call. Not needed day-one; flag if AC's Phase 2 spec ever lands a second site.
 - Worker memory ceiling for the 25 MB image cap — verify against Cloudflare Workers limits when implementation starts. If the actual ceiling is lower, reduce cap.
 
+(Resolved 2026-05-26: SharePoint admin consent + Azure admin consent on `Sites.Selected` both already granted; per-site CRO grant in place. No follow-up needed.)
+
 ---
 
-*Draft 2026-05-13 | Design session DC + AC + Lacey | Locked: scope (read-only), Graph scope (Sites.Selected), endpoint shape (3 routes), sync semantics (structured + 60s cache), failure (fresh token, 401→502, atomic rotation) | Gated on Azure Owner reclaim + secret rotation*
+*Draft 2026-05-13 | Updated 2026-05-26 (§9 Prerequisites + status header reflect Azure re-verification — admin consent already granted; SHIP gate dissolved) | Design session DC + AC + Lacey | Locked: scope (read-only), Graph scope (Sites.Selected), endpoint shape (3 routes), sync semantics (structured + 60s cache), failure (fresh token, 401→502, atomic rotation) | Build path clear*

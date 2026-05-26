@@ -67,7 +67,12 @@ Support" Category placeholder for DC + Lacey review —
 Batch 005.31 (GitHub Actions auto-deploy workflow at
 .github/workflows/deploy.yml; closes the 2026-05-19 →
 2026-05-22 deploy gap where 3 batches landed in main but
-never reached production — 2026-05-22).
+never reached production — 2026-05-22),
+Batch 005.31a (hotfix: pass SUPABASE_SERVICE_ROLE_KEY to the
+GH Actions build step so admin route modules can import
+supabaseAdmin at module-eval during page-data collection;
+deploy.yml header rewrite + §13 r31 on paths-ignore /
+workflow_dispatch — 2026-05-26).
 All migrations 001-017 have run against production.
 Batch 004.4.5 produced a UX discovery plan for Coverage + Settings
 reorg (Batch 005 implementation). See §16 for full shipped log.
@@ -1534,6 +1539,48 @@ Resolved             → green-500
     etc.) live on the Worker via `wrangler secret put` and are NOT
     in the workflow env.
 
+31. **GitHub Actions workflow edits do not trigger themselves.**
+    `.github/workflows/deploy.yml` carries
+    `paths-ignore: ['**.md', 'docs/**', '.github/**']`, so commits
+    that only touch the workflow file are ignored as a trigger.
+    Empty commits hit the same path: they touch zero paths and are
+    treated as fully-ignored. **Why:** the paths-ignore filter is
+    correct for protecting prod from docs-only churn, but it has
+    the side-effect that a workflow fix won't deploy itself —
+    Batch 005.31a's first manual run was needed precisely because
+    the prior workflow commit didn't auto-trigger. **How to apply:**
+    after editing `deploy.yml`, manually re-run from the Actions
+    tab via workflow_dispatch (the workflow exposes this trigger
+    for exactly this reason). Same applies any time you need a
+    deploy without a code change — there is no "deploy current
+    main" button other than workflow_dispatch.
+
+32. **Long-running blockers must be re-verified before being
+    treated as still-blocking.** If a §15 item has been "pending
+    external action" or "gated on X" for more than 7 days, run a
+    5-minute reality-check before planning around it the next
+    time — curl the endpoint, query the system, confirm the gate
+    is still real. **Why:** Batch 009 was treated as "Azure
+    prereqs blocked" for 23 days (2026-05-03 → 2026-05-26) when
+    the prereqs had actually been granted before the original
+    2026-05-02 Postman verification. The blocker was inherited
+    from an early misread and never re-tested. A 5-min Graph
+    curl on day 8 would have caught it; instead the priority
+    order and three docs surfaces all carried a phantom gate
+    that delayed scoping decisions. **How to apply:** when a §15
+    "gated on" item resurfaces in conversation past day 7,
+    verify before re-planning. Recordable verifications
+    (curl + status code, query + count, screenshot of an admin
+    panel) beat memory-of-prior-state. If verification flips
+    the state, update §15 + the relevant CROSS_CLAUDE.md
+    section (§4 contract surfaces or §5 pending rotations) +
+    any spec doc that propagated the gate, atomically, per §13
+    rule 23. The
+    23-day Azure phantom and the 7-day drought-evaluator silent
+    failure (2026-05-01 → 2026-05-07, see §13 rule 27) are both
+    examples of the same failure mode: confidence in a stale
+    state outlasting the state's actual reality.
+
 ---
 
 ## 14. What Is NOT In Scope for V1
@@ -1559,13 +1606,15 @@ Resolved             → green-500
   SharePoint Integration" (client_id
   6aa464c1-4eb9-4d94-b087-6eebe4fa8cb6) provisioned and
   Postman-verified 2026-05-02 / 2026-05-03 against the CRO
-  SharePoint site. Microsoft Graph reachability confirmed.
-  Batch 009 DESIGN locked 2026-05-13 — see
-  `docs/batch-009-sharepoint-spec.md` (read-only proxy,
-  three GET routes under `/api/sharepoint/*`, `Sites.Selected`
-  Graph scope, structured response + 60s per-call cache,
-  fresh Graph token per call). SHIP gated on two Azure
-  follow-ups — see §15 "Awaiting external action".
+  SharePoint site. End-to-end Graph re-verified 2026-05-26
+  (token 200, site metadata 200, drive children 200) —
+  admin consent on `Sites.Selected` and per-site CRO grant
+  both already in place. Batch 009 DESIGN locked 2026-05-13
+  — see `docs/batch-009-sharepoint-spec.md` (read-only
+  proxy, three GET routes under `/api/sharepoint/*`,
+  `Sites.Selected` Graph scope, structured response + 60s
+  per-call cache, fresh Graph token per call). No
+  outstanding Azure access work; build path clear.
 
 ### Identified for v1.5 (post-v1)
 - **Multi-client readiness** — Batch 004.99 discovery shipped
@@ -1604,14 +1653,14 @@ Batch 004.10 UX polish on 2026-05-01.)
       Prerequisites tracked under "Pending rotations" below.
 
 **Pending rotations (live, both sides)**
-- [ ] **Reclaim Owner access on Azure app** — "CQIP Dashboard
-      - SharePoint Integration" (client_id
-      6aa464c1-4eb9-4d94-b087-6eebe4fa8cb6). Gates the Azure
-      secret rotation below. Lacey-side Azure portal task.
-- [ ] **Rotate Azure client secret** — Current secret was
-      visible in 2026-05-02/03 verification screenshots and
-      is compromised-by-default until rotated. Sequenced
-      behind Owner access reclaim above.
+- [ ] **Rotate Azure client secret** — Hygiene rotation.
+      Current secret was visible in 2026-05-02/03 verification
+      screenshots and in the 2026-05-26 verification curl.
+      Carl-executable (Worker-only rotation per
+      `docs/batch-009-sharepoint-spec.md` §7). NOT blocking
+      Batch 009 build — the current value is functional and
+      admin consent is in place. Rotation is hygiene per
+      §13 rule 27 (secret rotation atomicity).
 - [ ] **Rotate CQIP_BRANDS_API_TOKEN** — In circulation since
       brands API initial setup (Batch 005.13-005.14 timeframe).
       Never rotated. Not known to be compromised — rotation
@@ -2039,8 +2088,8 @@ idempotency, and rollback semantics.
 
 ### Batch 009 — SharePoint integration
 **Status:** DESIGN locked 2026-05-13. Full spec at
-`docs/batch-009-sharepoint-spec.md`. SHIP gated on Azure
-prereqs (Owner reclaim → client secret rotation).
+`docs/batch-009-sharepoint-spec.md`. Build path clear —
+no outstanding Azure access work.
 
 Wires the CQIP Dashboard to the CRO SharePoint site via
 Microsoft Graph. Day-one consumer is AC's Phase 2 workflow
@@ -2053,12 +2102,12 @@ Dashboard - SharePoint Integration" (client_id
 Postman-verified. Microsoft Graph reachability confirmed
 end-to-end against the CRO SharePoint site.
 
-**Prerequisites (Azure side, Lacey-owned — gating SHIP, not
-DESIGN):**
-- [ ] Reclaim Owner access on Azure app (see §15
-      "Awaiting external action")
-- [ ] Rotate client secret (compromised-by-default; sequenced
-      behind Owner access)
+**Azure setup (verified 2026-05-26):** Admin consent on
+`Sites.Selected` and per-site CRO grant both already in
+place. Three-operation end-to-end test passed (token,
+site metadata, drive enumeration). No outstanding Azure
+access work; current `AZURE_CLIENT_SECRET` is functional.
+Secret rotation is hygiene-deferred per CROSS_CLAUDE §5.
 
 **Locked decisions (DESIGN session 2026-05-13):**
 1. **v1 write scope:** read-only. Matches §13 rule 5
@@ -2111,9 +2160,9 @@ package; no new build-time deps.
 `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`,
 `SHAREPOINT_SITE_HOSTNAME`, `SHAREPOINT_SITE_PATH`.
 
-**Priority order (updated 2026-05-15):**
+**Priority order (updated 2026-05-26):**
 5.19 (done) → Batch 005.25 (done 2026-05-13) → Batch 009
-(next, SHIP-gated on Azure prereqs) → Batch 006 →
+(next, build path clear) → Batch 006 →
 Batch 010 → Batch 011 → Batch 007 → Batch 008.
 
 SharePoint sits ahead of Boards because (a) the integration
@@ -2123,9 +2172,9 @@ workflow currently blocked on SharePoint manual access, and
 first regardless.
 
 **Open questions for SHIP-day (not blocking DESIGN — see
-spec §12):** SharePoint admin consent vs Azure admin consent
-on `Sites.Selected`; multi-site support deferral; Worker
-memory ceiling vs 25 MB image cap.
+spec §12):** multi-site support deferral; Worker memory
+ceiling vs 25 MB image cap. (Admin-consent question
+resolved 2026-05-26 — both layers already granted.)
 
 ### Ops / deferred
 - [ ] **Radara Edge Function deploy** — code committed at
@@ -2152,6 +2201,135 @@ memory ceiling vs 25 MB image cap.
 ---
 
 ## 16. Shipped Features Log
+
+### Azure prereqs verification + docs cleanup — 2026-05-26
+
+Docs-only update bundled atomically with Batch 005.31a. Closes
+the long-standing "Azure prereqs gate Batch 009" framing that
+had carried in CLAUDE.md + CROSS_CLAUDE.md + the Batch 009
+spec since 2026-05-03 (23 days).
+
+- **Reality check.** Lacey ran end-to-end Microsoft Graph
+  verification against the CRO SharePoint site:
+  - `POST /{tenant}/oauth2/v2.0/token` → 200
+  - `GET /sites/fusion92.sharepoint.com:/sites/CRO` → 200 with
+    full site metadata
+  - `GET /sites/{site-id}/drive/root/children` → 200 with full
+    folder + file listing
+  All three operations Batch 009 needs are working against the
+  current `AZURE_CLIENT_SECRET`. The GET on the app's
+  `selectedsites` returned 1, confirming the per-site
+  `Sites.Selected` grant on the CRO site is in place — admin
+  consent was granted before the original 2026-05-02 Postman
+  work (likely by Carl) and has been silently functional ever
+  since.
+- **The phantom gate.** "SHIP gated on Azure Owner reclaim →
+  client secret rotation" entered docs on 2026-05-03 based on
+  the assumption that Owner reclaim was required before
+  per-site admin consent could be granted. That assumption was
+  never re-tested. By 2026-05-26 the framing had propagated to:
+  - CLAUDE.md §14 (Planned but not yet shipped)
+  - CLAUDE.md §15 "Awaiting external action" (2 items)
+  - CLAUDE.md §15 Batch 009 entry (Prerequisites block,
+    Priority order line, Open questions)
+  - CROSS_CLAUDE.md §5 — formerly §4 before the 2026-05-26
+    restructure (2 items)
+  - `docs/batch-009-sharepoint-spec.md` (status header,
+    §9 Prerequisites, footer)
+- **Docs aligned to reality, same commit:**
+  - CLAUDE.md §14 SharePoint bullet: added 2026-05-26
+    verification note; removed "SHIP gated" line.
+  - CLAUDE.md §15 "Pending rotations": Owner reclaim bullet
+    deleted; secret rotation reworded as Carl-executable
+    hygiene per spec §7, explicitly non-blocking.
+  - CLAUDE.md §15 Batch 009: status line updated; old
+    "Prerequisites (Azure side)" block replaced with
+    "Azure setup (verified 2026-05-26)" summary.
+  - CLAUDE.md §15 Priority order: timestamp bumped to
+    2026-05-26; Batch 009 annotated "build path clear."
+  - CLAUDE.md §15 Open questions: admin-consent question
+    marked resolved.
+  - CROSS_CLAUDE.md restructured (provided by Lacey): the
+    legacy §4 Pending Rotations section is now §5; a new
+    §2 CC-namespace (CC1-CC11) absorbs the seven handoff
+    conventions plus four new cross-Claude rules (CC8
+    stale-status re-verification, CC9 last-verified
+    timestamps, CC10 blocker reality-check, CC11 status-
+    flip §6 entries). Owner reclaim bullet deleted from
+    §5; Azure secret rotation reworded as Carl-executable
+    hygiene; CQIP_BRANDS_API_TOKEN bullet unchanged. New
+    §7 (formerly §6) event log entry covers the
+    verification for AC's benefit.
+  - `docs/batch-009-sharepoint-spec.md`: status header
+    cleaned; §9 Prerequisites replaced with verification
+    evidence; footer cleaned.
+- **Rule 32 added** (CLAUDE.md §13). Codifies that §15 items
+  carrying a "gated on X" / "pending external action" tag
+  past day 7 must be re-verified before being treated as
+  still-blocking. Names this incident (23 days) and the
+  2026-05-07 drought-evaluator silent failure (7 days) as
+  the two reference examples of the failure mode.
+- **What did NOT change.** The Azure client secret is still
+  in circulation as a hygiene rotation candidate — its
+  rotation is Worker-only (no Forge surface today; SharePoint
+  proxy isn't shipped, so Forge doesn't hold the value).
+  Carl-executable. The CQIP_BRANDS_API_TOKEN hygiene rotation
+  is also untouched — different surface, different blast
+  radius, still queued. No code change. No migration. No
+  CLAUDE.md version bump (no structural change; per §13
+  rule 23 the doc-update is the change).
+
+**Lesson worth keeping (codified as §13 rule 32):** an
+external blocker tagged at moment T may be resolved by
+moment T+1d without anyone updating the docs. The longer
+the gap, the more likely the gate is phantom. The fix is
+cheap — a few minutes of verification — but only happens if
+the rule says "verify on re-encounter." Memory of the
+original blocker is a poor proxy for the current state of
+the blocker.
+
+### Batch 005.31a — Auto-deploy build-secret hotfix — 2026-05-26
+
+Hotfix to Batch 005.31. Pass `SUPABASE_SERVICE_ROLE_KEY` to the
+GitHub Actions build step. The first `workflow_dispatch` run of the
+new deploy workflow failed at "Collecting page data" because admin
+route modules eagerly import `supabaseAdmin` from
+`lib/supabase/server.ts`, which throws on missing service-role key
+at module-eval time. The Worker runtime already had the secret via
+`wrangler secret put` (TODO: lacey to verify via `wrangler secret
+list` — `needs_review` until confirmed); this batch closes the
+build-time gap so the GH Actions run can complete the
+`opennextjs-cloudflare build` step. See `deploy.yml` header
+comment for the now-complete secrets list.
+
+- **GH Actions secret added:** `SUPABASE_SERVICE_ROLE_KEY` added
+  to repo Actions secrets (Settings → Secrets and variables →
+  Actions).
+- **`.github/workflows/deploy.yml`:** env block on the
+  build/deploy step now passes `SUPABASE_SERVICE_ROLE_KEY`
+  through from the repo secret. Header comment rewritten — the
+  "Required repo secrets" list now includes service-role with an
+  explicit note that it is needed at BOTH build (page-data
+  collection) AND runtime (Worker), correcting the misleading
+  prior phrasing that bucketed it under "Runtime-only secrets".
+- **CLAUDE.md §13 rule 31** added: GitHub Actions workflow edits
+  do not trigger themselves (paths-ignore covers `.github/**`).
+  After editing `deploy.yml`, use workflow_dispatch from the
+  Actions tab to test. Captures the gotcha that surfaced on the
+  005.31 first-run debug loop.
+- **Why this is a separate batch:** 005.31's spec listed only 4
+  build-time secrets. Adding a fifth wasn't a code regression; it
+  was an audit gap surfaced only when the workflow actually ran.
+  Split out so the fix has its own commit and §16 entry, and so
+  the build-time-vs-runtime distinction is documented once in a
+  place future-DC can find it.
+
+**Why not bundled into 005.31:** 005.31 had already shipped to
+`main` and the workflow had successfully validated everything
+except the page-data collection step (which only fires under a
+real build, not under `npm run build` locally with `.env.local`
+populated). The build-time gap was a separate audit defect, not a
+regression of the 005.31 design.
 
 ### Batch 005.31 — GitHub Actions auto-deploy to Cloudflare Workers — 2026-05-22
 
@@ -4447,4 +4625,4 @@ demo blocker.
 
 ---
 
-*Last updated: 2026-05-22 | CQIP v1.5 — Batch 005.31 shipped (GitHub Actions auto-deploy workflow; closes the documented-but-unimplemented gap that let 3 batches drift from main to production)*
+*Last updated: 2026-05-26 | CQIP v1.5 — Batch 005.31a + Azure prereqs verification + §13 rule 32 shipped same-day. 005.31a: SUPABASE_SERVICE_ROLE_KEY added to GH Actions build env so admin route module-eval imports succeed during page-data collection; §13 r31 documents workflow_dispatch as the only path to test workflow edits given paths-ignore: .github/**. Azure verification: end-to-end Graph curl (token/site/drive children all 200) confirmed admin consent on Sites.Selected + per-site CRO grant were already in place; "SHIP gated on Azure prereqs" framing removed from 4 doc surfaces (CLAUDE.md §14 + §15, CROSS_CLAUDE.md §5 — restructured same-day to a CC-namespace + renumbered sections — and batch-009 spec) as a phantom blocker that had carried 23 days. §13 r32: long-running blockers (>7d) must be re-verified before being treated as still-blocking — names the Azure phantom + 2026-05-07 drought silent failure as reference examples.*

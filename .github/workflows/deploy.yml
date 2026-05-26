@@ -5,19 +5,19 @@ name: Deploy to Cloudflare Workers
 # Manual runs available from the Actions tab via workflow_dispatch.
 #
 # Required repo secrets (Settings → Secrets and variables → Actions):
-#   CLOUDFLARE_API_TOKEN          — token with Workers Scripts:Edit scope
-#   CLOUDFLARE_ACCOUNT_ID         — Cloudflare account ID (also visible
-#                                   in `npx wrangler whoami`)
-#   NEXT_PUBLIC_SUPABASE_URL      — inlined into the Next bundle AND
-#                                   into next.config.ts CSP at build time;
-#                                   missing → production CSP blocks
-#                                   Supabase REST + realtime calls
-#   NEXT_PUBLIC_SUPABASE_ANON_KEY — inlined into the Next bundle at
-#                                   build time
-#   SUPABASE_SERVICE_ROLE_KEY     — used by the Worker to sync JIRA
+#   CLOUDFLARE_API_TOKEN          — Workers Scripts:Edit scope
+#   CLOUDFLARE_ACCOUNT_ID         — also visible in `npx wrangler whoami`
+#   NEXT_PUBLIC_SUPABASE_URL      — inlined into Next bundle + CSP at build
+#   NEXT_PUBLIC_SUPABASE_ANON_KEY — inlined into Next bundle at build
+#   SUPABASE_SERVICE_ROLE_KEY     — required at build (admin route modules
+#                                   import supabaseAdmin at module-eval
+#                                   time during page-data collection) AND
+#                                   at runtime on the Worker
+#                                   (`wrangler secret put`)
 #
-# Runtime-only secrets (JIRA_API_TOKEN, CQIP_SYNC_AUTH_KEY, etc.) live
-# on the Worker via `wrangler secret put` — NOT needed here.
+# Runtime-only Worker secrets (NOT needed in this workflow):
+#   JIRA_API_TOKEN, CQIP_SYNC_AUTH_KEY, CQIP_BRANDS_API_TOKEN,
+#   CQIP_DROUGHT_AUTH_KEY — set via `wrangler secret put`.
 
 on:
   push:
