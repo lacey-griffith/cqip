@@ -112,6 +112,38 @@ Entry shape: date heading · 1-3 paragraph summary · pointer to
 spec/commit. Most-recent-first. Atomic with the triggering commit
 when feasible; follow-up commit acceptable if not.
 
+**R19** Stale-status re-verification. Any CROSS_CLAUDE §3 contract
+surface or §4 pending rotation in a non-terminal state for more
+than 14 days must be re-verified before the next planning
+decision that depends on its status. "Re-verification" means a
+real end-to-end check (curl, smoke test, API call) — not a
+re-read of the doc. Add results to the entry's "Last verified"
+field. Rationale: established 2026-05-26 after Batch 009 was
+treated as Azure-blocked for 23 days when the prereqs had
+actually been met.
+
+**R20** Last-verified timestamps on status-bearing entries.
+Every CROSS_CLAUDE §3 and §4 entry that DC owns carries a
+"Last verified" date. Status without a timestamp is presumed
+stale. When DC reads a status entry and acts on it, DC is
+responsible for confirming the timestamp is fresh enough for
+the decision being made. Applies to whichever Claude owns the
+entry — if AC ever publishes a §3 contract surface, this rule
+applies to AC for that entry.
+
+**R21** Blocker reality-check before planning around it. When
+a §15 / §4 / §6 item has been "blocked on external action" for
+more than 7 days, run a 5-minute reality check before treating
+the block as still real. The check goes in the §6 log
+regardless of outcome (block confirmed OR block dissolved).
+Companion rule to R19 — R19 governs status entries broadly;
+R21 governs blockers specifically.
+
 ---
 
-*Last updated: 2026-05-15 | R18 added (§6-entry trigger criteria)*
+*Last updated: 2026-05-26 | R19/R20/R21 added (stale-status
+re-verification · last-verified timestamps · blocker reality-
+check) — three rules originally proposed for the CC-namespace
+moved DC-local per AC namespace-fit review 2026-05-26. See
+CROSS_CLAUDE.md §6 entry "2026-05-26 — Batch 009 Azure prereqs
+verified + CC-namespace established" for context.*

@@ -4,13 +4,13 @@ Shared cross-project state for the two Claude sessions working
 across the CQIP program: DC (Dashboard, this repo) and AC
 (Forge consumer, cqip-qa-automation repo).
 
-**Source of truth for:** roster, handoff conventions, cross-Claude
-rules, contract surfaces, active cross-project rotations,
-cross-project decisions, append-only event log.
+**Source of truth for:** roster, cross-Claude rules, contract
+surfaces, active cross-project rotations, cross-project priority,
+append-only event log.
 
 **NOT source of truth for:** project-specific state (lives in
-each project's CLAUDE.md), behavior rules (live in each project's
-CLAUDE_RULES.md).
+each project's CLAUDE.md), behavior rules specific to one
+project (live in that project's CLAUDE_RULES.md).
 
 **Read at:** session start, by both DC and AC. Fetch from
 `https://github.com/lacey-griffith/cqip/blob/main/docs/CROSS_CLAUDE.md`.
@@ -49,14 +49,20 @@ Behavioral rules that apply to cross-project coordination. Separate
 from each project's CLAUDE_RULES.md, which governs project-local
 behavior. Both DC and AC follow these.
 
+The CC-namespace is intentionally small. Rules with asymmetric
+load-bearing (one Claude's failure mode, not both) live in that
+Claude's local CLAUDE_RULES.md, not here.
+
+### 2.1 The rules
+
 **CC1. Project name disambiguation.** AC = Forge-side, DC =
-Dashboard-side. "CQIP Claude" is too ambiguous — both projects share
-the CQIP name.
+Dashboard-side. "CQIP Claude" is too ambiguous — both projects
+share the CQIP name.
 
 **CC2. Scope context with relays.** Relay questions with enough
 scope context for the receiving Claude to verify the question
 was addressed to the right surface. Don't assume the receiver
-remembers what was last week's context.
+remembers what last week's context was.
 
 **CC3. Persistent state lives in docs, not chat memory.** If a
 cross-project agreement emerges mid-session, flag it for
@@ -84,53 +90,17 @@ doesn't map cleanly to the receiver's doc shape, push back
 and propose a smaller / different mirror. Source-of-truth
 lives where it natively belongs.
 
-**CC8. Stale-status re-verification.** Any §3 contract surface
-or §4 pending rotation in a non-terminal state for more than
-14 days must be re-verified before the next planning decision
-that depends on its status. "Re-verification" means a real
-end-to-end check (curl, smoke test, API call) — not a re-read
-of the doc. Add results to "Last verified" field on the entry.
-*Rationale: established 2026-05-26 after Batch 009 was treated
-as Azure-blocked for 23 days when the prereqs had actually
-been met before 2026-05-02.*
-
-**CC9. Last-verified timestamps on status-bearing entries.**
-Every §3 and §4 entry carries a "Last verified" date and a
-"Re-verify if" trigger (time-elapsed OR external event).
-Status without a timestamp is presumed stale. When a Claude
-reads a status entry and acts on it, that Claude is
-responsible for confirming the timestamp is fresh enough
-for the decision being made.
-
-**CC10. Blocker reality-check before planning around it.**
-When a §15 / §4 / §6 item has been "blocked on external
-action" for more than 7 days, run a 5-minute reality check
-before treating the block as still real. The check goes in
-the §6 log regardless of outcome (block confirmed OR block
-dissolved). *Companion rule to CC8 — CC8 governs status
-entries, CC10 governs blocker entries specifically.*
-
-**CC11. §6 entries on status flips.** When a §3 contract
+**CC8. §6 entries on status flips.** When a §3 contract
 surface flips PLANNED → LIVE, or a §4 rotation goes from
 pending → executed, a §6 entry is required, not optional.
 The flip itself is a cross-project event. Per R18-equivalent
 rules on both sides, this trigger is already mirrored —
-CC11 codifies it at the CC-namespace level for new Claudes
+CC8 codifies it at the CC-namespace level for new Claudes
 joining the project.
 
 ---
 
-## 3. Handoff Conventions (legacy, now promoted)
-
-The seven conventions originally locked Monday 2026-05-11 through
-Tuesday 2026-05-12 have been promoted to CC1-CC7 above. This
-section is retained as a pointer for the historical context and
-the locking dates; see the 2026-05-11 / 2026-05-12 §6 entries
-for the original conversation. Future additions go in §2.
-
----
-
-## 4. Contract Surfaces
+## 3. Contract Surfaces
 
 Active and planned API contracts between the two projects.
 
@@ -144,11 +114,12 @@ Active and planned API contracts between the two projects.
 - **Gate:** 404 returned for rows where `qa_automation_enabled = FALSE`
 - **List variant:** `/api/brands?projectKey=X` returns array,
   filtered to `qa_automation_enabled = TRUE`
-- **Status:** shipped, no production traffic yet (AC not live)
+- **Status:** shipped, no production traffic yet. AC Phase 1.5
+  deliberately dropped brand dependency (2026-05-12 scope
+  revision); brands API consumption begins with AC Phase 2.
 - **Last verified:** 2026-05-12 (shipped + auth verified;
-  CQIP_BRANDS_API_TOKEN installed on Forge dev + prod)
-- **Re-verify if:** AC reports going live OR >30 days elapsed
-  AND AC still pre-launch
+  CQIP_BRANDS_API_TOKEN installed on Forge dev + prod, never
+  exercised in production)
 
 ### `/api/sharepoint/*` — PLANNED (Batch 009)
 - **Owner:** DC
@@ -156,51 +127,71 @@ Active and planned API contracts between the two projects.
 - **Shape:** Three GET routes per spec —
   `/api/sharepoint/folder`, `/xlsx`, `/image`. Full shape at
   `docs/batch-009-sharepoint-spec.md` (commit ce397fa).
-- **Auth:** Bearer `CQIP_SHAREPOINT_API_TOKEN` (separate from brands
-  token per DC §13 rule 27 / AC §13 rule 9 — blast radius separation)
-- **Azure setup:** Verified end-to-end 2026-05-26 (see §6 entry).
-  Sites.Selected admin consent + per-site CRO grant both already
-  in place. Token, site metadata, and drive enumeration all 200.
+- **Auth:** Bearer `CQIP_SHAREPOINT_API_TOKEN` (separate from
+  brands token per DC §13 rule 27 / AC §13 rule 9 — blast
+  radius separation)
+- **Azure setup:** Verified end-to-end 2026-05-26 (see §6
+  entry). Sites.Selected admin consent + per-site CRO grant
+  both already in place. Token, site metadata, and drive
+  enumeration all 200.
 - **Status:** PLANNED. DC build can start anytime (no Azure
-  prereq blocks remaining). Flips to LIVE at SHIP, not at DESIGN,
-  per spec §11.
-- **Last verified:** 2026-05-26 (three-operation Graph curl from
-  Lacey's terminal; full results in §6)
-- **Re-verify if:** DC starts Batch 009 build (re-curl as smoke
-  test) OR AZURE_CLIENT_SECRET rotates OR >30 days elapsed
+  prereq blocks remaining). Flips to LIVE at SHIP, not at
+  DESIGN, per spec §11.
+- **First-ever ship risk:** AC Phase 2 will exercise BOTH
+  brands API and sharepoint API in production for the first
+  time in a single ship (per AC Q1 response, 2026-05-26).
+  Mitigation: ship `docs/batch-009-curl-examples.md`
+  alongside the routes (per AC Q2 response). Additional
+  mitigation: no-op rotation drill on
+  CQIP_SHAREPOINT_API_TOKEN post-issuance (per AC Q3
+  response, see §4).
+- **Last verified:** 2026-05-26 (three-operation Graph curl
+  from Lacey's terminal; full results in §6)
 
 ---
 
-## 5. Pending Rotations (live, both sides)
+## 4. Pending Rotations (live, both sides)
 
 Mirrored from DC §15 + AC §15. Status here is authoritative for
 both sides.
 
 - [ ] **Rotate Azure client secret** —
       Compromised-by-default per 2026-05-02/03 verification
-      screenshots and the 2026-05-26 verification curl. Worker-only
-      rotation per Batch 009 spec §7 (no AC coordination needed).
-      Carl-executable; institutional API-path block persists per
-      2026-05-19 §6 entry (servicePrincipalLockConfiguration).
-      Target rotation window: week of 2026-06-01 (Lacey returns
-      from travel; Carl available).
+      screenshots and the 2026-05-26 verification curl.
+      Worker-only rotation per Batch 009 spec §7 (no AC
+      coordination needed). Carl-executable; institutional
+      API-path block from 2026-05-19 has progressed —
+      Carl can rotate via available path during the week of
+      2026-06-01 (Lacey returns from travel; Carl available).
       Surfaces: Worker secret (single surface).
       **Last verified:** 2026-05-26 (secret still functional;
       Graph calls succeeding)
-      **Re-verify if:** rotation executed (flip to terminal +
-      §6 entry) OR >14 days elapsed without rotation
 - [ ] **Rotate CQIP_BRANDS_API_TOKEN** —
-      Hygiene rotation. Not known compromised. In circulation since
-      brands API initial setup (Batch 005.13-005.14 timeframe).
-      Surfaces: Worker secret, DC local .env, Forge dev variable,
-      Forge prod variable. Atomic rotation across all four required.
-      **Last verified:** 2026-05-12 (installed on Forge dev + prod)
-      **Re-verify if:** rotation executed OR brands API goes live
-      with production traffic OR >60 days elapsed
+      Hygiene rotation. Not known compromised. In circulation
+      since brands API initial setup (Batch 005.13-005.14
+      timeframe). Untouched since pre-positioning on Forge
+      dev + prod 2026-05-12.
+      Surfaces: Worker secret, DC local .env, Forge dev
+      variable, Forge prod variable. Atomic rotation across
+      all four required.
+      **Last verified:** 2026-05-12 (installed on Forge dev
+      + prod, never exercised)
+- [ ] **CQIP_SHAREPOINT_API_TOKEN rotation drill** (planned) —
+      Post-Batch-009-ship no-op rotation drill across all
+      four surfaces (Worker · Forge dev · Forge prod · DC
+      `.env.local`). Validates the §13 r27 / r9 rotation
+      atomicity pattern end-to-end before production
+      pressure exists. ~30-min synchronized window with DC,
+      AC, and Lacey. Schedule pre-Batch-009-ship per AC Q3
+      response (2026-05-26).
+      Drill shape: DC ships v1 with token A → both sides
+      verify token A works (curl + Forge dev panel load) →
+      rotate to token B atomically within window → verify
+      token B works → done.
 
 Rotation execution: Lacey kicks off; DC + AC walk their respective
-sides within a single deploy window per DC §13 rule 27 / AC §13 rule 9
-(also see CC-namespace: §13 rules cross-reference).
+sides within a single deploy window per DC §13 rule 27 / AC §13
+rule 9.
 
 **Removed from this section (2026-05-26):** "Reclaim Owner access
 on Azure app" — never the right framing. Lacey has always been
@@ -211,7 +202,7 @@ See §6 entry for full context.
 
 ---
 
-## 6. Cross-Project Priority Order
+## 5. Cross-Project Priority Order
 
 Spans both projects. Last locked 2026-05-13.
 
@@ -230,56 +221,69 @@ Spans both projects. Last locked 2026-05-13.
 
 ---
 
-## 7. Append-Only Event Log
+## 6. Append-Only Event Log
 
 Cross-project events worth durable record. Newest at top.
 Covers events from 2026-04-23 forward (start of the drift-
 prevention era). Project-internal events stay in each
 project's CLAUDE.md §16.
 
-### 2026-05-26 — Batch 009 Azure prereqs verified + doc cleanup
+### 2026-05-26 — Batch 009 Azure prereqs verified + CC-namespace established
 
-DC + Lacey ran end-to-end Microsoft Graph verification against
-the CRO SharePoint site:
+**Verification.** DC + Lacey ran end-to-end Microsoft Graph
+verification against the CRO SharePoint site:
 
   1. Token endpoint            POST /oauth2/v2.0/token  → 200
   2. Site metadata             GET /sites/...:/sites/CRO → 200
   3. Drive enumeration         GET /sites/{id}/drive/root/children → 200
 
-Full folder + file listing returned (`ADM Comms`, `CRO Client
-Comms`, `Strategy`, etc., plus xlsx/docx files with download
-URLs). JSON confirmed app_displayname = "CQIP Dashboard -
-SharePoint Integration" and selectedsites = 1 (CRO only,
-matching Sites.Selected design).
+Full folder + file listing returned. JSON confirmed
+app_displayname = "CQIP Dashboard - SharePoint Integration"
+and selectedsites = 1 (CRO only, matching Sites.Selected
+design).
 
 **Translation:** Both consent layers (Sites.Selected admin
-consent + per-site CRO grant) were already in place, configured
-in or before the 2026-05-02 / 2026-05-03 Postman verification
-window. The 23-day "Azure prereqs gate Batch 009" status was
-doc-vs-reality drift, not a real block. Whoever did the setup
-in early May — likely Carl — did the full configuration.
+consent + per-site CRO grant) were already in place,
+configured in or before the 2026-05-02 / 2026-05-03 Postman
+verification window. The 23-day "Azure prereqs gate Batch 009"
+status was doc-vs-reality drift, not a real block.
+
+**CC-namespace established.** CC1-CC8 added to §2 of this
+doc. CC1-CC7 promote the original 2026-05-11/12 handoff
+conventions to a numbered namespace. CC8 (formerly CC11
+in DC's initial draft) covers §6 entries on status flips.
+
+Three rules originally proposed for the CC-namespace
+(stale-status re-verification, last-verified timestamps,
+blocker reality-check) moved to DC CLAUDE_RULES.md local
+per AC's namespace-fit review: the failure modes are
+DC-asymmetric, and codifying habits that already work
+risks turning judgment into checklist (AC framing,
+2026-05-26).
 
 **Doc updates landed in same commit (Claudette executing):**
-- §4 (this doc) — "Reclaim Owner access" bullet removed.
-  Framing was wrong from the start: Lacey has always been
-  Owner; the historical block was edit access by F92 IT
-  policy, not Owner status.
-- §4 (this doc) — Azure client secret rotation rewritten:
-  no longer prereq for Batch 009, hygiene-only, Worker-only
-  rotation, Carl-executable, target window of 2026-06-01.
-- §3 (this doc) — `/api/sharepoint/*` entry updated to
-  reflect verified Azure setup + Last verified field added.
-- §2 / CC-namespace — Cross-Claude rules CC1-CC11 added,
-  including CC8 (stale-status re-verification), CC9
-  (last-verified timestamps), and CC10 (blocker reality-
-  check) — direct lessons from today's finding.
-- DC CLAUDE.md §15 Batch 009 prereqs block — rewritten.
+- §2 (this doc) — new CC1-CC8 rules section
+- §3 (this doc) — `/api/sharepoint/*` updated to reflect
+  verified Azure setup + Last verified field added +
+  first-ever ship risk note
+- §3 (this doc) — `/api/brands/*` Last verified field added
+  + Phase 1.5 brand-dependency-drop context
+- §4 (this doc) — "Reclaim Owner access" bullet removed
+  (wrong framing from inception); Azure secret rotation
+  reframed as hygiene-only Worker-only; CQIP_SHAREPOINT_
+  API_TOKEN rotation drill item added per AC Q3
+- DC CLAUDE.md §15 Batch 009 prereqs block — rewritten
 - DC CLAUDE.md §15 "Pending rotations" — Owner-reclaim
-  bullet removed; secret rotation reframed.
-- DC CLAUDE.md §13 rule 30 — secrets list patched for
-  005.31a + this update.
+  bullet removed; secret rotation reframed
+- DC CLAUDE.md §13 rule 30 — secrets list patched
+- DC CLAUDE_RULES.md — three new rules added covering
+  stale-status re-verification, last-verified timestamps,
+  blocker reality-check (next-available R-numbers per
+  Claudette)
 - docs/batch-009-sharepoint-spec.md §9 — replaced with
-  2026-05-26 verification evidence.
+  2026-05-26 verification evidence
+- AC §15 mirror update will follow as a separate AC-side
+  commit, citing this CROSS_CLAUDE state verbatim
 
 **Status flip:** Batch 009 moves from "DESIGN locked, SHIP
 gated on Azure prereqs" → "DESIGN locked, build can start
@@ -287,14 +291,18 @@ anytime, hygiene rotation deferred to 2026-06-01."
 
 **Lesson encoded:** A 5-minute curl on 2026-05-13 (the
 DESIGN-lock date) would have caught the drift before it
-became a 23-day phantom block. CC8 + CC10 are the
-preventive rules.
+became a 23-day phantom block. The three new DC-local
+rules formalize the preventive pattern without exporting
+it as cross-project ceremony.
 
 **Action implications for AC:** Phase 2 unblocking is now
 imminent — DC build start gates AC Phase 2, not Azure
 prereqs. CQIP_SHAREPOINT_API_TOKEN issuance moves from
-"future" to "imminent." See separate AC prompt sent
-2026-05-26 with Phase 1 readiness questions.
+"future" to "imminent." AC §15 patch pending (see above).
+Separate AC prompt sent 2026-05-26 with Phase 1 readiness
+questions; AC responses incorporated into §3 and §4 of
+this doc (curl-examples-doc mitigation, no-op rotation
+drill).
 
 ### 2026-05-19 — Azure secret rotation: API path also walled
 
@@ -307,12 +315,10 @@ Carl working on PIM-elevated access.
 Don't re-try the API path expecting different results.
 Rotation stays blocked until F92 institutional unlock.
 
-**Status update 2026-05-26:** Per Lacey, F92 institutional
-unlock has progressed; Carl can rotate via available path
-during the week of 2026-06-01. Adding this as a follow-up
-note rather than a separate §6 entry per CC11 (the §4 entry
-carries the live status; this log preserves the historical
-incident).
+**Status update 2026-05-26:** F92 institutional unlock has
+progressed; Carl can rotate via available path during the
+week of 2026-06-01. §4 entry carries the live status; this
+log preserves the historical incident.
 
 ### 2026-05-15 — AC: R18 mirror + Phase 1.5 deploy to development
 
@@ -575,8 +581,9 @@ Shareable Screenshots/ folder.
 
 ---
 
-*Last updated: 2026-05-26 | CC-namespace added (CC1-CC11) +
-Batch 009 Azure prereqs verified end-to-end + Owner-reclaim
-bullet removed from §5 as factually incorrect framing.
-Lessons from today encoded as CC8 (stale-status re-verification),
-CC9 (last-verified timestamps), CC10 (blocker reality-check).*
+*Last updated: 2026-05-26 | CC-namespace established (CC1-CC8;
+three originally-proposed rules moved DC-local per AC namespace-
+fit review). Batch 009 Azure prereqs verified end-to-end +
+Owner-reclaim bullet removed from §4 as factually incorrect
+framing. CQIP_SHAREPOINT_API_TOKEN rotation drill added to §4
+per AC Q3 (2026-05-26).*
