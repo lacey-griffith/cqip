@@ -1556,30 +1556,31 @@ Resolved             → green-500
     main" button other than workflow_dispatch.
 
 32. **Long-running blockers must be re-verified before being
-    treated as still-blocking.** If a §15 item has been "pending
-    external action" or "gated on X" for more than 7 days, run a
-    5-minute reality-check before planning around it the next
-    time — curl the endpoint, query the system, confirm the gate
-    is still real. **Why:** Batch 009 was treated as "Azure
-    prereqs blocked" for 23 days (2026-05-03 → 2026-05-26) when
-    the prereqs had actually been granted before the original
-    2026-05-02 Postman verification. The blocker was inherited
-    from an early misread and never re-tested. A 5-min Graph
-    curl on day 8 would have caught it; instead the priority
-    order and three docs surfaces all carried a phantom gate
-    that delayed scoping decisions. **How to apply:** when a §15
-    "gated on" item resurfaces in conversation past day 7,
-    verify before re-planning. Recordable verifications
-    (curl + status code, query + count, screenshot of an admin
-    panel) beat memory-of-prior-state. If verification flips
-    the state, update §15 + the relevant CROSS_CLAUDE.md
-    section (§4 contract surfaces or §5 pending rotations) +
-    any spec doc that propagated the gate, atomically, per §13
-    rule 23. The
-    23-day Azure phantom and the 7-day drought-evaluator silent
-    failure (2026-05-01 → 2026-05-07, see §13 rule 27) are both
-    examples of the same failure mode: confidence in a stale
-    state outlasting the state's actual reality.
+    treated as still-blocking** — see CLAUDE_RULES.md **R21**
+    (blocker reality-check), the canonical home for this rule,
+    with siblings **R19** (stale-status re-verification) +
+    **R20** (last-verified timestamps). In short: if a §15 item
+    has been "pending external action" or "gated on X" for more
+    than 7 days, run a 5-minute reality-check (curl the
+    endpoint, query the system, confirm the gate is still real)
+    before planning around it. If verification flips the state,
+    update §15 + the relevant CROSS_CLAUDE.md section (§3
+    contract surfaces or §4 pending rotations) + any spec doc
+    that propagated the gate, atomically, per §13 rule 23.
+    **Why this entry exists in §13 too:** the originating
+    incident was Dashboard-side (Batch 009 treated as "Azure
+    prereqs blocked" for 23 days, 2026-05-03 → 2026-05-26, when
+    the prereqs had been granted before the 2026-05-02 Postman
+    work — a phantom gate inherited from an early misread and
+    never re-tested). The 7-day drought-evaluator silent
+    failure (2026-05-01 → 2026-05-07, see §13 rule 27) is the
+    same failure mode: confidence in a stale state outlasting
+    the state's actual reality. R21 carries the full behavioral
+    rule; this §13 entry is a discoverability hook so a reader
+    scanning §13 lands on it. (Behavior rules live in
+    CLAUDE_RULES.md per the CLAUDE.md / CLAUDE_RULES.md split;
+    §13 business rules cross-reference them rather than
+    duplicate.)
 
 ---
 
@@ -2249,17 +2250,27 @@ spec since 2026-05-03 (23 days).
     2026-05-26; Batch 009 annotated "build path clear."
   - CLAUDE.md §15 Open questions: admin-consent question
     marked resolved.
-  - CROSS_CLAUDE.md restructured (provided by Lacey): the
-    legacy §4 Pending Rotations section is now §5; a new
-    §2 CC-namespace (CC1-CC11) absorbs the seven handoff
-    conventions plus four new cross-Claude rules (CC8
-    stale-status re-verification, CC9 last-verified
-    timestamps, CC10 blocker reality-check, CC11 status-
-    flip §6 entries). Owner reclaim bullet deleted from
-    §5; Azure secret rotation reworded as Carl-executable
-    hygiene; CQIP_BRANDS_API_TOKEN bullet unchanged. New
-    §7 (formerly §6) event log entry covers the
-    verification for AC's benefit.
+  - CROSS_CLAUDE.md restructured (provided by Lacey),
+    finalized in commit e7386e6: a new §2 CC-namespace
+    holds **CC1-CC8** — CC1-CC7 promote the seven
+    2026-05-11/12 handoff conventions to a numbered
+    namespace, and CC8 covers §6 entries on status flips.
+    Three rules originally proposed for the CC-namespace
+    (stale-status re-verification, last-verified
+    timestamps, blocker reality-check) were moved to DC
+    CLAUDE_RULES.md local as **R19/R20/R21** per AC's
+    namespace-fit review — the failure modes are
+    DC-asymmetric. Section numbering settled at: §3
+    Contract Surfaces, §4 Pending Rotations, §5
+    Cross-Project Priority Order, §6 Append-Only Event
+    Log. Owner reclaim bullet deleted from §4; Azure
+    secret rotation reworded as Carl-executable hygiene;
+    CQIP_BRANDS_API_TOKEN bullet unchanged; §3 contract
+    surfaces gained Last-verified fields. New §6 event-log
+    entry covers the verification for AC's benefit.
+    (An intermediate restructure in commit 78220a0 briefly
+    used a CC1-CC11 shape with rotations at §5; e7386e6
+    superseded it.)
   - `docs/batch-009-sharepoint-spec.md`: status header
     cleaned; §9 Prerequisites replaced with verification
     evidence; footer cleaned.
@@ -2268,7 +2279,13 @@ spec since 2026-05-03 (23 days).
   past day 7 must be re-verified before being treated as
   still-blocking. Names this incident (23 days) and the
   2026-05-07 drought-evaluator silent failure (7 days) as
-  the two reference examples of the failure mode.
+  the two reference examples of the failure mode. **Now a
+  discoverability hook** — the canonical behavior rule is
+  CLAUDE_RULES.md R21 (blocker reality-check), with siblings
+  R19 (stale-status re-verification) + R20 (last-verified
+  timestamps). Rule 32 was reworked to point at R21 in
+  commit #3 (2026-05-26) so the two don't drift; §13 keeps
+  the entry for readers who look there first.
 - **What did NOT change.** The Azure client secret is still
   in circulation as a hygiene rotation candidate — its
   rotation is Worker-only (no Forge surface today; SharePoint
@@ -4625,4 +4642,4 @@ demo blocker.
 
 ---
 
-*Last updated: 2026-05-26 | CQIP v1.5 — Batch 005.31a + Azure prereqs verification + §13 rule 32 shipped same-day. 005.31a: SUPABASE_SERVICE_ROLE_KEY added to GH Actions build env so admin route module-eval imports succeed during page-data collection; §13 r31 documents workflow_dispatch as the only path to test workflow edits given paths-ignore: .github/**. Azure verification: end-to-end Graph curl (token/site/drive children all 200) confirmed admin consent on Sites.Selected + per-site CRO grant were already in place; "SHIP gated on Azure prereqs" framing removed from 4 doc surfaces (CLAUDE.md §14 + §15, CROSS_CLAUDE.md §5 — restructured same-day to a CC-namespace + renumbered sections — and batch-009 spec) as a phantom blocker that had carried 23 days. §13 r32: long-running blockers (>7d) must be re-verified before being treated as still-blocking — names the Azure phantom + 2026-05-07 drought silent failure as reference examples.*
+*Last updated: 2026-05-26 | CQIP v1.5 — Batch 005.31a + Azure prereqs verification + CC-namespace finalization, shipped same-day across three commits. 005.31a: SUPABASE_SERVICE_ROLE_KEY added to GH Actions build env so admin route module-eval imports succeed during page-data collection; §13 r31 documents workflow_dispatch as the only path to test workflow edits given paths-ignore: .github/**. Azure verification: end-to-end Graph curl (token/site/drive children all 200) confirmed admin consent on Sites.Selected + per-site CRO grant were already in place; "SHIP gated on Azure prereqs" framing removed from 4 doc surfaces (CLAUDE.md §14 + §15, CROSS_CLAUDE.md, batch-009 spec) as a phantom blocker that had carried 23 days. CROSS_CLAUDE.md CC-namespace finalized at CC1-CC8 (§2); three originally-proposed rules moved to DC-local CLAUDE_RULES.md R19 (stale-status re-verification) / R20 (last-verified timestamps) / R21 (blocker reality-check) per AC namespace-fit review. CROSS_CLAUDE section numbering settled: §3 contract surfaces, §4 pending rotations, §5 priority, §6 event log. §13 r32 reworked from a standalone rule into a discoverability hook pointing at R21 (canonical), so the §13 entry and the CLAUDE_RULES.md rule don't drift.*
