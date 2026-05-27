@@ -1,8 +1,10 @@
 # Batch 005.32 — Root Cause Taxonomy Normalization + Lock
 
+> **⚠️ SUPERSEDED 2026-05-27 — DO NOT EXECUTE.** This spec's implementation (taxonomy table, normalize script, constrained edit dialog, edit-route validation, §13 rule) already shipped as **Batch 005.28** (table `quality_log_taxonomy`, migration `020_quality_log_taxonomy.sql`) + **Batch 005.29**. A 2026-05-27 re-audit (see `docs/root-cause-audit-2026-05-20.md` §2.7) found zero non-canonical values in production. Note also that §3's canonical spellings (spaced slashes) contradict the shipped Jira-verbatim canonicals and must not be applied. Spec retained for history only.
+
 **Author:** DC + Lacey
 **Date:** 2026-05-27
-**Status:** Ready for Claudette execution
+**Status:** SUPERSEDED by Batch 005.28/005.29 (was: Ready for Claudette execution)
 **Scope-locked:** Yes. No items move in or out without explicit decision.
 
 **Pairs with:**

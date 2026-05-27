@@ -199,6 +199,83 @@ free-text edit dialog).
 
 ---
 
+### 2.7 — 2026-05-27 re-audit snapshot
+
+> Appended per Batch 005.32 spec Step 1. The spec asked for a
+> "§2.6" but that number was already taken by the Provenance
+> subsection above, so this is filed as §2.7. **Append-only — the
+> original §2.1–§2.6 figures above are the 2026-05-20 snapshot and
+> are left untouched.**
+
+**Headline: the drift documented in §2.1–§2.5 is gone.** A fresh
+read-only pull of all non-deleted `quality_logs` rows on 2026-05-27
+(service-role supabase-js, JS aggregation matching the original
+methodology) found **zero non-canonical values across all five
+fields**. Every value present in the data matches an `is_active`
+row in `quality_log_taxonomy`.
+
+This is the expected end-state of **Batch 005.28** (shipped
+2026-05-20), which the original §5 recommendation (Option B)
+became: it created the `quality_log_taxonomy` table (migration
+`020_quality_log_taxonomy.sql`), ran
+`scripts/normalize-quality-log-fields.ts` against production,
+refactored the edit dialog to constrained `MultiCombobox` inputs,
+and added server-side validation in `app/api/logs/edit/route.ts`
+(CLAUDE.md §13 rule 29). Batch 005.29 added the Client Request
+category + client-change-request subtypes. The combination
+normalized the historical drift and closed the live drift source.
+
+**Re-audit counts (54 non-deleted rows; was 49 on 2026-05-20):**
+
+| created_by | rows | window |
+| --- | --- | --- |
+| `csv_import` | 37 | 2025-11-20 → 2026-01-14 |
+| `system` | 17 | 2026-04-21 → 2026-05-27 |
+
+The `system` cohort grew 12 → 17 since 2026-05-20. **None of those
+five new rows introduced drift** — confirming the constrained
+dialog + edit-route validation are holding the line.
+
+| Field | distinct | rows w/ data | non-canonical |
+| --- | --- | --- | --- |
+| `root_cause_final` | 10 | 44 | 0 |
+| `root_cause_initial` | 10 | 39 | 0 |
+| `issue_category` | 8 | 39 | 0 |
+| `issue_subtype` | 12 | 15 | 0 |
+| `resolution_type` | 3 | 13 | 0 |
+
+The top buckets the original audit flagged as split are now
+consolidated: `CRO Code Error` (16 in `_final`, 17 in `_initial`)
+and `Missing Assets/ Info` (15 / 12) each aggregate to a single
+canonical. The cross-field pollution values (`Design/Visual`,
+`CRO Implementation`, `Data / Mapping Issue` in `root_cause_*`)
+are no longer present.
+
+**`needs_review` queue: 10 rows** (matches the Batch 005.32 spec's
+note). All 10 are already canonical on every taxonomy field — the
+flag is a manual-review marker from the 005.28 normalization run,
+not a sign of remaining drift. Per the spec's §4, these are left
+as-is.
+
+**Canonical spelling note (important for any future normalization):**
+the live `quality_log_taxonomy` canonicals are **Jira-verbatim**
+per Batch 005.28's locked "N2 Policy A" — e.g. `Missing Assets/ Info`,
+`Process/ Communication`, `Unknown/ Needs Investigation`,
+`External Factor/ Environment Change`, `Client Data/ Feed Issue`
+(no space *before* the slash). The webhook/sync write path depends
+on this exact spelling so Jira-sourced values pass the edit-route
+validation. Any future taxonomy work must preserve these strings;
+do not "tidy" the slash spacing without re-seeding the table and
+updating the write-path expectations in lockstep.
+
+**Conclusion:** no normalization is needed as of 2026-05-27. The
+Batch 005.32 spec's implementation steps (migration, normalize
+script, dialog refactor, route validation, §13 rule) were already
+delivered by Batch 005.28/005.29; that spec has been marked
+superseded.
+
+---
+
 ## 3. Code Findings — Write-Path Audit
 
 Every write path that touches the 5 fields:
