@@ -1,6 +1,6 @@
 # CQIP — CRO Quality Intelligence Platform
 ## Claude Code Project Context File
-### Fusion92 | CRO Department | v1.5
+### Fusion92 | CRO Department | v1.6
 
 ---
 
@@ -188,6 +188,9 @@ cqip/
 │       ├── brands/
 │       │   ├── [projectKey]/[brandCode]/route.ts # Batch 004.5: Bearer-auth, single-brand read
 │       │   └── route.ts                    # Batch 004.5: Bearer-auth, list-by-project
+│       ├── health/route.ts                 # Batch 011: public, dependency-free health probe
+│       │                                     (status/timestamp/version/environment); no auth,
+│       │                                     no DB; deploy.yml smoke check hits this
 │       ├── logs/edit/route.ts              # Server-side edit endpoint
 │       └── jira/sync/route.ts              # Proxy to jira-sync edge function (forwards CQIP_SYNC_AUTH_KEY)
 │
@@ -359,6 +362,16 @@ CQIP_DROUGHT_AUTH_KEY=           # Shared secret between the daily pg_cron job a
 
 ### .env.example
 Committed to repo with all keys present but empty values.
+
+### `/api/health` env reads (Batch 011 — all optional, none required)
+The public health probe reads, in priority order, `NEXT_PUBLIC_BUILD_COMMIT`
+(stamped at build by `scripts/gen-build-info.js` — the only one actually set
+in this Workers deploy), then `CF_PAGES_COMMIT_SHA`, then `GIT_COMMIT_SHA` for
+its `version` field, falling back to `"unknown"`. It reads `NODE_ENV` then
+`ENVIRONMENT` for `environment`, also defaulting to `"unknown"`. None are
+required; the endpoint never crashes on a missing var. Note: `CF_PAGES_COMMIT_SHA`
+is a Cloudflare Pages var and is never set here (CQIP runs on Workers, not
+Pages — see §2) — it is kept only as a documented fallback per the Batch 011 spec.
 
 ---
 
@@ -2180,16 +2193,15 @@ resolved 2026-05-26 — both layers already granted.)
 ### Ops / deferred
 - [ ] **Radara Edge Function deploy** — code committed at
       `supabase/functions/radara-sweep/index.ts` but not deployed.
-- [ ] **Deploy smoke check via `/api/health`** — the Batch 005.31
-      auto-deploy workflow's post-deploy smoke check curls `/login`
-      (the cheapest known-200 URL on the Worker). A dedicated
-      `/api/health` endpoint that returns a structured body
-      (e.g. commit SHA from build-info + Supabase reachability ping)
-      would catch a wider class of "deploy succeeded but Worker is
-      wedged" failures than a static page fetch. Half-day batch:
-      `app/api/health/route.ts` + workflow swap from `/login` to
-      `/api/health`. Not gating any other work — the `/login` check
-      is good enough for v1 auto-deploy.
+- [x] **Deploy smoke check via `/api/health`** — **shipped Batch 011
+      (2026-05-27).** `app/api/health/route.ts` added (public,
+      dependency-free, always-200 JSON probe); `deploy.yml` smoke
+      check swapped from `/login` to `/api/health` and now asserts
+      both 200 AND `{"status":"ok"}` in the body. v1 scope is
+      deliberately "app responds, env loaded" — NO Supabase
+      reachability ping (the original sketch above mentioned one;
+      explicitly out of scope per the Batch 011 spec to keep the
+      probe fast and dependency-free). See §16.
 
 ### Randy items (Cloudflare org-level — when he's back)
 - [ ] Cloudflare Workers Paid billing transfer (currently Lacey
@@ -2202,6 +2214,66 @@ resolved 2026-05-26 — both layers already granted.)
 ---
 
 ## 16. Shipped Features Log
+
+### Batch 011 — Node 24 upgrade + /api/health endpoint — 2026-05-27
+
+Two paired CI-hygiene items, both touching `deploy.yml`: bump the
+GitHub Actions Node runtime 20 → 24 ahead of the Node 20 EOL
+deadline (2026-06-02), and add a purpose-built `/api/health`
+endpoint so the auto-deploy smoke check has a real health signal
+instead of pinging `/login`. Closes the §15 Ops/deferred
+"Deploy smoke check via /api/health" item.
+
+- **New file `app/api/health/route.ts`** — public (no auth, no
+  Bearer), dependency-free Next route handler. Always returns 200
+  with `{ status: "ok", timestamp, version, environment }` and
+  `Cache-Control: no-store`. `export const dynamic = 'force-dynamic'`
+  keeps it per-request (fresh timestamp, never statically
+  prerendered). No DB / Supabase / Graph call by design — if the
+  handler itself fails to execute, the workflow's HTTP fetch fails,
+  and that IS the health signal. `version` resolves
+  `NEXT_PUBLIC_BUILD_COMMIT` (the build-info SHA — only one actually
+  populated here) → `CF_PAGES_COMMIT_SHA` → `GIT_COMMIT_SHA` →
+  `"unknown"`; `environment` resolves `NODE_ENV` → `ENVIRONMENT` →
+  `"unknown"`. Verifies as `ƒ` (dynamic) in the build route table.
+- **`.github/workflows/deploy.yml`** — two edits:
+  - Edit A: `actions/setup-node` `node-version: '20'` → `'24'`.
+  - Edit B: post-deploy smoke check URL `/login` → `/api/health`;
+    assertion strengthened from status-only to status 200 **AND**
+    body contains `{"status":"ok"}` (the body is the whole point of
+    a dedicated probe over the static login page).
+- **CLAUDE.md** — §3 file tree adds `app/api/health/route.ts`; §4
+  documents the optional env reads; §15 Ops/deferred item checked
+  off; this §16 entry; footer + version bump (v1.5 → v1.6 — first
+  bump after the Batch 005.32 spec was superseded; a new public
+  route + workflow runtime change is structural per §13 rule 23).
+- **§13 rule check:** rule 30/31 `paths-ignore` (`**.md`, `docs/**`,
+  `.github/**`) is unchanged and still correct — this commit also
+  touches `app/api/health/route.ts` (a non-ignored path), so the
+  push DOES trigger the workflow, and the triggered run uses the new
+  Node-24 `deploy.yml`. No new rule needed.
+
+**⚠ DEPLOY STATUS AT TIME OF WRITING — COMMITTED, NOT YET PUSHED.**
+1. **Step 1 — Node 24 local build verification: DONE, GREEN.** The
+   dev machine had only Node v22.16.0 and no version manager, so
+   `node@24` (24.16.0) was installed keg-only via Homebrew and the
+   spec's gate (`npm ci` + `npm run build`) was run with it — clean
+   pass, full route table including `/api/health` as `ƒ` (dynamic).
+   The Node-24-only build-break risk the gate exists for is ruled
+   out.
+2. **Step 5 — commit made on `main`; PUSH HANDED TO LACEY.** `gh`
+   is not installed (can't watch the Actions run), and push to
+   `main` auto-deploys to production, so the push + CI-watch +
+   `curl https://cqip.l-hay.workers.dev/api/health` confirmation
+   were left to Lacey per the agreed hand-off. Once pushed: the
+   commit touches `app/api/health/route.ts` (non-ignored), so the
+   workflow triggers and runs on the new Node-24 `deploy.yml`; the
+   smoke check should show `GET /api/health → 200` + the JSON body.
+
+Rollback (per spec §4) if Node 24 breaks the prod deploy: revert
+ONLY the `deploy.yml` Node bump (keep `/api/health` — it is
+independently shippable and works on Node 20/22 too), push, let it
+re-run on Node 20, investigate Node 24 separately before 2026-06-02.
 
 ### Azure prereqs verification + docs cleanup — 2026-05-26
 
@@ -4642,4 +4714,4 @@ demo blocker.
 
 ---
 
-*Last updated: 2026-05-26 | CQIP v1.5 — Batch 005.31a + Azure prereqs verification + CC-namespace finalization, shipped same-day across three commits. 005.31a: SUPABASE_SERVICE_ROLE_KEY added to GH Actions build env so admin route module-eval imports succeed during page-data collection; §13 r31 documents workflow_dispatch as the only path to test workflow edits given paths-ignore: .github/**. Azure verification: end-to-end Graph curl (token/site/drive children all 200) confirmed admin consent on Sites.Selected + per-site CRO grant were already in place; "SHIP gated on Azure prereqs" framing removed from 4 doc surfaces (CLAUDE.md §14 + §15, CROSS_CLAUDE.md, batch-009 spec) as a phantom blocker that had carried 23 days. CROSS_CLAUDE.md CC-namespace finalized at CC1-CC8 (§2); three originally-proposed rules moved to DC-local CLAUDE_RULES.md R19 (stale-status re-verification) / R20 (last-verified timestamps) / R21 (blocker reality-check) per AC namespace-fit review. CROSS_CLAUDE section numbering settled: §3 contract surfaces, §4 pending rotations, §5 priority, §6 event log. §13 r32 reworked from a standalone rule into a discoverability hook pointing at R21 (canonical), so the §13 entry and the CLAUDE_RULES.md rule don't drift.*
+*Last updated: 2026-05-27 | CQIP v1.6 — Batch 011 (Node 24 CI bump + public /api/health probe). `app/api/health/route.ts` returns always-200 JSON (status/timestamp/version/environment), no auth, no DB; deploy.yml bumped setup-node 20→24 and swapped the smoke check from /login to /api/health (now asserts 200 + {"status":"ok"}). Closes the §15 Ops/deferred smoke-check item. ⚠ COMMITTED, NOT YET PUSHED: Node 24 local-build gate (spec Step 1) PASSED green (node@24 24.16.0 installed keg-only via brew since the dev machine had only Node 22 + no version manager). Commit made on main; push + CI-watch + prod /api/health curl handed to Lacey (gh not installed; push to main = prod deploy). See §16 Batch 011 for the deploy-status caveat + rollback. Prior (v1.5, 2026-05-26):* Batch 005.31a + Azure prereqs verification + CC-namespace finalization, shipped same-day across three commits. 005.31a: SUPABASE_SERVICE_ROLE_KEY added to GH Actions build env so admin route module-eval imports succeed during page-data collection; §13 r31 documents workflow_dispatch as the only path to test workflow edits given paths-ignore: .github/**. Azure verification: end-to-end Graph curl (token/site/drive children all 200) confirmed admin consent on Sites.Selected + per-site CRO grant were already in place; "SHIP gated on Azure prereqs" framing removed from 4 doc surfaces (CLAUDE.md §14 + §15, CROSS_CLAUDE.md, batch-009 spec) as a phantom blocker that had carried 23 days. CROSS_CLAUDE.md CC-namespace finalized at CC1-CC8 (§2); three originally-proposed rules moved to DC-local CLAUDE_RULES.md R19 (stale-status re-verification) / R20 (last-verified timestamps) / R21 (blocker reality-check) per AC namespace-fit review. CROSS_CLAUDE section numbering settled: §3 contract surfaces, §4 pending rotations, §5 priority, §6 event log. §13 r32 reworked from a standalone rule into a discoverability hook pointing at R21 (canonical), so the §13 entry and the CLAUDE_RULES.md rule don't drift.*
