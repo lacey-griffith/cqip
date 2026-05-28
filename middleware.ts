@@ -84,6 +84,14 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.svg$|.*\\.png$|.*\\.jpg$|.*\\.jpeg$).*)',
+    // Negative lookahead — paths that must NOT run middleware:
+    //   _next/static, _next/image, favicon, static images: build artifacts
+    //   api/sharepoint, api/brands: both authenticate via their own
+    //     Bearer token (CQIP_SHAREPOINT_API_TOKEN / CQIP_BRANDS_API_TOKEN)
+    //     and never read the Supabase session cookie. Without the
+    //     carveout every Forge call paid a supabase.auth.getUser()
+    //     round-trip and gained a Supabase-availability dependency on
+    //     a Graph-only path. (Karen review, 2026-05-28.)
+    '/((?!_next/static|_next/image|favicon.ico|api/sharepoint|api/brands|.*\\.svg$|.*\\.png$|.*\\.jpg$|.*\\.jpeg$).*)',
   ],
 };
