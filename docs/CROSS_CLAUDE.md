@@ -121,32 +121,43 @@ Active and planned API contracts between the two projects.
   CQIP_BRANDS_API_TOKEN installed on Forge dev + prod, never
   exercised in production)
 
-### `/api/sharepoint/*` — PLANNED (Batch 009)
+### `/api/sharepoint/*` — LIVE (Batch 009, SHIPPED 2026-05-29)
 - **Owner:** DC
-- **Consumer:** AC (Phase 2 of Forge consumer)
-- **Shape:** Three GET routes per spec —
-  `/api/sharepoint/folder`, `/xlsx`, `/image`. Full shape at
-  `docs/batch-009-sharepoint-spec.md` (commit ce397fa).
+- **Consumer:** AC (Phase 2 of Forge consumer) — **unblocked
+  as of 2026-05-29**
+- **Shape:** Three read-only GET routes (all Bearer-gated):
+  - `GET /api/sharepoint/folder?url=<folder-url>` → enumerate
+    folder. Returns `{folder:{url,name}, xlsx:{ref,name},
+    screenshots:[{ref,name,size}], warnings:[]}`. Identifies
+    the single xlsx at root + `Shareable Screenshots/` images;
+    ignores `assets/` and `bugs/`. `ref` is opaque
+    (`<drive-id>:<item-id>`); AC passes it back verbatim.
+  - `GET /api/sharepoint/xlsx?ref=<file-ref>` → parse
+    `Preview Links` sheet rows 4+ (Col A→label, B→variation,
+    C→national_url, D→local_url nullable). Returns
+    `{filename, rows:[...]}`; does NOT return raw bytes.
+  - `GET /api/sharepoint/image?ref=<file-ref>` → stream image
+    bytes (25 MB cap, pass-through `Content-Type`, no cache).
+  - Full shape + error matrix at
+    `docs/batch-009-sharepoint-spec.md` (status header now
+    SHIPPED).
 - **Auth:** Bearer `CQIP_SHAREPOINT_API_TOKEN` (separate from
   brands token per DC §13 rule 27 / AC §13 rule 9 — blast
-  radius separation)
-- **Azure setup:** Verified end-to-end 2026-05-26 (see §6
-  entry). Sites.Selected admin consent + per-site CRO grant
-  both already in place. Token, site metadata, and drive
-  enumeration all 200.
-- **Status:** PLANNED. DC build can start anytime (no Azure
-  prereq blocks remaining). Flips to LIVE at SHIP, not at
-  DESIGN, per spec §11.
-- **First-ever ship risk:** AC Phase 2 will exercise BOTH
-  brands API and sharepoint API in production for the first
-  time in a single ship (per AC Q1 response, 2026-05-26).
-  Mitigation: ship `docs/batch-009-curl-examples.md`
-  alongside the routes (per AC Q2 response). Additional
-  mitigation: no-op rotation drill on
-  CQIP_SHAREPOINT_API_TOKEN post-issuance (per AC Q3
-  response, see §4).
-- **Last verified:** 2026-05-26 (three-operation Graph curl
-  from Lacey's terminal; full results in §6)
+  radius separation). No query-param fallback.
+- **Caching:** 60s in-memory per-Worker-instance for `/folder`
+  + `/xlsx`; `?nocache=1` bypass. `/image` not cached.
+- **Graph:** `Sites.Selected` scope, client-credentials flow,
+  share-id folder resolution (`u!base64url` → driveItem),
+  fresh token per logical request.
+- **SHIP-day deviations from DESIGN:** D1 share-id resolution
+  (over path-lookup; alias-drift robustness), D2
+  `xlsx_not_found`→422 hard-fail (was soft-fail), D3
+  `xlsx-js-style` not `xlsx` (CVE-removed 2026-04-26), D4 token
+  per logical request. See spec footer + DC §16 Batch 009.
+- **Smoke:** live-Azure green against Test Task 001 / WDG 07
+  (12 screenshots, 6 Preview Links rows), 2026-05-29.
+- **Last verified:** 2026-05-29 (SHIP smoke from DC; routes
+  live on Worker)
 
 ---
 
@@ -210,12 +221,12 @@ Spans both projects. Last locked 2026-05-13.
 | --- | --- | --- | --- |
 | 1 | DC | 5.19 SPL multi-page presence sweep | ✅ done |
 | 2 | DC | Batch 005.25 brand dropdown fix | ✅ done |
-| 3 | DC | Batch 009 SharePoint integration | next (unblocked 2026-05-26) |
+| 3 | DC | Batch 009 SharePoint integration | ✅ SHIPPED 2026-05-29 |
 | 4 | AC | Phase 1.5 implementation | parallel with DC 009 |
 | 5 | DC | Batch 006 Teams dispatch | post-009 |
 | 6 | DC | Batch 010 UI polish | post-006 |
 | 7 | DC | Batch 011 Coverage redesign | post-010 |
-| 8 | AC | Phase 2 (after DC 009 ships) | gated on DC 009 |
+| 8 | AC | Phase 2 (after DC 009 ships) | ✅ unblocked 2026-05-29 |
 | 9 | DC | Batch 007 Custom Jira Boards | post-Phase-2 |
 | 10 | DC | Batch 008 Convert.com automation | last |
 
@@ -227,6 +238,51 @@ Cross-project events worth durable record. Newest at top.
 Covers events from 2026-04-23 forward (start of the drift-
 prevention era). Project-internal events stay in each
 project's CLAUDE.md §16.
+
+### 2026-05-29 — Batch 009 SharePoint integration SHIPPED (§3 PLANNED → LIVE)
+
+**Per CC8: contract surface `/api/sharepoint/*` flipped
+PLANNED → LIVE — this entry is mandatory.**
+
+DC shipped the read-only Microsoft Graph proxy. Three GET
+routes live under `/api/sharepoint/*` (`/folder` enumerate,
+`/xlsx` parse Preview Links, `/image` stream bytes),
+`Sites.Selected` scope, 60s in-memory cache, share-id folder
+resolution, Bearer-gated on `CQIP_SHAREPOINT_API_TOKEN`,
+middleware carveout for /api/sharepoint + /api/brands. No DB
+migration (stateless). Live-Azure smoke green against Test
+Task 001 / WDG 07 (12 screenshots, 6 Preview Links rows).
+
+**Four SHIP-day deviations from the 2026-05-13 DESIGN**
+(folded into the spec doc):
+- **D1** — share-id folder resolution
+  (`/shares/{u!base64url}/driveItem`) replaced the spec's
+  path-lookup (`/drive/root:/{path}:/children`). Path-lookup
+  silently 404s on the `Shared Documents` vs `Documents`
+  library-alias drift; share-id is robust to URL shape.
+- **D2** — `xlsx_not_found` flipped from soft-fail (warning,
+  200) to hard-fail (422, context `url`) per Lacey, so AC
+  gates Phase 2 on a real status code.
+- **D3** — parser uses `xlsx-js-style` (already in deps,
+  read-compatible superset), not the `xlsx` package the spec
+  named — `xlsx` was removed 2026-04-26 (DC Batch 004.2) over
+  unpatched CVEs. No new build-time dependency.
+- **D4** — "fresh token per call" clarified to "fresh token
+  per logical request, reused across the 2-3 Graph sub-calls,
+  discarded at request end." No cross-request caching.
+
+**Cross-project impact:** AC Phase 2 is now unblocked (§5 row
+8). AC Q1 flagged that Phase 2 will exercise BOTH the brands
+API and the sharepoint API in production for the first time
+in a single ship — the curl-examples mitigation and the
+no-op rotation drill on `CQIP_SHAREPOINT_API_TOKEN` (AC Q2/Q3)
+remain the agreed risk controls. `AZURE_CLIENT_SECRET` hygiene
+rotation stays queued (Worker-only, Carl-executable, Fri/Mon
+target — §4 unchanged).
+
+Commits: c7afede + 98a6133 (Step 2) + the SHIP docs commit.
+Advisor credit: AC (day-one needs clarification), Jenny +
+Karen (five-finding pre-ship review).
 
 ### 2026-05-26 — Batch 009 Azure prereqs verified + CC-namespace established
 

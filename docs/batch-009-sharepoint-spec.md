@@ -1,6 +1,6 @@
 # SPEC: Batch 009 — SharePoint Integration
 
-**Status:** DESIGN locked 2026-05-13. Build path clear — Azure setup re-verified 2026-05-26 (admin consent + per-site CRO grant already in place).
+**Status:** SHIPPED 2026-05-29. Build path was clear — Azure setup re-verified 2026-05-26 (admin consent + per-site CRO grant already in place).
 **Owner:** DC (Dashboard backend).
 **Consumer:** AC (Forge consumer, Phase 2).
 **Companion docs:** CLAUDE.md §14 + §15 (Batch 009 entry), CROSS_CLAUDE.md §3 (`/api/sharepoint/*` contract surface), DC §13 rules 21 + 27.
@@ -140,6 +140,7 @@ All non-2xx responses (except `/image` 200) return JSON:
 | `folder_not_found` | 404 | URL doesn't resolve in Graph | `url` |
 | `file_not_found` | 404 | `ref` doesn't resolve | `ref` |
 | `multiple_xlsx_at_root` | 422 | Folder root has >1 xlsx | `filenames: [...]` |
+| `xlsx_not_found` | 422 | Folder root has 0 xlsx | `url` |
 | `sheet_not_found` | 422 | xlsx missing `Preview Links` | `expected: "Preview Links"` |
 | `image_too_large` | 413 | Image exceeds 25 MB | `max_bytes`, `actual_bytes` |
 | `sharepoint_auth` | 502 | Graph returned 401/403 | — |
@@ -181,17 +182,20 @@ Cache write only on 2xx responses. Errors are not cached.
 
 **Per-call sequence:**
 
-1. Worker requests fresh access token from Azure AD token endpoint with `client_id`, `client_secret`, `scope=https://graph.microsoft.com/.default`.
-2. Worker calls Graph API with `Authorization: Bearer <access_token>`.
-3. Token is discarded after the call. No caching.
+1. Worker requests a fresh access token per logical request (one user-facing call to `/api/sharepoint/*`) from the Azure AD token endpoint with `client_id`, `client_secret`, `scope=https://graph.microsoft.com/.default`.
+2. Worker calls Graph API with `Authorization: Bearer <access_token>`. The token is reused across the 2-3 Graph sub-calls within that request (e.g. share-resolve → enumerate children → fetch bytes).
+3. Token is discarded at request end. No cross-request caching.
 
 **Why no token cache:** Microsoft tokens are ~1 hour. Caching saves ~200ms per call but adds (a) expiry tracking, (b) refresh-on-401 retry logic, (c) per-instance state. Operator-triggered single-ticket calls don't warrant the complexity. Revisit if Phase 2 generates bulk traffic.
 
 **Graph endpoints used:**
 
-- `GET /sites/{site-id}/drive/root:/{path}:/children` — folder enumeration.
+- Folder resolution from URL: `GET /shares/{u!<base64url>}/driveItem` — translate the user-supplied SharePoint web URL into a Graph `driveItem` (carries `id` + `parentReference.driveId`). **Share-id approach, not path-lookup** — see rationale below.
+- `GET /drives/{drive-id}/items/{item-id}/children?$top=200` — folder enumeration from the resolved driveItem.
 - `GET /drives/{drive-id}/items/{item-id}/content` — file bytes (xlsx + images).
-- Site resolution from URL: `GET /sites/{hostname}:/{server-relative-path}` to translate the user-provided SharePoint web URL into `site-id`.
+- Site/drive resolution (config-driven, for tenant-guard): `GET /sites/{hostname}:/{server-relative-path}` then `GET /sites/{site-id}/drive`.
+
+**Rationale (D1 — share-id over path-lookup):** the original design listed `GET /sites/{site-id}/drive/root:/{path}:/children`. That path-rooted lookup is brittle: SharePoint silently exposes the same document library under both the `Shared Documents` and `Documents` server-relative aliases, and which one a user-supplied URL carries drifts unpredictably — a path-lookup against the wrong alias 404s with no useful signal. The share-id form (`u!` + unpadded base64url of the full URL, per Graph's shares API) is robust to URL shape (UI browser URLs, share URLs, encoded paths, library-alias variants) because Graph resolves the share token to the canonical driveItem itself.
 
 ---
 
@@ -266,7 +270,7 @@ lib/api/
   sharepoint-bearer-auth.ts # Mirrors lib/api/bearer-auth.ts but for the SHAREPOINT token
 ```
 
-**Reuse:** xlsx parsing reuses the existing `xlsx` package (already in deps; see §2 in CLAUDE.md). Don't add `xlsx-js-style` — read-only, no styling.
+**Reuse:** xlsx parsing uses `xlsx-js-style` (already in deps from Batch 004.2; the plain `xlsx` package was removed 2026-04-26 over unpatched high-CVEs). `xlsx-js-style` is a read-compatible superset, so the read-only `Preview Links` parse works against it unchanged — no new build-time dependency added. (Rationale: D3.)
 
 **New env vars (all set via `wrangler secret put`):**
 
@@ -315,4 +319,4 @@ CROSS_CLAUDE.md §3 also gets updated: `/api/sharepoint/*` moves from PLANNED to
 
 ---
 
-*Draft 2026-05-13 | Updated 2026-05-26 (§9 Prerequisites + status header reflect Azure re-verification — admin consent already granted; SHIP gate dissolved) | Design session DC + AC + Lacey | Locked: scope (read-only), Graph scope (Sites.Selected), endpoint shape (3 routes), sync semantics (structured + 60s cache), failure (fresh token, 401→502, atomic rotation) | Build path clear*
+*Draft 2026-05-13 | Updated 2026-05-26 (§9 Prerequisites + status header reflect Azure re-verification — admin consent already granted; SHIP gate dissolved) | SHIPPED 2026-05-29 (4 SHIP-day deviations folded in: D1 share-id resolution, D2 `xlsx_not_found` 422 hard-fail, D3 `xlsx-js-style` dep, D4 token per logical request) | Design session DC + AC + Lacey | Locked: scope (read-only), Graph scope (Sites.Selected), endpoint shape (3 routes), sync semantics (structured + 60s cache), failure (fresh token, 401→502, atomic rotation)*

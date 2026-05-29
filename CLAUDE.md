@@ -72,7 +72,12 @@ Batch 005.31a (hotfix: pass SUPABASE_SERVICE_ROLE_KEY to the
 GH Actions build step so admin route modules can import
 supabaseAdmin at module-eval during page-data collection;
 deploy.yml header rewrite + §13 r31 on paths-ignore /
-workflow_dispatch — 2026-05-26).
+workflow_dispatch — 2026-05-26),
+Batch 009 (SharePoint proxy — three read-only GET routes
+under /api/sharepoint/* against Microsoft Graph,
+Sites.Selected scope, 60s in-memory cache, share-id
+folder resolution, middleware carveout for /api/sharepoint
++ /api/brands — 2026-05-29).
 All migrations 001-017 have run against production.
 Batch 004.4.5 produced a UX discovery plan for Coverage + Settings
 reorg (Batch 005 implementation). See §16 for full shipped log.
@@ -192,7 +197,12 @@ cqip/
 │       │                                     (status/timestamp/version/environment); no auth,
 │       │                                     no DB; deploy.yml smoke check hits this
 │       ├── logs/edit/route.ts              # Server-side edit endpoint
-│       └── jira/sync/route.ts              # Proxy to jira-sync edge function (forwards CQIP_SYNC_AUTH_KEY)
+│       ├── jira/sync/route.ts              # Proxy to jira-sync edge function (forwards CQIP_SYNC_AUTH_KEY)
+│       └── sharepoint/                     # Batch 009: read-only Microsoft Graph proxy
+│           ├── folder/route.ts             # GET ?url= → enumerate folder (single xlsx + Shareable
+│           │                                 Screenshots/); share-id resolution; 60s cache
+│           ├── xlsx/route.ts               # GET ?ref= → parse Preview Links sheet → structured rows; 60s cache
+│           └── image/route.ts             # GET ?ref= → stream image bytes (25 MB cap; no cache)
 │
 ├── components/
 │   ├── ui/                      # shadcn components + SplitButton (Batch 003)
@@ -235,8 +245,21 @@ cqip/
 │   │   └── get-changed-by.ts    # Batch 004.3: canonical helper for server-side
 │   │                              `changed_by` derivation (see §13 rule 19)
 │   ├── api/
-│   │   └── bearer-auth.ts       # Batch 004.5: timing-safe Bearer compare for
-│   │                              /api/brands/* routes (CQIP_BRANDS_API_TOKEN)
+│   │   ├── bearer-auth.ts       # Batch 004.5: timing-safe Bearer compare for
+│   │   │                          /api/brands/* routes (CQIP_BRANDS_API_TOKEN)
+│   │   └── sharepoint-bearer-auth.ts # Batch 009: timing-safe Bearer compare for
+│   │                              /api/sharepoint/* routes (CQIP_SHAREPOINT_API_TOKEN —
+│   │                              separate blast radius from the brands token)
+│   ├── sharepoint/              # Batch 009: Microsoft Graph proxy helpers
+│   │   ├── graph-client.ts      # Fresh Azure AD token per logical request + Graph
+│   │   │                          fetch wrapper (1 retry on 5xx; token reused across sub-calls)
+│   │   ├── site-resolver.ts     # SharePoint web URL → Graph driveItem via share-id
+│   │   │                          (u!base64url); config-driven site/drive resolve; URL normalize
+│   │   ├── folder-filter.ts     # single-xlsx-at-root + Shareable Screenshots/ logic;
+│   │   │                          ignores assets/ and bugs/
+│   │   ├── xlsx-parser.ts       # Preview Links sheet → structured rows (xlsx-js-style)
+│   │   ├── cache.ts             # Per-Worker-instance Map + 60s TTL
+│   │   └── errors.ts            # Error envelope builders + code→HTTP map
 │   ├── easter-eggs/
 │   │   ├── use-konami-code.ts
 │   │   ├── use-loading-message.ts
@@ -353,6 +376,14 @@ WEBHOOK_SECRET=                  # Random secret to validate Jira webhook payloa
 CQIP_SYNC_AUTH_KEY=              # Shared secret between Worker and jira-sync edge function. Can be any random string — generate with `openssl rand -hex 32`. Not a JWT.
 CQIP_BRANDS_API_TOKEN=           # Shared secret for the read-only /api/brands endpoints (consumed by the Forge QA-automation app). Same value must be set as an encrypted Forge variable on the Forge side. Generate with `openssl rand -hex 32`. Not a JWT.
 CQIP_DROUGHT_AUTH_KEY=           # Shared secret between the daily pg_cron job and the drought-evaluator edge function. Generate with `openssl rand -hex 32`. Not a JWT. Set on Supabase Edge Functions secrets only — Worker does not need this one.
+
+# SharePoint (Batch 009 — Microsoft Graph proxy)
+CQIP_SHAREPOINT_API_TOKEN=       # AC (Forge) ↔ Worker bearer for /api/sharepoint/* (timing-safe compare). Separate blast radius from CQIP_BRANDS_API_TOKEN — NOT shared. Generate with `openssl rand -hex 32`. Not a JWT. Rotates atomically across four surfaces (Worker · Forge dev · Forge prod · DC .env.local) per §13 rule 27.
+AZURE_CLIENT_ID=                 # Azure app registration "CQIP Dashboard - SharePoint Integration" (6aa464c1-4eb9-4d94-b087-6eebe4fa8cb6). Worker only.
+AZURE_CLIENT_SECRET=             # Azure app client secret (client-credentials flow). Worker only. Hygiene rotation pending (Worker-only; Carl-executable; non-blocking).
+AZURE_TENANT_ID=                 # Fusion92 Azure AD tenant. Worker only.
+SHAREPOINT_SITE_HOSTNAME=fusion92.sharepoint.com   # CRO SharePoint site host.
+SHAREPOINT_SITE_PATH=/sites/CRO  # CRO SharePoint site server-relative path.
 ```
 
 ### Where they're set
@@ -1616,19 +1647,9 @@ Resolved             → green-500
   expires (prompted the 2026-04-23 incident). Planned Batch 005.
 - **Radara Edge Function deploy** — code is committed at
   `supabase/functions/radara-sweep/index.ts` but not deployed.
-- **SharePoint integration** — Azure app "CQIP Dashboard -
-  SharePoint Integration" (client_id
-  6aa464c1-4eb9-4d94-b087-6eebe4fa8cb6) provisioned and
-  Postman-verified 2026-05-02 / 2026-05-03 against the CRO
-  SharePoint site. End-to-end Graph re-verified 2026-05-26
-  (token 200, site metadata 200, drive children 200) —
-  admin consent on `Sites.Selected` and per-site CRO grant
-  both already in place. Batch 009 DESIGN locked 2026-05-13
-  — see `docs/batch-009-sharepoint-spec.md` (read-only
-  proxy, three GET routes under `/api/sharepoint/*`,
-  `Sites.Selected` Graph scope, structured response + 60s
-  per-call cache, fresh Graph token per call). No
-  outstanding Azure access work; build path clear.
+
+(SharePoint integration shipped as Batch 009 on 2026-05-29 —
+moved out of Planned. See §16.)
 
 ### Identified for v1.5 (post-v1)
 - **Multi-client readiness** — Batch 004.99 discovery shipped
@@ -1660,21 +1681,18 @@ Batch 004.10 UX polish on 2026-05-01.)
       `/api/brands/*` until Forge consumer goes live. Tracked
       cross-project; not actionable on dashboard side.
 
-**SharePoint integration**
-- [ ] **SharePoint integration** — Azure app provisioned and
-      Postman-verified 2026-05-02 / 2026-05-03 (see §14).
-      Production integration deferred to Batch 009.
-      Prerequisites tracked under "Pending rotations" below.
-
 **Pending rotations (live, both sides)**
 - [ ] **Rotate Azure client secret** — Hygiene rotation.
       Current secret was visible in 2026-05-02/03 verification
       screenshots and in the 2026-05-26 verification curl.
       Carl-executable (Worker-only rotation per
-      `docs/batch-009-sharepoint-spec.md` §7). NOT blocking
-      Batch 009 build — the current value is functional and
-      admin consent is in place. Rotation is hygiene per
-      §13 rule 27 (secret rotation atomicity).
+      `docs/batch-009-sharepoint-spec.md` §7). Batch 009 has
+      now SHIPPED on the current value (functional, admin
+      consent in place), so this stays a pure hygiene rotation
+      per §13 rule 27 (secret rotation atomicity). Target
+      window: Fri 2026-05-29 / Mon 2026-06-01. Worker-only —
+      no Forge surface holds this value (only
+      CQIP_SHAREPOINT_API_TOKEN does), so no AC coordination.
 - [ ] **Rotate CQIP_BRANDS_API_TOKEN** — In circulation since
       brands API initial setup (Batch 005.13-005.14 timeframe).
       Never rotated. Not known to be compromised — rotation
@@ -2100,95 +2118,24 @@ Realistic scope: 2-4 week build, not a weekend project. The
 "single push" hides a multi-step orchestrator with error handling,
 idempotency, and rollback semantics.
 
-### Batch 009 — SharePoint integration
-**Status:** DESIGN locked 2026-05-13. Full spec at
-`docs/batch-009-sharepoint-spec.md`. Build path clear —
-no outstanding Azure access work.
+### Batch 009 — SharePoint integration — SHIPPED 2026-05-29
+Read-only Microsoft Graph proxy. Three GET routes under
+`/api/sharepoint/*` (`/folder`, `/xlsx`, `/image`),
+`Sites.Selected` scope, 60s in-memory cache, share-id folder
+resolution. See §16 for the full shipped-log entry and the
+four SHIP-day deviations (D1-D4). Full spec at
+`docs/batch-009-sharepoint-spec.md` (status header now
+SHIPPED). Day-one consumer AC's Phase 2 is unblocked.
 
-Wires the CQIP Dashboard to the CRO SharePoint site via
-Microsoft Graph. Day-one consumer is AC's Phase 2 workflow
-(given a Jira ticket's QA Doc URL: enumerate folder, parse
-xlsx Preview Links sheet, fetch screenshot bytes).
-
-**Groundwork (2026-05-02 / 2026-05-03):** Azure app "CQIP
-Dashboard - SharePoint Integration" (client_id
-6aa464c1-4eb9-4d94-b087-6eebe4fa8cb6) provisioned and
-Postman-verified. Microsoft Graph reachability confirmed
-end-to-end against the CRO SharePoint site.
-
-**Azure setup (verified 2026-05-26):** Admin consent on
-`Sites.Selected` and per-site CRO grant both already in
-place. Three-operation end-to-end test passed (token,
-site metadata, drive enumeration). No outstanding Azure
-access work; current `AZURE_CLIENT_SECRET` is functional.
-Secret rotation is hygiene-deferred per CROSS_CLAUDE §5.
-
-**Locked decisions (DESIGN session 2026-05-13):**
-1. **v1 write scope:** read-only. Matches §13 rule 5
-   (read-only against Jira) and Batch 007 (read-only Boards).
-2. **Microsoft Graph scope set:** `Sites.Selected` (tightest
-   scope that supports the three operations, per-site grant).
-3. **Endpoint shape:** three GET routes, one per resource
-   type (`/folder`, `/xlsx`, `/image`) — matches brands-API
-   precedent. No mode-parameter multiplexing.
-4. **Sync semantics:** structured response + 60s per-call
-   cache (folder + xlsx only; images pass through). Proxy
-   owns folder-filtering and xlsx-parsing rules so AC
-   doesn't reimplement them.
-5. **Failure / rotation:** fresh Graph token per call (no
-   token cache), 401→502 with auth-error envelope, 1 retry
-   on 5xx with 500ms backoff. `CQIP_SHAREPOINT_API_TOKEN`
-   rotates atomically across four surfaces (Worker · Forge
-   dev · Forge prod · DC `.env.local`) per §13 rule 27.
-
-**Decisions locked earlier at groundwork time (2026-05-11),
-still in force:**
-- Auth pattern mirrors brands API: separate Bearer token
-  `CQIP_SHAREPOINT_API_TOKEN` (NOT shared with
-  `CQIP_BRANDS_API_TOKEN`; separate blast radius per §4 token
-  conventions), timing-safe compare server-side, set on both
-  Worker (wrangler secret) and Forge (encrypted variable).
-- Server-side proxy through Worker to Microsoft Graph — no
-  direct Forge → Graph calls. Keeps Graph credentials behind
-  the Worker.
-
-**Endpoint summary (full shapes in spec doc §3):**
-- `GET /api/sharepoint/folder?url=<folder-url>` — enumerate
-  folder; identify single xlsx at root + `Shareable
-  Screenshots/` images; ignore `assets/` and `bugs/`.
-- `GET /api/sharepoint/xlsx?ref=<file-ref>` — parse
-  `Preview Links` sheet rows 4+ (Col A→label, B→variation,
-  C→national_url, D→local_url); does NOT return raw bytes.
-- `GET /api/sharepoint/image?ref=<file-ref>` — stream image
-  bytes; 25 MB cap; pass-through `Content-Type`.
-
-**Implementation surface:** Worker routes under
-`app/api/sharepoint/` (NOT Supabase Edge Functions), plus
-`lib/sharepoint/` helpers (graph-client, site-resolver,
-folder-filter, xlsx-parser, cache, errors) and
-`lib/api/sharepoint-bearer-auth.ts`. No DB migration — the
-proxy is stateless. xlsx parsing reuses the existing `xlsx`
-package; no new build-time deps.
-
-**New env vars at SHIP:** `CQIP_SHAREPOINT_API_TOKEN`,
-`AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`,
-`SHAREPOINT_SITE_HOSTNAME`, `SHAREPOINT_SITE_PATH`.
-
-**Priority order (updated 2026-05-26):**
+**Priority order (updated 2026-05-29):**
 5.19 (done) → Batch 005.25 (done 2026-05-13) → Batch 009
-(next, build path clear) → Batch 006 →
-Batch 010 → Batch 011 → Batch 007 → Batch 008.
+(SHIPPED 2026-05-29) → Batch 006 → Batch 010 → Batch 011 →
+Batch 007 → Batch 008.
 
-SharePoint sits ahead of Boards because (a) the integration
-groundwork is already done, (b) it unblocks a CRO team
-workflow currently blocked on SharePoint manual access, and
-(c) Boards has a hard prereq on SPL onboarding finishing
-first regardless.
-
-**Open questions for SHIP-day (not blocking DESIGN — see
-spec §12):** multi-site support deferral; Worker memory
-ceiling vs 25 MB image cap. (Admin-consent question
-resolved 2026-05-26 — both layers already granted.)
+**SHIP-day open questions resolved:** multi-site support
+stays deferred (single Fusion92 tenant via env-config, per
+spec §8/§12); 25 MB image cap retained as a proxy-side
+Worker-memory guard.
 
 ### Ops / deferred
 - [ ] **Radara Edge Function deploy** — code committed at
@@ -2214,6 +2161,91 @@ resolved 2026-05-26 — both layers already granted.)
 ---
 
 ## 16. Shipped Features Log
+
+### Batch 009 — SharePoint integration LIVE — 2026-05-29
+
+Read-only Microsoft Graph proxy from the Worker to the CRO
+SharePoint site. Closes the §14 "Planned but not yet shipped"
+SharePoint entry and the §15 Batch 009 pending section. Day-one
+consumer AC's Phase 2 workflow (Jira QA Doc URL → enumerate
+folder → parse Preview Links xlsx → fetch screenshot bytes) is
+unblocked as of 2026-05-29.
+
+**What shipped:**
+- **Three read-only GET routes under `app/api/sharepoint/`:**
+  - `folder/route.ts` — `?url=` enumerates a SharePoint folder:
+    identifies the single xlsx at root + the `Shareable
+    Screenshots/` images; ignores `assets/` and `bugs/`; returns
+    the structured `{folder, xlsx, screenshots[], warnings[]}`
+    shape with `ref` opaque to AC. 60s in-memory cache.
+  - `xlsx/route.ts` — `?ref=` parses the `Preview Links` sheet
+    (rows 4+, Col A→label / B→variation / C→national_url /
+    D→local_url); returns structured rows, NOT raw bytes. 60s
+    cache.
+  - `image/route.ts` — `?ref=` streams image bytes (25 MB cap,
+    pass-through `Content-Type`, no cache).
+- **`lib/sharepoint/` helpers:** `graph-client` (fresh Azure AD
+  token per logical request, reused across the 2-3 Graph
+  sub-calls, 1 retry on 5xx), `site-resolver` (share-id folder
+  resolution + config-driven site/drive + URL normalize),
+  `folder-filter`, `xlsx-parser` (xlsx-js-style), `cache`
+  (per-Worker Map + 60s TTL), `errors` (envelope + code→HTTP
+  map). Plus `lib/api/sharepoint-bearer-auth.ts` (timing-safe
+  Bearer compare against `CQIP_SHAREPOINT_API_TOKEN`, separate
+  blast radius from the brands token).
+- **Auth:** `Sites.Selected` Graph scope (per-site CRO grant),
+  client-credentials flow. Bearer-gated externally; no
+  query-param fallback.
+- **Middleware carveout** for `/api/sharepoint` + `/api/brands`
+  so the session middleware doesn't intercept these
+  Bearer-authenticated API routes (the brands routes were
+  retroactively covered by the same carveout).
+- **No DB migration** — the proxy is stateless (no audit rows,
+  no cache table, no token persistence).
+
+**Six new env vars (Worker secrets via `wrangler secret put`;
+`.env.local` for local dev):** `CQIP_SHAREPOINT_API_TOKEN`,
+`AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`,
+`SHAREPOINT_SITE_HOSTNAME` (`fusion92.sharepoint.com`),
+`SHAREPOINT_SITE_PATH` (`/sites/CRO`). See §4.
+
+**Four SHIP-day deviations from the locked DESIGN (folded into
+the spec doc):**
+- **D1 — share-id folder resolution.** The original spec listed
+  `GET /sites/{site-id}/drive/root:/{path}:/children`. Switched
+  to `GET /shares/{u!base64url}/driveItem` → `GET /drives/{drive-id}/items/{item-id}/children`.
+  Path-lookup silently 404s on the `Shared Documents` vs
+  `Documents` library-alias drift; share-id is robust to URL
+  shape.
+- **D2 — `xlsx_not_found` flipped to hard-fail (422).** 0 xlsx
+  at folder root was originally a soft-fail warning; locked to a
+  422 (context: `url`) per Lacey so AC gates Phase 2 on a real
+  status code instead of inspecting a warning.
+- **D3 — `xlsx-js-style`, not `xlsx`.** The spec said "reuse the
+  existing `xlsx` package"; that package was removed 2026-04-26
+  (Batch 004.2) over unpatched CVEs. The parser uses
+  `xlsx-js-style` (already in deps, read-compatible superset) —
+  no new build-time dependency.
+- **D4 — token per logical request.** Clarified "fresh token per
+  call" to "fresh token per user-facing `/api/sharepoint/*`
+  request, reused across the 2-3 Graph sub-calls, discarded at
+  request end" — no cross-request caching.
+
+**Smoke target:** live-Azure smoke against the Test Task 001
+folder (WDG 07 variants) — green: 12 screenshots enumerated, 6
+Preview Links rows parsed.
+
+**Commits:** `c7afede` (Step 2: routes + Jenny/Karen hardening)
++ `98a6133` (Step 2: middleware carveout for /api/sharepoint +
+/api/brands) + this SHIP docs commit.
+
+**Advisor credit:** AC for the day-one needs clarification
+(folder/xlsx/image shapes, soft-fail vs hard-fail framing);
+Jenny + Karen for the five-finding pre-ship review.
+
+**Hygiene follow-up (non-blocking):** `AZURE_CLIENT_SECRET`
+rotation remains queued (Worker-only, Carl-executable, Fri/Mon
+target) — §15 Pending rotations.
 
 ### Batch 011 — Node 24 upgrade + /api/health endpoint — 2026-05-27
 
@@ -4714,4 +4746,4 @@ demo blocker.
 
 ---
 
-*Last updated: 2026-05-27 | CQIP v1.6 — Batch 011 (Node 24 CI bump + public /api/health probe). `app/api/health/route.ts` returns always-200 JSON (status/timestamp/version/environment), no auth, no DB; deploy.yml bumped setup-node 20→24 and swapped the smoke check from /login to /api/health (now asserts 200 + {"status":"ok"}). Closes the §15 Ops/deferred smoke-check item. ⚠ COMMITTED, NOT YET PUSHED: Node 24 local-build gate (spec Step 1) PASSED green (node@24 24.16.0 installed keg-only via brew since the dev machine had only Node 22 + no version manager). Commit made on main; push + CI-watch + prod /api/health curl handed to Lacey (gh not installed; push to main = prod deploy). See §16 Batch 011 for the deploy-status caveat + rollback. Prior (v1.5, 2026-05-26):* Batch 005.31a + Azure prereqs verification + CC-namespace finalization, shipped same-day across three commits. 005.31a: SUPABASE_SERVICE_ROLE_KEY added to GH Actions build env so admin route module-eval imports succeed during page-data collection; §13 r31 documents workflow_dispatch as the only path to test workflow edits given paths-ignore: .github/**. Azure verification: end-to-end Graph curl (token/site/drive children all 200) confirmed admin consent on Sites.Selected + per-site CRO grant were already in place; "SHIP gated on Azure prereqs" framing removed from 4 doc surfaces (CLAUDE.md §14 + §15, CROSS_CLAUDE.md, batch-009 spec) as a phantom blocker that had carried 23 days. CROSS_CLAUDE.md CC-namespace finalized at CC1-CC8 (§2); three originally-proposed rules moved to DC-local CLAUDE_RULES.md R19 (stale-status re-verification) / R20 (last-verified timestamps) / R21 (blocker reality-check) per AC namespace-fit review. CROSS_CLAUDE section numbering settled: §3 contract surfaces, §4 pending rotations, §5 priority, §6 event log. §13 r32 reworked from a standalone rule into a discoverability hook pointing at R21 (canonical), so the §13 entry and the CLAUDE_RULES.md rule don't drift.*
+*Last updated: 2026-05-29 | CQIP v1.7 — Batch 009 (SharePoint integration LIVE). Read-only Microsoft Graph proxy: three GET routes under `/api/sharepoint/*` (`/folder` enumerate, `/xlsx` parse Preview Links, `/image` stream bytes), `Sites.Selected` scope, 60s in-memory cache, share-id folder resolution, 25 MB image cap; `lib/sharepoint/*` helpers + `lib/api/sharepoint-bearer-auth.ts` (CQIP_SHAREPOINT_API_TOKEN, separate blast radius from brands token); middleware carveout for /api/sharepoint + /api/brands; no DB migration (stateless). Six new env vars (CQIP_SHAREPOINT_API_TOKEN + 4 Azure/SharePoint config + SHAREPOINT_SITE_PATH). Four SHIP-day deviations from DESIGN: D1 share-id resolution (alias-drift robustness), D2 xlsx_not_found→422 hard-fail, D3 xlsx-js-style not xlsx (CVE-removed 2026-04-26), D4 token per logical request. Live-Azure smoke green (Test Task 001 / WDG 07: 12 screenshots, 6 Preview Links rows). Closes §14 Planned SharePoint entry + §15 Batch 009 pending. AZURE_CLIENT_SECRET hygiene rotation still queued (Worker-only, Fri/Mon target). Commits c7afede + 98a6133 (Step 2) + this SHIP docs commit. Advisor credit: AC (day-one needs), Jenny + Karen (five-finding review). DO NOT PUSH — three-commit chain pushed by Lacey after eyeball. Prior (v1.6, 2026-05-27): Batch 011 (Node 24 CI bump + public /api/health probe) — `app/api/health/route.ts` always-200 JSON, deploy.yml setup-node 20→24 + smoke check /login→/api/health; committed-not-pushed, handed to Lacey. Prior (v1.5, 2026-05-26):* Batch 005.31a + Azure prereqs verification + CC-namespace finalization, shipped same-day across three commits. 005.31a: SUPABASE_SERVICE_ROLE_KEY added to GH Actions build env so admin route module-eval imports succeed during page-data collection; §13 r31 documents workflow_dispatch as the only path to test workflow edits given paths-ignore: .github/**. Azure verification: end-to-end Graph curl (token/site/drive children all 200) confirmed admin consent on Sites.Selected + per-site CRO grant were already in place; "SHIP gated on Azure prereqs" framing removed from 4 doc surfaces (CLAUDE.md §14 + §15, CROSS_CLAUDE.md, batch-009 spec) as a phantom blocker that had carried 23 days. CROSS_CLAUDE.md CC-namespace finalized at CC1-CC8 (§2); three originally-proposed rules moved to DC-local CLAUDE_RULES.md R19 (stale-status re-verification) / R20 (last-verified timestamps) / R21 (blocker reality-check) per AC namespace-fit review. CROSS_CLAUDE section numbering settled: §3 contract surfaces, §4 pending rotations, §5 priority, §6 event log. §13 r32 reworked from a standalone rule into a discoverability hook pointing at R21 (canonical), so the §13 entry and the CLAUDE_RULES.md rule don't drift.*
