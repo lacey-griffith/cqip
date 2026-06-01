@@ -98,6 +98,12 @@ rules on both sides, this trigger is already mirrored —
 CC8 codifies it at the CC-namespace level for new Claudes
 joining the project.
 
+**CC9. Relay repo state at an immutable ref.** Link files at a
+commit SHA (`/blob/<sha>/`), not `/blob/main/` — branch-tip URLs
+can serve stale CDN copies. For load-bearing state, paste
+`git show` / `git log` output; the commit is primary evidence, a
+fetched blob is a cache.
+
 ---
 
 ## 3. Contract Surfaces
@@ -167,16 +173,28 @@ Mirrored from DC §15 + AC §15. Status here is authoritative for
 both sides.
 
 - [ ] **Rotate Azure client secret** —
-      Compromised-by-default per 2026-05-02/03 verification
-      screenshots and the 2026-05-26 verification curl.
-      Worker-only rotation per Batch 009 spec §7 (no AC
-      coordination needed). Carl-executable; institutional
-      API-path block from 2026-05-19 has progressed —
-      Carl can rotate via available path during the week of
-      2026-06-01 (Lacey returns from travel; Carl available).
+      **Status (2026-06-01):** rotated by Carl 2026-06-01. The
+      rotated-to value was saved to `.env.local`, deployed to
+      the Worker via `wrangler secret put`, then accidentally
+      exposed in a chat paste — so the value now live in prod is
+      itself compromised. Prod verified healthy 2026-06-01 (live
+      curl on `/api/sharepoint/folder`, Test Task 001 → HTTP 200,
+      full enumeration: xlsx + 12 WDG 07 screenshots, warnings
+      empty). NOT closed — exposure stays open until a clean
+      re-rotation lands.
+      **Blocked on:** Carl granting Lacey app access on the Azure
+      app (client_id `6aa464c1-4eb9-4d94-b087-6eebe4fa8cb6`) for
+      self-service rotation. Requested 2026-06-01; ETA
+      days-to-weeks.
+      **Owner:** Lacey. **Trigger:** access granted → rotate +
+      `wrangler secret put` + re-verify 200 on
+      `/api/sharepoint/folder`.
+      **Interim blast radius:** bounded — `Sites.Selected` /
+      CRO site only / read-only; the gate token
+      `CQIP_SHAREPOINT_API_TOKEN` is NOT exposed.
       Surfaces: Worker secret (single surface).
-      **Last verified:** 2026-05-26 (secret still functional;
-      Graph calls succeeding)
+      **Last verified:** 2026-06-01 (prod 200 on
+      `/api/sharepoint/folder`)
 - [ ] **Rotate CQIP_BRANDS_API_TOKEN** —
       Hygiene rotation. Not known compromised. In circulation
       since brands API initial setup (Batch 005.13-005.14
@@ -238,6 +256,48 @@ Cross-project events worth durable record. Newest at top.
 Covers events from 2026-04-23 forward (start of the drift-
 prevention era). Project-internal events stay in each
 project's CLAUDE.md §16.
+
+### 2026-06-01 — AZURE_CLIENT_SECRET rotated; rotated-to value exposed, prod verified healthy, clean re-rotation blocked on app access
+
+Precise sequence:
+1. Original Azure client secret (compromised since the
+   2026-05-02/03 verification screenshots) rotated by Carl
+   2026-06-01.
+2. New secret saved to `.env.local`, deployed to the Worker via
+   `wrangler secret put` — then accidentally exposed in a chat
+   paste. So the value now live in prod is itself compromised.
+3. Prod VERIFIED HEALTHY 2026-06-01: live curl on
+   `/api/sharepoint/folder` (Test Task 001) → HTTP 200, full
+   enumeration (xlsx + 12 WDG 07 screenshots, warnings empty).
+   Both the gate token path and the Azure-secret → Graph path
+   are working.
+4. Clean re-rotation BLOCKED: needs Carl to grant Lacey app
+   access on the Azure app (client_id
+   `6aa464c1-4eb9-4d94-b087-6eebe4fa8cb6`). Requested
+   2026-06-01; ETA days-to-weeks.
+
+Tracked **open** (exposure live until clean re-rotation), not
+closed — see §4. Prod confirmed up (200). Interim blast radius
+bounded: `Sites.Selected` / CRO site only / read-only; the gate
+token `CQIP_SHAREPOINT_API_TOKEN` is NOT exposed. Logged for
+cross-Claude visibility because AC Phase 2 is the first
+production traffic on these routes.
+
+### 2026-06-01 — AC: test mode fully ended (relayed)
+
+AC/Forge test mode ended in v2.15.0 (dev): the `TEST_MODE`
+eligibility gate was dropped (commit b5726f6), and the panel is
+hidden from non-CRO accounts via `displayConditions` (commit
+8c78d19). AC retired the `ALLOWED_TEST_TICKETS` recon and the
+forge-vars overwrite caution. DC confirms no live DC/CC reference
+assumes test mode is still active.
+
+### 2026-06-01 — CC9 added: relay repo state at immutable ref
+
+Trigger: a 2026-06-01 fetch of a `/blob/main/` URL served a
+2026-05-12 cached copy (stale CDN at branch tip). CC9 now
+requires immutable-ref links (`/blob/<sha>/`) and pasted
+`git show` / `git log` output for load-bearing state.
 
 ### 2026-05-29 — Batch 009 SharePoint integration SHIPPED (§3 PLANNED → LIVE)
 
@@ -637,9 +697,15 @@ Shareable Screenshots/ folder.
 
 ---
 
-*Last updated: 2026-05-26 | CC-namespace established (CC1-CC8;
-three originally-proposed rules moved DC-local per AC namespace-
-fit review). Batch 009 Azure prereqs verified end-to-end +
-Owner-reclaim bullet removed from §4 as factually incorrect
-framing. CQIP_SHAREPOINT_API_TOKEN rotation drill added to §4
-per AC Q3 (2026-05-26).*
+*Last updated: 2026-06-01 | CC9 added (relay repo state at an
+immutable ref — triggered by a stale `/blob/main/` CDN fetch).
+AC test mode fully ended (v2.15.0 dev) logged to §6.
+AZURE_CLIENT_SECRET incident tracked in §4 + §6: rotated
+2026-06-01, rotated-to value exposed in chat and now live in
+prod, prod verified healthy (200 on `/api/sharepoint/folder`),
+clean re-rotation OPEN — blocked on Carl granting Lacey Azure
+app access. Prior (2026-05-29): Batch 009 SharePoint SHIPPED, §3
+flipped PLANNED → LIVE. Prior (2026-05-26): CC-namespace
+established (CC1-CC8); Batch 009 Azure prereqs verified
+end-to-end; CQIP_SHAREPOINT_API_TOKEN rotation drill added to §4
+per AC Q3.*
