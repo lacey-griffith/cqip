@@ -471,25 +471,6 @@ export default function CoveragePage() {
 
       <Card className="sticky top-2 z-10 p-3 md:p-4">
         <div className="flex flex-wrap items-center gap-3">
-          <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--f92-gray)]">
-            Overlays
-          </span>
-          {OVERLAY_KEYS.map(k => (
-            <button
-              key={k}
-              type="button"
-              aria-pressed={overlays[k]}
-              onClick={() => setOverlays(o => ({ ...o, [k]: !o[k] }))}
-              className={cn(
-                'inline-flex h-7 items-center rounded-full border px-3 text-xs font-medium transition',
-                overlays[k]
-                  ? OVERLAY_ACTIVE_CLASS[k]
-                  : 'border-[color:var(--f92-border)] bg-transparent text-[color:var(--f92-gray)] hover:bg-[color:var(--f92-tint)]',
-              )}
-            >
-              {OVERLAY_LABELS[k]}
-            </button>
-          ))}
           <div className="ml-auto flex flex-wrap items-center gap-3">
             <label className="flex h-9 items-center gap-2 text-sm text-[color:var(--f92-dark)]">
               <input
@@ -599,11 +580,36 @@ export default function CoveragePage() {
         </div>
       </Card>
 
-      <div>
-        <h2 className="cqip-section-title text-sm font-semibold uppercase tracking-[0.2em] text-[color:var(--f92-navy)]">Pipeline</h2>
-        <p className="mt-1 text-xs text-[color:var(--f92-gray)]">
-          Live work-in-progress by stage (from Jira). Click any count to see the tickets.
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="cqip-section-title text-sm font-semibold uppercase tracking-[0.2em] text-[color:var(--f92-navy)]">Pipeline</h2>
+          <p className="mt-1 text-xs text-[color:var(--f92-gray)]">
+            Live work-in-progress by stage (from Jira). Click any count to see the tickets.
+          </p>
+        </div>
+        {/* Overlay toggles live with the Pipeline table — they only badge
+            pipeline counts. State + handlers unchanged; render-location only. */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--f92-gray)]">
+            Overlays
+          </span>
+          {OVERLAY_KEYS.map(k => (
+            <button
+              key={k}
+              type="button"
+              aria-pressed={overlays[k]}
+              onClick={() => setOverlays(o => ({ ...o, [k]: !o[k] }))}
+              className={cn(
+                'inline-flex h-7 items-center rounded-full border px-3 text-xs font-medium transition',
+                overlays[k]
+                  ? OVERLAY_ACTIVE_CLASS[k]
+                  : 'border-[color:var(--f92-border)] bg-transparent text-[color:var(--f92-gray)] hover:bg-[color:var(--f92-tint)]',
+              )}
+            >
+              {OVERLAY_LABELS[k]}
+            </button>
+          ))}
+        </div>
       </div>
 
       <Card>

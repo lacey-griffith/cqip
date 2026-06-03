@@ -2291,7 +2291,11 @@ out and remain unscheduled.
   Both tables share the `ProjectBrandFilter` scope + single-brand
   exemption; KPIs stay full-scope (program-health boundary, Batch
   005.22).
-- **Overlay toggles** are visual-only (never filter rows out). When
+- **Overlay toggles** are visual-only (never filter rows out) and
+  live directly above the Pipeline table (relocated out of the top
+  control bar in a 010 follow-on — they only badge pipeline counts,
+  so they belong with that table; the top bar keeps Project pills +
+  Show paused + Export). When
   on, each stage count renders a per-overlay `OverlayCountBadge`
   showing the tagged subset (blue NI / amber TS / gray OH); badges
   stack. **`PipelineStageDrawer`** (Sheet, stacks per §13 r26) opens
