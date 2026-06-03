@@ -70,6 +70,14 @@
   --pill-filter-fg:                     #1E2D6B;
   --pill-filter-paused-border:          rgba(30, 45, 107, 0.35);
   --pill-filter-selected-paused-border: rgba(255, 255, 255, 0.5);
+
+  /* KPI long-range accent (Batch 010) — teal treatment that promotes the
+     Tests This Year / Tests All Time cards above the rolling-window KPIs.
+     Light mode: pale teal fill, teal-700 border, deep-teal value text.
+     fg #0E5A52 on the pale fill clears WCAG AA for the large numerals. */
+  --kpi-longrange-bg:     #E0F2F1;
+  --kpi-longrange-border: #0F766E;
+  --kpi-longrange-fg:     #0E5A52;
 }
 
 :root[data-theme="dark"] {
@@ -135,6 +143,12 @@
   --pill-filter-fg:                     #B5D4F4;
   --pill-filter-paused-border:          rgba(181, 212, 244, 0.4);
   /* --pill-filter-selected-paused-border inherits from :root (white@50%) */
+
+  /* KPI long-range accent — dark mode: deep-teal fill, teal-400 border,
+     teal-300 value text. fg #5EEAD4 on the #0C2F2C fill clears WCAG AA. */
+  --kpi-longrange-bg:     #0C2F2C;
+  --kpi-longrange-border: #2DD4BF;
+  --kpi-longrange-fg:     #5EEAD4;
 }
 
 @theme inline {

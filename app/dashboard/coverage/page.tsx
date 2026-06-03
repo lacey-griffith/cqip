@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Sparkline } from '@/components/coverage/sparkline';
 import { BrandDetailDrawer } from '@/components/coverage/brand-detail-drawer';
+import { PipelineStageDrawer } from '@/components/coverage/pipeline-stage-drawer';
+import { OverlayCountBadge, OVERLAY_ACTIVE_CLASS } from '@/components/coverage/overlay-badge';
 import { SyncJiraButton } from '@/components/dashboard/sync-jira-button';
 import {
   ProjectBrandFilter,
@@ -27,6 +29,17 @@ import {
   type Milestone,
   type QualityLog,
 } from '@/lib/coverage/queries';
+import {
+  OVERLAY_KEYS,
+  OVERLAY_LABELS,
+  PIPELINE_STAGES,
+  STAGE_LABELS,
+  type OverlayKey,
+  type PipelineBrand,
+  type PipelineResponse,
+  type PipelineStage,
+  type PipelineTicket,
+} from '@/lib/coverage/pipeline-stages';
 import { cn } from '@/lib/utils';
 
 type SortKey =
@@ -84,12 +97,36 @@ export default function CoveragePage() {
   const [drawerRow, setDrawerRow] = useState<CoverageRow | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
+  // Live Jira pipeline (Batch 010). Keyed by brand_code; merged onto the
+  // shared CoverageRow brand set so both tables share filter + paused scope.
+  const [pipelineBrands, setPipelineBrands] = useState<Map<string, PipelineBrand>>(new Map());
+  const [unresolvedCount, setUnresolvedCount] = useState(0);
+  // Overlay toggles are visual-only (they never filter rows out). Local state.
+  const [overlays, setOverlays] = useState<Record<OverlayKey, boolean>>({
+    needs_info: false,
+    troubleshooting: false,
+    on_hold: false,
+  });
+  const [stageDrawer, setStageDrawer] = useState<{
+    brandLabel: string;
+    stageLabel: string;
+    tickets: PipelineTicket[];
+  } | null>(null);
+
   const refetchAll = useCallback(async () => {
-    const [brandsRes, projectsRes, milestonesRes, logsRes] = await Promise.all([
+    const [brandsRes, projectsRes, milestonesRes, logsRes, pipelineRes] = await Promise.all([
       supabase.from('brands').select('id, project_key, brand_code, jira_value, display_name, is_active, is_paused, paused_reason').order('display_name'),
       supabase.from('projects').select('jira_project_key, client_name, display_name, brand_model').eq('is_active', true).order('display_name'),
       supabase.from('test_milestones').select('id, jira_ticket_id, jira_ticket_url, jira_summary, brand_id, brand_jira_value, milestone_type, reached_at, source, created_by, notes, is_deleted').eq('is_deleted', false),
       supabase.from('quality_logs').select('id, client_brand, triggered_at, is_deleted').eq('is_deleted', false),
+      // Live Jira pipeline. Server route — keeps JIRA_API_TOKEN off the client.
+      fetch('/api/coverage/pipeline')
+        .then(async (r) =>
+          r.ok
+            ? { ok: true as const, data: (await r.json()) as PipelineResponse }
+            : { ok: false as const, detail: `${r.status} ${(await r.text().catch(() => '')).slice(0, 200)}`.trim() },
+        )
+        .catch((e) => ({ ok: false as const, detail: e instanceof Error ? e.message : String(e) })),
     ]);
 
     // Surface partial failures so the page doesn't silently render as empty.
@@ -98,6 +135,17 @@ export default function CoveragePage() {
     if (projectsRes.error) failures.push(`projects: ${projectsRes.error.message}`);
     if (milestonesRes.error) failures.push(`test_milestones: ${milestonesRes.error.message}`);
     if (logsRes.error) failures.push(`quality_logs: ${logsRes.error.message}`);
+
+    if (pipelineRes.ok) {
+      const data = pipelineRes.data;
+      setPipelineBrands(new Map(data.brands.map((b) => [b.brand_code, b])));
+      setUnresolvedCount(data.unresolved_count);
+      // Per-project Jira errors are partial — surface but still render counts.
+      if (data.errors.length > 0) failures.push(`pipeline (partial): ${data.errors.join('; ')}`);
+    } else {
+      failures.push(`pipeline: ${pipelineRes.detail}`);
+    }
+
     if (failures.length > 0) {
       console.error('[coverage] fetch failures', failures);
       setLoadError(failures.join(' · '));
@@ -321,6 +369,18 @@ export default function CoveragePage() {
     setDrawerOpen(true);
   }
 
+  function openStageDrawer(row: CoverageRow, stage: PipelineStage) {
+    const pipeline = pipelineBrands.get(row.brand.brand_code);
+    const tickets = (pipeline?.tickets ?? []).filter((t) => t.stage === stage);
+    setStageDrawer({
+      brandLabel: row.brand.display_name,
+      stageLabel: STAGE_LABELS[stage],
+      tickets,
+    });
+  }
+
+  const activeOverlayKeys = OVERLAY_KEYS.filter((k) => overlays[k]);
+
   const kpiCards = [
     { label: 'This Week', value: crossBrand.thisWeek, hint: 'Tests reached' },
     { label: 'Last Week', value: crossBrand.lastWeek, hint: 'Tests reached' },
@@ -386,10 +446,16 @@ export default function CoveragePage() {
               </Card>
             ))
           : deliveredCards.map(k => (
-              <Card key={k.label} className="border-[color:var(--f92-border)] bg-white p-3 md:p-4 shadow-sm">
-                <p className="text-xs font-medium uppercase tracking-wider text-[color:var(--f92-gray)]">{k.label}</p>
-                <p className="mt-2 text-3xl md:text-4xl font-bold text-[color:var(--f92-navy)]">{k.value}</p>
-                {k.hint ? <p className="mt-2 text-xs text-[color:var(--f92-gray)]">{k.hint}</p> : null}
+              // Long-range accent (Batch 010): teal treatment promotes these
+              // two cumulative KPIs above the rolling-window row. Tokens in
+              // globals.css (§13 rule 25) — WCAG AA in both themes.
+              <Card
+                key={k.label}
+                className="border-2 border-[color:var(--kpi-longrange-border)] bg-[color:var(--kpi-longrange-bg)] p-3 md:p-4 shadow-sm"
+              >
+                <p className="text-xs font-semibold uppercase tracking-wider text-[color:var(--kpi-longrange-fg)]">{k.label}</p>
+                <p className="mt-2 text-3xl md:text-4xl font-bold text-[color:var(--kpi-longrange-fg)]">{k.value}</p>
+                {k.hint ? <p className="mt-2 text-xs text-[color:var(--kpi-longrange-fg)] opacity-80">{k.hint}</p> : null}
               </Card>
             ))}
       </div>
@@ -404,17 +470,36 @@ export default function CoveragePage() {
       />
 
       <Card className="sticky top-2 z-10 p-3 md:p-4">
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="flex h-9 items-center gap-2 text-sm text-[color:var(--f92-dark)]">
-            <input
-              type="checkbox"
-              checked={showPaused}
-              onChange={e => setShowPaused(e.target.checked)}
-              className="h-4 w-4 rounded border-[color:var(--f92-border)] text-[color:var(--f92-orange)] focus:ring-[color:var(--f92-orange)]"
-            />
-            Show paused brands
-          </label>
-          <div className="ml-auto">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--f92-gray)]">
+            Overlays
+          </span>
+          {OVERLAY_KEYS.map(k => (
+            <button
+              key={k}
+              type="button"
+              aria-pressed={overlays[k]}
+              onClick={() => setOverlays(o => ({ ...o, [k]: !o[k] }))}
+              className={cn(
+                'inline-flex h-7 items-center rounded-full border px-3 text-xs font-medium transition',
+                overlays[k]
+                  ? OVERLAY_ACTIVE_CLASS[k]
+                  : 'border-[color:var(--f92-border)] bg-transparent text-[color:var(--f92-gray)] hover:bg-[color:var(--f92-tint)]',
+              )}
+            >
+              {OVERLAY_LABELS[k]}
+            </button>
+          ))}
+          <div className="ml-auto flex flex-wrap items-center gap-3">
+            <label className="flex h-9 items-center gap-2 text-sm text-[color:var(--f92-dark)]">
+              <input
+                type="checkbox"
+                checked={showPaused}
+                onChange={e => setShowPaused(e.target.checked)}
+                className="h-4 w-4 rounded border-[color:var(--f92-border)] text-[color:var(--f92-orange)] focus:ring-[color:var(--f92-orange)]"
+              />
+              Show paused brands
+            </label>
             <Button
               variant="secondary"
               size="sm"
@@ -426,6 +511,11 @@ export default function CoveragePage() {
           </div>
         </div>
       </Card>
+
+      <div>
+        <h2 className="cqip-section-title text-sm font-semibold uppercase tracking-[0.2em] text-[color:var(--f92-navy)]">Output</h2>
+        <p className="mt-1 text-xs text-[color:var(--f92-gray)]">Tests delivered (Dev Client Review first-entries) by brand.</p>
+      </div>
 
       <Card>
         <div className="overflow-x-auto">
@@ -508,6 +598,114 @@ export default function CoveragePage() {
           </table>
         </div>
       </Card>
+
+      <div>
+        <h2 className="cqip-section-title text-sm font-semibold uppercase tracking-[0.2em] text-[color:var(--f92-navy)]">Pipeline</h2>
+        <p className="mt-1 text-xs text-[color:var(--f92-gray)]">
+          Live work-in-progress by stage (from Jira). Click any count to see the tickets.
+        </p>
+      </div>
+
+      <Card>
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-left text-sm">
+            <thead>
+              <tr className="text-[color:var(--f92-dark)]">
+                <th className="px-4 py-3 font-semibold">Brand</th>
+                {PIPELINE_STAGES.map(stage => (
+                  <th key={stage} className="px-4 py-3 font-semibold">{STAGE_LABELS[stage]}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                Array.from({ length: 8 }, (_, i) => (
+                  <tr key={i} className="border-t border-[color:var(--f92-border)]">
+                    <td colSpan={1 + PIPELINE_STAGES.length} className="px-4 py-4">
+                      <div className="h-4 w-full animate-pulse rounded bg-[color:var(--f92-tint)]" />
+                    </td>
+                  </tr>
+                ))
+              ) : visibleRows.length === 0 ? (
+                <tr>
+                  <td colSpan={1 + PIPELINE_STAGES.length} className="px-4 py-8 text-center text-[color:var(--f92-gray)]">
+                    {brands.length === 0
+                      ? 'No brands configured. Ask an admin to seed brands in Settings → Projects.'
+                      : 'No brands match the current filters.'}
+                  </td>
+                </tr>
+              ) : (
+                visibleRows.map(row => {
+                  const pipeline = pipelineBrands.get(row.brand.brand_code);
+                  return (
+                    <tr
+                      key={row.brand.id}
+                      className={cn(
+                        'border-t border-[color:var(--f92-border)]',
+                        row.brand.is_paused
+                          ? 'bg-slate-100 text-[color:var(--f92-gray)] opacity-75 dark:bg-slate-900/40'
+                          : '',
+                      )}
+                    >
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-[color:var(--f92-dark)]">{row.brand.display_name}</span>
+                          <span className="rounded-full border border-[color:var(--f92-border)] bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest text-[color:var(--f92-gray)]">
+                            {row.brand.brand_code}
+                          </span>
+                        </div>
+                      </td>
+                      {PIPELINE_STAGES.map(stage => {
+                        const count = pipeline?.counts[stage] ?? 0;
+                        const overlayBadges = activeOverlayKeys
+                          .map(k => ({ k, n: pipeline?.overlays[k][stage] ?? 0 }))
+                          .filter(({ n }) => n > 0);
+                        return (
+                          <td key={stage} className="px-4 py-3 align-top">
+                            {count > 0 ? (
+                              <button
+                                type="button"
+                                onClick={() => openStageDrawer(row, stage)}
+                                className="font-semibold text-[color:var(--f92-navy)] hover:underline focus-visible:underline"
+                              >
+                                {count}
+                              </button>
+                            ) : (
+                              <span className="text-[color:var(--f92-lgray)]">0</span>
+                            )}
+                            {overlayBadges.length > 0 ? (
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {overlayBadges.map(({ k, n }) => (
+                                  <OverlayCountBadge key={k} overlayKey={k} count={n} />
+                                ))}
+                              </div>
+                            ) : null}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+        {unresolvedCount > 0 ? (
+          <p className="border-t border-[color:var(--f92-border)] px-4 py-2 text-xs text-[color:var(--f92-gray)]">
+            {unresolvedCount} active {unresolvedCount === 1 ? 'ticket' : 'tickets'} not shown — no brand assigned in Jira.
+          </p>
+        ) : null}
+      </Card>
+
+      <PipelineStageDrawer
+        open={stageDrawer !== null}
+        onOpenChange={open => {
+          if (!open) setStageDrawer(null);
+        }}
+        brandLabel={stageDrawer?.brandLabel ?? ''}
+        stageLabel={stageDrawer?.stageLabel ?? ''}
+        tickets={stageDrawer?.tickets ?? []}
+      />
 
       <BrandDetailDrawer
         row={drawerRow}

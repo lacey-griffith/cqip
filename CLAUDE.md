@@ -1,6 +1,6 @@
 # CQIP — CRO Quality Intelligence Platform
 ## Claude Code Project Context File
-### Fusion92 | CRO Department | v1.6
+### Fusion92 | CRO Department | v1.8
 
 ---
 
@@ -77,7 +77,16 @@ Batch 009 (SharePoint proxy — three read-only GET routes
 under /api/sharepoint/* against Microsoft Graph,
 Sites.Selected scope, 60s in-memory cache, share-id
 folder resolution, middleware carveout for /api/sharepoint
-+ /api/brands — 2026-05-29).
++ /api/brands — 2026-05-29),
+Batch 010 (Coverage pipeline visibility — new server route
+app/api/coverage/pipeline runs LIVE JQL per active project (no
+cache; that's Batch 007), buckets tickets by brand + the five
+pipeline stages [Strategy · Design · Dev · Queued · Live; Done +
+Reporting excluded], surfaces three overlay tags from Jira
+customfield_12528 "CRO Labels"; Coverage page split into Output +
+Pipeline tables with overlay toggles, per-count badges, a
+per-count PipelineStageDrawer, teal long-range KPI accent; no
+migration, read-only against Jira — 2026-06-03).
 All migrations 001-017 have run against production.
 Batch 004.4.5 produced a UX discovery plan for Coverage + Settings
 reorg (Batch 005 implementation). See §16 for full shipped log.
@@ -160,9 +169,13 @@ cqip/
 │   │   ├── layout.tsx           # Konami listener, EasterEggHost, session check
 │   │   ├── page.tsx             # Home view (KPIs + charts + matrix rain + click-drill drawer)
 │   │   ├── coverage/
-│   │   │   └── page.tsx         # Client Coverage table (Batch 002): KPIs, drought flags,
-│   │   │                          sparklines, brand detail drawer, paused-row treatment,
-│   │   │                          per-column sort, leadership-ready CSV/XLSX export
+│   │   │   └── page.tsx         # Client Coverage (Batch 002 + 010): split Output + Pipeline
+│   │   │                          tables. Output = KPIs, drought flags, sparklines, brand
+│   │   │                          detail drawer, paused-row treatment, per-column sort,
+│   │   │                          leadership-ready CSV/XLSX export. Pipeline (Batch 010) =
+│   │   │                          live per-stage WIP counts from /api/coverage/pipeline,
+│   │   │                          overlay toggles + per-count badges + PipelineStageDrawer,
+│   │   │                          teal long-range KPI accent
 │   │   ├── docs/
 │   │   │   ├── page.tsx         # Docs home with QA tab guide
 │   │   │   └── array-of-sunshine/page.tsx   # Password-gated egg dossier
@@ -193,6 +206,13 @@ cqip/
 │       ├── brands/
 │       │   ├── [projectKey]/[brandCode]/route.ts # Batch 004.5: Bearer-auth, single-brand read
 │       │   └── route.ts                    # Batch 004.5: Bearer-auth, list-by-project
+│       ├── coverage/
+│       │   └── pipeline/route.ts           # Batch 010: GET, cookie-bound session (any authed
+│       │                                     user). LIVE JQL per active project → per-brand,
+│       │                                     per-stage pipeline counts + overlay subsets +
+│       │                                     ticket lists. Reads lib/coverage/pipeline-stages
+│       │                                     map; brand resolution per §13 r13/r28. Read-only
+│       │                                     against Jira; no cache (Batch 007 owns caching)
 │       ├── health/route.ts                 # Batch 011: public, dependency-free health probe
 │       │                                     (status/timestamp/version/environment); no auth,
 │       │                                     no DB; deploy.yml smoke check hits this
@@ -215,7 +235,11 @@ cqip/
 │   │                              /dashboard/settings/coverage),
 │   │                              AddBrandDrawer (Batch 005.20 — sheet drawer for
 │   │                              creating a brand row, closes audit Q1 / brand-create
-│   │                              UI gap)
+│   │                              UI gap),
+│   │                              PipelineStageDrawer + overlay-badge (Batch 010 —
+│   │                              Sheet listing a brand's live Jira tickets in a
+│   │                              pipeline stage; OverlayCountBadge + TagBadge use the
+│   │                              --pill-* tokens per §13 r25)
 │   ├── dashboard/               # KPI cards, ActiveAlertsPanel, SyncJiraButton, LogDrawer
 │   │                              (shared click-to-filter drawer, Batch 003),
 │   │                              SyncStatusPill (Batch 005.10 — pass/fail
@@ -237,8 +261,18 @@ cqip/
 │   │   ├── client.ts            # Browser Supabase client
 │   │   └── server.ts            # Server Supabase client
 │   ├── jira/
-│   │   ├── client.ts            # Jira API calls (Node/Next)
-│   │   └── field-map.ts         # Custom field ID mappings (see §7)
+│   │   ├── client.ts            # Jira API calls (Node/Next). NOTE: throws at import if
+│   │   │                          Jira env is missing — do not import from a build-eval path.
+│   │   ├── field-map.ts         # Custom field ID mappings (see §7)
+│   │   └── search.ts            # Batch 010: lazy (build-safe) JQL search helper, token
+│   │                              pagination (/rest/api/3/search/jql). Reads env inside the
+│   │                              fn so a route can import it without breaking `next build`.
+│   ├── coverage/
+│   │   ├── queries.ts           # Batch 002: pure client-side coverage aggregators +
+│   │   │                          literal-string rework match (queries.ts ~line 169, §13 r28)
+│   │   └── pipeline-stages.ts   # Batch 010: single source of truth for the stage→Jira-status
+│   │                              map + overlay-tag (customfield_12528) definitions +
+│   │                              response types. Prose companion: docs/batch-010-pipeline-stage-map.md
 │   ├── alerts/
 │   │   └── rules.ts             # Alert rule evaluation logic
 │   ├── audit/
@@ -342,6 +376,8 @@ cqip/
 │   ├── root-cause-audit-2026-05-20.md # Batch 005.28 audit findings + Option A/B/C recommendation
 │   ├── root-cause-taxonomy-mapping.md # Batch 005.28: variant→canonical map (drives normalize script)
 │   ├── qa-field-reference.md          # Batch 005.28: living definition of every QA log field
+│   ├── batch-010-pipeline-stage-map.md # Batch 010: prose companion to lib/coverage/pipeline-stages.ts
+│   │                                     (stage→status map, overlay tags, exclusions)
 │   └── ux-plans/                      # UX redesign plans (Coverage + Settings reorg, etc.)
 │
 └── .claude/
@@ -1626,6 +1662,40 @@ Resolved             → green-500
     §13 business rules cross-reference them rather than
     duplicate.)
 
+33. **Coverage pipeline counts are LIVE Jira at render, off a single
+    source-of-truth stage map.** `app/api/coverage/pipeline/route.ts`
+    runs one JQL per active project against
+    `/rest/api/3/search/jql` (token-paginated) for tickets whose
+    status is in the union of the five pipeline stages, then buckets
+    them by brand + stage in-route. There is **no** `jira_tickets`
+    cache — caching is Batch 007. The stage→status map and the
+    overlay-tag definitions are defined once in
+    `lib/coverage/pipeline-stages.ts` (prose companion
+    `docs/batch-010-pipeline-stage-map.md`); never scatter Jira
+    status strings across the route or page. **`Done` and
+    `Reporting` are deliberately excluded** from the Live column and
+    every other column. Overlays (Needs Info / Troubleshooting / On
+    Hold) live on the multi-select custom field **`customfield_12528`
+    "CRO Labels"** — NOT the `labels` field — matched on the option
+    `value` with exact Jira casing (`"Needs info"`,
+    `"Troubleshooting"`, `"On hold"`; verified against prod
+    2026-06-03). Brand resolution reuses the §13 r13/r28 chain
+    (single_brand → `default_brand_id`; multi_brand → field →
+    `brands.jira_value` → `brand_aliases` → `default_brand_id` →
+    null); unresolved tickets are excluded from per-brand counts and
+    reported via the response `unresolved_count` (NBLYCRO has many
+    legitimately brand-less Strategy tickets). "Age in stage" uses
+    `statuscategorychangedate` as the v1 approximation — true
+    per-status age needs the changelog (out of scope, flagged in
+    code). **Why:** a single map keeps the data layer and the UI from
+    drifting on status spellings; live-at-render is correct until the
+    Batch 007 cache exists. **How to apply:** new statuses or overlay
+    tags go in `pipeline-stages.ts` + the companion doc (atomically,
+    rule 23); the new JQL helper `lib/jira/search.ts` reads env
+    lazily so server routes can import it without breaking
+    `next build` (unlike `lib/jira/client.ts`, which throws at
+    import).
+
 ---
 
 ## 14. What Is NOT In Scope for V1
@@ -2127,10 +2197,12 @@ four SHIP-day deviations (D1-D4). Full spec at
 `docs/batch-009-sharepoint-spec.md` (status header now
 SHIPPED). Day-one consumer AC's Phase 2 is unblocked.
 
-**Priority order (updated 2026-05-29):**
+**Priority order (updated 2026-06-03):**
 5.19 (done) → Batch 005.25 (done 2026-05-13) → Batch 009
-(SHIPPED 2026-05-29) → Batch 006 → Batch 010 → Batch 011 →
-Batch 007 → Batch 008.
+(SHIPPED 2026-05-29) → Batch 010 (SHIPPED 2026-06-03) →
+Batch 006 → Batch 011 → Batch 007 → Batch 008.
+(Batch 010.1 — drought pill/cron/thresholds — and 010.2 —
+contract counts — remain unscheduled follow-ons to Batch 010.)
 
 **SHIP-day open questions resolved:** multi-site support
 stays deferred (single Fusion92 tenant via env-config, per
@@ -2161,6 +2233,79 @@ Worker-memory guard.
 ---
 
 ## 16. Shipped Features Log
+
+### Batch 010 — Coverage pipeline visibility — 2026-06-03
+
+Surfaces live work-in-progress (not just delivered tests) on
+`/dashboard/coverage`. Ships **010 only** — 010.1 (drought
+pill/cron/thresholds) and 010.2 (contract counts) are explicitly
+out and remain unscheduled.
+
+**What shipped:**
+- **`lib/coverage/pipeline-stages.ts`** — single source of truth for
+  the stage→Jira-status map (Strategy · Design · Dev · Queued · Live;
+  `Done` + `Reporting` excluded), the overlay-tag definitions, the
+  reverse lookups, and the `/api/coverage/pipeline` response types.
+  Prose companion `docs/batch-010-pipeline-stage-map.md` (committed on
+  its own first, per the batch's Step 1).
+- **`lib/jira/search.ts`** — lazy, build-safe JQL search helper using
+  the token-paginated `/rest/api/3/search/jql` endpoint. Reads Jira
+  env inside the function (unlike `lib/jira/client.ts`, which throws
+  at import) so a Next route can import it without breaking
+  `next build` — `JIRA_API_TOKEN` is a runtime-only Worker secret.
+- **`app/api/coverage/pipeline/route.ts`** (GET) — cookie-bound
+  session auth, any authenticated user (coverage is read-only-visible;
+  NOT Bearer, NOT admin-gated). Loads projects/brands/aliases once via
+  the service role, runs **one JQL per active project** for the union
+  of the five stage buckets, buckets tickets by brand + stage in-route
+  (brand resolution mirrors the webhook's §13 r13/r28 chain), and
+  returns per-brand `{counts, overlays (per-stage subsets), tickets}`
+  plus `unresolved_count` and per-project `errors` (partial-success
+  transparency). LIVE at render — no cache (Batch 007 owns caching);
+  read-only against Jira (§13 r5).
+- **CONFIRM-at-impl resolved:** overlays are stored on the Jira
+  multi-select **`customfield_12528` "CRO Labels"** (NBLYCRO/SPLCRO
+  tickets carry no `labels`), matched on the exact-cased option values
+  `"Needs info"` / `"Troubleshooting"` / `"On hold"`. Verified against
+  production 2026-06-03.
+- **Coverage page redesign:** pipeline fetch added to `refetchAll()`
+  (partial failure flows into the existing `failures[]`/`loadError`);
+  Tests This Year + Tests All Time KPIs promoted with a teal
+  long-range accent via new `--kpi-longrange-{bg,border,fg}` tokens in
+  `app/globals.css` (`:root` + dark, WCAG AA, §13 r25 — no inline
+  hex); control bar gains three overlay toggle chips on the left with
+  Show paused + Export moved right-aligned into the same bar; tables
+  split into **Output** (existing, unchanged — keeps its
+  ACTIVE/DROUGHT pill) and **Pipeline** (Brand · Strategy · Design ·
+  Dev · Queued · Live, no status column, counts are click targets).
+  Both tables share the `ProjectBrandFilter` scope + single-brand
+  exemption; KPIs stay full-scope (program-health boundary, Batch
+  005.22).
+- **Overlay toggles** are visual-only (never filter rows out). When
+  on, each stage count renders a per-overlay `OverlayCountBadge`
+  showing the tagged subset (blue NI / amber TS / gray OH); badges
+  stack. **`PipelineStageDrawer`** (Sheet, stacks per §13 r26) opens
+  on a count click and lists that brand's live Jira tickets in that
+  stage — Jira link, title, `TagBadge`s (all CRO Labels), approximate
+  age in stage. Badge colors come from the `--pill-*` tokens.
+- **Age in stage** uses `statuscategorychangedate` as the v1
+  approximation; true per-status age (changelog) is flagged
+  out-of-scope in the route code.
+- **No migration, no schema change.** §13 rule 33 added.
+
+**Verification:** `npm run build` green; `tsc --noEmit` clean; new
+route returns 401 unauthenticated (auth gate) and the end-to-end data
+path was validated against live prod Jira + Supabase (504 in-pipeline
+tickets across NBLYCRO + SPLCRO; per-brand stage + overlay counts
+sensible; 252 NBLYCRO tickets correctly excluded as brand-less — all
+empty brand field, zero alias gaps). Output table unchanged
+(regression check). The 8 pre-existing `react-hooks/static-components`
+lint findings on the coverage page (SortableHeader/SortIcon, predate
+this batch) are untouched; no new lint findings introduced.
+
+DO NOT PUSH — Lacey smoke-tests + deploys manually. Step 1 (doc +
+const) committed on its own; the route, page, components, CSS tokens,
+and these CLAUDE.md edits land together.
 
 ### Batch 009 — SharePoint integration LIVE — 2026-05-29
 
@@ -4746,4 +4891,4 @@ demo blocker.
 
 ---
 
-*Last updated: 2026-05-29 | CQIP v1.7 — Batch 009 (SharePoint integration LIVE). Read-only Microsoft Graph proxy: three GET routes under `/api/sharepoint/*` (`/folder` enumerate, `/xlsx` parse Preview Links, `/image` stream bytes), `Sites.Selected` scope, 60s in-memory cache, share-id folder resolution, 25 MB image cap; `lib/sharepoint/*` helpers + `lib/api/sharepoint-bearer-auth.ts` (CQIP_SHAREPOINT_API_TOKEN, separate blast radius from brands token); middleware carveout for /api/sharepoint + /api/brands; no DB migration (stateless). Six new env vars (CQIP_SHAREPOINT_API_TOKEN + 4 Azure/SharePoint config + SHAREPOINT_SITE_PATH). Four SHIP-day deviations from DESIGN: D1 share-id resolution (alias-drift robustness), D2 xlsx_not_found→422 hard-fail, D3 xlsx-js-style not xlsx (CVE-removed 2026-04-26), D4 token per logical request. Live-Azure smoke green (Test Task 001 / WDG 07: 12 screenshots, 6 Preview Links rows). Closes §14 Planned SharePoint entry + §15 Batch 009 pending. AZURE_CLIENT_SECRET hygiene rotation still queued (Worker-only, Fri/Mon target). Commits c7afede + 98a6133 (Step 2) + this SHIP docs commit. Advisor credit: AC (day-one needs), Jenny + Karen (five-finding review). DO NOT PUSH — three-commit chain pushed by Lacey after eyeball. Prior (v1.6, 2026-05-27): Batch 011 (Node 24 CI bump + public /api/health probe) — `app/api/health/route.ts` always-200 JSON, deploy.yml setup-node 20→24 + smoke check /login→/api/health; committed-not-pushed, handed to Lacey. Prior (v1.5, 2026-05-26):* Batch 005.31a + Azure prereqs verification + CC-namespace finalization, shipped same-day across three commits. 005.31a: SUPABASE_SERVICE_ROLE_KEY added to GH Actions build env so admin route module-eval imports succeed during page-data collection; §13 r31 documents workflow_dispatch as the only path to test workflow edits given paths-ignore: .github/**. Azure verification: end-to-end Graph curl (token/site/drive children all 200) confirmed admin consent on Sites.Selected + per-site CRO grant were already in place; "SHIP gated on Azure prereqs" framing removed from 4 doc surfaces (CLAUDE.md §14 + §15, CROSS_CLAUDE.md, batch-009 spec) as a phantom blocker that had carried 23 days. CROSS_CLAUDE.md CC-namespace finalized at CC1-CC8 (§2); three originally-proposed rules moved to DC-local CLAUDE_RULES.md R19 (stale-status re-verification) / R20 (last-verified timestamps) / R21 (blocker reality-check) per AC namespace-fit review. CROSS_CLAUDE section numbering settled: §3 contract surfaces, §4 pending rotations, §5 priority, §6 event log. §13 r32 reworked from a standalone rule into a discoverability hook pointing at R21 (canonical), so the §13 entry and the CLAUDE_RULES.md rule don't drift.*
+*Last updated: 2026-06-03 | CQIP v1.8 — Batch 010 (Coverage pipeline visibility). New cookie-bound server route `app/api/coverage/pipeline` runs LIVE JQL per active project (token-paginated `/rest/api/3/search/jql`) for the union of five pipeline stages (Strategy · Design · Dev · Queued · Live; Done + Reporting excluded), buckets by brand + stage in-route via the §13 r13/r28 chain, returns per-brand counts + overlay per-stage subsets + ticket lists + `unresolved_count`. No `jira_tickets` cache (Batch 007 owns that); read-only against Jira (§13 r5). Stage→status map + overlay-tag defs are the single source of truth in `lib/coverage/pipeline-stages.ts` (prose companion `docs/batch-010-pipeline-stage-map.md`, committed first on its own). Overlays confirmed at impl to live on Jira multi-select `customfield_12528` "CRO Labels" (NOT `labels`), exact casing "Needs info"/"Troubleshooting"/"On hold" — verified vs prod 2026-06-03. New build-safe lazy JQL helper `lib/jira/search.ts`. Coverage page split into Output (unchanged, keeps its pill) + Pipeline tables (counts are click→`PipelineStageDrawer`), three visual-only overlay toggles producing stacking per-count badges, teal long-range KPI accent via new `--kpi-longrange-*` tokens (WCAG AA, §13 r25). No migration; §13 r33 added. Build green, tsc clean, route 401s unauthenticated, data path validated against live prod. DO NOT PUSH — Lacey smoke-tests + deploys manually. Prior (v1.7, 2026-05-29): Batch 009 (SharePoint integration LIVE). Read-only Microsoft Graph proxy: three GET routes under `/api/sharepoint/*` (`/folder` enumerate, `/xlsx` parse Preview Links, `/image` stream bytes), `Sites.Selected` scope, 60s in-memory cache, share-id folder resolution, 25 MB image cap; `lib/sharepoint/*` helpers + `lib/api/sharepoint-bearer-auth.ts` (CQIP_SHAREPOINT_API_TOKEN, separate blast radius from brands token); middleware carveout for /api/sharepoint + /api/brands; no DB migration (stateless). Six new env vars (CQIP_SHAREPOINT_API_TOKEN + 4 Azure/SharePoint config + SHAREPOINT_SITE_PATH). Four SHIP-day deviations from DESIGN: D1 share-id resolution (alias-drift robustness), D2 xlsx_not_found→422 hard-fail, D3 xlsx-js-style not xlsx (CVE-removed 2026-04-26), D4 token per logical request. Live-Azure smoke green (Test Task 001 / WDG 07: 12 screenshots, 6 Preview Links rows). Closes §14 Planned SharePoint entry + §15 Batch 009 pending. AZURE_CLIENT_SECRET hygiene rotation still queued (Worker-only, Fri/Mon target). Commits c7afede + 98a6133 (Step 2) + this SHIP docs commit. Advisor credit: AC (day-one needs), Jenny + Karen (five-finding review). DO NOT PUSH — three-commit chain pushed by Lacey after eyeball. Prior (v1.6, 2026-05-27): Batch 011 (Node 24 CI bump + public /api/health probe) — `app/api/health/route.ts` always-200 JSON, deploy.yml setup-node 20→24 + smoke check /login→/api/health; committed-not-pushed, handed to Lacey. Prior (v1.5, 2026-05-26):* Batch 005.31a + Azure prereqs verification + CC-namespace finalization, shipped same-day across three commits. 005.31a: SUPABASE_SERVICE_ROLE_KEY added to GH Actions build env so admin route module-eval imports succeed during page-data collection; §13 r31 documents workflow_dispatch as the only path to test workflow edits given paths-ignore: .github/**. Azure verification: end-to-end Graph curl (token/site/drive children all 200) confirmed admin consent on Sites.Selected + per-site CRO grant were already in place; "SHIP gated on Azure prereqs" framing removed from 4 doc surfaces (CLAUDE.md §14 + §15, CROSS_CLAUDE.md, batch-009 spec) as a phantom blocker that had carried 23 days. CROSS_CLAUDE.md CC-namespace finalized at CC1-CC8 (§2); three originally-proposed rules moved to DC-local CLAUDE_RULES.md R19 (stale-status re-verification) / R20 (last-verified timestamps) / R21 (blocker reality-check) per AC namespace-fit review. CROSS_CLAUDE section numbering settled: §3 contract surfaces, §4 pending rotations, §5 priority, §6 event log. §13 r32 reworked from a standalone rule into a discoverability hook pointing at R21 (canonical), so the §13 entry and the CLAUDE_RULES.md rule don't drift.*

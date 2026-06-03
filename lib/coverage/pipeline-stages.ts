@@ -102,3 +102,49 @@ export function overlayKeyForTag(tagValue: string | null | undefined): OverlayKe
   if (!tagValue) return null;
   return TAG_VALUE_TO_OVERLAY.get(tagValue) ?? null;
 }
+
+// -----------------------------------------------------------------------
+// Response shapes for GET /api/coverage/pipeline. Defined here (a pure,
+// server-dep-free module) so both the route and the client page import the
+// same contract.
+// -----------------------------------------------------------------------
+
+export type StageCounts = Record<PipelineStage, number>;
+
+// Per-overlay, per-stage subset counts (e.g. how many Dev-stage tickets
+// carry the "Needs info" tag).
+export type OverlayStageCounts = Record<OverlayKey, StageCounts>;
+
+export interface PipelineTicket {
+  key: string;
+  url: string;
+  summary: string;
+  stage: PipelineStage;
+  tags: string[];      // all CRO Labels values present on the ticket
+  age_label: string;   // approx age in stage (statuscategorychangedate, v1)
+}
+
+export interface PipelineBrand {
+  brand_code: string;
+  counts: StageCounts;
+  overlays: OverlayStageCounts;
+  tickets: PipelineTicket[];
+}
+
+export interface PipelineResponse {
+  brands: PipelineBrand[];
+  unresolved_count: number;  // tickets whose brand could not be resolved
+  errors: string[];          // per-project fetch errors (partial-success transparency)
+}
+
+export function emptyStageCounts(): StageCounts {
+  return { strategy: 0, design: 0, dev: 0, queued: 0, live: 0 };
+}
+
+export function emptyOverlayStageCounts(): OverlayStageCounts {
+  return {
+    needs_info: emptyStageCounts(),
+    troubleshooting: emptyStageCounts(),
+    on_hold: emptyStageCounts(),
+  };
+}
