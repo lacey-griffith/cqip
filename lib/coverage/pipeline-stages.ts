@@ -50,6 +50,18 @@ export const ALL_STAGE_STATUSES: readonly string[] = PIPELINE_STAGES.flatMap(
   (stage) => STAGE_STATUSES[stage],
 );
 
+// Jira issue types excluded from the pipeline query. These are auto-generated
+// workflow scaffolding sub-tasks (three per parent story, parked in Strategy)
+// — never pipeline work, and they carry no brand of their own (the brand lives
+// on the parent). Including them inflated `unresolved_count` by 252 on NBLYCRO
+// while contributing zero real work. Drives an `AND issuetype NOT IN (...)`
+// clause on the per-project query. Add future checklist types here.
+export const EXCLUDED_ISSUE_TYPES: readonly string[] = [
+  'Strategy Review Checklist',
+  'Design Review Checklist',
+  'Dev Review Checklist',
+];
+
 // Reverse lookup: Jira status → pipeline stage (or null when excluded/unknown).
 const STATUS_TO_STAGE: Map<string, PipelineStage> = new Map(
   PIPELINE_STAGES.flatMap((stage) =>

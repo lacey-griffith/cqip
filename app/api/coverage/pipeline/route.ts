@@ -13,6 +13,7 @@ import { createSupabaseRouteClient, supabaseAdmin } from '@/lib/supabase/server'
 import { searchJql } from '@/lib/jira/search';
 import {
   ALL_STAGE_STATUSES,
+  EXCLUDED_ISSUE_TYPES,
   OVERLAY_FIELD_ID,
   emptyOverlayStageCounts,
   emptyStageCounts,
@@ -164,6 +165,12 @@ export async function GET() {
   }
 
   const statusList = ALL_STAGE_STATUSES.map((s) => `"${s}"`).join(', ');
+  // Exclude auto-generated checklist sub-tasks at the source (see
+  // EXCLUDED_ISSUE_TYPES) so they never count as pipeline work or inflate
+  // unresolved_count.
+  const excludedTypeClause = EXCLUDED_ISSUE_TYPES.length
+    ? ` AND issuetype not in (${EXCLUDED_ISSUE_TYPES.map((t) => `"${t}"`).join(', ')})`
+    : '';
   const errors: string[] = [];
   let unresolvedCount = 0;
 
@@ -173,7 +180,7 @@ export async function GET() {
     if (project.brand_model === 'multi_brand' && project.brand_jira_field_id) {
       fields.push(project.brand_jira_field_id);
     }
-    const jql = `project = "${project.jira_project_key}" AND status in (${statusList})`;
+    const jql = `project = "${project.jira_project_key}" AND status in (${statusList})${excludedTypeClause}`;
 
     let issues;
     try {

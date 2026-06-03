@@ -2263,6 +2263,16 @@ out and remain unscheduled.
   plus `unresolved_count` and per-project `errors` (partial-success
   transparency). LIVE at render — no cache (Batch 007 owns caching);
   read-only against Jira (§13 r5).
+- **Checklist sub-tasks excluded at the source (010 follow-on):** the
+  query carries `AND issuetype NOT IN (...)` for the three
+  auto-generated checklist types (`Strategy`/`Design`/`Dev Review
+  Checklist`), listed as `EXCLUDED_ISSUE_TYPES` in
+  `pipeline-stages.ts`. A 2026-06-03 diagnostic found all 252 NBLYCRO
+  brand-less in-pipeline tickets were exactly these scaffolding
+  sub-tasks (brand lives on the parent), so `unresolved_count` was a
+  misleading 252; excluding them drops it to ~0 while leaving the
+  brand-resolved real-work count (239) unchanged. The unresolved
+  footnote already self-suppresses when the count is 0.
 - **CONFIRM-at-impl resolved:** overlays are stored on the Jira
   multi-select **`customfield_12528` "CRO Labels"** (NBLYCRO/SPLCRO
   tickets carry no `labels`), matched on the exact-cased option values

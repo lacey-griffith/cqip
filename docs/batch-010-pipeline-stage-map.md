@@ -42,6 +42,29 @@ the map is portable across projects that name the status either way. As of
 
 ---
 
+## Excluded issue types
+
+The pipeline query also drops three Jira issue types via an
+`AND issuetype NOT IN (...)` clause (the const `EXCLUDED_ISSUE_TYPES` in
+`lib/coverage/pipeline-stages.ts`):
+
+- `Strategy Review Checklist`
+- `Design Review Checklist`
+- `Dev Review Checklist`
+
+**Rationale:** these are auto-generated workflow scaffolding sub-tasks (three
+per parent story, all parked in `Strategy`). They are never pipeline work and
+carry no brand of their own — the brand lives on the parent. A 2026-06-03
+diagnostic found all 252 brand-less NBLYCRO in-pipeline tickets were exactly
+these three checklist types (84 each), 100% in Strategy, 100% created in the
+prior 30 days, with zero real-work tickets among them. Counting them inflated
+`unresolved_count` to a misleading 252 while contributing nothing. Excluding
+them at the source drops `unresolved_count` to ~0 and leaves the
+brand-resolved real-work count (239 on NBLYCRO) unchanged. Add future
+checklist/scaffolding types to the const.
+
+---
+
 ## Overlay tags
 
 Overlays are visual annotations on stage counts — they do **not** move a
