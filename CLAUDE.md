@@ -2197,12 +2197,16 @@ four SHIP-day deviations (D1-D4). Full spec at
 `docs/batch-009-sharepoint-spec.md` (status header now
 SHIPPED). Day-one consumer AC's Phase 2 is unblocked.
 
-**Priority order (updated 2026-06-03):**
-5.19 (done) → Batch 005.25 (done 2026-05-13) → Batch 009
-(SHIPPED 2026-05-29) → Batch 010 (SHIPPED 2026-06-03) →
-Batch 006 → Batch 011 → Batch 007 → Batch 008.
-(Batch 010.1 — drought pill/cron/thresholds — and 010.2 —
-contract counts — remain unscheduled follow-ons to Batch 010.)
+**Priority order (updated 2026-06-04):**
+5.19 (done) → Batch 005.25 (done 2026-05-13) → Batch 011
+(SHIPPED 2026-05-27) → Batch 009 (SHIPPED 2026-05-29) →
+Batch 010 (SHIPPED 2026-06-03, DEPLOYED 2026-06-04) →
+Batch 006 → Batch 007 → Batch 008.
+(Batch 011 was the Node 24 + /api/health batch — see §16 — not the
+"Coverage redesign" some older priority lists named; it shipped
+2026-05-27 and is no longer upcoming. Batch 010.1 — drought
+pill/cron/thresholds — and 010.2 — contract counts — remain
+unscheduled follow-ons to Batch 010. Mirrors CROSS_CLAUDE.md §5.)
 
 **SHIP-day open questions resolved:** multi-site support
 stays deferred (single Fusion92 tenant via env-config, per
