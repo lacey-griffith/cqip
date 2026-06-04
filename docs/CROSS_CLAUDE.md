@@ -233,7 +233,7 @@ See §6 entry for full context.
 
 ## 5. Cross-Project Priority Order
 
-Spans both projects. Last locked 2026-05-13.
+Spans both projects. Last locked 2026-06-04.
 
 | # | Owner | Item | Status |
 | --- | --- | --- | --- |
@@ -241,12 +241,27 @@ Spans both projects. Last locked 2026-05-13.
 | 2 | DC | Batch 005.25 brand dropdown fix | ✅ done |
 | 3 | DC | Batch 009 SharePoint integration | ✅ SHIPPED 2026-05-29 |
 | 4 | AC | Phase 1.5 implementation | parallel with DC 009 |
-| 5 | DC | Batch 006 Teams dispatch | post-009 |
-| 6 | DC | Batch 010 UI polish | post-006 |
-| 7 | DC | Batch 011 Coverage redesign | post-010 |
-| 8 | AC | Phase 2 (after DC 009 ships) | ✅ unblocked 2026-05-29 |
+| 5 | DC | Batch 011 Node 24 + public /api/health probe | ✅ SHIPPED 2026-05-27 |
+| 6 | DC | Batch 010 Coverage pipeline visibility | ✅ SHIPPED + DEPLOYED 2026-06-04 |
+| 7 | AC | Phase 2 (after DC 009 ships) | ✅ unblocked 2026-05-29 |
+| 8 | DC | Batch 006 Teams dispatch | next open DC batch |
 | 9 | DC | Batch 007 Custom Jira Boards | post-Phase-2 |
 | 10 | DC | Batch 008 Convert.com automation | last |
+
+**Scope corrections logged 2026-06-04** (the prior table was locked
+2026-05-13, before two batches were re-scoped):
+- **Batch 011** is the Node 24 CI bump + public dependency-free
+  `/api/health` probe — NOT the "Coverage redesign" the old table
+  named. Shipped 2026-05-27.
+- **Batch 010** is Coverage **pipeline visibility** (live-JQL Output +
+  Pipeline split tables, overlay toggles, per-count drawer) — NOT the
+  "UI polish" the old table named. Shipped + deployed 2026-06-04,
+  reprioritized ahead of Batch 006. DC-internal: the new
+  `/api/coverage/pipeline` route is cookie-bound session auth and is
+  NOT consumed by AC, so no §3 contract-surface or §6 event-log entry
+  is warranted — full detail lives in the DC CLAUDE.md §16 per this
+  doc's project-internal scoping rule.
+- **Batch 006** (Teams dispatch) is now the next open DC batch.
 
 ---
 
