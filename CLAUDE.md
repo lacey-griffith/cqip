@@ -1696,6 +1696,18 @@ Resolved             → green-500
     `next build` (unlike `lib/jira/client.ts`, which throws at
     import).
 
+34. **In-flight batches live in §15.5 with locked decisions + phase
+    status. On ship, the entry MOVES to §16 (full shipped entry) and
+    is REMOVED from §15.5** — a batch appears in exactly one of
+    §15.5 / §16, never both. This prevents §15.5 from duplicating the
+    shipped log and rotting. Lifecycle order reads §15 backlog →
+    §15.5 in-flight → §16 shipped: when a backlog item starts active
+    build, it gains a §15.5 entry (locked decisions so they're not
+    relitigated, current phase, open questions, spec pointer) and the
+    §15 backlog item gets a one-line "IN FLIGHT — see §15.5"
+    annotation; when it ships, the §15.5 entry is deleted in the same
+    commit that writes the §16 entry (atomically, per rule 23).
+
 ---
 
 ## 14. What Is NOT In Scope for V1
@@ -1818,8 +1830,10 @@ Deliverables (all complete):
 Strict rule: only items already in scope at lock time. No new
 additions.
 
-- [ ] **5.1 Coverage + Settings UX redesign** — implement per Batch
-      004.4.5 plan. Decision locked: tabs (Details / QA Config /
+- [ ] **5.1 Coverage + Settings UX redesign** — **IN FLIGHT as
+      Batch 005.1 (2026-06-05) — see §15.5** for locked decisions,
+      phase status, and spec pointer. Original scope: implement per
+      Batch 004.4.5 plan. Decision locked: tabs (Details / QA Config /
       Milestones / Pause) inside a unified `BrandAdminDrawer`,
       not multi-drawer. Phased: Phase 1+2 (admin actions to
       Coverage) + Phase 3 (delete settings page). Phase 4 cosmetic
@@ -2205,13 +2219,53 @@ Batch 006 → Batch 007 → Batch 008.
 (Batch 011 was the Node 24 + /api/health batch — see §16 — not the
 "Coverage redesign" some older priority lists named; it shipped
 2026-05-27 and is no longer upcoming. Batch 010.1 — drought
-pill/cron/thresholds — and 010.2 — contract counts — remain
-unscheduled follow-ons to Batch 010. Mirrors CROSS_CLAUDE.md §5.)
+pill/cron/thresholds — and 010.2 — brand contract management, see
+the dedicated §15 entry above — remain unscheduled follow-ons to
+Batch 010. Batch 005.1 — Coverage redesign + BrandAdminDrawer — is
+IN FLIGHT as of 2026-06-05; see §15.5. Mirrors CROSS_CLAUDE.md §5.)
 
 **SHIP-day open questions resolved:** multi-site support
 stays deferred (single Fusion92 tenant via env-config, per
 spec §8/§12); 25 MB image cap retained as a proxy-side
 Worker-memory guard.
+
+### Drought predicate off-by-one check (Path 2 — unscheduled)
+- [ ] If the business intent is "2 milestones = covered" (meeting
+      target), the `<= 2` drought predicate in
+      `lib/coverage/queries.ts` + the drought-evaluator is wrong
+      (should be `< 2`). Path 1 (Batch 005.1) aligned the new
+      Health / Covered KPIs to the current `<= 2` code for
+      consistency; this item tracks whether the predicate ITSELF
+      needs fixing. Dedicated batch — touches the alert evaluator
+      (open drought alerts would resolve/flip on the boundary
+      brands), the Coverage table pill, and the page's "≤2"
+      subtitle copy, all atomically. Surfaced by Jenny's Batch
+      005.1 pre-flight (2026-06-05).
+
+### Batch 010.2 — Brand contract management (not started)
+Expanded 2026-06-05 from the original "per-brand contract count"
+follow-on to Batch 010. Scoped after Batch 005.1's BrandAdminDrawer
+lands as its home.
+
+Per-brand contract record under Coverage Management (Settings →
+Client Coverage), surfaced as a tab on the BrandAdminDrawer built in
+005.1. Ties into BOTH the Coverage table and the KPIs — replaces the
+flat threshold (2/28d) with each brand's contracted target; the
+drought predicate + Overall Health + Brands Covered + table DROUGHT
+pill all read per-brand via the single `!droughtFlag` swap point
+(Batch 005.1's aggregators are written so this is a one-line change
+inside the per-brand loop).
+
+- Min viable: `contract_milestones_per_period` + `period`.
+- Full record (this batch's direction): + start/end dates, contract
+  status, notes.
+- Open design Qs for 010.2 scoping:
+  - `contract_status` vs `brands.is_paused` overlap — two ways to
+    say "not currently delivering"; need one source of truth or an
+    explicit precedence rule.
+  - Monthly-contract vs 28d-measurement period semantics — contracts
+    are likely per calendar month; the drought window is rolling 28d.
+  - v1 scope: billing / rate explicitly OUT.
 
 ### Ops / deferred
 - [ ] **Radara Edge Function deploy** — code committed at
@@ -2233,6 +2287,48 @@ Worker-memory guard.
 - [ ] Demo date confirmation (Sammy's slot, otherwise next week)
 - [ ] CQIP success metrics check-in
 - [ ] Guest account setup for demo
+
+---
+
+## 15.5. In-Flight Batches
+
+Batches actively being built but not yet shipped. Each entry holds the
+locked decisions (so they're not relitigated mid-build), current
+phase/status, open questions, and a pointer to the spec. Lifecycle:
+§15 backlog → §15.5 in-flight → §16 shipped. Per §13 rule 34, a batch
+appears in exactly one of §15.5 / §16 — on ship, the entry here is
+deleted in the same commit that writes the §16 shipped entry.
+
+### Batch 005.1 — Coverage redesign + BrandAdminDrawer  [IN FLIGHT]
+Spec: `docs/batch-005.1-coverage-redesign-spec.md` (Jenny
+PASS-WITH-FINDINGS 2026-06-05, all findings folded into the spec).
+
+**Status:** Phase 0-1 done (decisions locked, spec final). Phase 2
+next (KPI calcs + tests in `lib/coverage/queries.ts` +
+`tests/coverage-kpis.test.ts`). Phases 4-6 (BrandAdminDrawer,
+settings-page delete, Karen, deploy) span past 2026-06-05.
+
+**Locked decisions:**
+- Path 1: covered = `count > THRESHOLD` (strict complement of the
+  `<= 2` drought pill), computed via the shared `!droughtFlag`
+  predicate so KPI + pill can't diverge.
+- Flat threshold (2/28d) this batch; per-brand target swap is
+  Batch 010.2 (the aggregator reads the threshold per-brand inside
+  the loop so the swap is one line).
+- 9 KPIs full-scope (005.22 boundary NOT reversed); filter-aware
+  KPIs / per-client Coverage view deferred (growth — spec §8b).
+- Quality Score: distinct clean tickets / distinct delivered
+  tickets, rolling 28d, high % = good.
+- All controls kept (PROJECT pills + Show-paused + Export); tables
+  stay filter-scoped.
+- Settings page (`/dashboard/settings/coverage`) deleted in a
+  SEPARATE commit, only after the drawer is verified live.
+
+**Open:** exactly-2 business semantics — if "2 = covered" is the
+real rule, the drought predicate is off-by-one (`<= 2` should be
+`< 2`); that's a Path 2 fix touching the drought-evaluator, owed as
+its own batch. See the §15 "Drought predicate off-by-one check"
+backlog item.
 
 ---
 
@@ -4909,4 +5005,4 @@ demo blocker.
 
 ---
 
-*Last updated: 2026-06-03 | CQIP v1.8 — Batch 010 (Coverage pipeline visibility). New cookie-bound server route `app/api/coverage/pipeline` runs LIVE JQL per active project (token-paginated `/rest/api/3/search/jql`) for the union of five pipeline stages (Strategy · Design · Dev · Queued · Live; Done + Reporting excluded), buckets by brand + stage in-route via the §13 r13/r28 chain, returns per-brand counts + overlay per-stage subsets + ticket lists + `unresolved_count`. No `jira_tickets` cache (Batch 007 owns that); read-only against Jira (§13 r5). Stage→status map + overlay-tag defs are the single source of truth in `lib/coverage/pipeline-stages.ts` (prose companion `docs/batch-010-pipeline-stage-map.md`, committed first on its own). Overlays confirmed at impl to live on Jira multi-select `customfield_12528` "CRO Labels" (NOT `labels`), exact casing "Needs info"/"Troubleshooting"/"On hold" — verified vs prod 2026-06-03. New build-safe lazy JQL helper `lib/jira/search.ts`. Coverage page split into Output (unchanged, keeps its pill) + Pipeline tables (counts are click→`PipelineStageDrawer`), three visual-only overlay toggles producing stacking per-count badges, teal long-range KPI accent via new `--kpi-longrange-*` tokens (WCAG AA, §13 r25). No migration; §13 r33 added. Build green, tsc clean, route 401s unauthenticated, data path validated against live prod. DO NOT PUSH — Lacey smoke-tests + deploys manually. Prior (v1.7, 2026-05-29): Batch 009 (SharePoint integration LIVE). Read-only Microsoft Graph proxy: three GET routes under `/api/sharepoint/*` (`/folder` enumerate, `/xlsx` parse Preview Links, `/image` stream bytes), `Sites.Selected` scope, 60s in-memory cache, share-id folder resolution, 25 MB image cap; `lib/sharepoint/*` helpers + `lib/api/sharepoint-bearer-auth.ts` (CQIP_SHAREPOINT_API_TOKEN, separate blast radius from brands token); middleware carveout for /api/sharepoint + /api/brands; no DB migration (stateless). Six new env vars (CQIP_SHAREPOINT_API_TOKEN + 4 Azure/SharePoint config + SHAREPOINT_SITE_PATH). Four SHIP-day deviations from DESIGN: D1 share-id resolution (alias-drift robustness), D2 xlsx_not_found→422 hard-fail, D3 xlsx-js-style not xlsx (CVE-removed 2026-04-26), D4 token per logical request. Live-Azure smoke green (Test Task 001 / WDG 07: 12 screenshots, 6 Preview Links rows). Closes §14 Planned SharePoint entry + §15 Batch 009 pending. AZURE_CLIENT_SECRET hygiene rotation still queued (Worker-only, Fri/Mon target). Commits c7afede + 98a6133 (Step 2) + this SHIP docs commit. Advisor credit: AC (day-one needs), Jenny + Karen (five-finding review). DO NOT PUSH — three-commit chain pushed by Lacey after eyeball. Prior (v1.6, 2026-05-27): Batch 011 (Node 24 CI bump + public /api/health probe) — `app/api/health/route.ts` always-200 JSON, deploy.yml setup-node 20→24 + smoke check /login→/api/health; committed-not-pushed, handed to Lacey. Prior (v1.5, 2026-05-26):* Batch 005.31a + Azure prereqs verification + CC-namespace finalization, shipped same-day across three commits. 005.31a: SUPABASE_SERVICE_ROLE_KEY added to GH Actions build env so admin route module-eval imports succeed during page-data collection; §13 r31 documents workflow_dispatch as the only path to test workflow edits given paths-ignore: .github/**. Azure verification: end-to-end Graph curl (token/site/drive children all 200) confirmed admin consent on Sites.Selected + per-site CRO grant were already in place; "SHIP gated on Azure prereqs" framing removed from 4 doc surfaces (CLAUDE.md §14 + §15, CROSS_CLAUDE.md, batch-009 spec) as a phantom blocker that had carried 23 days. CROSS_CLAUDE.md CC-namespace finalized at CC1-CC8 (§2); three originally-proposed rules moved to DC-local CLAUDE_RULES.md R19 (stale-status re-verification) / R20 (last-verified timestamps) / R21 (blocker reality-check) per AC namespace-fit review. CROSS_CLAUDE section numbering settled: §3 contract surfaces, §4 pending rotations, §5 priority, §6 event log. §13 r32 reworked from a standalone rule into a discoverability hook pointing at R21 (canonical), so the §13 entry and the CLAUDE_RULES.md rule don't drift.*
+*Last updated: 2026-06-05 | CQIP v1.8 — docs-only update: new §15.5 In-Flight Batches section (seeded with Batch 005.1 — Coverage redesign + BrandAdminDrawer, spec at docs/batch-005.1-coverage-redesign-spec.md, Jenny PASS-WITH-FINDINGS folded), new §13 rule 34 (in-flight lifecycle: §15 backlog → §15.5 → §16, exactly-one-home), §15 backlog additions (Drought predicate off-by-one check / Path 2; Batch 010.2 expanded to Brand contract management). No version bump — no structural code change. Prior (v1.8, 2026-06-03): Batch 010 (Coverage pipeline visibility). New cookie-bound server route `app/api/coverage/pipeline` runs LIVE JQL per active project (token-paginated `/rest/api/3/search/jql`) for the union of five pipeline stages (Strategy · Design · Dev · Queued · Live; Done + Reporting excluded), buckets by brand + stage in-route via the §13 r13/r28 chain, returns per-brand counts + overlay per-stage subsets + ticket lists + `unresolved_count`. No `jira_tickets` cache (Batch 007 owns that); read-only against Jira (§13 r5). Stage→status map + overlay-tag defs are the single source of truth in `lib/coverage/pipeline-stages.ts` (prose companion `docs/batch-010-pipeline-stage-map.md`, committed first on its own). Overlays confirmed at impl to live on Jira multi-select `customfield_12528` "CRO Labels" (NOT `labels`), exact casing "Needs info"/"Troubleshooting"/"On hold" — verified vs prod 2026-06-03. New build-safe lazy JQL helper `lib/jira/search.ts`. Coverage page split into Output (unchanged, keeps its pill) + Pipeline tables (counts are click→`PipelineStageDrawer`), three visual-only overlay toggles producing stacking per-count badges, teal long-range KPI accent via new `--kpi-longrange-*` tokens (WCAG AA, §13 r25). No migration; §13 r33 added. Build green, tsc clean, route 401s unauthenticated, data path validated against live prod. DO NOT PUSH — Lacey smoke-tests + deploys manually. Prior (v1.7, 2026-05-29): Batch 009 (SharePoint integration LIVE). Read-only Microsoft Graph proxy: three GET routes under `/api/sharepoint/*` (`/folder` enumerate, `/xlsx` parse Preview Links, `/image` stream bytes), `Sites.Selected` scope, 60s in-memory cache, share-id folder resolution, 25 MB image cap; `lib/sharepoint/*` helpers + `lib/api/sharepoint-bearer-auth.ts` (CQIP_SHAREPOINT_API_TOKEN, separate blast radius from brands token); middleware carveout for /api/sharepoint + /api/brands; no DB migration (stateless). Six new env vars (CQIP_SHAREPOINT_API_TOKEN + 4 Azure/SharePoint config + SHAREPOINT_SITE_PATH). Four SHIP-day deviations from DESIGN: D1 share-id resolution (alias-drift robustness), D2 xlsx_not_found→422 hard-fail, D3 xlsx-js-style not xlsx (CVE-removed 2026-04-26), D4 token per logical request. Live-Azure smoke green (Test Task 001 / WDG 07: 12 screenshots, 6 Preview Links rows). Closes §14 Planned SharePoint entry + §15 Batch 009 pending. AZURE_CLIENT_SECRET hygiene rotation still queued (Worker-only, Fri/Mon target). Commits c7afede + 98a6133 (Step 2) + this SHIP docs commit. Advisor credit: AC (day-one needs), Jenny + Karen (five-finding review). DO NOT PUSH — three-commit chain pushed by Lacey after eyeball. Prior (v1.6, 2026-05-27): Batch 011 (Node 24 CI bump + public /api/health probe) — `app/api/health/route.ts` always-200 JSON, deploy.yml setup-node 20→24 + smoke check /login→/api/health; committed-not-pushed, handed to Lacey. Prior (v1.5, 2026-05-26):* Batch 005.31a + Azure prereqs verification + CC-namespace finalization, shipped same-day across three commits. 005.31a: SUPABASE_SERVICE_ROLE_KEY added to GH Actions build env so admin route module-eval imports succeed during page-data collection; §13 r31 documents workflow_dispatch as the only path to test workflow edits given paths-ignore: .github/**. Azure verification: end-to-end Graph curl (token/site/drive children all 200) confirmed admin consent on Sites.Selected + per-site CRO grant were already in place; "SHIP gated on Azure prereqs" framing removed from 4 doc surfaces (CLAUDE.md §14 + §15, CROSS_CLAUDE.md, batch-009 spec) as a phantom blocker that had carried 23 days. CROSS_CLAUDE.md CC-namespace finalized at CC1-CC8 (§2); three originally-proposed rules moved to DC-local CLAUDE_RULES.md R19 (stale-status re-verification) / R20 (last-verified timestamps) / R21 (blocker reality-check) per AC namespace-fit review. CROSS_CLAUDE section numbering settled: §3 contract surfaces, §4 pending rotations, §5 priority, §6 event log. §13 r32 reworked from a standalone rule into a discoverability hook pointing at R21 (canonical), so the §13 entry and the CLAUDE_RULES.md rule don't drift.*
