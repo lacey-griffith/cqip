@@ -2303,7 +2303,7 @@ deleted in the same commit that writes the §16 shipped entry.
 Spec: `docs/batch-005.1-coverage-redesign-spec.md` (Jenny
 PASS-WITH-FINDINGS 2026-06-05, all findings folded into the spec).
 
-**Status:** Phase 0-2 done. Phase 2 (Commit 2, 2026-06-08): shared
+**Status:** Phase 0-3 done. Phase 2 (Commit 2, 2026-06-08): shared
 `isInDrought()` predicate + `COVERAGE_THRESHOLD` constant extracted in
 `lib/coverage/queries.ts` (Output-table pill now routes through it);
 `computeCoverageHealth()` (single-pass Health % + Brands Covered N/M)
@@ -2313,9 +2313,23 @@ normal, 0-denominator, dirty-not-in-delivered intersection, exactly-
 THRESHOLD boundary = drought/uncovered, single-pass non-divergence) —
 all pass via `npx tsx --test`; build green, tsc clean. `QualityLog`
 interface + coverage page `quality_logs` select gained `jira_ticket_id`
-(needed by Quality Score). Phase 3 next (KPI row reorg + wire the 3 new
-cards). Phases 4-6 (BrandAdminDrawer, settings-page delete, Karen,
-deploy) span past 2026-06-05.
+(needed by Quality Score). Phase 3 (Commit 3, 2026-06-10, UI-only):
+`app/dashboard/coverage/page.tsx` KPI row reorged into ONE responsive
+grid of 9 cards in locked order — teal long-range pair (Tests This Year
+/ Tests All Time) MOVED to front (position-only, tokens unchanged), the
+existing four rolling-window cards unchanged, then three NEW non-teal
+cards (Overall Health, Brands Covered "N/M", Quality Score) wired to the
+Phase 2 `computeCoverageHealth()` / `computeQualityScore()` exports.
+Full-scope guard honored: the new cards read the FULL brands/milestones/
+logs state arrays via two memos, never `visibleRows`; tables stay
+filter-scoped. New-card subtitles read "LAST 28 DAYS". No calc/schema/
+drawer change. The "Slow paused brands" typo + ">2" drought subtitle the
+spec flagged were already correct in-repo ("Show paused brands" / "≤2") —
+no copy change needed. Prod hand-check (required): shipped fns === an
+independent manual recompute against prod — Overall Health 7/13 (54%),
+Quality Score 32/40 (80%); boundary confirmed live (ASV=2 → uncovered,
+MDG=3 → covered). Build green, tsc clean. Phases 4-6 (BrandAdminDrawer,
+settings-page delete, Karen, deploy) span past 2026-06-10.
 
 **Locked decisions:**
 - Path 1: covered = `count > THRESHOLD` (strict complement of the

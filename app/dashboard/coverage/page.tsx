@@ -18,6 +18,8 @@ import {
 import { downloadBrandedXlsx } from '@/lib/export/branded-xlsx';
 import {
   buildCoverageRows,
+  computeCoverageHealth,
+  computeQualityScore,
   countInWindow,
   endOfLastWeek,
   startOfCurrentMonth,
@@ -216,6 +218,17 @@ export default function CoveragePage() {
 
   const rows = useMemo(() => buildCoverageRows(brands, milestones, logs), [brands, milestones, logs]);
 
+  // Program-health KPIs (Batch 005.1 Phase 3). FULL-SCOPE by design (Batch
+  // 005.22 boundary, spec §3.1): computed from the FULL brands / milestones /
+  // logs state arrays, NEVER from visibleRows (which is filter- AND
+  // paused-scoped). The KPI row reports program health and deliberately
+  // ignores the project/brand filter; only the tables below are filter-scoped.
+  // Overall Health + Brands Covered share a single pass (same numerator /
+  // denominator), routed through the shared isInDrought predicate so they can't
+  // diverge from the Output table's DROUGHT pill.
+  const healthKpi = useMemo(() => computeCoverageHealth(brands, milestones), [brands, milestones]);
+  const qualityKpi = useMemo(() => computeQualityScore(milestones, logs), [milestones, logs]);
+
   const singleBrandProjectKeys = useMemo(
     () => new Set(projects.filter(p => p.brand_model === 'single_brand').map(p => p.jira_project_key)),
     [projects],
@@ -387,21 +400,38 @@ export default function CoveragePage() {
   // which double-counts a ticket carrying two active tags).
   const activeOverlayTagValues = activeOverlayKeys.map((k) => OVERLAY_TAG_VALUES[k]);
 
-  const kpiCards = [
-    { label: 'This Week', value: crossBrand.thisWeek, hint: 'Tests reached' },
-    { label: 'Last Week', value: crossBrand.lastWeek, hint: 'Tests reached' },
-    { label: 'Rolling 28 Days', value: crossBrand.rolling28, hint: 'Tests reached' },
-    { label: 'This Month', value: crossBrand.thisMonth, hint: 'Tests reached' },
-  ];
-
   const todayLabel = new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit' });
   const earliestLabel = crossBrand.earliest
     ? crossBrand.earliest.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
     : null;
 
-  const deliveredCards = [
-    { label: 'Tests This Year', value: crossBrand.ytd, hint: `Through ${todayLabel}` },
-    { label: 'Tests All Time', value: crossBrand.allTime, hint: earliestLabel ? `Since ${earliestLabel}` : null },
+  // KPI row (Batch 005.1 Phase 3) — ONE responsive row, 9 cards, LOCKED order:
+  // teal long-range pair (moved to front) → existing four rolling-window cards
+  // (unchanged) → three new program-health cards. tone:'teal' keeps the
+  // --kpi-longrange-* tokens; tone:'standard' uses standard KPI styling. The
+  // three new cards read healthKpi / qualityKpi — full-scope (see memo above).
+  const kpiRow: Array<{
+    key: string;
+    tone: 'teal' | 'standard';
+    label: string;
+    value: string | number;
+    hint: string | null;
+  }> = [
+    { key: 'tests-year', tone: 'teal', label: 'Tests This Year', value: crossBrand.ytd, hint: `Through ${todayLabel}` },
+    { key: 'tests-all', tone: 'teal', label: 'Tests All Time', value: crossBrand.allTime, hint: earliestLabel ? `Since ${earliestLabel}` : null },
+    { key: 'this-week', tone: 'standard', label: 'This Week', value: crossBrand.thisWeek, hint: 'Tests reached' },
+    { key: 'last-week', tone: 'standard', label: 'Last Week', value: crossBrand.lastWeek, hint: 'Tests reached' },
+    { key: 'rolling28', tone: 'standard', label: 'Rolling 28 Days', value: crossBrand.rolling28, hint: 'Tests reached' },
+    { key: 'this-month', tone: 'standard', label: 'This Month', value: crossBrand.thisMonth, hint: 'Tests reached' },
+    // Overall Health — % active non-paused brands NOT in drought (28d); '—' when
+    // no active unpaused brands (0-denominator).
+    { key: 'health', tone: 'standard', label: 'Overall Health', value: healthKpi.healthPct === null ? '—' : `${healthKpi.healthPct}%`, hint: 'LAST 28 DAYS' },
+    // Brands Covered — N/M form of the SAME calc (same single pass). Subtitle is
+    // "LAST 28 DAYS" (the calc is inherently 28d), never "THIS WEEK".
+    { key: 'covered', tone: 'standard', label: 'Brands Covered', value: healthKpi.totalCount === 0 ? '—' : `${healthKpi.coveredCount}/${healthKpi.totalCount}`, hint: 'LAST 28 DAYS' },
+    // Quality Score — distinct clean / distinct delivered tickets (28d); '—'
+    // when 0 delivered.
+    { key: 'quality', tone: 'standard', label: 'Quality Score', value: qualityKpi.scorePct === null ? '—' : `${qualityKpi.scorePct}%`, hint: 'LAST 28 DAYS' },
   ];
 
   return (
@@ -426,44 +456,37 @@ export default function CoveragePage() {
         </div>
       ) : null}
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      {/* Single responsive KPI row — 9 cards, locked order (wraps: 2-up
+          mobile, 3×3 tablet, single row on xl). Teal long-range pair leads. */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-9">
         {loading
-          ? Array.from({ length: 4 }, (_, i) => (
+          ? Array.from({ length: 9 }, (_, i) => (
               <Card key={i} className="border-[color:var(--f92-border)] bg-white p-3 md:p-4 shadow-sm">
                 <div className="h-3 w-24 animate-pulse rounded bg-[color:var(--f92-tint)]" />
                 <div className="mt-2 h-8 w-16 animate-pulse rounded bg-[color:var(--f92-tint)]" />
               </Card>
             ))
-          : kpiCards.map(k => (
-              <Card key={k.label} className="border-[color:var(--f92-border)] bg-white p-3 md:p-4 shadow-sm">
-                <p className="text-xs font-medium uppercase tracking-wider text-[color:var(--f92-gray)]">{k.label}</p>
-                <p className="mt-2 text-3xl md:text-4xl font-bold text-[color:var(--f92-navy)]">{k.value}</p>
-                <p className="mt-2 text-xs text-[color:var(--f92-gray)]">{k.hint}</p>
-              </Card>
-            ))}
-      </div>
-
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        {loading
-          ? Array.from({ length: 2 }, (_, i) => (
-              <Card key={i} className="border-[color:var(--f92-border)] bg-white p-3 md:p-4 shadow-sm">
-                <div className="h-3 w-24 animate-pulse rounded bg-[color:var(--f92-tint)]" />
-                <div className="mt-2 h-8 w-16 animate-pulse rounded bg-[color:var(--f92-tint)]" />
-              </Card>
-            ))
-          : deliveredCards.map(k => (
-              // Long-range accent (Batch 010): teal treatment promotes these
-              // two cumulative KPIs above the rolling-window row. Tokens in
-              // globals.css (§13 rule 25) — WCAG AA in both themes.
-              <Card
-                key={k.label}
-                className="border-2 border-[color:var(--kpi-longrange-border)] bg-[color:var(--kpi-longrange-bg)] p-3 md:p-4 shadow-sm"
-              >
-                <p className="text-xs font-semibold uppercase tracking-wider text-[color:var(--kpi-longrange-fg)]">{k.label}</p>
-                <p className="mt-2 text-3xl md:text-4xl font-bold text-[color:var(--kpi-longrange-fg)]">{k.value}</p>
-                {k.hint ? <p className="mt-2 text-xs text-[color:var(--kpi-longrange-fg)] opacity-80">{k.hint}</p> : null}
-              </Card>
-            ))}
+          : kpiRow.map(k =>
+              k.tone === 'teal' ? (
+                // Long-range accent (Batch 010): teal treatment. Batch 005.1
+                // moved these two to the FRONT of the row — position-only
+                // change; tokens + styling unchanged (globals.css, §13 r25).
+                <Card
+                  key={k.key}
+                  className="border-2 border-[color:var(--kpi-longrange-border)] bg-[color:var(--kpi-longrange-bg)] p-3 md:p-4 shadow-sm"
+                >
+                  <p className="text-xs font-semibold uppercase tracking-wider text-[color:var(--kpi-longrange-fg)]">{k.label}</p>
+                  <p className="mt-2 text-3xl md:text-4xl font-bold text-[color:var(--kpi-longrange-fg)]">{k.value}</p>
+                  {k.hint ? <p className="mt-2 text-xs text-[color:var(--kpi-longrange-fg)] opacity-80">{k.hint}</p> : null}
+                </Card>
+              ) : (
+                <Card key={k.key} className="border-[color:var(--f92-border)] bg-white p-3 md:p-4 shadow-sm">
+                  <p className="text-xs font-medium uppercase tracking-wider text-[color:var(--f92-gray)]">{k.label}</p>
+                  <p className="mt-2 text-3xl md:text-4xl font-bold text-[color:var(--f92-navy)]">{k.value}</p>
+                  {k.hint ? <p className="mt-2 text-xs text-[color:var(--f92-gray)]">{k.hint}</p> : null}
+                </Card>
+              ),
+            )}
       </div>
 
       <ProjectBrandFilter
