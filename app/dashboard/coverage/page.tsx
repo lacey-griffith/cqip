@@ -9,7 +9,7 @@ import { Card } from '@/components/ui/card';
 import { Sparkline } from '@/components/coverage/sparkline';
 import { BrandDetailDrawer } from '@/components/coverage/brand-detail-drawer';
 import { PipelineStageDrawer } from '@/components/coverage/pipeline-stage-drawer';
-import { OverlayCountBadge, OVERLAY_ACTIVE_CLASS } from '@/components/coverage/overlay-badge';
+import { OverlayCountBadge, UntaggedCountBadge, OVERLAY_ACTIVE_CLASS } from '@/components/coverage/overlay-badge';
 import { SyncJiraButton } from '@/components/dashboard/sync-jira-button';
 import {
   ProjectBrandFilter,
@@ -32,6 +32,7 @@ import {
 import {
   OVERLAY_KEYS,
   OVERLAY_LABELS,
+  OVERLAY_TAG_VALUES,
   PIPELINE_STAGES,
   STAGE_LABELS,
   type OverlayKey,
@@ -106,6 +107,7 @@ export default function CoveragePage() {
     needs_info: false,
     troubleshooting: false,
     on_hold: false,
+    awaiting_client_input: false,
   });
   const [stageDrawer, setStageDrawer] = useState<{
     brandLabel: string;
@@ -380,6 +382,10 @@ export default function CoveragePage() {
   }
 
   const activeOverlayKeys = OVERLAY_KEYS.filter((k) => overlays[k]);
+  // Exact Jira tag values for the active overlays — used to compute the
+  // untagged remainder from tickets[] (NOT by summing per-overlay badges,
+  // which double-counts a ticket carrying two active tags).
+  const activeOverlayTagValues = activeOverlayKeys.map((k) => OVERLAY_TAG_VALUES[k]);
 
   const kpiCards = [
     { label: 'This Week', value: crossBrand.thisWeek, hint: 'Tests reached' },
@@ -666,6 +672,20 @@ export default function CoveragePage() {
                         const overlayBadges = activeOverlayKeys
                           .map(k => ({ k, n: pipeline?.overlays[k][stage] ?? 0 }))
                           .filter(({ n }) => n > 0);
+                        // Untagged remainder: tickets in this stage carrying
+                        // NONE of the active overlay tags. Computed from
+                        // tickets[] so a ticket with two active tags counts
+                        // once (summing per-overlay badges would double it).
+                        // Invariant: union-tagged + untagged === stage total.
+                        // Chip shown only when ≥1 overlay is active and the
+                        // cell is non-empty.
+                        const showOverlays = activeOverlayKeys.length > 0 && count > 0;
+                        const untaggedCount = showOverlays
+                          ? (pipeline?.tickets ?? []).filter(
+                              t => t.stage === stage
+                                && !t.tags.some(tag => activeOverlayTagValues.includes(tag)),
+                            ).length
+                          : 0;
                         return (
                           <td key={stage} className="px-4 py-3 align-top">
                             {count > 0 ? (
@@ -679,11 +699,12 @@ export default function CoveragePage() {
                             ) : (
                               <span className="text-[color:var(--f92-lgray)]">0</span>
                             )}
-                            {overlayBadges.length > 0 ? (
+                            {showOverlays ? (
                               <div className="mt-1 flex flex-wrap gap-1">
                                 {overlayBadges.map(({ k, n }) => (
                                   <OverlayCountBadge key={k} overlayKey={k} count={n} />
                                 ))}
+                                <UntaggedCountBadge count={untaggedCount} />
                               </div>
                             ) : null}
                           </td>

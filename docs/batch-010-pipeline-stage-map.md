@@ -75,16 +75,29 @@ Jira multi-select custom field **`customfield_12528` ("CRO Labels")** —
 **not** the `labels` field (NBLYCRO/SPLCRO tickets carry no `labels`). The
 matcher keys on the option `value` string with **exact Jira casing**:
 
-| Overlay (UI label) | Jira `CRO Labels` option value |
-| ------------------ | ------------------------------ |
-| Needs Info         | `Needs info`                   |
-| Troubleshooting    | `Troubleshooting`              |
-| On Hold            | `On hold`                      |
+| Overlay (UI label)    | Jira `CRO Labels` option value |
+| --------------------- | ------------------------------ |
+| Needs Info            | `Needs info`                   |
+| Troubleshooting       | `Troubleshooting`              |
+| On Hold               | `On hold`                      |
+| Awaiting Client Input | `Awaiting client input`        |
 
 The full `CRO Labels` option set in prod is: `Go live`, `Awaiting client
 input`, `On hold`, `Needs info`, `Troubleshooting`, `Deployment`, `Paused`.
-Only the three above are surfaced as Batch 010 overlay toggles. (`Deployment`
-is the same tag §13 rule 4 reads for `test_type`.)
+Four of these are surfaced as overlay toggles (the fourth, **Awaiting Client
+Input**, was added as a Batch 010 follow-on 2026-06-10 — verbatim casing
+re-confirmed against the prod option list that day). (`Deployment` is the
+same tag §13 rule 4 reads for `test_type`.)
+
+### Untagged-remainder chip (Batch 010 follow-on)
+
+When ≥1 overlay toggle is active, each non-empty stage count also renders a
+neutral dashed-border "None N" chip: the count of tickets in that stage
+carrying **none** of the *active* overlay tags. It is computed directly from
+`tickets[]` (a ticket with two active tags counts once) — never by summing
+the per-overlay badges, which would double-count. Invariant, per cell:
+`union-tagged + untagged === stage total`. The chip is hidden when zero
+overlays are active.
 
 ---
 

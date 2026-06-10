@@ -82,12 +82,13 @@ export function stageForStatus(status: string | null | undefined): PipelineStage
 
 export const OVERLAY_FIELD_ID = 'customfield_12528';
 
-export type OverlayKey = 'needs_info' | 'troubleshooting' | 'on_hold';
+export type OverlayKey = 'needs_info' | 'troubleshooting' | 'on_hold' | 'awaiting_client_input';
 
 export const OVERLAY_KEYS: readonly OverlayKey[] = [
   'needs_info',
   'troubleshooting',
   'on_hold',
+  'awaiting_client_input',
 ] as const;
 
 // UI labels for the overlay toggles.
@@ -95,14 +96,18 @@ export const OVERLAY_LABELS: Record<OverlayKey, string> = {
   needs_info: 'Needs Info',
   troubleshooting: 'Troubleshooting',
   on_hold: 'On Hold',
+  awaiting_client_input: 'Awaiting Client Input',
 };
 
 // Exact Jira `CRO Labels` option values (casing matters — these are matched
-// literally against the multi-select option `.value`).
+// literally against the multi-select option `.value`). The `Awaiting client
+// input` casing (capital A, rest lowercase) is verbatim from the prod CRO
+// Labels option list, confirmed 2026-06-10 — do not transform (§13 r28).
 export const OVERLAY_TAG_VALUES: Record<OverlayKey, string> = {
   needs_info: 'Needs info',
   troubleshooting: 'Troubleshooting',
   on_hold: 'On hold',
+  awaiting_client_input: 'Awaiting client input',
 };
 
 // Reverse lookup: Jira tag value → overlay key.
@@ -158,5 +163,6 @@ export function emptyOverlayStageCounts(): OverlayStageCounts {
     needs_info: emptyStageCounts(),
     troubleshooting: emptyStageCounts(),
     on_hold: emptyStageCounts(),
+    awaiting_client_input: emptyStageCounts(),
   };
 }

@@ -2430,6 +2430,48 @@ DO NOT PUSH — Lacey smoke-tests + deploys manually. Step 1 (doc +
 const) committed on its own; the route, page, components, CSS tokens,
 and these CLAUDE.md edits land together.
 
+**Follow-on — 4th overlay (Awaiting Client Input) + untagged-remainder
+chip — 2026-06-10.** Extends Batch 010 (not a new §15.5 in-flight batch).
+
+- **4th overlay `awaiting_client_input`** added to the SoT
+  `lib/coverage/pipeline-stages.ts`: `OverlayKey` union, `OVERLAY_KEYS`,
+  `OVERLAY_LABELS` (`'Awaiting Client Input'`), `OVERLAY_TAG_VALUES`
+  (`'Awaiting client input'` — verbatim Jira casing, capital A / rest
+  lowercase, re-confirmed against the prod CRO Labels option list
+  2026-06-10; do not transform per §13 r28), and
+  `emptyOverlayStageCounts()`. The route
+  (`app/api/coverage/pipeline/route.ts`) needed **no change** — its
+  overlay bucketing iterates ticket tags through `overlayKeyForTag()`
+  and writes `bucket.overlays[key][stage]`, so the 4th overlay counts
+  automatically once the const + empty-counts key exist (verified, not
+  assumed).
+- **4th toggle chip** on the Coverage page renders automatically (the
+  toggle row maps `OVERLAY_KEYS`); only the local `overlays` state
+  object gained the `awaiting_client_input: false` slot. New color: a
+  violet `--pill-aci-{bg,border,fg}` token set in `app/globals.css`
+  (`:root` + dark, WCAG AA, §13 r25 — no inline hex), distinct from the
+  blue/amber/gray of the existing three. `OVERLAY_STYLE` /
+  `OVERLAY_ACTIVE_CLASS` in `components/coverage/overlay-badge.tsx`
+  gained the ACI entry (abbr `ACI`); `TagBadge` picks up the violet for
+  the `Awaiting client input` tag in the stage drawer automatically.
+- **Untagged-remainder chip.** New `UntaggedCountBadge` (dashed gray,
+  sibling to `OverlayCountBadge`). When ≥1 overlay toggle is ACTIVE,
+  each non-empty stage cell renders a `None N` chip = count of that
+  stage's tickets carrying NONE of the ACTIVE overlay tags. Computed
+  from `tickets[]` (a ticket with two active tags counts once) — NOT by
+  summing per-overlay badges, which would double-count. Per-cell
+  invariant: union-tagged + untagged === stage total. Hidden when zero
+  overlays are active (and on empty cells).
+- **Atomic doc:** `docs/batch-010-pipeline-stage-map.md` overlay table
+  gains the 4th row + an untagged-remainder-chip subsection (§13 r23).
+- **Verification:** `npm run build` green; `tsc --noEmit` clean; ESLint
+  on the changed files surfaces only the 8 pre-existing
+  `react-hooks/static-components` findings (SortableHeader/SortIcon) —
+  no new findings. Running-app check against prod (ACI counts where
+  ACI-tagged tickets exist — legitimately 0 until the team applies the
+  label; ≥1-cell union+untagged=total hand-check; existing 3 overlays
+  unregressed) is Lacey's manual smoke step before deploy. DO NOT PUSH.
+
 ### Batch 009 — SharePoint integration LIVE — 2026-05-29
 
 Read-only Microsoft Graph proxy from the Worker to the CRO
