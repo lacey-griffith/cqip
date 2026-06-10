@@ -31,6 +31,7 @@ export interface Milestone {
 
 export interface QualityLog {
   id: string;
+  jira_ticket_id: string;
   client_brand: string | null;
   triggered_at: string;
   is_deleted: boolean;
@@ -84,6 +85,37 @@ export function startOfCurrentMonth(): Date {
 
 export function startOfMonth(year: number, monthIndex: number): Date {
   return new Date(year, monthIndex, 1);
+}
+
+// -----------------------------------------------------------------------
+// Drought / coverage threshold — SINGLE SOURCE OF TRUTH.
+//
+// The Output-table DROUGHT pill (via buildCoverageRows) and the Overall
+// Health / Brands Covered KPIs (computeCoverageHealth) BOTH route their
+// comparison through isInDrought() so the two surfaces are physically
+// incapable of diverging (Batch 005.1 hard constraints #1 + #3). Never
+// re-spell the `<= threshold` / `> threshold` inequality at a call site.
+//
+// THRESHOLD is a constant, NOT a live alert_rules.config fetch: the pill
+// has always been hardcoded to <= 2, so reading live config for Health
+// while the pill stays hardcoded would let them drift the moment an admin
+// edits the rule. Parity with the pill wins this batch.
+// -----------------------------------------------------------------------
+
+export const COVERAGE_THRESHOLD = 2;
+
+/**
+ * A brand is in DROUGHT when it is not paused and reached `threshold` or
+ * fewer milestones in the rolling-28d window. "Covered" is the strict
+ * complement among non-paused brands (count > threshold). A brand sitting
+ * exactly ON the threshold is in drought / uncovered.
+ */
+export function isInDrought(
+  testsRolling28: number,
+  isPaused: boolean,
+  threshold: number = COVERAGE_THRESHOLD,
+): boolean {
+  return !isPaused && testsRolling28 <= threshold;
 }
 
 // -----------------------------------------------------------------------
@@ -191,7 +223,7 @@ export function buildCoverageRows(
     const testsRolling28 = countInWindow(milestones, brand.id, rolling28Start, now);
     const testsCurrentMonth = countInWindow(milestones, brand.id, currentMonthStart, now);
     const reworkRolling28 = reworkCountForBrand(logs, brand.jira_value, rolling28Start, now);
-    const droughtFlag = !brand.is_paused && testsRolling28 <= 2;
+    const droughtFlag = isInDrought(testsRolling28, brand.is_paused);
     const monthly = monthlyCounts(milestones, brand.id, 6);
 
     return {
@@ -205,4 +237,130 @@ export function buildCoverageRows(
       monthly,
     };
   });
+}
+
+// -----------------------------------------------------------------------
+// Coverage KPIs (Batch 005.1). All full-scope program-health metrics:
+// compute from the FULL brands / milestones arrays, NEVER `visibleRows`
+// (which is filter- AND paused-scoped). The page wires these into the
+// non-teal KPI cards in Phase 3.
+// -----------------------------------------------------------------------
+
+export interface CoverageHealth {
+  /** active, non-paused brands NOT in drought (count > threshold in 28d). */
+  coveredCount: number;
+  /** active, non-paused brands (the denominator). */
+  totalCount: number;
+  /** round(coveredCount / totalCount * 100); null when totalCount === 0 → render '—'. */
+  healthPct: number | null;
+}
+
+/**
+ * Overall Health % AND Brands Covered (N/M) in a SINGLE pass over brands —
+ * they are literally the same numerator/denominator (hard constraint #4).
+ * "Covered" derives from the shared `isInDrought` predicate so it can never
+ * diverge from the Output-table DROUGHT pill (hard constraint #1).
+ *
+ * Brands Covered display = `${coveredCount}/${totalCount}` (render '—' when
+ * totalCount === 0). Overall Health = healthPct (already '—'-guarded).
+ *
+ * Paused and inactive brands are excluded from the denominator per spec §3.1.
+ */
+export function computeCoverageHealth(
+  brands: Brand[],
+  milestones: Milestone[],
+  now: Date = new Date(),
+): CoverageHealth {
+  const rolling28Start = new Date(now);
+  rolling28Start.setDate(rolling28Start.getDate() - 28);
+  const counts = countsByBrand(milestones, rolling28Start, now);
+
+  let coveredCount = 0;
+  let totalCount = 0;
+  for (const brand of brands) {
+    if (!brand.is_active) continue; // spec §3.1: "active brands"
+    if (brand.is_paused) continue; // excluded from the denominator
+    // 010.2 swap point: read the per-brand contracted target here
+    // (e.g. brand.contract_milestones_per_month) instead of the flat
+    // constant. The loop already reads `target` per brand, so the swap
+    // is THIS ONE LINE.
+    const target = COVERAGE_THRESHOLD;
+    const count = counts.get(brand.id) ?? 0;
+    if (!isInDrought(count, brand.is_paused, target)) coveredCount += 1;
+    totalCount += 1;
+  }
+
+  return {
+    coveredCount,
+    totalCount,
+    healthPct: totalCount === 0 ? null : Math.round((coveredCount / totalCount) * 100),
+  };
+}
+
+export interface QualityScore {
+  /** distinct tickets that reached Dev Client Review in the 28d window. */
+  deliveredCount: number;
+  /** distinct delivered tickets with ≥1 in-window rework. */
+  dirtyCount: number;
+  /** deliveredCount - dirtyCount. */
+  cleanCount: number;
+  /** round(cleanCount / deliveredCount * 100); null when deliveredCount === 0 → render '—'. */
+  scorePct: number | null;
+}
+
+const DELIVERED_MILESTONE_TYPE = 'dev_client_review';
+
+/**
+ * Quality Score % — clean-delivery rate. Of the distinct tickets delivered
+ * (reached Dev Client Review) in the last 28 days, what % had zero rework
+ * in that same window. HIGH % = GOOD.
+ *
+ * - Distinct TICKETS, not rework events: a ticket bounced 3× counts once.
+ * - The dirty set is INTERSECTED with the delivered set (load-bearing) so a
+ *   rework on a ticket NOT delivered in-window can't poison the score.
+ * - Window semantics are intentional: a ticket delivered in-window whose
+ *   only rework predates the window reads CLEAN (rolling recent-quality,
+ *   not lifetime-clean).
+ * - milestone_type filter is stricter than the type-agnostic shared count
+ *   helpers; harmless today (only dev_client_review is ever written) —
+ *   reconcile when a second milestone_type lands (spec §3.3).
+ */
+export function computeQualityScore(
+  milestones: Milestone[],
+  logs: QualityLog[],
+  now: Date = new Date(),
+): QualityScore {
+  const windowStart = new Date(now);
+  windowStart.setDate(windowStart.getDate() - 28);
+  const startMs = windowStart.getTime();
+  const endMs = now.getTime();
+
+  const delivered = new Set<string>();
+  for (const m of milestones) {
+    if (m.is_deleted) continue;
+    if (m.milestone_type !== DELIVERED_MILESTONE_TYPE) continue;
+    const t = new Date(m.reached_at).getTime();
+    if (t < startMs || t >= endMs) continue;
+    delivered.add(m.jira_ticket_id);
+  }
+
+  const dirty = new Set<string>();
+  for (const l of logs) {
+    if (l.is_deleted) continue;
+    const t = new Date(l.triggered_at).getTime();
+    if (t < startMs || t >= endMs) continue;
+    if (!delivered.has(l.jira_ticket_id)) continue; // intersection — load-bearing
+    dirty.add(l.jira_ticket_id);
+  }
+
+  const deliveredCount = delivered.size;
+  const dirtyCount = dirty.size;
+  const cleanCount = deliveredCount - dirtyCount;
+
+  return {
+    deliveredCount,
+    dirtyCount,
+    cleanCount,
+    scorePct: deliveredCount === 0 ? null : Math.round((cleanCount / deliveredCount) * 100),
+  };
 }

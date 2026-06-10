@@ -2303,10 +2303,19 @@ deleted in the same commit that writes the §16 shipped entry.
 Spec: `docs/batch-005.1-coverage-redesign-spec.md` (Jenny
 PASS-WITH-FINDINGS 2026-06-05, all findings folded into the spec).
 
-**Status:** Phase 0-1 done (decisions locked, spec final). Phase 2
-next (KPI calcs + tests in `lib/coverage/queries.ts` +
-`tests/coverage-kpis.test.ts`). Phases 4-6 (BrandAdminDrawer,
-settings-page delete, Karen, deploy) span past 2026-06-05.
+**Status:** Phase 0-2 done. Phase 2 (Commit 2, 2026-06-08): shared
+`isInDrought()` predicate + `COVERAGE_THRESHOLD` constant extracted in
+`lib/coverage/queries.ts` (Output-table pill now routes through it);
+`computeCoverageHealth()` (single-pass Health % + Brands Covered N/M)
+and `computeQualityScore()` (distinct clean/delivered tickets, rolling
+28d) added as pure functions; `tests/coverage-kpis.test.ts` (5 cases:
+normal, 0-denominator, dirty-not-in-delivered intersection, exactly-
+THRESHOLD boundary = drought/uncovered, single-pass non-divergence) —
+all pass via `npx tsx --test`; build green, tsc clean. `QualityLog`
+interface + coverage page `quality_logs` select gained `jira_ticket_id`
+(needed by Quality Score). Phase 3 next (KPI row reorg + wire the 3 new
+cards). Phases 4-6 (BrandAdminDrawer, settings-page delete, Karen,
+deploy) span past 2026-06-05.
 
 **Locked decisions:**
 - Path 1: covered = `count > THRESHOLD` (strict complement of the

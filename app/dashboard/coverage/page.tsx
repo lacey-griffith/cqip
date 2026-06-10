@@ -118,7 +118,7 @@ export default function CoveragePage() {
       supabase.from('brands').select('id, project_key, brand_code, jira_value, display_name, is_active, is_paused, paused_reason').order('display_name'),
       supabase.from('projects').select('jira_project_key, client_name, display_name, brand_model').eq('is_active', true).order('display_name'),
       supabase.from('test_milestones').select('id, jira_ticket_id, jira_ticket_url, jira_summary, brand_id, brand_jira_value, milestone_type, reached_at, source, created_by, notes, is_deleted').eq('is_deleted', false),
-      supabase.from('quality_logs').select('id, client_brand, triggered_at, is_deleted').eq('is_deleted', false),
+      supabase.from('quality_logs').select('id, jira_ticket_id, client_brand, triggered_at, is_deleted').eq('is_deleted', false),
       // Live Jira pipeline. Server route — keeps JIRA_API_TOKEN off the client.
       fetch('/api/coverage/pipeline')
         .then(async (r) =>
