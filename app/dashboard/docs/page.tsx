@@ -153,6 +153,102 @@ export default function DocsPage() {
         </ul>
       </Section>
 
+      <Section id="coverage" title="Reading the Coverage page">
+        <p>
+          The Coverage page shows brand health two ways — what&apos;s already been{' '}
+          <strong>delivered</strong> (the Output table) and what&apos;s currently{' '}
+          <strong>in flight</strong> (the Pipeline table, pulled live from Jira each
+          time the page loads). It&apos;s visible to every signed-in user and is
+          read-only — there&apos;s nothing to fill in here.
+        </p>
+
+        <h3>Pipeline stages</h3>
+        <p>
+          The Pipeline table buckets live work into five stages:{' '}
+          <strong>Strategy → Design → Dev → Queued → Live</strong>. The numbers are
+          live Jira ticket counts. Tickets in <em>Done</em> and <em>Reporting</em> are
+          deliberately excluded — the pipeline is about work that&apos;s still moving.
+          Click any count to open a drawer listing that stage&apos;s tickets, each
+          linking back to Jira.
+        </p>
+
+        <h3>Overlay tags</h3>
+        <p>
+          Four overlay tags can badge the pipeline counts:{' '}
+          <strong>Needs Info</strong>, <strong>Troubleshooting</strong>,{' '}
+          <strong>On Hold</strong>, and <strong>Awaiting Client Input</strong>. Toggle
+          them on above the Pipeline table. They are <em>visual overlays only</em> —
+          they badge the counts to show how many tickets in each stage carry that tag;
+          they do <strong>not</strong> filter rows out. When one or more overlays is
+          on, each stage count also shows a <strong>&ldquo;None N&rdquo;</strong> chip:
+          the number of tickets in that stage carrying none of the active tags.
+        </p>
+
+        <h3>Milestone drought</h3>
+        <p>
+          A brand that has reached <strong>2 or fewer</strong> delivered milestones in
+          the last 28 days shows a <strong>DROUGHT</strong> pill on the Output table —
+          a flag that delivery for that brand has gone quiet.
+        </p>
+
+        <h3>The KPI row</h3>
+        <p>
+          Nine cards run across the top of the page. They are <strong>full-scope</strong>:
+          they describe the whole program and deliberately <em>ignore</em> the
+          project / brand filter. The filter re-scopes the tables below it, not these
+          cards.
+        </p>
+        <ul>
+          <li>
+            <strong>Two teal long-range cards</strong> — Tests This Year and Tests All
+            Time. The teal accent flags the long-range view.
+          </li>
+          <li>
+            <strong>Four time-window cards</strong> — This Week, Last Week, Rolling 28
+            Days, and This Month — milestone and sendback counts over each window.
+          </li>
+          <li>
+            <strong>Three operational KPIs</strong> — the ones people ask about most,
+            defined precisely below.
+          </li>
+        </ul>
+        <dl className="space-y-3">
+          <Field
+            name="Overall Health %"
+            description={<>
+              Of all active, non-paused brands, the percentage <strong>not</strong> in
+              drought. &ldquo;Covered&rdquo; means <strong>more than 2</strong>{' '}
+              milestones in the last 28 days — a brand sitting at exactly 2 reads as
+              uncovered, matching the DROUGHT pill on the Output table. Reads
+              &ldquo;—&rdquo; when there are no active, non-paused brands.
+            </>}
+          />
+          <Field
+            name="Brands Covered (N/M)"
+            description={<>
+              The same measure as Overall Health, in count form — e.g. <strong>7/13</strong>{' '}
+              means 7 of 13 active, non-paused brands are covered. Identical numerator
+              and denominator to Overall Health %. Subtitle reads &ldquo;Last 28
+              days.&rdquo;
+            </>}
+          />
+          <Field
+            name="Quality Score %"
+            description={<>
+              Of the distinct tickets <em>delivered</em> in the last 28 days (tickets
+              that first reached Dev Client Review in that window), the percentage with{' '}
+              <strong>zero rework</strong> in that same window. Counts distinct tickets,
+              not rework events — a ticket bounced three times still counts once. Higher
+              is better. Reads &ldquo;—&rdquo; when nothing was delivered in the window.
+            </>}
+          />
+        </dl>
+        <p className="text-xs italic text-[color:var(--f92-gray)]">
+          The coverage threshold is currently a flat 2 milestones for every brand. It
+          will switch to each brand&apos;s contracted target in a future release.
+        </p>
+      </Section>
+
       <Section id="filters" title="Using filters and reports">
         <h3>Filters on the Logs page</h3>
         <p>
@@ -200,7 +296,15 @@ export default function DocsPage() {
           />
           <Field
             name="Issue Category"
-            description="What type of issue is this? Pick the best-fitting option: functional bug, visual/UI issue, tracking/analytics, content, missing / miscommunicated info, code / config error, etc. This is a big driver of the Issue Category Breakdown chart."
+            description={<>
+              The broad bucket describing what kind of problem the sendback was — the
+              top-level triage of where the issue came from. Pick the single
+              best-fitting category, then use Issue Subtype to pinpoint the specific
+              symptom. This is a big driver of the Issue Category Breakdown chart, so
+              picking consistently matters. For the current option list and what each
+              value means, see the{' '}
+              <a href="/dashboard/docs/qa-fields#classification" className="font-medium text-[color:var(--f92-orange)] underline hover:brightness-95">QA Field Reference</a>.
+            </>}
           />
           <Field
             name="Issue Subtype"
@@ -231,7 +335,14 @@ export default function DocsPage() {
           />
           <Field
             name="Resolution Type"
-            description="How was it fixed? (CRO Code / Configuration Error, Client Change, Third-Party, Design, etc.) Helps us see what kinds of fixes keep recurring."
+            description={<>
+              How the issue was actually fixed — the category of the fix that closed it
+              out. This is distinct from Root Cause: Root Cause is <em>why</em> it
+              happened, Resolution Type is <em>how</em> it was resolved. Helps us see
+              which kinds of fixes keep recurring. For the current option list and what
+              each value means, see the{' '}
+              <a href="/dashboard/docs/qa-fields#resolution" className="font-medium text-[color:var(--f92-orange)] underline hover:brightness-95">QA Field Reference</a>.
+            </>}
           />
           <Field
             name="Root Cause (CRO)"
