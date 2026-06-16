@@ -272,6 +272,26 @@ Covers events from 2026-04-23 forward (start of the drift-
 prevention era). Project-internal events stay in each
 project's CLAUDE.md §16.
 
+### 2026-06-05 — AC: Phase 2 consumes the SharePoint surface (/folder + /xlsx)
+
+Per CC5/CC8: AC now consumes the LIVE /api/sharepoint/* contract surface — first
+consumer traffic since DC's Batch 009 ship (2026-05-29).
+
+- Phase 2a (v3.0.0, AC commit 4550060, 2026-06-03): consumes GET /folder.
+  Enumerate-only against a hardcoded test folder; proved token byte-match,
+  egress consent, and the {folder, xlsx, screenshots[], warnings[]} shape
+  end-to-end (NBLYCRO-1895 → 200, 13 files, warnings empty). Matches DC's
+  2026-05-29 smoke.
+- Phase 2b (v3.4.0, AC commits 1e74159, b31f6d8, 83129ad, 2026-06-05): consumes
+  GET /xlsx?ref=. Re-derives the ticket's QA Doc URL href server-side, enumerates
+  /folder, parses the Preview Links sheet via /xlsx, feeds the Phase 1.5 formatter,
+  auto-populates the QA comment. Verified green on NBLYCRO-1139 (Control + V1-V4,
+  10 screenshots enumerated).
+- /image (2c) is NOT yet consumed.
+
+Spec: AC SPEC_phase2b.md v0.2 at AC commit db99deb. Consumer-only event — no
+DC-side code change. AC docs current as of 83129ad.
+
 ### 2026-06-01 — AZURE_CLIENT_SECRET rotated; rotated-to value exposed, prod verified healthy, clean re-rotation blocked on app access
 
 Precise sequence:
