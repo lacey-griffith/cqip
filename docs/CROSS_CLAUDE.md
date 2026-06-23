@@ -272,6 +272,31 @@ Covers events from 2026-04-23 forward (start of the drift-
 prevention era). Project-internal events stay in each
 project's CLAUDE.md §16.
 
+### 2026-06-23 — AC: Phase 2c spike consumes /image (third SharePoint surface)
+
+Per CC5/CC8: AC now consumes GET /api/sharepoint/image — completing the three-
+route SharePoint surface (/folder + /xlsx already logged 2026-06-05).
+
+- Phase 2c spike (AC v3.5.0, commit ec0da13, version-stamped 4df7f76,
+  deployed dev 2026-06-22): consumes GET /image?ref=. fetchImage() in
+  sharepoint.js (Bearer auth, raw arrayBuffer() on 200, shared
+  proxyErrorOrNull ladder + new 413 too_large branch); fetchScreenshot
+  resolver base64-encodes server-side into a data:<mime>;base64 URI; panel
+  renders one screenshot via UI Kit 2's Image. SPIKE ONLY — one image, no
+  comment-embedding, no multi-image, no ADF media (full 2c build deferred).
+- Verified green 2026-06-23 (Lacey, manual): image renders on an eligible
+  ticket, three-layer size guard holds.
+- Open /image contract question RESOLVED: DC sets an exact Content-Length on
+  every 200 (DC source f5c7e0a, line 108), but AC's resolver observes it
+  absent against the live Worker (logged 3×). Leading hypothesis: edge/fetch-
+  layer strips it in transit (observed, not packet-proven). No functional
+  impact — AC's size guard runs off the enumerated screenshots[].size, never
+  Content-Length. Flagging for any future DC consumer that might assume the
+  header survives the wire.
+
+Spec: AC SPEC remains spike-scoped; full 2c build (embed + multi-image) not
+started. Consumer-only event — no DC-side code change.
+
 ### 2026-06-05 — AC: Phase 2 consumes the SharePoint surface (/folder + /xlsx)
 
 Per CC5/CC8: AC now consumes the LIVE /api/sharepoint/* contract surface — first
@@ -732,8 +757,14 @@ Shareable Screenshots/ folder.
 
 ---
 
-*Last updated: 2026-06-01 | CC9 added (relay repo state at an
-immutable ref — triggered by a stale `/blob/main/` CDN fetch).
+*Last updated: 2026-06-23 | §6: AC Phase 2c spike now consumes
+GET /api/sharepoint/image (AC v3.5.0, dev 2026-06-22) — third and
+final SharePoint route consumed; verified green 2026-06-23. Open
+/image Content-Length contract question resolved (DC sets it per
+200; AC observes it stripped in transit — no functional impact,
+AC sizes off screenshots[].size). Prior (2026-06-01): CC9 added
+(relay repo state at an immutable ref — triggered by a stale
+`/blob/main/` CDN fetch).
 AC test mode fully ended (v2.15.0 dev) logged to §6.
 AZURE_CLIENT_SECRET incident tracked in §4 + §6: rotated
 2026-06-01, rotated-to value exposed in chat and now live in
