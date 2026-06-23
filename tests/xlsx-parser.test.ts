@@ -42,6 +42,28 @@ test('parses rows 4+ after skipping title/blank/header', () => {
   assert.equal(rows[1].variation, 'Hero Swap');
 });
 
+test('parses a two-row-header sheet (National/Local sub-header, empty Col A) — regression for MDG-70 / NBLYCRO-1823', () => {
+  // Both-URL tests get an extra sub-header row at sheet row 4 (rows[3])
+  // whose Col A is empty, pushing data to sheet row 5 (rows[4]). The old
+  // fixed HEADER_ROWS = 3 broke on this row immediately and returned [].
+  const bytes = buildWorkbook(PREVIEW_SHEET_NAME, [
+    ['Preview Links — Title row'],
+    [],
+    ['Label', 'Variation', 'National', 'Local'],
+    [null, null, 'National', 'Local'], // sub-header: empty Col A, must be skipped
+    ['Control', 'Control', 'https://national.example/control', 'https://local.example/control'],
+    ['V1', 'Hero Swap', 'https://national.example/v1', 'https://local.example/v1'],
+  ]);
+  const rows = parsePreviewLinks(bytes);
+  assert.equal(rows.length, 2);
+  assert.deepEqual(
+    rows.map((r) => r.label),
+    ['Control', 'V1'],
+  );
+  assert.equal(rows[0].national_url, 'https://national.example/control');
+  assert.equal(rows[0].local_url, 'https://local.example/control');
+});
+
 test('stops at the first row where Col A is empty', () => {
   const bytes = buildWorkbook(PREVIEW_SHEET_NAME, [
     ...HEADER_ROWS,

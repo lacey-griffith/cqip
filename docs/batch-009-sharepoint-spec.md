@@ -99,8 +99,9 @@ Parses the xlsx `Preview Links` sheet and returns structured rows. Does NOT retu
 - Read sheet named `Preview Links`. Case-insensitive match; trim whitespace.
 - Row 1: title (ignore).
 - Row 2: blank (skip).
-- Row 3: header row (ignore — column positions are contract).
-- Rows 4+: data rows. Stop at first row where Col A is empty.
+- Header depth is variable (1–2 rows). Data begins at the first row whose
+  Col A is a variation label (Control/V1/V2/…), read contiguously; stop at
+  the first row where Col A is empty.
 - Map: Col A → `label`, Col B → `variation`, Col C → `national_url`, Col D → `local_url` (nullable).
 
 If no `Preview Links` sheet exists → 422 with `{error: "sheet_not_found", expected: "Preview Links"}`.

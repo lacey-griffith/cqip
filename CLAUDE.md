@@ -2576,6 +2576,18 @@ Jenny + Karen for the five-finding pre-ship review.
 rotation remains queued (Worker-only, Carl-executable, Fri/Mon
 target) — §15 Pending rotations.
 
+**Addendum 2026-06-23 — variable-header-depth /xlsx parser fix.**
+`lib/sharepoint/xlsx-parser.ts` now finds the data-start row dynamically
+(first Col A matching `/^(control|v\d+)$/i`) instead of a fixed
+`HEADER_ROWS = 3`. Two-row-header sheets — where a National/Local
+sub-header row with an empty Col A precedes the data (e.g. NBLYCRO-1823 /
+MDG-70) — were breaking the parse immediately and returning `rows: []`;
+the one-row-header case (NBLYCRO-1139) is unchanged. Parser-correctness
+only: response shape (`{filename, rows}`) and column mapping unchanged, no
+contract impact, no AC code change. Spec §3.2 reworded for variable header
+depth; two-row regression case added to `tests/xlsx-parser.test.ts`. No new
+§13 rule.
+
 ### Batch 011 — Node 24 upgrade + /api/health endpoint — 2026-05-27
 
 Two paired CI-hygiene items, both touching `deploy.yml`: bump the

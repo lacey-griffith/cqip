@@ -1,14 +1,19 @@
 // Parses the `Preview Links` sheet per spec §3.2.
 // Sheet name match is case-insensitive + trim-tolerant.
-// Row 1: title (skip). Row 2: blank (skip). Row 3: header (skip).
-// Row 4+: data. Stop at first row where Col A is empty.
+// Header depth is variable (1–2 rows). Data begins at the first row
+// whose Col A is a variation label (Control/V1/V2/…), read
+// contiguously; stop at first empty Col A.
 // Col A → label, Col B → variation, Col C → national_url,
 // Col D → local_url (nullable).
 
 import * as XLSX from 'xlsx-js-style';
 
 export const PREVIEW_SHEET_NAME = 'Preview Links';
-const HEADER_ROWS = 3;
+// Matches a variation-label cell in Col A (case-insensitive). The
+// title row and the optional National/Local sub-header row both have
+// a non-matching Col A, so this locates the data start regardless of
+// how many header rows precede it.
+const LABEL_RE = /^(control|v\d+)$/i;
 
 export interface PreviewRow {
   label: string;
@@ -56,8 +61,21 @@ export function parsePreviewLinks(
     blankrows: true,
   });
 
+  // Dynamic data-start detection: the first row whose Col A is a
+  // variation label. A fixed header offset would regress either the
+  // one-row-header sheets or the two-row-header (sub-header) sheets
+  // depending on the constant chosen.
+  let start = -1;
+  for (let i = 0; i < rows.length; i++) {
+    if (LABEL_RE.test(cellToString((rows[i] ?? ([] as unknown[]))[0]))) {
+      start = i;
+      break;
+    }
+  }
+  if (start === -1) return [];
+
   const dataRows: PreviewRow[] = [];
-  for (let i = HEADER_ROWS; i < rows.length; i++) {
+  for (let i = start; i < rows.length; i++) {
     const row = (rows[i] ?? []) as unknown[];
     const label = cellToString(row[0]);
     if (label === '') break;
