@@ -1,13 +1,15 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronUp, ChevronsUpDown } from 'lucide-react';
+import { ChevronDown, ChevronUp, ChevronsUpDown, Settings } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Sparkline } from '@/components/coverage/sparkline';
 import { BrandDetailDrawer } from '@/components/coverage/brand-detail-drawer';
+import { BrandAdminDrawer } from '@/components/coverage/brand-admin-drawer';
+import { AddBrandDrawer } from '@/components/coverage/add-brand-drawer';
 import { PipelineStageDrawer } from '@/components/coverage/pipeline-stage-drawer';
 import { OverlayCountBadge, UntaggedCountBadge, OVERLAY_ACTIVE_CLASS } from '@/components/coverage/overlay-badge';
 import { SyncJiraButton } from '@/components/dashboard/sync-jira-button';
@@ -99,6 +101,10 @@ export default function CoveragePage() {
   const [filter, setFilter] = useState<FilterValue>({ projectKeys: [], brandCodes: [] });
   const [drawerRow, setDrawerRow] = useState<CoverageRow | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // Admin surfaces (Batch 005.1 Phase 4) — per-brand admin drawer + create-brand.
+  const [adminBrand, setAdminBrand] = useState<Brand | null>(null);
+  const [adminOpen, setAdminOpen] = useState(false);
+  const [addBrandOpen, setAddBrandOpen] = useState(false);
 
   // Live Jira pipeline (Batch 010). Keyed by brand_code; merged onto the
   // shared CoverageRow brand set so both tables share filter + paused scope.
@@ -184,8 +190,8 @@ export default function CoveragePage() {
     return () => { cancelled = true; };
   }, [refetchAll]);
 
-  // Refetch when the tab regains focus so admin round-trips to
-  // /settings/coverage don't leave this page showing stale counts.
+  // Refetch when the tab regains focus so external changes (other tabs,
+  // the settings-page fallback) don't leave this page showing stale counts.
   useEffect(() => {
     function onVisible() {
       if (document.visibilityState === 'visible') {
@@ -384,6 +390,9 @@ export default function CoveragePage() {
     setDrawerOpen(true);
   }
 
+  // Output table gains a trailing admin-actions column only for admins.
+  const outputColSpan = isAdmin ? 10 : 9;
+
   function openStageDrawer(row: CoverageRow, stage: PipelineStage) {
     const pipeline = pipelineBrands.get(row.brand.brand_code);
     const tickets = (pipeline?.tickets ?? []).filter((t) => t.stage === stage);
@@ -500,6 +509,11 @@ export default function CoveragePage() {
 
       <Card className="sticky top-2 z-10 p-3 md:p-4">
         <div className="flex flex-wrap items-center gap-3">
+          {isAdmin ? (
+            <Button size="sm" onClick={() => setAddBrandOpen(true)}>
+              Add brand
+            </Button>
+          ) : null}
           <div className="ml-auto flex flex-wrap items-center gap-3">
             <label className="flex h-9 items-center gap-2 text-sm text-[color:var(--f92-dark)]">
               <input
@@ -541,20 +555,21 @@ export default function CoveragePage() {
                 <SortableHeader k="reworkRatio" label="Rework Ratio" />
                 <th className="px-4 py-3 font-semibold">Trend</th>
                 <SortableHeader k="status" label="Status" />
+                {isAdmin ? <th className="px-4 py-3" aria-label="Actions" /> : null}
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 Array.from({ length: 8 }, (_, i) => (
                   <tr key={i} className="border-t border-[color:var(--f92-border)]">
-                    <td colSpan={9} className="px-4 py-4">
+                    <td colSpan={outputColSpan} className="px-4 py-4">
                       <div className="h-4 w-full animate-pulse rounded bg-[color:var(--f92-tint)]" />
                     </td>
                   </tr>
                 ))
               ) : visibleRows.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center text-[color:var(--f92-gray)]">
+                  <td colSpan={outputColSpan} className="px-4 py-8 text-center text-[color:var(--f92-gray)]">
                     {brands.length === 0
                       ? 'No brands configured. Ask an admin to seed brands in Settings → Projects.'
                       : 'No brands match the current filters.'}
@@ -600,6 +615,22 @@ export default function CoveragePage() {
                       <td className="px-4 py-3">
                         <Badge variant={status.variant}>{status.label}</Badge>
                       </td>
+                      {isAdmin ? (
+                        <td className="px-4 py-3">
+                          <button
+                            type="button"
+                            aria-label={`Manage ${row.brand.display_name}`}
+                            onClick={e => {
+                              e.stopPropagation();
+                              setAdminBrand(row.brand);
+                              setAdminOpen(true);
+                            }}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--f92-gray)] transition hover:bg-[color:var(--f92-tint)] hover:text-[color:var(--f92-dark)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)]"
+                          >
+                            <Settings className="h-4 w-4" aria-hidden="true" />
+                          </button>
+                        </td>
+                      ) : null}
                     </tr>
                   );
                 })
@@ -765,17 +796,24 @@ export default function CoveragePage() {
           setDrawerOpen(open);
           if (!open) setDrawerRow(null);
         }}
-        isAdmin={isAdmin}
-        onManageMilestones={() => {
-          // Hand off to Settings → Coverage; the in-drawer inline manage
-          // UI is served from that page (§5) to keep scope tight.
-          setDrawerOpen(false);
-          if (drawerRow) {
-            window.location.href = `/dashboard/settings/coverage?brand=${encodeURIComponent(drawerRow.brand.id)}`;
-          } else {
-            window.location.href = '/dashboard/settings/coverage';
-          }
+      />
+
+      <BrandAdminDrawer
+        brand={adminBrand}
+        brands={brands}
+        open={adminOpen}
+        onOpenChange={open => {
+          setAdminOpen(open);
+          if (!open) setAdminBrand(null);
         }}
+        onMutated={() => { void refetchAll(); }}
+      />
+
+      <AddBrandDrawer
+        open={addBrandOpen}
+        onOpenChange={setAddBrandOpen}
+        projects={projects.map(p => ({ jira_project_key: p.jira_project_key, display_name: p.display_name }))}
+        onCreated={() => { void refetchAll(); }}
       />
     </div>
   );

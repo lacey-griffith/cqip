@@ -2336,6 +2336,32 @@ Phase 3 is the first Batch 005.1 phase to reach prod ahead of the rest
 of the batch; Phases 4-6 (BrandAdminDrawer, settings-page delete,
 Karen, final deploy) span past 2026-06-10.
 
+Phase 4 (Commit 4, BrandAdminDrawer) built: new per-brand admin drawer
+on `/dashboard/coverage` consolidating all four brand-admin flows —
+**Details** (read-only), **QA Config**, **Milestones**, **Pause** — into
+one `BrandAdminDrawer` (`components/coverage/brand-admin-drawer.tsx`,
+minimal local tab strip; no Tabs component in the library). Opened by
+admins via a per-row gear button on the Output table (`e.stopPropagation`
+so it doesn't also fire the read-drawer row click); row click still opens
+the read-only `BrandDetailDrawer`. The QA-config form body was extracted
+verbatim to a chrome-less `components/coverage/brand-qa-config-form.tsx`
+(`BrandQaConfig` type now lives there); `edit-brand-qa-config-drawer.tsx`
+is now a thin Sheet wrapper around it and re-exports `BrandQaConfig` so
+the **untouched settings page imports still resolve** (settings page
+deleted in Phase 5, not now). `ManageMilestonesDialog` gained an optional
+`onChanged?` callback (fired after add/edit/delete) so the drawer can
+refetch Output counts. `BrandDetailDrawer` lost its `isAdmin` /
+`onManageMilestones` props + "Manage milestones" button (admin actions
+moved to the new drawer); the old redirect to
+`/dashboard/settings/coverage` is removed. "Add brand" button moved onto
+the Coverage control bar (admin-only) opening the existing
+`AddBrandDrawer` (projects derived from page state — no second fetch). No
+new mutation routes, no schema change, no migration — every write reuses
+an existing server-gated route (audit stays server-derived, §13 r19).
+Build green, tsc clean; lint introduces zero new findings (the 8
+pre-existing `react-hooks/static-components` on SortableHeader/SortIcon
+are untouched). DO NOT PUSH — Lacey smoke-tests + deploys manually.
+
 **Locked decisions:**
 - Path 1: covered = `count > THRESHOLD` (strict complement of the
   `<= 2` drought pill), computed via the shared `!droughtFlag`

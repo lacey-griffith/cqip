@@ -27,6 +27,10 @@ const TICKET_PATTERN = /^[A-Z]+-\d+$/;
 interface ManageMilestonesDialogProps {
   brands: Brand[];
   initialBrandId?: string | null;
+  // Optional callback fired after any successful add / edit / delete so a host
+  // (e.g. the coverage-page BrandAdminDrawer) can refetch its own counts.
+  // Defaults to a no-op — the settings page works unchanged without it.
+  onChanged?: () => void;
 }
 
 interface EditState {
@@ -61,7 +65,7 @@ function sourceVariant(source: string): 'default' | 'in_progress' | 'resolved' |
   }
 }
 
-export function ManageMilestonesDialog({ brands, initialBrandId }: ManageMilestonesDialogProps) {
+export function ManageMilestonesDialog({ brands, initialBrandId, onChanged }: ManageMilestonesDialogProps) {
   const { toast } = useToast();
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [loading, setLoading] = useState(true);
@@ -204,6 +208,7 @@ export function ManageMilestonesDialog({ brands, initialBrandId }: ManageMilesto
       setAddNotes('');
       setAddReachedAt(toDatetimeLocal(new Date()));
       await loadMilestones();
+      onChanged?.();
     } finally {
       setAddSubmitting(false);
     }
@@ -250,6 +255,7 @@ export function ManageMilestonesDialog({ brands, initialBrandId }: ManageMilesto
       toast('✅ Milestone updated');
       cancelEdit();
       await loadMilestones();
+      onChanged?.();
     } finally {
       setEditSubmitting(false);
     }
@@ -275,6 +281,7 @@ export function ManageMilestonesDialog({ brands, initialBrandId }: ManageMilesto
     }
     setDeletingId(null);
     await loadMilestones();
+    onChanged?.();
   }
 
   return (

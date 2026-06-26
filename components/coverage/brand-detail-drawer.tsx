@@ -2,7 +2,6 @@
 
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import type { CoverageRow, Milestone } from '@/lib/coverage/queries';
 import { startOfRolling28 } from '@/lib/coverage/queries';
@@ -12,8 +11,6 @@ interface BrandDetailDrawerProps {
   milestones: Milestone[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  isAdmin: boolean;
-  onManageMilestones: () => void;
 }
 
 function formatDate(iso: string): string {
@@ -34,7 +31,7 @@ function monthLabel(monthIso: string): string {
   return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('en-US', { month: 'short' });
 }
 
-export function BrandDetailDrawer({ row, milestones, open, onOpenChange, isAdmin, onManageMilestones }: BrandDetailDrawerProps) {
+export function BrandDetailDrawer({ row, milestones, open, onOpenChange }: BrandDetailDrawerProps) {
   if (!row) return null;
 
   const { brand } = row;
@@ -148,14 +145,6 @@ export function BrandDetailDrawer({ row, milestones, open, onOpenChange, isAdmin
             </ul>
           )}
         </div>
-
-        {isAdmin ? (
-          <div className="mt-6">
-            <Button variant="secondary" size="sm" onClick={onManageMilestones}>
-              Manage milestones
-            </Button>
-          </div>
-        ) : null}
       </SheetContent>
     </Sheet>
   );
