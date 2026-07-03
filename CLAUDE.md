@@ -2308,8 +2308,18 @@ deleted in the same commit that writes the §16 shipped entry.
 Spec: `docs/batch-005.1-coverage-redesign-spec.md` (Jenny
 PASS-WITH-FINDINGS 2026-06-05, all findings folded into the spec).
 
-**Status:** Phase 0-5 done; Phase 6 (Karen post-flight → Lacey smoke-test +
-manual deploy) remaining. Phase 4 (BrandAdminDrawer) is pushed + deployed +
+**Status:** Phase 0-6 done; Lacey smoke-test + manual deploy of Commit A
+remaining. Karen full-chain post-flight ran 2026-07-03 (PASS-WITH-FINDINGS):
+Finding 1 (Jenny-Critical boundary test had aged RED — `buildCoverageRows`
+had no injectable clock, so test 4's pinned-NOW milestones fell outside the
+real 28d window as of 2026-07-03; production unaffected since pill + KPI both
+read the same wall clock at render) FIXED in Commit A — all five time-window
+helpers + `monthlyCounts` + `buildCoverageRows` now take an optional
+`now: Date = new Date()` (default preserves the page call site exactly), test 4
+pins NOW on the pill side; suite re-greened 5/5, build green, tsc clean. Also
+closes Finding 3 (buildCoverageRows was the last coverage aggregator without an
+injectable clock). Findings 2-3 doc items absorbed at close-out (Commit B).
+Phase 4 (BrandAdminDrawer) is pushed + deployed +
 VERIFIED LIVE in prod by Lacey (commit `45b3242`), which satisfied the Phase 5
 gate. Phase 2 (Commit 2, 2026-06-08): shared
 `isInDrought()` predicate + `COVERAGE_THRESHOLD` constant extracted in

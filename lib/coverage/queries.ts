@@ -53,33 +53,35 @@ export interface CoverageRow {
 // existing logs page parses triggered_at for the filter pills).
 // -----------------------------------------------------------------------
 
-export function startOfCurrentWeek(): Date {
-  const now = new Date();
+// Every time-window helper takes an optional `now` (default `new Date()`)
+// so callers can pin the clock for deterministic tests. Defaults preserve
+// the original wall-clock behavior exactly — no call site needs to change.
+
+export function startOfCurrentWeek(now: Date = new Date()): Date {
   const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   d.setDate(d.getDate() - d.getDay()); // back to Sunday
   return d;
 }
 
-export function startOfLastWeek(): Date {
-  const d = startOfCurrentWeek();
+export function startOfLastWeek(now: Date = new Date()): Date {
+  const d = startOfCurrentWeek(now);
   d.setDate(d.getDate() - 7);
   return d;
 }
 
-export function endOfLastWeek(): Date {
-  const d = startOfCurrentWeek();
+export function endOfLastWeek(now: Date = new Date()): Date {
+  const d = startOfCurrentWeek(now);
   d.setMilliseconds(d.getMilliseconds() - 1);
   return d;
 }
 
-export function startOfRolling28(): Date {
-  const d = new Date();
+export function startOfRolling28(now: Date = new Date()): Date {
+  const d = new Date(now);
   d.setDate(d.getDate() - 28);
   return d;
 }
 
-export function startOfCurrentMonth(): Date {
-  const now = new Date();
+export function startOfCurrentMonth(now: Date = new Date()): Date {
   return new Date(now.getFullYear(), now.getMonth(), 1);
 }
 
@@ -162,8 +164,8 @@ export function monthlyCounts(
   milestones: Milestone[],
   brandId: string,
   monthsBack = 6,
+  now: Date = new Date(),
 ): Array<{ monthIso: string; count: number }> {
-  const now = new Date();
   const buckets: Array<{ monthIso: string; start: Date; end: Date; count: number }> = [];
   for (let i = monthsBack - 1; i >= 0; i -= 1) {
     const monthStart = new Date(now.getFullYear(), now.getMonth() - i, 1);
@@ -209,13 +211,13 @@ export function buildCoverageRows(
   brands: Brand[],
   milestones: Milestone[],
   logs: QualityLog[],
+  now: Date = new Date(),
 ): CoverageRow[] {
-  const now = new Date();
-  const currentWeekStart = startOfCurrentWeek();
-  const lastWeekStart = startOfLastWeek();
-  const lastWeekEnd = endOfLastWeek();
-  const rolling28Start = startOfRolling28();
-  const currentMonthStart = startOfCurrentMonth();
+  const currentWeekStart = startOfCurrentWeek(now);
+  const lastWeekStart = startOfLastWeek(now);
+  const lastWeekEnd = endOfLastWeek(now);
+  const rolling28Start = startOfRolling28(now);
+  const currentMonthStart = startOfCurrentMonth(now);
 
   return brands.map(brand => {
     const testsCurrentWeek = countInWindow(milestones, brand.id, currentWeekStart, now);
@@ -224,7 +226,7 @@ export function buildCoverageRows(
     const testsCurrentMonth = countInWindow(milestones, brand.id, currentMonthStart, now);
     const reworkRolling28 = reworkCountForBrand(logs, brand.jira_value, rolling28Start, now);
     const droughtFlag = isInDrought(testsRolling28, brand.is_paused);
-    const monthly = monthlyCounts(milestones, brand.id, 6);
+    const monthly = monthlyCounts(milestones, brand.id, 6, now);
 
     return {
       brand,

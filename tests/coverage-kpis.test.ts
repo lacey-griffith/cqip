@@ -176,8 +176,10 @@ test('exactly-THRESHOLD boundary — 2 milestones reads DROUGHT/uncovered on BOT
   ];
   const milestones = [...deliveries('A', 2, 'TA'), ...deliveries('B', 3, 'TB')];
 
-  // Pill (Output table) and KPI must AGREE at the boundary.
-  const rows = buildCoverageRows(brands, milestones, []);
+  // Pill (Output table) and KPI must AGREE at the boundary. Pin NOW on the
+  // pill side too — buildCoverageRows now takes an injectable clock, so the
+  // fixture window can never age out from under the wall clock (Karen F1/F3).
+  const rows = buildCoverageRows(brands, milestones, [], NOW);
   const rowA = rows.find(r => r.brand.id === 'A')!;
   const rowB = rows.find(r => r.brand.id === 'B')!;
   assert.equal(rowA.testsRolling28, 2);
