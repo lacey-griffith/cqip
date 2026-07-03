@@ -191,8 +191,9 @@ cqip/
 │   │       ├── alerts/          # Alert rule config
 │   │       ├── users/           # User management (admin only)
 │   │       ├── audit/           # Admin change log viewer (Batch 001)
-│   │       ├── coverage/        # Admin: pause/unpause brands, manage milestones (Batch 002)
 │   │       └── system/          # Admin: build stamp + system info (Batch 003)
+│   │       # NOTE: settings/coverage/ removed in Batch 005.1 Phase 5 — brand
+│   │       #       admin now lives in the Coverage page's BrandAdminDrawer
 │   └── api/
 │       ├── admin/
 │       │   ├── brands/
@@ -230,12 +231,16 @@ cqip/
 │   ├── logs/                    # TicketLink, EditLogDialog, ConfirmDeleteDialog, MmiList,
 │   │                              LogDetailDrawer (Batch 003), three-dot action menu
 │   ├── coverage/                # BrandDetailDrawer, ManageMilestonesDialog, Sparkline (Batch 002),
-│   │                              EditBrandQaConfigDrawer (Batch 004.5 — sheet drawer for
-│   │                              editing per-brand QA-automation config; opens from
-│   │                              /dashboard/settings/coverage),
+│   │                              BrandAdminDrawer + BrandQaConfigForm (Batch 005.1 Phase 4 —
+│   │                              per-brand admin drawer opened from the Coverage Output table;
+│   │                              tabs Details/QA Config/Milestones/Pause; BrandQaConfigForm is
+│   │                              the chrome-less QA-config form, canonical home of the
+│   │                              BrandQaConfig type. Replaces EditBrandQaConfigDrawer, whose
+│   │                              thin-wrapper file was deleted in Batch 005.1 Phase 5 alongside
+│   │                              the /dashboard/settings/coverage page),
 │   │                              AddBrandDrawer (Batch 005.20 — sheet drawer for
 │   │                              creating a brand row, closes audit Q1 / brand-create
-│   │                              UI gap),
+│   │                              UI gap; now opened from the Coverage control bar),
 │   │                              PipelineStageDrawer + overlay-badge (Batch 010 —
 │   │                              Sheet listing a brand's live Jira tickets in a
 │   │                              pipeline stage; OverlayCountBadge + TagBadge use the
@@ -2303,7 +2308,10 @@ deleted in the same commit that writes the §16 shipped entry.
 Spec: `docs/batch-005.1-coverage-redesign-spec.md` (Jenny
 PASS-WITH-FINDINGS 2026-06-05, all findings folded into the spec).
 
-**Status:** Phase 0-3 done. Phase 2 (Commit 2, 2026-06-08): shared
+**Status:** Phase 0-5 done; Phase 6 (Karen post-flight → Lacey smoke-test +
+manual deploy) remaining. Phase 4 (BrandAdminDrawer) is pushed + deployed +
+VERIFIED LIVE in prod by Lacey (commit `45b3242`), which satisfied the Phase 5
+gate. Phase 2 (Commit 2, 2026-06-08): shared
 `isInDrought()` predicate + `COVERAGE_THRESHOLD` constant extracted in
 `lib/coverage/queries.ts` (Output-table pill now routes through it);
 `computeCoverageHealth()` (single-pass Health % + Brands Covered N/M)
@@ -2361,6 +2369,29 @@ an existing server-gated route (audit stays server-derived, §13 r19).
 Build green, tsc clean; lint introduces zero new findings (the 8
 pre-existing `react-hooks/static-components` on SortableHeader/SortIcon
 are untouched). DO NOT PUSH — Lacey smoke-tests + deploys manually.
+
+Phase 5 (Commit 5, settings-page deletion) done — gated on Phase 4 being
+verified live, which Lacey confirmed. Deleted
+`app/dashboard/settings/coverage/page.tsx` (the standalone brand-admin page,
+now fully replaced by the Coverage page's `BrandAdminDrawer`) and the
+`components/coverage/edit-brand-qa-config-drawer.tsx` thin wrapper (its only
+consumer was the settings page; `BrandQaConfig`'s canonical home is
+`brand-qa-config-form.tsx`, which `BrandAdminDrawer` already imports directly,
+so no import breaks). Removed the "Client Coverage" tile from the settings
+home (`app/dashboard/settings/page.tsx`). Refreshed two stale code comments
+that named the deleted path (`brand-admin-drawer.tsx`,
+`manage-milestones-dialog.tsx`). No coverage-page redirect fix was needed —
+the spec-flagged `window.location.href` redirects at coverage page :730/:732
+were already removed in Phase 4. `middleware.ts` r24 admin gate is
+wildcard-based (`/dashboard/settings/*` minus `/profile`) so the removed child
+page needed no gate edit. Repo-wide `grep "settings/coverage"` across
+`app/ components/ lib/ middleware.ts` returns zero hits. Build green, tsc clean
+(a stale `.next/dev/types` artifact from a prior `next dev` referenced the
+deleted route until `.next/dev` was cleared — gitignored build output, not
+source). `manage-milestones-dialog` + `add-brand-drawer` kept (consumed by
+`BrandAdminDrawer` / the Coverage control bar); `back-to-settings` untouched
+(5 other settings pages use it). DO NOT PUSH — Lacey smoke-tests + deploys
+manually.
 
 **Locked decisions:**
 - Path 1: covered = `count > THRESHOLD` (strict complement of the

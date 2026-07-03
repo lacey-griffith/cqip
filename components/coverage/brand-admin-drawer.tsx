@@ -16,9 +16,9 @@ import { cn } from '@/lib/utils';
 
 // Per-brand admin surface for the Coverage page (Batch 005.1 Phase 4).
 // Consolidates all brand-admin actions — Details, QA Config, Milestones,
-// Pause — into one drawer opened from the Output table by admins. Replaces
-// the old redirect to /dashboard/settings/coverage (that page stays live as
-// a fallback until Phase 5).
+// Pause — into one drawer opened from the Output table by admins. This is
+// now the sole brand-admin surface; the standalone settings coverage page
+// was removed in Batch 005.1 Phase 5.
 //
 // No new mutation routes: each write reuses an existing server-gated route
 // (/api/admin/brands/qa-config, /api/admin/milestones, /api/admin/brands/pause)

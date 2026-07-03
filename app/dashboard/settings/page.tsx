@@ -35,12 +35,6 @@ const settingsSections = [
     icon: '📜',
   },
   {
-    title: 'Client Coverage',
-    description: 'Admin-only: add, edit, or delete test milestones.',
-    href: '/dashboard/settings/coverage',
-    icon: '🎯',
-  },
-  {
     title: 'System Info',
     description: 'Build version and deploy status. Admin-only.',
     href: '/dashboard/settings/system',

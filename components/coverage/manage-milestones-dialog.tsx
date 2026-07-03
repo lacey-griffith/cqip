@@ -13,9 +13,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { ConfirmDeleteDialog } from '@/components/logs/confirm-delete-dialog';
 import type { Brand, Milestone } from '@/lib/coverage/queries';
 
-// Rendered as an inline section (NOT a modal) per the /settings/coverage
-// spec — that's the canonical admin surface. The coverage page's brand
-// detail drawer links here with ?brand=<id> to open with filter pre-set.
+// Rendered as an inline section (NOT a modal). Hosted in the Milestones tab
+// of the Coverage page's BrandAdminDrawer (Batch 005.1 Phase 4) — the sole
+// brand-admin surface since the standalone settings coverage page was
+// removed in Phase 5.
 //
 // All audit-emitting mutations go through /api/admin/milestones so
 // changed_by is derived server-side per §13 rule 19. The browser never

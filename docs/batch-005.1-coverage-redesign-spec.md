@@ -371,8 +371,10 @@ DO NOT PUSH — Lacey smoke-tests + deploys manually per standing pattern.
 - [ ] All four mutation flows work through the drawer (Details/QA/Milestones/Pause)
 - [ ] Audit writes preserved (§13 r19, server-derived changed_by)
 - [ ] Admin-only write affordances; read-only users see read view
-- [ ] Settings page deleted in a SEPARATE commit, after drawer verified live
-- [ ] Middleware admin-gate intact post-deletion
+- [x] Settings page deleted in a SEPARATE commit, after drawer verified live
+      (Phase 5, Commit 5 — gated on Phase 4 verified live in prod)
+- [x] Middleware admin-gate intact post-deletion (wildcard `/dashboard/settings/*`
+      gate needs no edit; zero literal `settings/coverage` refs remain)
 
 ---
 
