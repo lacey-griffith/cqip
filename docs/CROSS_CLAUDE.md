@@ -12,7 +12,12 @@ append-only event log.
 each project's CLAUDE.md), behavior rules specific to one
 project (live in that project's CLAUDE_RULES.md).
 
-**Read at:** session start, by both DC and AC. Fetch from
+**Read at:** session start, by both DC and AC. Read the local working copy
+via the connector at
+`/Users/l.hay/Documents/Code/cqip-project/cqip/docs/CROSS_CLAUDE.md` —
+canonical per CC9 (the on-disk file is authoritative, not a GitHub fetch,
+which can lag `main`). Secondary reference only, if the local copy is
+unavailable:
 `https://github.com/lacey-griffith/cqip/blob/main/docs/CROSS_CLAUDE.md`.
 
 **Updated by:** Lacey, DC, or AC via standard docs commits.
@@ -233,7 +238,8 @@ See §6 entry for full context.
 
 ## 5. Cross-Project Priority Order
 
-Spans both projects. Last locked 2026-06-04.
+Spans both projects. Last locked 2026-07-03 (per
+`docs/batch-outline-2026-07-03.md`).
 
 | # | Owner | Item | Status |
 | --- | --- | --- | --- |
@@ -244,12 +250,35 @@ Spans both projects. Last locked 2026-06-04.
 | 5 | DC | Batch 011 Node 24 + public /api/health probe | ✅ SHIPPED 2026-05-27 |
 | 6 | DC | Batch 010 Coverage pipeline visibility | ✅ SHIPPED + DEPLOYED 2026-06-04 |
 | 7 | AC | Phase 2 (after DC 009 ships) | ✅ unblocked 2026-05-29 |
-| 8 | DC | Batch 006 Teams dispatch | next open DC batch |
-| 9 | DC | Batch 007 Custom Jira Boards | post-Phase-2 |
-| 10 | DC | Batch 008 Convert.com automation | last |
+| 8 | DC | Batch 005.1 Coverage redesign + BrandAdminDrawer | ✅ SHIPPED 2026-07-03 |
+| 9 | DC | auth.2 → auth.1 identity migration + admin reset | **next open DC batch** |
+| 10 | DC | Batch 006 Teams dispatch (EXPANDED) | after auth |
+| 11 | DC | Batch 005.2 Coverage visual redesign | after 006 |
+| 12 | DC | Batch 010.1 Pipeline alerts (MERGED: 010.2 + Path 2) | after 005.2 |
+| 13 | DC | Batch 007 Custom Jira Boards | after 010.1 |
+| 14 | DC | Per-brand config pages | prereq for Batch 008 |
+| 15 | DC | Batch 008 Convert.com automation | last |
 
-**Scope corrections logged 2026-06-04** (the prior table was locked
-2026-05-13, before two batches were re-scoped):
+**Scope corrections logged 2026-07-03** (re-sequenced per the batch
+outline; supersedes the 2026-06-04 lock):
+- **Batch 005.1** (Coverage redesign + BrandAdminDrawer) SHIPPED
+  2026-07-03. DC-internal — no AC contract surface, so no §3/§6 entry
+  (full detail in DC CLAUDE.md §16).
+- **auth.2 → auth.1** (identity migration off `@cqip.local` + admin
+  password reset) is now the next open DC batch — the only
+  operational-risk item on the board.
+- **Batch 006** (Teams dispatch) EXPANDED — edge-function dispatcher,
+  single channel, forward-only dispatch, global cap with self-announcing
+  overflow, absorbs the cron-silence monitor (evaluator-health alerting),
+  plus a daily morning status digest. Sequenced after auth, before 005.2.
+- **Batch 010.1** (Pipeline alerts) MERGED — absorbs the former Batch
+  010.2 (brand contract management) and the Path 2 drought off-by-one:
+  per-brand targets on the brand record (BrandAdminDrawer tab as UI home),
+  both evaluators read per-brand config, the comparison-vs-configured-target
+  is defined once (settling the off-by-one), `contract_status` kept
+  separate from `is_paused`. DC-internal.
+
+**Scope corrections logged 2026-06-04** (historical; superseded above):
 - **Batch 011** is the Node 24 CI bump + public dependency-free
   `/api/health` probe — NOT the "Coverage redesign" the old table
   named. Shipped 2026-05-27.
@@ -261,7 +290,6 @@ Spans both projects. Last locked 2026-06-04.
   NOT consumed by AC, so no §3 contract-surface or §6 event-log entry
   is warranted — full detail lives in the DC CLAUDE.md §16 per this
   doc's project-internal scoping rule.
-- **Batch 006** (Teams dispatch) is now the next open DC batch.
 
 ---
 

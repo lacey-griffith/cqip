@@ -86,7 +86,16 @@ Reporting excluded], surfaces three overlay tags from Jira
 customfield_12528 "CRO Labels"; Coverage page split into Output +
 Pipeline tables with overlay toggles, per-count badges, a
 per-count PipelineStageDrawer, teal long-range KPI accent; no
-migration, read-only against Jira — 2026-06-03).
+migration, read-only against Jira — 2026-06-03),
+Batch 005.1 (Coverage redesign + BrandAdminDrawer — KPI row reorged
+into a 9-card grid with three new program-health cards [Overall
+Health, Brands Covered N/M, Quality Score], the standalone
+/dashboard/settings/coverage admin page replaced by an in-page
+per-brand BrandAdminDrawer [tabs Details/QA Config/Milestones/Pause]
+and then deleted; shared isInDrought() predicate so KPI + DROUGHT pill
+can't diverge; no schema, no migration; Karen full-chain post-flight
+PASS-WITH-FINDINGS, Finding 1 injectable-clock test fix in commit
+eefc9f0 — 2026-07-03).
 All migrations 001-017 have run against production.
 Batch 004.4.5 produced a UX discovery plan for Coverage + Settings
 reorg (Batch 005 implementation). See §16 for full shipped log.
@@ -831,12 +840,14 @@ seeded with `qa_automation_enabled = TRUE`, `url_pattern =
 brands stay at the FALSE default until Lacey enables them via the
 admin UI.
 
-The QA columns are edited from `/dashboard/settings/coverage` via the
-`EditBrandQaConfigDrawer`, which calls `PATCH /api/admin/brands/qa-config`.
-That route writes the brand row with the service role and emits one
-audit_log row per changed field with `target_type = 'brand'` and
-`changed_by` derived server-side from `auth.uid()` per §13 rule on
-audit-write attribution.
+The QA columns are edited from the Coverage page's `BrandAdminDrawer`
+(QA Config tab → `BrandQaConfigForm`, Batch 005.1 Phase 4), which calls
+`PATCH /api/admin/brands/qa-config`. (Before Batch 005.1 this lived on the
+now-deleted `/dashboard/settings/coverage` page via the
+`EditBrandQaConfigDrawer`, both removed in Phase 5.) That route writes the
+brand row with the service role and emits one audit_log row per changed
+field with `target_type = 'brand'` and `changed_by` derived server-side
+from `auth.uid()` per §13 rule on audit-write attribution.
 
 `updated_at` has no trigger — none of the existing tables in this
 project use updated_at triggers, so the admin route sets it explicitly
@@ -1835,14 +1846,11 @@ Deliverables (all complete):
 Strict rule: only items already in scope at lock time. No new
 additions.
 
-- [ ] **5.1 Coverage + Settings UX redesign** — **IN FLIGHT as
-      Batch 005.1 (2026-06-05) — see §15.5** for locked decisions,
-      phase status, and spec pointer. Original scope: implement per
-      Batch 004.4.5 plan. Decision locked: tabs (Details / QA Config /
-      Milestones / Pause) inside a unified `BrandAdminDrawer`,
-      not multi-drawer. Phased: Phase 1+2 (admin actions to
-      Coverage) + Phase 3 (delete settings page). Phase 4 cosmetic
-      polish optional.
+- [x] **5.1 Coverage + Settings UX redesign** — **SHIPPED 2026-07-03 as
+      Batch 005.1; see §16.** Delivered the unified `BrandAdminDrawer`
+      (tabs Details / QA Config / Milestones / Pause) on the Coverage
+      page, reorged the KPI row with 3 new program-health cards, and
+      deleted the standalone `/dashboard/settings/coverage` page.
 - [ ] **5.2 Jira token-expiry monitoring** — Teams alert when Jira
       API returns 401/404 from sync or webhook. Calendar-style
       early warning. Prevents silent breakage like the 2026-04-23
@@ -1978,20 +1986,14 @@ additions.
         scope.
 
       F1 + F2 closed by Batch 005.25 (2026-05-13).
-- [ ] **5.21 Cron-silence monitor** — extend the `sync_runs` pattern
-      from Batch 005.10 to all cron-driven functions, OR add a
-      Settings → System card showing last-activity-per-cron derived
-      from `audit_log` (e.g., `MAX(changed_at) WHERE changed_by LIKE
-      'system:%'` grouped by cron name). Surface a warning when
-      last-activity exceeds a per-cron expected window (e.g.,
-      drought-evaluator >36h since last activity = stale). The
-      2026-05-07 drought-evaluator silent-failure incident persisted
-      for 7 days because pg_cron's `cron.job_run_details` only logs
-      HTTP response receipt, not function correctness. Either
-      approach (generic `cron_runs` table OR audit_log query card)
-      would have caught the drift inside 36 hours. Pairs with
-      eventual Batch 006 (Teams dispatch) — alerts firing on stale
-      data is worse than no alerts.
+- [~] **5.21 Cron-silence monitor** — **ABSORBED into Batch 006
+      (Teams dispatch, EXPANDED) on 2026-07-03.** Now framed as
+      evaluator-health alerting inside the dispatcher: a broken/failing
+      evaluator produces an ALERT, not suppression. Original rationale
+      (the 2026-05-07 drought-evaluator 7-day silent failure — pg_cron's
+      `cron.job_run_details` only logs HTTP response receipt, not function
+      correctness) carries into the Batch 006 scope. See the Batch 006
+      entry below.
 - [x] **5.22 Phase 1: Project-aware brand resolution** — schema +
       webhook + sync refactor making brand lookup per-project. Closes
       audit Q2 + SPL ingestion gap. **Shipped 2026-05-07**; see §16.
@@ -2074,17 +2076,91 @@ library). That's its own future batch when scoped.
 **Shipped 2026-05-13** as commit 35f0dfc.
 See §16 entry below.
 
-### Batch 006 (post-demo) — Teams webhook dispatch (dedicated)
+### auth.1 / auth.2 — Identity migration + admin password reset (scoped 2026-07-03)
+Own session; Jenny pre-flight required despite small size (touches
+`user_profiles` / Supabase Auth / the §13 r22 trigger-protected column
+neighborhood). Build order within the session: auth.2 first
+(self-contained), then auth.1. Effort S–MED. First-priority upcoming work
+— the only operational-risk item on the board (zero password-recovery
+path today).
+
+**auth.1 — migrate off `@cqip.local`:** full identity migration to real
+fusion emails. Users prompted for their fusion email (prompt-on-next-login
+flow for the 7 existing accounts — a flow to build, not just a schema
+change). Enables Supabase's native forgot-password flow (admin
+self-recovery). Open decision: login stays username-keyed with email
+mapped underneath, or login switches to email.
+
+**auth.2 — admin-initiated password reset:** admins can reset READ-ONLY
+users only (never other admins). Flow: temp password + forced change on
+first login. Admin self-recovery via email reset (post-auth.1) or the
+other admin. Likely shape: server route + service role, gated per §13
+r24/r6, audit-logged per r19 with the reset-target as audit subject.
+
+### Batch 005.2 — Coverage visual redesign (scoped 2026-07-03)
+Jenny pre-flight locked (full visual redesign). Scope emerges from a
+mockup session — **mockups are on Lacey's local machine; capture the asset
+paths in this entry when the batch is written** (placeholder until Lacey
+supplies them). Known shape: mild-to-moderate reorganizing, combining the
+Output + Pipeline tables, with differences to both. Structural questions
+for the mock session: preserve the Batch 010 split-table structure or
+merge? Touch the Batch 005.1 9-card KPI row or work around it? Sequenced
+before Batch 010.1 (both touch `coverage/page.tsx`). Does NOT include the
+dashboard polish cluster — that's a standalone entry (different page).
+Effort MED–LG.
+
+### Dashboard polish cluster + Pipeline sortable columns + rework indicator (scoped 2026-07-03)
+Standalone entry — NOT part of Batch 005.2 (different page). Three grouped
+items: (1) dashboard polish — KPI hover popovers, stacked issue-category
+chart, Recent Activity panel; (2) sortable Pipeline table columns on
+`/dashboard/coverage`; (3) a rework indicator that distinguishes
+zero-delivery weeks from genuinely quiet weeks.
+
+### Per-brand config pages (prereq for Batch 008; scoped 2026-07-03)
+Scoping unfinished. Sketch: a per-brand page hosting URL inventory, site
+areas, staging/prod URLs, notes, changelog, add-new actions. Data model
+moves from individual URLs to targeting definitions per site area (regex
+patterns, exclusion lists, element checks, audience conditions) + a
+derived-examples layer. A resolution-mode field distinguishes URL-pattern
+areas from element-checked / audience-gated areas. Open: data-model lock;
+migration path for existing brand URL data. **Hard prereq for Batch 008
+(Convert.com);** sleeps while 008 sleeps, wakes as its prereq. Effort
+MED–LG.
+
+### Batch 006 (post-demo) — Teams dispatch (EXPANDED)
 Wires `alert_events` rows to actually fire Teams notifications.
 Until this batch ships, alerts accumulate silently in the database.
+Scope EXPANDED 2026-07-03 (`docs/batch-outline-2026-07-03.md`): absorbs
+backlog 5.21 (cron-silence monitor) + adds a daily morning status digest.
+Effort MED–LG (was MED); net board shrinks because 5.21 folds in.
 
-- [ ] Dispatch service (edge function or server route)
+Original scope:
+- [ ] Dispatch service — **edge function (locked)**, following the
+      drought-evaluator template (sits next to its callers, established
+      custom-auth pattern per §13 r21, `verify_jwt=false`).
 - [ ] Rate limiting
 - [ ] Retry with exponential backoff
 - [ ] Adaptive Card / message card formatting per rule type
 - [ ] Test mode toggle in Settings → Alerts
 - [ ] Mark `notification_sent = TRUE` on success
 - [ ] Detect 401/403 from Teams webhook (rotation grace handling)
+
+Expanded scope (locked 2026-07-03):
+- [ ] **Single Teams channel** for all alert types (revisit per-client
+      channels only if/when volume demands).
+- [ ] **Forward-only dispatch:** existing silent `alert_events` rows (open
+      droughts etc.) do NOT fire retroactively. Dispatch starts clean from
+      ship-time.
+- [ ] **Global rate cap with self-announcing overflow:** when the cap
+      trips, post one "Alert limit reached (N suppressed) — check
+      dashboard" message. Never silently swallow.
+- [ ] **Absorbs backlog 5.21 (cron-silence monitor):** evaluator-health
+      alerting. A broken/failing evaluator produces an ALERT, not
+      suppression. Philosophy: don't limit real alerts — surface when the
+      thing producing them is broken.
+- [ ] **NEW: daily morning status digest** — cron posting current statuses
+      (open droughts, active alerts; pipeline health once Batch 010.1
+      lands).
 
 ### Batch 007 (post-006, hard prereq: 004.99 + SPL onboarding) — Custom Jira Boards
 Internal Kanban-style board view inside CQIP mirroring active tickets
@@ -2127,10 +2203,22 @@ and team feedback informs the write model.
   decide at implementation), linked in main nav alongside
   Dashboard, Coverage, etc.
 
-DISCOVERY DECISIONS NEEDED AT IMPLEMENTATION:
+**Decisions banked 2026-07-03 (`docs/batch-outline-2026-07-03.md`) —
+promoted from the discovery list below:**
+- **Saved views: URL params + per-user saved views + default-view-on-login**
+  (uses the `board_views` table already in the sketch). Flow: Jira-like
+  default layout → user customizes → saves to profile → their default
+  loads on board entry.
+- **Filter bar: Jira-parity** (per Lacey's screenshot) — quick filters
+  (Exclude Paused Brands / Roadmap / In Progress / QA / With Client /
+  Needs Attention / No holds / Assigned to me / Unassigned / Recently
+  Updated), brand pills (ASV…WDG), a grouping control.
+- **Card density: compact default, comfortable as a user toggle.**
+- **Cache freshness: "last synced" indicator + manual "sync now" CTA**
+  showing success/failure (sync_runs pattern precedent from Batch 005.10).
+
+DISCOVERY DECISIONS STILL OPEN AT IMPLEMENTATION:
 - Exact route path (`/board` vs `/boards`)
-- Card visual density (compact vs. comfortable default)
-- Filter persistence (per-user saved views? URL param? both?)
 - Whether "View All" collapses to a single combined column
   set or shows per-client column groups
 
@@ -2216,61 +2304,76 @@ four SHIP-day deviations (D1-D4). Full spec at
 `docs/batch-009-sharepoint-spec.md` (status header now
 SHIPPED). Day-one consumer AC's Phase 2 is unblocked.
 
-**Priority order (updated 2026-06-04):**
-5.19 (done) → Batch 005.25 (done 2026-05-13) → Batch 011
-(SHIPPED 2026-05-27) → Batch 009 (SHIPPED 2026-05-29) →
-Batch 010 (SHIPPED 2026-06-03, DEPLOYED 2026-06-04) →
-Batch 006 → Batch 007 → Batch 008.
-(Batch 011 was the Node 24 + /api/health batch — see §16 — not the
-"Coverage redesign" some older priority lists named; it shipped
-2026-05-27 and is no longer upcoming. Batch 010.1 — drought
-pill/cron/thresholds — and 010.2 — brand contract management, see
-the dedicated §15 entry above — remain unscheduled follow-ons to
-Batch 010. Batch 005.1 — Coverage redesign + BrandAdminDrawer — is
-IN FLIGHT as of 2026-06-05; see §15.5. Mirrors CROSS_CLAUDE.md §5.)
+**Priority order (updated 2026-07-03 — locked per
+`docs/batch-outline-2026-07-03.md`; mirrors CROSS_CLAUDE.md §5):**
+auth.2 → auth.1 (identity migration + admin reset, own session) →
+Batch 006 (Teams dispatch, EXPANDED) → Batch 005.2 (Coverage visual
+redesign) → Batch 010.1 (Pipeline alerts, MERGED — absorbs 010.2 +
+Path 2) → Batch 007 (Custom Jira Boards) → per-brand config pages →
+Batch 008 (Convert.com).
+
+Rationale: auth.2/.1 lead — the only operational-risk item on the board
+(zero password-recovery path today). 006 before 005.2 — highest
+scaffolding lift, and it does NOT touch `coverage/page.tsx`, so it runs
+without conflicting with the redesign (mockup work can proceed in
+parallel). 005.2 before 010.1 — both touch `coverage/page.tsx`, so the
+redesign settles the layout before 010.1's per-brand pill lands on it.
+010.1 after 006 so pipeline alerts fire Teams pings from day one instead
+of shipping stubbed. 007 → per-brand config (hard prereq for 008) → 008.
+
+(SHIPPED, no longer upcoming — all in §16: 5.19, Batch 005.25, Batch 011,
+Batch 009, Batch 010, Batch 005.1. DISSOLVED: Batch 010.2 and the
+standalone Path 2 off-by-one item are folded into Batch 010.1; backlog
+5.21 is absorbed into Batch 006.)
 
 **SHIP-day open questions resolved:** multi-site support
 stays deferred (single Fusion92 tenant via env-config, per
 spec §8/§12); 25 MB image cap retained as a proxy-side
 Worker-memory guard.
 
-### Drought predicate off-by-one check (Path 2 — unscheduled)
-- [ ] If the business intent is "2 milestones = covered" (meeting
-      target), the `<= 2` drought predicate in
-      `lib/coverage/queries.ts` + the drought-evaluator is wrong
-      (should be `< 2`). Path 1 (Batch 005.1) aligned the new
-      Health / Covered KPIs to the current `<= 2` code for
-      consistency; this item tracks whether the predicate ITSELF
-      needs fixing. Dedicated batch — touches the alert evaluator
-      (open drought alerts would resolve/flip on the boundary
-      brands), the Coverage table pill, and the page's "≤2"
-      subtitle copy, all atomically. Surfaced by Jenny's Batch
-      005.1 pre-flight (2026-06-05).
+### Drought predicate off-by-one check (Path 2) — DISSOLVED into Batch 010.1
+Folded into Batch 010.1 (Pipeline alerts, merged) on 2026-07-03. The
+`<= 2` vs `< 2` question stops being a standalone predicate fix and becomes
+"define the comparison against the configured per-brand target once,
+correctly." See the Batch 010.1 entry below.
 
-### Batch 010.2 — Brand contract management (not started)
-Expanded 2026-06-05 from the original "per-brand contract count"
-follow-on to Batch 010. Scoped after Batch 005.1's BrandAdminDrawer
-lands as its home.
+### Batch 010.2 — Brand contract management — MERGED into Batch 010.1
+Merged 2026-07-03. Per-brand contract targets are now part of Batch 010.1's
+scope (below), not a separate batch.
 
-Per-brand contract record under Coverage Management (Settings →
-Client Coverage), surfaced as a tab on the BrandAdminDrawer built in
-005.1. Ties into BOTH the Coverage table and the KPIs — replaces the
-flat threshold (2/28d) with each brand's contracted target; the
-drought predicate + Overall Health + Brands Covered + table DROUGHT
-pill all read per-brand via the single `!droughtFlag` swap point
-(Batch 005.1's aggregators are written so this is a one-line change
-inside the per-brand loop).
+### Batch 010.1 — Pipeline alerts (MERGED: 010.1 + 010.2 + Path 2)
+Sequenced after Batch 006. Collapses the three formerly-separate items
+(pipeline drought alerting, brand contract management, and the Path 2
+off-by-one) into one coherent build.
 
-- Min viable: `contract_milestones_per_period` + `period`.
-- Full record (this batch's direction): + start/end dates, contract
-  status, notes.
-- Open design Qs for 010.2 scoping:
-  - `contract_status` vs `brands.is_paused` overlap — two ways to
-    say "not currently delivering"; need one source of truth or an
-    explicit precedence rule.
-  - Monthly-contract vs 28d-measurement period semantics — contracts
-    are likely per calendar month; the drought window is rolling 28d.
-  - v1 scope: billing / rate explicitly OUT.
+- **Per-brand targets on the brand record** — milestone targets AND
+  pipeline-stage thresholds, replacing the flat 2/28d constant. Driven by
+  the fact that contracts already vary per brand (the old "gated on a real
+  contract" trigger for 010.2 is moot).
+- **UI home: BrandAdminDrawer tab** — resolves the deleted-settings-page
+  re-home question (the old 010.2 sketch said `/settings/coverage`, deleted
+  in Batch 005.1 Phase 5). This is what the drawer was built for.
+- **Both evaluators (milestone-drought + pipeline-drought) read per-brand
+  config.** Batch 005.1's aggregators were deliberately written so the
+  flat→per-brand swap is a one-line change inside the per-brand loop.
+- **Path 2 off-by-one settled INSIDE this build:** the `<= 2` vs `< 2`
+  question becomes "define the comparison against the configured target
+  once, correctly." Standalone Path 2 item KILLED; standalone 010.2
+  DISSOLVED.
+- **`contract_status` ≠ `is_paused` (locked):** separate fields.
+  `is_paused` = operational state (mid-contract hold) → drives
+  alert-skipping (r20 precedent). `contract_status` = commercial state →
+  informational + future billing hooks. A brand can be contracted-but-
+  paused; collapsing the two loses that.
+- **Default thresholds:** placeholder until PM consult on per-contract
+  numbers (Lacey action); configurable per brand from day one.
+- **Storage decision (open):** new table vs `alert_rules.config` reuse —
+  consult the Batch 005.2 redesign outcome before deciding.
+- Daily 5am Central cron → `alert_events`, audit per §13 r20
+  (`changed_by = 'system:pipeline-drought-evaluator'`).
+- Ships with Teams pings live (Batch 006 lands first in sequence).
+- Effort: MED. PM consult on contract verbiage / monthly-vs-28d window
+  semantics still owed (Lacey).
 
 ### Ops / deferred
 - [ ] **Radara Edge Function deploy** — code committed at
@@ -2304,130 +2407,133 @@ phase/status, open questions, and a pointer to the spec. Lifecycle:
 appears in exactly one of §15.5 / §16 — on ship, the entry here is
 deleted in the same commit that writes the §16 shipped entry.
 
-### Batch 005.1 — Coverage redesign + BrandAdminDrawer  [IN FLIGHT]
-Spec: `docs/batch-005.1-coverage-redesign-spec.md` (Jenny
-PASS-WITH-FINDINGS 2026-06-05, all findings folded into the spec).
-
-**Status:** Phase 0-6 done; Lacey smoke-test + manual deploy of Commit A
-remaining. Karen full-chain post-flight ran 2026-07-03 (PASS-WITH-FINDINGS):
-Finding 1 (Jenny-Critical boundary test had aged RED — `buildCoverageRows`
-had no injectable clock, so test 4's pinned-NOW milestones fell outside the
-real 28d window as of 2026-07-03; production unaffected since pill + KPI both
-read the same wall clock at render) FIXED in Commit A — all five time-window
-helpers + `monthlyCounts` + `buildCoverageRows` now take an optional
-`now: Date = new Date()` (default preserves the page call site exactly), test 4
-pins NOW on the pill side; suite re-greened 5/5, build green, tsc clean. Also
-closes Finding 3 (buildCoverageRows was the last coverage aggregator without an
-injectable clock). Findings 2-3 doc items absorbed at close-out (Commit B).
-Phase 4 (BrandAdminDrawer) is pushed + deployed +
-VERIFIED LIVE in prod by Lacey (commit `45b3242`), which satisfied the Phase 5
-gate. Phase 2 (Commit 2, 2026-06-08): shared
-`isInDrought()` predicate + `COVERAGE_THRESHOLD` constant extracted in
-`lib/coverage/queries.ts` (Output-table pill now routes through it);
-`computeCoverageHealth()` (single-pass Health % + Brands Covered N/M)
-and `computeQualityScore()` (distinct clean/delivered tickets, rolling
-28d) added as pure functions; `tests/coverage-kpis.test.ts` (5 cases:
-normal, 0-denominator, dirty-not-in-delivered intersection, exactly-
-THRESHOLD boundary = drought/uncovered, single-pass non-divergence) —
-all pass via `npx tsx --test`; build green, tsc clean. `QualityLog`
-interface + coverage page `quality_logs` select gained `jira_ticket_id`
-(needed by Quality Score). Phase 3 (Commit 3, 2026-06-10, UI-only):
-`app/dashboard/coverage/page.tsx` KPI row reorged into ONE responsive
-grid of 9 cards in locked order — teal long-range pair (Tests This Year
-/ Tests All Time) MOVED to front (position-only, tokens unchanged), the
-existing four rolling-window cards unchanged, then three NEW non-teal
-cards (Overall Health, Brands Covered "N/M", Quality Score) wired to the
-Phase 2 `computeCoverageHealth()` / `computeQualityScore()` exports.
-Full-scope guard honored: the new cards read the FULL brands/milestones/
-logs state arrays via two memos, never `visibleRows`; tables stay
-filter-scoped. New-card subtitles read "LAST 28 DAYS". No calc/schema/
-drawer change. The "Slow paused brands" typo + ">2" drought subtitle the
-spec flagged were already correct in-repo ("Show paused brands" / "≤2") —
-no copy change needed. Prod hand-check (required): shipped fns === an
-independent manual recompute against prod — Overall Health 7/13 (54%),
-Quality Score 32/40 (80%); boundary confirmed live (ASV=2 → uncovered,
-MDG=3 → covered). Build green, tsc clean. **Pushed to `main` as
-commit `48ee281` on 2026-06-10 16:02 CDT (ef3ab04..48ee281),
-triggering the §13 r30 auto-deploy to production** (touches
-`app/dashboard/coverage/page.tsx`, a non-ignored path — not docs-only).
-Phase 3 is the first Batch 005.1 phase to reach prod ahead of the rest
-of the batch; Phases 4-6 (BrandAdminDrawer, settings-page delete,
-Karen, final deploy) span past 2026-06-10.
-
-Phase 4 (Commit 4, BrandAdminDrawer) built: new per-brand admin drawer
-on `/dashboard/coverage` consolidating all four brand-admin flows —
-**Details** (read-only), **QA Config**, **Milestones**, **Pause** — into
-one `BrandAdminDrawer` (`components/coverage/brand-admin-drawer.tsx`,
-minimal local tab strip; no Tabs component in the library). Opened by
-admins via a per-row gear button on the Output table (`e.stopPropagation`
-so it doesn't also fire the read-drawer row click); row click still opens
-the read-only `BrandDetailDrawer`. The QA-config form body was extracted
-verbatim to a chrome-less `components/coverage/brand-qa-config-form.tsx`
-(`BrandQaConfig` type now lives there); `edit-brand-qa-config-drawer.tsx`
-is now a thin Sheet wrapper around it and re-exports `BrandQaConfig` so
-the **untouched settings page imports still resolve** (settings page
-deleted in Phase 5, not now). `ManageMilestonesDialog` gained an optional
-`onChanged?` callback (fired after add/edit/delete) so the drawer can
-refetch Output counts. `BrandDetailDrawer` lost its `isAdmin` /
-`onManageMilestones` props + "Manage milestones" button (admin actions
-moved to the new drawer); the old redirect to
-`/dashboard/settings/coverage` is removed. "Add brand" button moved onto
-the Coverage control bar (admin-only) opening the existing
-`AddBrandDrawer` (projects derived from page state — no second fetch). No
-new mutation routes, no schema change, no migration — every write reuses
-an existing server-gated route (audit stays server-derived, §13 r19).
-Build green, tsc clean; lint introduces zero new findings (the 8
-pre-existing `react-hooks/static-components` on SortableHeader/SortIcon
-are untouched). DO NOT PUSH — Lacey smoke-tests + deploys manually.
-
-Phase 5 (Commit 5, settings-page deletion) done — gated on Phase 4 being
-verified live, which Lacey confirmed. Deleted
-`app/dashboard/settings/coverage/page.tsx` (the standalone brand-admin page,
-now fully replaced by the Coverage page's `BrandAdminDrawer`) and the
-`components/coverage/edit-brand-qa-config-drawer.tsx` thin wrapper (its only
-consumer was the settings page; `BrandQaConfig`'s canonical home is
-`brand-qa-config-form.tsx`, which `BrandAdminDrawer` already imports directly,
-so no import breaks). Removed the "Client Coverage" tile from the settings
-home (`app/dashboard/settings/page.tsx`). Refreshed two stale code comments
-that named the deleted path (`brand-admin-drawer.tsx`,
-`manage-milestones-dialog.tsx`). No coverage-page redirect fix was needed —
-the spec-flagged `window.location.href` redirects at coverage page :730/:732
-were already removed in Phase 4. `middleware.ts` r24 admin gate is
-wildcard-based (`/dashboard/settings/*` minus `/profile`) so the removed child
-page needed no gate edit. Repo-wide `grep "settings/coverage"` across
-`app/ components/ lib/ middleware.ts` returns zero hits. Build green, tsc clean
-(a stale `.next/dev/types` artifact from a prior `next dev` referenced the
-deleted route until `.next/dev` was cleared — gitignored build output, not
-source). `manage-milestones-dialog` + `add-brand-drawer` kept (consumed by
-`BrandAdminDrawer` / the Coverage control bar); `back-to-settings` untouched
-(5 other settings pages use it). DO NOT PUSH — Lacey smoke-tests + deploys
-manually.
-
-**Locked decisions:**
-- Path 1: covered = `count > THRESHOLD` (strict complement of the
-  `<= 2` drought pill), computed via the shared `!droughtFlag`
-  predicate so KPI + pill can't diverge.
-- Flat threshold (2/28d) this batch; per-brand target swap is
-  Batch 010.2 (the aggregator reads the threshold per-brand inside
-  the loop so the swap is one line).
-- 9 KPIs full-scope (005.22 boundary NOT reversed); filter-aware
-  KPIs / per-client Coverage view deferred (growth — spec §8b).
-- Quality Score: distinct clean tickets / distinct delivered
-  tickets, rolling 28d, high % = good.
-- All controls kept (PROJECT pills + Show-paused + Export); tables
-  stay filter-scoped.
-- Settings page (`/dashboard/settings/coverage`) deleted in a
-  SEPARATE commit, only after the drawer is verified live.
-
-**Open:** exactly-2 business semantics — if "2 = covered" is the
-real rule, the drought predicate is off-by-one (`<= 2` should be
-`< 2`); that's a Path 2 fix touching the drought-evaluator, owed as
-its own batch. See the §15 "Drought predicate off-by-one check"
-backlog item.
+*(Empty — no batches currently in flight. Batch 005.1 — Coverage
+redesign + BrandAdminDrawer — shipped 2026-07-03 and moved to §16 per
+§13 rule 34.)*
 
 ---
 
 ## 16. Shipped Features Log
+
+### Batch 005.1 — Coverage redesign + BrandAdminDrawer — 2026-07-03
+
+Two bundled changes to `/dashboard/coverage`, shipped across a five-commit
+chain: (1) Coverage KPI reorg + 3 new program-health cards, and (2) the
+§15 item 5.1 BrandAdminDrawer consolidation — replacing the standalone
+`/dashboard/settings/coverage` admin page with a unified per-brand drawer
+opened from the Coverage page. Spec:
+`docs/batch-005.1-coverage-redesign-spec.md` (Jenny pre-flight
+PASS-WITH-FINDINGS 2026-06-05, all findings folded into the spec before
+build). No schema change, no migration across the whole chain.
+
+**Phase 2 — KPI calc layer + tests (commit `adb502b`, 2026-06-08):**
+- `lib/coverage/queries.ts`: extracted the shared `isInDrought()` predicate
+  + `COVERAGE_THRESHOLD` constant; the Output-table DROUGHT pill (via
+  `buildCoverageRows`) now routes through it.
+- `computeCoverageHealth()` — single pass yielding BOTH Overall Health %
+  and Brands Covered N/M (same numerator/denominator, so they cannot
+  diverge). `computeQualityScore()` — distinct clean ÷ distinct delivered
+  tickets, rolling 28d. Both pure functions over plain arrays.
+- `tests/coverage-kpis.test.ts` — 5 cases (normal, 0-denominator,
+  dirty-not-in-delivered intersection, exactly-THRESHOLD boundary =
+  drought/uncovered, single-pass non-divergence), run via `npx tsx --test`.
+- `QualityLog` interface + coverage page `quality_logs` select gained
+  `jira_ticket_id` (needed by Quality Score).
+
+**Phase 3 — KPI row reorg + card wiring (commit `48ee281`, 2026-06-10,
+UI-only, first phase to reach prod):** `app/dashboard/coverage/page.tsx`
+KPI row reorged into ONE responsive 9-card grid in locked order — teal
+long-range pair (Tests This Year / Tests All Time) moved to front
+(position-only; `--kpi-longrange-*` tokens unchanged), the existing four
+rolling-window cards unchanged, then three NEW non-teal cards (Overall
+Health, Brands Covered "N/M", Quality Score) wired to the Phase 2 exports.
+**Full-scope guard honored** — the new cards read the FULL
+brands/milestones/logs state arrays via two memos, never `visibleRows`
+(the filter- and paused-scoped memo); tables stay filter-scoped (Batch
+005.22 KPI boundary NOT reversed). New-card subtitles read "LAST 28 DAYS".
+Prod hand-check confirmed shipped fns === an independent manual recompute
+(Overall Health 7/13 = 54%, Quality Score 32/40 = 80%; boundary live:
+ASV=2 → uncovered, MDG=3 → covered).
+
+**Phase 4 — BrandAdminDrawer (commit `45b3242`, verified live in prod by
+Lacey):** new per-brand admin drawer on `/dashboard/coverage`
+consolidating all four brand-admin flows — **Details** (read-only),
+**QA Config**, **Milestones**, **Pause** — into one `BrandAdminDrawer`
+(`components/coverage/brand-admin-drawer.tsx`; minimal local tab strip, no
+Tabs component in the library). Opened by admins via a per-row gear button
+on the Output table (`e.stopPropagation` so it doesn't also fire the
+read-drawer row click); row click still opens the read-only
+`BrandDetailDrawer`. The QA-config form body was extracted to a
+chrome-less `components/coverage/brand-qa-config-form.tsx` (canonical home
+of the `BrandQaConfig` type). `ManageMilestonesDialog` gained an optional
+`onChanged?` callback so the drawer refetches Output counts.
+`BrandDetailDrawer` lost its `isAdmin` / `onManageMilestones` props (admin
+actions moved to the new drawer). "Add brand" moved onto the Coverage
+control bar (admin-only, opens the existing `AddBrandDrawer`). **No new
+mutation routes** — every write reuses an existing server-gated route
+(`/api/admin/brands/qa-config`, `/api/admin/brands/pause`,
+`/api/admin/milestones[/:id]`, `/api/admin/brands`); audit stays
+server-derived per §13 r19; middleware r24 posture unaffected.
+
+**Phase 5 — settings-page deletion (commit `f388276`, gated on Phase 4
+verified live):** deleted `app/dashboard/settings/coverage/page.tsx` and
+the `components/coverage/edit-brand-qa-config-drawer.tsx` thin wrapper
+(only consumer was the settings page). Removed the "Client Coverage" tile
+from the settings home. `middleware.ts` r24 admin gate is wildcard-based
+(`/dashboard/settings/*` minus `/profile`) so the removed child page
+needed no gate edit. Repo-wide `grep "settings/coverage"` across
+`app/ components/ lib/ middleware.ts` returns zero hits.
+`manage-milestones-dialog` + `add-brand-drawer` kept (consumed by
+`BrandAdminDrawer` / control bar); `back-to-settings` untouched (5 other
+settings pages use it).
+
+**Commit A — Karen Finding 1 fix (commit `eefc9f0`, 2026-07-03):**
+`buildCoverageRows`, the five time-window helpers
+(`startOfCurrentWeek` / `startOfLastWeek` / `endOfLastWeek` /
+`startOfRolling28` / `startOfCurrentMonth`), and `monthlyCounts` gained an
+optional trailing `now: Date = new Date()`, mirroring
+`computeCoverageHealth` / `computeQualityScore`. The default preserves the
+Coverage page call site exactly (no app/component change). Test 4 now pins
+NOW on the pill side too; suite re-greened 5/5. Also closes Finding 3
+(`buildCoverageRows` was the last coverage aggregator without an injectable
+clock). See Karen post-flight below.
+
+**Jenny Critical + Path 1 resolution:** "Covered" is the strict complement
+of the drought predicate, computed as `!isInDrought(...)` via the single
+shared predicate — so the Overall Health / Brands Covered KPIs and the
+Output-table DROUGHT pill are structurally incapable of diverging. A brand
+sitting exactly ON the threshold (2 milestones/28d) reads DROUGHT/uncovered
+on both surfaces. Flat threshold (2/28d) this batch; the aggregator reads
+`target` per-brand inside the loop so the per-brand-target swap is a
+one-line change when Batch 010.1 (merged, ex-010.2) lands. The exactly-2
+business-semantics question (`<= 2` vs `< 2` — "Path 2") is NOT a bug in
+this batch's parity work; it is folded into Batch 010.1 where the
+comparison-against-configured-target is defined once, correctly.
+
+**Karen full-chain post-flight (2026-07-03, PASS-WITH-FINDINGS):** reviewed
+the whole chain (Phases 2-5), precedent Batch 009 whole-ship review.
+Verified by re-running: `tsc --noEmit` clean, `npm run build` exit 0,
+zero `settings/coverage` refs, the shared-predicate divergence-proofing
+end-to-end, the full-scope guard, permission surfaces (all four flows
+through existing server-gated routes, no new routes), and deletion
+completeness. One must-fix — Finding 1 (the Jenny-Critical boundary test
+had aged RED because `buildCoverageRows` used the wall clock while the test
+pinned NOW; **production was never affected** — pill and KPI both read the
+same wall clock at render, so they always agreed) — FIXED in Commit A.
+Findings 2-3 (LOW doc items) absorbed into this close-out commit: the §5
+schema-doc QA-config edit-path reference updated to the BrandAdminDrawer,
+and the injectable-clock hygiene item resolved by Commit A.
+
+**Advisor credit (CC4):** Jenny (pre-flight, 2026-06-05 — Critical +
+Medium findings folded into the spec); Karen (full-chain post-flight,
+2026-07-03).
+
+**Verification (Commit A, re-run at close-out):** `npx tsx --test
+tests/coverage-kpis.test.ts` → 5/5 pass; `tsc --noEmit` clean; `npm run
+build` exit 0; ESLint on changed files → no new findings (the 8
+pre-existing `react-hooks/static-components` on SortableHeader/SortIcon
+predate the batch). DO NOT PUSH — Lacey smoke-tests Commit A and pushes
+both commits.
 
 ### Batch 010 — Coverage pipeline visibility — 2026-06-03
 
@@ -5154,4 +5260,4 @@ demo blocker.
 
 ---
 
-*Last updated: 2026-06-10 | CQIP v1.8 — Batch 005.1 Phase 3 (Commit 3) PUSHED to `main` as commit `48ee281` (ef3ab04..48ee281), triggering the §13 r30 auto-deploy to production: Coverage KPI row reorged into one 9-card grid (teal long-range pair moved to front; three new non-teal cards — Overall Health, Brands Covered N/M, Quality Score — wired to the Phase 2 `computeCoverageHealth()`/`computeQualityScore()` exports, full-scope guard honored). First Batch 005.1 phase to reach prod; Phases 4-6 (BrandAdminDrawer, settings-page delete, Karen, final deploy) still pending — §15.5 entry updated. No version bump (no schema/structural change). Prior (2026-06-05, docs-only): new §15.5 In-Flight Batches section (seeded with Batch 005.1 — Coverage redesign + BrandAdminDrawer, spec at docs/batch-005.1-coverage-redesign-spec.md, Jenny PASS-WITH-FINDINGS folded), new §13 rule 34 (in-flight lifecycle: §15 backlog → §15.5 → §16, exactly-one-home), §15 backlog additions (Drought predicate off-by-one check / Path 2; Batch 010.2 expanded to Brand contract management). No version bump — no structural code change. Prior (v1.8, 2026-06-03): Batch 010 (Coverage pipeline visibility). New cookie-bound server route `app/api/coverage/pipeline` runs LIVE JQL per active project (token-paginated `/rest/api/3/search/jql`) for the union of five pipeline stages (Strategy · Design · Dev · Queued · Live; Done + Reporting excluded), buckets by brand + stage in-route via the §13 r13/r28 chain, returns per-brand counts + overlay per-stage subsets + ticket lists + `unresolved_count`. No `jira_tickets` cache (Batch 007 owns that); read-only against Jira (§13 r5). Stage→status map + overlay-tag defs are the single source of truth in `lib/coverage/pipeline-stages.ts` (prose companion `docs/batch-010-pipeline-stage-map.md`, committed first on its own). Overlays confirmed at impl to live on Jira multi-select `customfield_12528` "CRO Labels" (NOT `labels`), exact casing "Needs info"/"Troubleshooting"/"On hold" — verified vs prod 2026-06-03. New build-safe lazy JQL helper `lib/jira/search.ts`. Coverage page split into Output (unchanged, keeps its pill) + Pipeline tables (counts are click→`PipelineStageDrawer`), three visual-only overlay toggles producing stacking per-count badges, teal long-range KPI accent via new `--kpi-longrange-*` tokens (WCAG AA, §13 r25). No migration; §13 r33 added. Build green, tsc clean, route 401s unauthenticated, data path validated against live prod. DO NOT PUSH — Lacey smoke-tests + deploys manually. Prior (v1.7, 2026-05-29): Batch 009 (SharePoint integration LIVE). Read-only Microsoft Graph proxy: three GET routes under `/api/sharepoint/*` (`/folder` enumerate, `/xlsx` parse Preview Links, `/image` stream bytes), `Sites.Selected` scope, 60s in-memory cache, share-id folder resolution, 25 MB image cap; `lib/sharepoint/*` helpers + `lib/api/sharepoint-bearer-auth.ts` (CQIP_SHAREPOINT_API_TOKEN, separate blast radius from brands token); middleware carveout for /api/sharepoint + /api/brands; no DB migration (stateless). Six new env vars (CQIP_SHAREPOINT_API_TOKEN + 4 Azure/SharePoint config + SHAREPOINT_SITE_PATH). Four SHIP-day deviations from DESIGN: D1 share-id resolution (alias-drift robustness), D2 xlsx_not_found→422 hard-fail, D3 xlsx-js-style not xlsx (CVE-removed 2026-04-26), D4 token per logical request. Live-Azure smoke green (Test Task 001 / WDG 07: 12 screenshots, 6 Preview Links rows). Closes §14 Planned SharePoint entry + §15 Batch 009 pending. AZURE_CLIENT_SECRET hygiene rotation still queued (Worker-only, Fri/Mon target). Commits c7afede + 98a6133 (Step 2) + this SHIP docs commit. Advisor credit: AC (day-one needs), Jenny + Karen (five-finding review). DO NOT PUSH — three-commit chain pushed by Lacey after eyeball. Prior (v1.6, 2026-05-27): Batch 011 (Node 24 CI bump + public /api/health probe) — `app/api/health/route.ts` always-200 JSON, deploy.yml setup-node 20→24 + smoke check /login→/api/health; committed-not-pushed, handed to Lacey. Prior (v1.5, 2026-05-26):* Batch 005.31a + Azure prereqs verification + CC-namespace finalization, shipped same-day across three commits. 005.31a: SUPABASE_SERVICE_ROLE_KEY added to GH Actions build env so admin route module-eval imports succeed during page-data collection; §13 r31 documents workflow_dispatch as the only path to test workflow edits given paths-ignore: .github/**. Azure verification: end-to-end Graph curl (token/site/drive children all 200) confirmed admin consent on Sites.Selected + per-site CRO grant were already in place; "SHIP gated on Azure prereqs" framing removed from 4 doc surfaces (CLAUDE.md §14 + §15, CROSS_CLAUDE.md, batch-009 spec) as a phantom blocker that had carried 23 days. CROSS_CLAUDE.md CC-namespace finalized at CC1-CC8 (§2); three originally-proposed rules moved to DC-local CLAUDE_RULES.md R19 (stale-status re-verification) / R20 (last-verified timestamps) / R21 (blocker reality-check) per AC namespace-fit review. CROSS_CLAUDE section numbering settled: §3 contract surfaces, §4 pending rotations, §5 priority, §6 event log. §13 r32 reworked from a standalone rule into a discoverability hook pointing at R21 (canonical), so the §13 entry and the CLAUDE_RULES.md rule don't drift.*
+*Last updated: 2026-07-03 | CQIP v1.9 — Batch 005.1 CLOSE-OUT (Coverage redesign + BrandAdminDrawer). Two commits after Karen's full-chain post-flight (PASS-WITH-FINDINGS). Commit A (`eefc9f0`, code): `buildCoverageRows` + the five time-window helpers + `monthlyCounts` gained an injectable `now: Date = new Date()` (default preserves the page call site exactly), re-greening the Jenny-Critical exactly-THRESHOLD boundary test that had aged RED as of 2026-07-03 (production never affected — pill + KPI read the same wall clock at render); closes Karen Findings 1 + 3; suite 5/5, tsc clean, build green. Commit B (docs-only, this commit): §15.5 Batch 005.1 entry deleted + full §16 shipped entry written (r34); §15 backlog 5.1 closed; §15 priority re-sequenced per `docs/batch-outline-2026-07-03.md` (auth.2/.1 → 006 EXPANDED → 005.2 → 010.1 MERGED → 007 → per-brand config → 008); four new backlog entries (auth.1/.2, Batch 005.2 Coverage visual redesign, dashboard polish cluster, per-brand config pages); Batch 006 EXPANDED (edge-fn dispatcher, single channel, forward-only, self-announcing overflow cap, absorbs 5.21 cron-silence monitor, + daily morning digest); Batch 010.1 MERGED (absorbs former 010.2 + Path 2 off-by-one; per-brand targets on the brand record, BrandAdminDrawer tab as UI home, `contract_status` ≠ `is_paused`); 5.21 / Path 2 / 010.2 tombstoned to their new homes; Batch 007 banked the 2026-07-03 decisions (saved views via `board_views`, Jira-parity filter bar, compact-default density, last-synced + manual-sync CTA); Karen Finding 2 fixed (§5 schema-doc QA-config edit path now names the BrandAdminDrawer); `docs/batch-outline-2026-07-03.md` created + status flipped to ENCODED (CLAUDE.md canonical); CROSS_CLAUDE.md §5 priority mirrored + "Read at" header fixed to the local connector path per CC9. Version bump v1.8 → v1.9: Batch 005.1 is structural (new BrandAdminDrawer component surface + deleted `settings/coverage` page/route) per §13 r23. DC-internal — no AC contract surface, so no CROSS_CLAUDE §6 entry. DO NOT PUSH — Lacey smoke-tests Commit A and pushes both. Prior (2026-06-10, v1.8): Batch 005.1 Phase 3 (Commit 3) PUSHED to `main` as commit `48ee281` (ef3ab04..48ee281), triggering the §13 r30 auto-deploy to production: Coverage KPI row reorged into one 9-card grid (teal long-range pair moved to front; three new non-teal cards — Overall Health, Brands Covered N/M, Quality Score — wired to the Phase 2 `computeCoverageHealth()`/`computeQualityScore()` exports, full-scope guard honored). First Batch 005.1 phase to reach prod. No version bump (no schema/structural change). Prior (2026-06-05, docs-only): new §15.5 In-Flight Batches section (seeded with Batch 005.1 — Coverage redesign + BrandAdminDrawer, spec at docs/batch-005.1-coverage-redesign-spec.md, Jenny PASS-WITH-FINDINGS folded), new §13 rule 34 (in-flight lifecycle: §15 backlog → §15.5 → §16, exactly-one-home), §15 backlog additions (Drought predicate off-by-one check / Path 2; Batch 010.2 expanded to Brand contract management). No version bump — no structural code change. Prior (v1.8, 2026-06-03): Batch 010 (Coverage pipeline visibility). New cookie-bound server route `app/api/coverage/pipeline` runs LIVE JQL per active project (token-paginated `/rest/api/3/search/jql`) for the union of five pipeline stages (Strategy · Design · Dev · Queued · Live; Done + Reporting excluded), buckets by brand + stage in-route via the §13 r13/r28 chain, returns per-brand counts + overlay per-stage subsets + ticket lists + `unresolved_count`. No `jira_tickets` cache (Batch 007 owns that); read-only against Jira (§13 r5). Stage→status map + overlay-tag defs are the single source of truth in `lib/coverage/pipeline-stages.ts` (prose companion `docs/batch-010-pipeline-stage-map.md`, committed first on its own). Overlays confirmed at impl to live on Jira multi-select `customfield_12528` "CRO Labels" (NOT `labels`), exact casing "Needs info"/"Troubleshooting"/"On hold" — verified vs prod 2026-06-03. New build-safe lazy JQL helper `lib/jira/search.ts`. Coverage page split into Output (unchanged, keeps its pill) + Pipeline tables (counts are click→`PipelineStageDrawer`), three visual-only overlay toggles producing stacking per-count badges, teal long-range KPI accent via new `--kpi-longrange-*` tokens (WCAG AA, §13 r25). No migration; §13 r33 added. Build green, tsc clean, route 401s unauthenticated, data path validated against live prod. DO NOT PUSH — Lacey smoke-tests + deploys manually. Prior (v1.7, 2026-05-29): Batch 009 (SharePoint integration LIVE). Read-only Microsoft Graph proxy: three GET routes under `/api/sharepoint/*` (`/folder` enumerate, `/xlsx` parse Preview Links, `/image` stream bytes), `Sites.Selected` scope, 60s in-memory cache, share-id folder resolution, 25 MB image cap; `lib/sharepoint/*` helpers + `lib/api/sharepoint-bearer-auth.ts` (CQIP_SHAREPOINT_API_TOKEN, separate blast radius from brands token); middleware carveout for /api/sharepoint + /api/brands; no DB migration (stateless). Six new env vars (CQIP_SHAREPOINT_API_TOKEN + 4 Azure/SharePoint config + SHAREPOINT_SITE_PATH). Four SHIP-day deviations from DESIGN: D1 share-id resolution (alias-drift robustness), D2 xlsx_not_found→422 hard-fail, D3 xlsx-js-style not xlsx (CVE-removed 2026-04-26), D4 token per logical request. Live-Azure smoke green (Test Task 001 / WDG 07: 12 screenshots, 6 Preview Links rows). Closes §14 Planned SharePoint entry + §15 Batch 009 pending. AZURE_CLIENT_SECRET hygiene rotation still queued (Worker-only, Fri/Mon target). Commits c7afede + 98a6133 (Step 2) + this SHIP docs commit. Advisor credit: AC (day-one needs), Jenny + Karen (five-finding review). DO NOT PUSH — three-commit chain pushed by Lacey after eyeball. Prior (v1.6, 2026-05-27): Batch 011 (Node 24 CI bump + public /api/health probe) — `app/api/health/route.ts` always-200 JSON, deploy.yml setup-node 20→24 + smoke check /login→/api/health; committed-not-pushed, handed to Lacey. Prior (v1.5, 2026-05-26):* Batch 005.31a + Azure prereqs verification + CC-namespace finalization, shipped same-day across three commits. 005.31a: SUPABASE_SERVICE_ROLE_KEY added to GH Actions build env so admin route module-eval imports succeed during page-data collection; §13 r31 documents workflow_dispatch as the only path to test workflow edits given paths-ignore: .github/**. Azure verification: end-to-end Graph curl (token/site/drive children all 200) confirmed admin consent on Sites.Selected + per-site CRO grant were already in place; "SHIP gated on Azure prereqs" framing removed from 4 doc surfaces (CLAUDE.md §14 + §15, CROSS_CLAUDE.md, batch-009 spec) as a phantom blocker that had carried 23 days. CROSS_CLAUDE.md CC-namespace finalized at CC1-CC8 (§2); three originally-proposed rules moved to DC-local CLAUDE_RULES.md R19 (stale-status re-verification) / R20 (last-verified timestamps) / R21 (blocker reality-check) per AC namespace-fit review. CROSS_CLAUDE section numbering settled: §3 contract surfaces, §4 pending rotations, §5 priority, §6 event log. §13 r32 reworked from a standalone rule into a discoverability hook pointing at R21 (canonical), so the §13 entry and the CLAUDE_RULES.md rule don't drift.*
