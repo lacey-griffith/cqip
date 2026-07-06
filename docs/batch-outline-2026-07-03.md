@@ -236,6 +236,7 @@ failure/rollback semantics. Hard prereq: per-brand config pages.
       (monthly vs rolling-28d semantics) — before 010.1 impl
 - [ ] Mockup asset paths captured when 005.2 batch entry is written
 - [ ] Naming formula for Convert deployments — before 008 discovery
-- [ ] Azure re-rotation: STILL OPEN, blocked on Carl app-access grant,
-      requested 2026-06-01 (~4.5 wks, way past R21 7-day trigger).
-      Ping Carl.
+- [ ] Azure re-rotation: **DELIBERATE HOLD — Lacey's call, not stale-rot;
+      do NOT re-flag.** (This is an intentional pause, not an unverified
+      stale blocker — R21's 7-day reality-check does not apply. Leave as-is
+      until Lacey moves it.)

@@ -26,6 +26,17 @@ interface UserProfile {
 }
 
 const LOCAL_SUFFIX = '@cqip.local';
+const F92_DOMAIN = '@fusion92.com';
+
+// Edit-email smart default (Batch auth-cleanup): a bare local part gets the
+// fusion domain appended; anything containing '@' is treated as a full address
+// verbatim (so non-F92 / correction accounts stay possible — a default, not a
+// hard cage). Lowercased to match the server's normalization.
+function toFusionEmail(raw: string): string {
+  const v = raw.trim().toLowerCase();
+  if (!v) return '';
+  return v.includes('@') ? v : `${v}${F92_DOMAIN}`;
+}
 
 // Relative "last active" label. "Never" for accounts that have never signed in.
 function relativeTimeFromNow(iso: string | null | undefined): string {
@@ -264,19 +275,20 @@ export default function UsersSettingsPage() {
 
   async function saveEmail() {
     if (!emailEditor) return;
+    const effectiveEmail = toFusionEmail(emailValue);
     try {
       setEmailSaving(true);
       setEmailError(null);
       const response = await fetch('/api/admin/users', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: emailEditor.id, action: 'set_email', email: emailValue }),
+        body: JSON.stringify({ id: emailEditor.id, action: 'set_email', email: effectiveEmail }),
       });
       const result = await response.json();
       if (!response.ok) {
         throw new Error(result.error || 'Unable to update email.');
       }
-      const newEmail: string = result.email ?? emailValue.trim().toLowerCase();
+      const newEmail: string = result.email ?? effectiveEmail;
       setUsers(prev => prev.map(u =>
         u.id === emailEditor.id
           ? { ...u, email: newEmail, auth_email: newEmail, email_drift: false }
@@ -452,18 +464,31 @@ export default function UsersSettingsPage() {
             </Button>
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-3">
-            <Input
-              type="email"
-              autoComplete="off"
-              placeholder="first.last@fusion92.com"
-              value={emailValue}
-              onChange={e => setEmailValue(e.target.value)}
-              className="max-w-xs"
-            />
+            <div className="flex w-full max-w-sm items-stretch overflow-hidden rounded-md border border-[color:var(--f92-border)] bg-white focus-within:ring-2 focus-within:ring-[color:var(--f92-orange)]">
+              <input
+                type="text"
+                autoComplete="off"
+                placeholder="first.last"
+                value={emailValue}
+                onChange={e => setEmailValue(e.target.value)}
+                className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm text-[color:var(--f92-dark)] outline-none"
+              />
+              {emailValue.includes('@') ? null : (
+                <span className="flex items-center whitespace-nowrap border-l border-[color:var(--f92-border)] bg-[color:var(--f92-warm)] px-3 text-sm text-[color:var(--f92-gray)]">
+                  {F92_DOMAIN}
+                </span>
+              )}
+            </div>
             <Button size="sm" onClick={saveEmail} disabled={emailSaving || !emailValue.trim()}>
               {emailSaving ? 'Saving…' : 'Save email'}
             </Button>
           </div>
+          {emailValue.trim() ? (
+            <p className="mt-2 text-xs text-[color:var(--f92-gray)]">
+              Will set: <span className="font-mono text-[color:var(--f92-dark)]">{toFusionEmail(emailValue)}</span>
+              {emailValue.includes('@') ? ' (full address entered)' : ''}
+            </p>
+          ) : null}
           {emailError ? <p className="mt-3 text-sm text-red-600">{emailError}</p> : null}
         </Card>
       ) : null}
@@ -497,18 +522,17 @@ export default function UsersSettingsPage() {
                 <th className="px-3 py-3 font-semibold">Role</th>
                 <th className="px-3 py-3 font-semibold">Active</th>
                 <th className="px-3 py-3 font-semibold">Last active</th>
-                <th className="px-3 py-3 font-semibold">Created</th>
                 <th className="px-3 py-3 font-semibold">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[color:var(--f92-border)]">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-3 py-6 text-center text-[color:var(--f92-gray)]">Loading users...</td>
+                  <td colSpan={5} className="px-3 py-6 text-center text-[color:var(--f92-gray)]">Loading users...</td>
                 </tr>
               ) : visibleUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-3 py-6 text-center text-[color:var(--f92-gray)]">No users to show.</td>
+                  <td colSpan={5} className="px-3 py-6 text-center text-[color:var(--f92-gray)]">No users to show.</td>
                 </tr>
               ) : visibleUsers.map(user => {
                 const isLocal = user.email.endsWith(LOCAL_SUFFIX);
@@ -572,7 +596,6 @@ export default function UsersSettingsPage() {
                     >
                       {relativeTimeFromNow(user.last_sign_in_at)}
                     </td>
-                    <td className="px-3 py-3 text-xs text-[color:var(--f92-gray)]">{new Date(user.created_at).toLocaleDateString()}</td>
                     <td className="px-3 py-3">
                       <div className="flex flex-wrap gap-2">
                         {!isAdminTarget && (

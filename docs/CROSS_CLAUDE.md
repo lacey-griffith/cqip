@@ -239,7 +239,9 @@ See §6 entry for full context.
 ## 5. Cross-Project Priority Order
 
 Spans both projects. Last locked 2026-07-03 (per
-`docs/batch-outline-2026-07-03.md`).
+`docs/batch-outline-2026-07-03.md`); re-sequenced 2026-07-06 (auth chain
+DONE; Brand Wellness slotted first, 005.2 pulled ahead of 006 per Lacey
+2026-07-05).
 
 | # | Owner | Item | Status |
 | --- | --- | --- | --- |
@@ -251,13 +253,14 @@ Spans both projects. Last locked 2026-07-03 (per
 | 6 | DC | Batch 010 Coverage pipeline visibility | ✅ SHIPPED + DEPLOYED 2026-06-04 |
 | 7 | AC | Phase 2 (after DC 009 ships) | ✅ unblocked 2026-05-29 |
 | 8 | DC | Batch 005.1 Coverage redesign + BrandAdminDrawer | ✅ SHIPPED 2026-07-03 |
-| 9 | DC | auth.2 → auth.1 identity migration + admin reset | **next open DC batch** |
-| 10 | DC | Batch 006 Teams dispatch (EXPANDED) | after auth |
-| 11 | DC | Batch 005.2 Coverage visual redesign | after 006 |
-| 12 | DC | Batch 010.1 Pipeline alerts (MERGED: 010.2 + Path 2) | after 005.2 |
-| 13 | DC | Batch 007 Custom Jira Boards | after 010.1 |
-| 14 | DC | Per-brand config pages | prereq for Batch 008 |
-| 15 | DC | Batch 008 Convert.com automation | last |
+| 9 | DC | auth chain (auth.2 → auth.1 → Approach-C fix → auth-cleanup) + login-events plumbing | ✅ SHIPPED 2026-07-05/06 |
+| 10 | DC | Brand Wellness | **next open DC batch** |
+| 11 | DC | Batch 005.2 Coverage Ledger redesign | after Brand Wellness |
+| 12 | DC | Batch 006 Teams dispatch (EXPANDED) | after 005.2 |
+| 13 | DC | Batch 010.1 Pipeline alerts (MERGED: 010.2 + Path 2) | after 006 |
+| 14 | DC | Batch 007 Custom Jira Boards | after 010.1 |
+| 15 | DC | Per-brand config pages | prereq for Batch 008 |
+| 16 | DC | Batch 008 Convert.com automation | last |
 
 **Scope corrections logged 2026-07-03** (re-sequenced per the batch
 outline; supersedes the 2026-06-04 lock):

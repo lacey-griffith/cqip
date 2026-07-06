@@ -16,33 +16,13 @@ const MAX_ATTEMPTS = 5;
 const LOCKOUT_MS = 5 * 60 * 1000;
 const WARN_AFTER = 3;
 
-function normalizeUsername(raw: string): string {
-  return raw.trim().toLowerCase();
-}
-
-function toEmail(username: string): string {
-  return `${normalizeUsername(username)}${LOCAL_SUFFIX}`;
-}
-
-// Batch auth.1 dual-mode login [Jenny H3]. If the identifier looks like an
-// email, use it directly; otherwise synthesize the legacy @cqip.local address.
-//
-// Approach C (Karen HIGH fix): the earlier version did a username→email lookup
-// against user_profiles here. That lookup is DEAD from the login screen — the
-// browser client is unauthenticated and user_profiles RLS is authenticated-only
-// (migration 005), so it always returned null and fell through to synthesis
-// anyway. Dropped entirely rather than papered over with a resolver endpoint or
-// an anon RLS policy. Migrated users sign in via the '@' branch (they enter
-// their fusion email — the failed-login hint nudges them there); un-migrated
-// users still resolve by username via synthesis.
+// Batch auth-cleanup: login is email-only. All 7 accounts have migrated off
+// @cqip.local (drift check confirmed clean), so the legacy username→synthesis
+// fallback is gone — the input IS the email. History: auth.1 shipped this as a
+// dual-mode shim; Approach C dropped the dead user_profiles lookup; this commit
+// drops the synthesis branch now that every account signs in with a real email.
 function resolveIdentifierToEmail(identifier: string): string {
-  const trimmed = identifier.trim();
-  if (trimmed.includes('@')) {
-    return trimmed.toLowerCase();
-  }
-  // TODO(auth.1-cleanup): legacy @cqip.local synthesis. Removed once all 7
-  //   accounts are migrated and everyone signs in with their email.
-  return toEmail(trimmed);
+  return identifier.trim().toLowerCase();
 }
 
 interface AttemptState {
@@ -157,10 +137,7 @@ function LoginView() {
       writeAttempts(next);
       setAttempts(next);
       setNow(Date.now());
-      // Static hint (no lookup, no directory disclosure): migrated users who
-      // still type their old username will fail synthesis — point them at email.
-      const baseMessage = error?.message ?? 'Please check your credentials and try again.';
-      setMessage(`${baseMessage} Switched to email login? Enter your email address.`);
+      setMessage(error?.message ?? 'Invalid login credentials.');
       return;
     }
 
@@ -253,7 +230,7 @@ function LoginView() {
             <p className="text-sm text-[color:var(--f92-gray)]">
               {showReset
                 ? 'Enter your email address and we will send a reset link. Username-only accounts cannot receive reset emails — contact an admin.'
-                : 'Enter your email or username and password to continue.'}
+                : 'Enter your email and password to continue.'}
             </p>
           </div>
         </div>
@@ -288,12 +265,12 @@ function LoginView() {
         ) : (
           <form onSubmit={handleSubmit} className="space-y-5" suppressHydrationWarning>
             <div>
-              <Label htmlFor="username">Email or username</Label>
+              <Label htmlFor="username">Email</Label>
               <Input
                 id="username"
-                type="text"
+                type="email"
                 autoComplete="username"
-                placeholder="email or username"
+                placeholder="you@fusion92.com"
                 value={username}
                 onChange={event => setUsername(event.target.value)}
                 required
