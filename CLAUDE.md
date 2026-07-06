@@ -1,6 +1,6 @@
 # CQIP — CRO Quality Intelligence Platform
 ## Claude Code Project Context File
-### Fusion92 | CRO Department | v1.8
+### Fusion92 | CRO Department | v2.0
 
 ---
 
@@ -95,8 +95,18 @@ per-brand BrandAdminDrawer [tabs Details/QA Config/Milestones/Pause]
 and then deleted; shared isInDrought() predicate so KPI + DROUGHT pill
 can't diverge; no schema, no migration; Karen full-chain post-flight
 PASS-WITH-FINDINGS, Finding 1 injectable-clock test fix in commit
-eefc9f0 — 2026-07-03).
-All migrations 001-017 have run against production.
+eefc9f0 — 2026-07-03),
+Batch auth.2 (admin temp-password reset for read-only users + forced
+change + "app never mutates an admin account" guard on every
+/api/admin/users surface + full user-mutation audit trail; migration
+022 [must_change_password column + audit target-type 'user' + r22
+trigger extended to the flag]; middleware forced-change gate +
+/api/account/password-changed flag-clear route; Jenny pre-flight
+PASS-WITH-FINDINGS folded [C1/H1/H2/M1/M2/M4]; committed-not-pushed,
+DO NOT PUSH — Karen next; auth.1 is a separate follow-up commit —
+2026-07-05).
+All migrations 001-017 have run against production; migration 022
+awaits its manual apply (Batch auth.2 deploy step).
 Batch 004.4.5 produced a UX discovery plan for Coverage + Settings
 reorg (Batch 005 implementation). See §16 for full shipped log.
 
@@ -632,19 +642,32 @@ CREATE TABLE user_profiles (
                         'checkered','checkered_large'
                       )),
   theme_preference    TEXT CHECK (theme_preference IN ('light','dark')),
-  avatar_url          TEXT        -- profile photo URL (Supabase Storage)
+  avatar_url          TEXT,       -- profile photo URL (Supabase Storage)
+  must_change_password BOOLEAN NOT NULL DEFAULT FALSE  -- migration 022 (Batch auth.2)
 );
 ```
 
-**`role` and `is_active` are trigger-protected** (migration 016, Batch
-004.6). A `BEFORE UPDATE OF role, is_active` trigger raises
-`insufficient_privilege` when `auth.uid()` is set and the caller is
-not an admin, even if RLS would otherwise permit the row update. The
-existing `user_profiles_self_update` policy (migration 005) is still
-row-level only, so the trigger is the sole defense against a read-only
-user mutating their own role / is_active via supabase-js. Service-role
-calls (auth.uid() IS NULL) bypass the trigger so `/api/admin/users`
-can still toggle these columns. See §13 rule 22.
+**`role`, `is_active`, and `must_change_password` are trigger-protected**
+(migration 016 for the first two, extended by migration 022, Batch
+auth.2). A `BEFORE UPDATE OF role, is_active, must_change_password`
+trigger raises `insufficient_privilege` when `auth.uid()` is set and
+the caller is not an admin, even if RLS would otherwise permit the row
+update. The existing `user_profiles_self_update` policy (migration 005)
+is still row-level only, so the trigger is the sole defense against a
+read-only user mutating their own role / is_active / forced-change flag
+via supabase-js. Service-role calls (auth.uid() IS NULL) bypass the
+trigger so `/api/admin/users` (set flag) and
+`/api/account/password-changed` (clear flag) can still write these
+columns. See §13 rule 22.
+
+**`must_change_password`** (migration 022, Batch auth.2) is the
+forced-change flag. Set TRUE by `/api/admin/users` `set_temp_password`
+when an admin issues a temp password; cleared by
+`/api/account/password-changed` after the user changes their password
+(the change-password form on `/dashboard/settings/profile` calls that
+route once the GoTrue `updateUser` succeeds — the browser can't clear
+it directly). `middleware.ts` pins any user with the flag set to the
+change-password screen until it clears. See §13 rules 22 + 35.
 
 ### alert_rules
 
@@ -963,11 +986,18 @@ Migration 011 made `log_entry_id` nullable, added a generic
 `(target_type, target_id)` pair, and a CHECK constraint that enforces:
 
 - `target_type = 'quality_log'` requires `log_entry_id IS NOT NULL`, OR
-- `target_type IN ('test_milestone','brand','alert_event')` requires `target_id IS NOT NULL`
+- `target_type IN ('test_milestone','brand','alert_event','user')` requires `target_id IS NOT NULL`
 
 (Migration 015 added `'alert_event'` to the allowed list so the
 drought evaluator's start/end audit rows can reference an
-`alert_events.id`.)
+`alert_events.id`. Migration 022 — Batch auth.2 — added `'user'` so
+user-account mutations from `/api/admin/users` and
+`/api/account/password-changed` — create, role change, deactivate,
+temp-password/reset, forced-change-completed — can reference a
+`user_profiles.id` in `target_id`. Note these rows use the
+CHECK-allowed `action` values (`CREATE`/`UPDATE`) plus a descriptive
+`field_name`, per the codebase audit convention — the `audit_log.action`
+CHECK has its own allowed set and was NOT changed.)
 
 Legacy rows were back-filled with `target_type = 'quality_log'` and
 `target_id = log_entry_id`. Migration 012 added an admin-only INSERT
@@ -1442,12 +1472,15 @@ Resolved             → green-500
     shared secret (e.g., a future Teams-dispatch trigger) must add
     this setting at deploy time.
 
-22. **`user_profiles.role` and `user_profiles.is_active` are
-    trigger-protected; cron / service-role writers bypass via the
-    `auth.uid() IS NOT NULL` guard.** Migration 016 (Batch 004.6)
-    adds a `BEFORE UPDATE OF role, is_active` trigger on
-    `user_profiles` that raises `insufficient_privilege` when the
-    caller has `auth.uid()` set and is not an admin. This closes the
+22. **`user_profiles.role`, `user_profiles.is_active`, and
+    `user_profiles.must_change_password` are trigger-protected; cron /
+    service-role writers bypass via the `auth.uid() IS NOT NULL`
+    guard.** Migration 016 (Batch 004.6) adds a `BEFORE UPDATE OF role,
+    is_active` trigger on `user_profiles`; migration 022 (Batch auth.2)
+    extends both the trigger's `OF` list and its guard condition to
+    also cover `must_change_password`. The trigger raises
+    `insufficient_privilege` when the caller has `auth.uid()` set and
+    is not an admin. This closes the
     privilege-escalation hole left by the row-level
     `user_profiles_self_update` RLS policy (migration 005), which
     cannot constrain individual columns and would otherwise let a
@@ -1458,12 +1491,12 @@ Resolved             → green-500
     express; the `auth.uid() IS NOT NULL` check carves out service-role
     writers (no auth.uid() in that context) so `/api/admin/users` can
     still toggle these columns via `supabaseAdmin`. **How to apply:**
-    Any future code that toggles `role` or `is_active` from the
-    browser must go through a server route that uses the service
-    role; cookie-bound clients will hit the trigger. The trigger is
-    intentionally tight — only those two columns; benign self-updates
-    (theme, avatar, color) continue to use the existing self-update
-    RLS policy.
+    Any future code that toggles `role`, `is_active`, or
+    `must_change_password` from the browser must go through a server
+    route that uses the service role; cookie-bound clients will hit the
+    trigger. The trigger is intentionally tight — only those three
+    columns; benign self-updates (theme, avatar, color) continue to use
+    the existing self-update RLS policy.
 
 23. **CLAUDE.md is updated atomically with every ship.** Every batch
     that touches code, schema, or behavior must include CLAUDE.md
@@ -1723,6 +1756,38 @@ Resolved             → green-500
     §15 backlog item gets a one-line "IN FLIGHT — see §15.5"
     annotation; when it ships, the §15.5 entry is deleted in the same
     commit that writes the §16 entry (atomically, per rule 23).
+
+35. **The app never mutates an admin account; every user-account
+    mutation is audited and admin-issued temp passwords force a change.**
+    (Batch auth.2.) Every state-changing surface on
+    `/api/admin/users` — `set_temp_password`, `reset_password`, the
+    generic role / `is_active` PATCH branch (both directions), and
+    `DELETE` — runs `assertTargetIsReadOnly(id)` and returns 403 when
+    the target's role is `admin`. Promotion (read_only → admin) still
+    works because the target is read_only at guard time; demoting,
+    deactivating, resetting, or temp-password-ing an admin is refused.
+    Admin recovery is out-of-band only (self-initiated email post-auth.1,
+    or the Supabase console). Every one of those mutations (plus create)
+    also writes an `audit_log` row with `target_type='user'`,
+    `target_id=<user id>`, `changed_by` server-derived via
+    `getChangedBy()` on the **cookie-bound** route client (§13 r19) —
+    the temp password itself is never logged, never persisted, and
+    returned once with `Cache-Control: no-store`. `set_temp_password`
+    sets `must_change_password=true`; the middleware gate (r24 neighbor)
+    pins that user to `/dashboard/settings/profile` until they change
+    their password, at which point the profile form calls
+    `/api/account/password-changed` to clear the flag (service role —
+    the flag is trigger-protected per r22). **Why:** the app must not be
+    a lever for privilege changes or admin takeover; the audit trail
+    must cover identity mutations, not just quality-log edits (§13 r2);
+    a temp password with no forced change is a standing credential.
+    **How to apply:** any NEW user-mutation surface must call
+    `assertTargetIsReadOnly` (or the auth.1 `assertTargetIsReadOnlyOrSelf`
+    variant, which permits admin self-edit for email migration) and emit
+    a `target_type='user'` audit row. Because that action-value must be
+    in the `audit_log.action` CHECK, reuse `CREATE`/`UPDATE` with a
+    descriptive `field_name` (the codebase convention) rather than
+    inventing a new action string.
 
 ---
 
@@ -2080,22 +2145,27 @@ See §16 entry below.
 Own session; Jenny pre-flight required despite small size (touches
 `user_profiles` / Supabase Auth / the §13 r22 trigger-protected column
 neighborhood). Build order within the session: auth.2 first
-(self-contained), then auth.1. Effort S–MED. First-priority upcoming work
-— the only operational-risk item on the board (zero password-recovery
-path today).
+(self-contained), then auth.1. Effort S–MED. Spec: `docs/batch-auth-spec.md`
+(v3, Jenny PASS-WITH-FINDINGS folded). First-priority upcoming work — the
+only operational-risk item on the board (zero password-recovery path today).
 
-**auth.1 — migrate off `@cqip.local`:** full identity migration to real
-fusion emails. Users prompted for their fusion email (prompt-on-next-login
-flow for the 7 existing accounts — a flow to build, not just a schema
-change). Enables Supabase's native forgot-password flow (admin
-self-recovery). Open decision: login stays username-keyed with email
-mapped underneath, or login switches to email.
+**auth.2 — SHIPPED 2026-07-05 (committed, not pushed); see §16.** Admin
+temp-password reset for read-only users + forced change + admin-account
+immutability + full user-mutation audit trail. Migration 022, the
+`/api/admin/users` guards/actions/audit, the middleware forced-change
+gate + `/api/account/password-changed` flag-clear route, and the
+users-page UI all landed. **auth.1 is the next commit (below).**
 
-**auth.2 — admin-initiated password reset:** admins can reset READ-ONLY
-users only (never other admins). Flow: temp password + forced change on
-first login. Admin self-recovery via email reset (post-auth.1) or the
-other admin. Likely shape: server route + service role, gated per §13
-r24/r6, audit-logged per r19 with the reset-target as audit subject.
+**auth.1 — migrate off `@cqip.local` (NEXT COMMIT, not yet built):** full
+identity migration to real fusion emails via a dual-mode login shim
+(username→email resolved through `user_profiles`, per spec §4.1) + an
+`assertTargetIsReadOnlyOrSelf`-guarded `set_email` action + "Last active"
+column + drift indicator. Enables Supabase's native forgot-password flow
+(admin self-recovery). Lacey migrates her own account first. auth.1 will
+need to extend the `audit_log.action` CHECK (or reuse `UPDATE`) for the
+`email_change` audit row — auth.2 deliberately did NOT touch the action
+CHECK. Login stays username-keyed with email mapped underneath (dual-mode),
+resolving the earlier open decision per spec §4.1.
 
 ### Batch 005.2 — Coverage visual redesign (scoped 2026-07-03)
 Jenny pre-flight locked (full visual redesign). Scope emerges from a
@@ -2414,6 +2484,93 @@ redesign + BrandAdminDrawer — shipped 2026-07-03 and moved to §16 per
 ---
 
 ## 16. Shipped Features Log
+
+### Batch auth.2 — Admin temp-password reset + account-recovery hardening — 2026-07-05
+
+First half of the auth.2/auth.1 session (spec `docs/batch-auth-spec.md`
+v3, Jenny PASS-WITH-FINDINGS folded). auth.2 gives admins a working
+recovery path for read-only users (all 7 accounts are `@cqip.local`
+today, so Supabase email recovery is dead — see spec §1.2), closes the
+Jenny findings on `/api/admin/users` (no target-role guard, zero audit
+rows), and locks the "app never mutates an admin account" posture.
+**auth.1 (email migration + dual-mode login + Last active/drift) is the
+NEXT, separate commit — deliberately NOT pulled forward.**
+
+**Migration 022 — `022_auth2_recovery.sql` (idempotent), three parts:**
+1. `user_profiles.must_change_password BOOLEAN NOT NULL DEFAULT FALSE` —
+   the forced-change flag.
+2. **[Jenny C1]** DROP + re-ADD `audit_log_target_shape_chk` to admit
+   `target_type='user'` (allowed set now
+   `quality_log|test_milestone|brand|alert_event|user`), mirroring the
+   migration-015 `'alert_event'` pattern. Without it every user audit
+   row throws a CHECK violation.
+3. **[Jenny M1]** Extended the r22 privileged-column trigger —
+   `BEFORE UPDATE OF role, is_active, must_change_password`, same
+   function/guard — so a non-admin browser write to the flag (via the
+   migration-005 self_update RLS policy) raises `insufficient_privilege`.
+   Service-role writers (auth.uid() IS NULL) still pass.
+
+**Second CHECK gap found + handled during build (parallel to C1):** the
+`audit_log.action` CHECK (`001:70-72`) only permits
+`CREATE|UPDATE|DELETE|STATUS_CHANGE|AI_SUGGESTION` — the spec's literal
+`action='password_reset'` would ALSO CHECK-violate. Rather than a fourth
+migration part, auth.2 follows the established codebase audit convention
+(e.g. `brands/pause/route.ts:98`): allowed action value (`CREATE`/`UPDATE`)
++ descriptive `field_name` (`password` / `role` / `is_active` /
+`must_change_password`). Migration 022 stays at exactly the three
+enumerated parts. auth.1's `email_change` audit will make the same choice.
+
+**Route `app/api/admin/users/route.ts`:**
+- `requireAdmin()` now also returns the cookie-bound route client so
+  `getChangedBy()` receives it per **[Jenny M4]** (§13 r19).
+- **[Jenny H1]** New `assertTargetIsReadOnly(id)` guard wraps ALL
+  state-changing surfaces — `set_temp_password`, `reset_password`, the
+  generic role/`is_active` PATCH branch (both directions), and `DELETE`
+  — returning 403 on admin targets. Promotion (read_only → admin) still
+  works (target is read_only at guard time). The auth.1
+  `assertTargetIsReadOnlyOrSelf` variant is NOT built yet.
+- New action **`set_temp_password`:** server-generated 20-char
+  alphanumeric temp password (`crypto.getRandomValues`, ambiguous glyphs
+  dropped) → `auth.admin.updateUserById` → `must_change_password=true`
+  (service role) → audit row (pw never in the row) → returns
+  `{temp_password}` once with `Cache-Control: no-store`.
+- `reset_password` (email) kept + guard + audit; still refuses
+  `@cqip.local`. Create/role/deactivate now write `target_type='user'`
+  audit rows (closes Jenny finding 4). Client-supplied `changed_by` is
+  warned + discarded (§13 r19).
+
+**Forced-change gate + flag-clear [Jenny M1/M2]:**
+- `middleware.ts` consolidates the auth-dashboard `user_profiles` lookup
+  to ONE round-trip serving both the new forced-change gate and the
+  existing r24 admin gate. A user with `must_change_password=true` is
+  redirected to `/dashboard/settings/profile?mustChangePassword=1` and
+  blocked elsewhere until cleared (runs before the admin gate so a
+  flagged admin lands on profile, not a bounce).
+- New route **`POST /api/account/password-changed`** — clears the
+  caller's own flag via service role (browser can't; trigger-protected)
+  and audits the completed change. The change-password form
+  (`settings/profile/page.tsx`, corrected from the spec's "layout"
+  assumption per Jenny M2) calls it after `supabase.auth.updateUser`
+  succeeds, then redirects to `/dashboard`. A forced-change banner shows
+  on the profile page while the flag is set.
+
+**UI (`settings/users/page.tsx`):** read-only rows get a "Set temp
+password" action → one-time copy callout ("share over a secure channel;
+won't be shown again"). Admin rows: role select + active switch disabled,
+reset/temp-pw/delete replaced with a "Managed out-of-band" note — the UI
+matches the server refusal.
+
+**Verification:** `tsc --noEmit` clean; `npm run build` green (both new
+routes register as `ƒ` dynamic); ESLint on all changed files → zero
+findings. Migration 022 runs manually in the Supabase SQL editor BEFORE
+the code is deployed (the middleware/route select `must_change_password`).
+Per §13 r22/r35 the whole write path is service-role, so the trigger is
+bypassed by design. **DO NOT PUSH — Lacey routes to Karen, then
+smoke-tests + pushes.** §13 rule 35 added; r22 extended; §5 schema doc
+updated (must_change_password column + trigger + audit target-type).
+
+**Advisor credit:** Jenny (pre-flight PASS-WITH-FINDINGS — C1/H3/M1 +
+H1/H2/M2/M3/M4; auth.2 folds C1/H1/H2(partial)/M1/M2/M4).
 
 ### Batch 005.1 — Coverage redesign + BrandAdminDrawer — 2026-07-03
 
@@ -5260,4 +5417,4 @@ demo blocker.
 
 ---
 
-*Last updated: 2026-07-03 | CQIP v1.9 — Batch 005.1 CLOSE-OUT (Coverage redesign + BrandAdminDrawer). Two commits after Karen's full-chain post-flight (PASS-WITH-FINDINGS). Commit A (`eefc9f0`, code): `buildCoverageRows` + the five time-window helpers + `monthlyCounts` gained an injectable `now: Date = new Date()` (default preserves the page call site exactly), re-greening the Jenny-Critical exactly-THRESHOLD boundary test that had aged RED as of 2026-07-03 (production never affected — pill + KPI read the same wall clock at render); closes Karen Findings 1 + 3; suite 5/5, tsc clean, build green. Commit B (docs-only, this commit): §15.5 Batch 005.1 entry deleted + full §16 shipped entry written (r34); §15 backlog 5.1 closed; §15 priority re-sequenced per `docs/batch-outline-2026-07-03.md` (auth.2/.1 → 006 EXPANDED → 005.2 → 010.1 MERGED → 007 → per-brand config → 008); four new backlog entries (auth.1/.2, Batch 005.2 Coverage visual redesign, dashboard polish cluster, per-brand config pages); Batch 006 EXPANDED (edge-fn dispatcher, single channel, forward-only, self-announcing overflow cap, absorbs 5.21 cron-silence monitor, + daily morning digest); Batch 010.1 MERGED (absorbs former 010.2 + Path 2 off-by-one; per-brand targets on the brand record, BrandAdminDrawer tab as UI home, `contract_status` ≠ `is_paused`); 5.21 / Path 2 / 010.2 tombstoned to their new homes; Batch 007 banked the 2026-07-03 decisions (saved views via `board_views`, Jira-parity filter bar, compact-default density, last-synced + manual-sync CTA); Karen Finding 2 fixed (§5 schema-doc QA-config edit path now names the BrandAdminDrawer); `docs/batch-outline-2026-07-03.md` created + status flipped to ENCODED (CLAUDE.md canonical); CROSS_CLAUDE.md §5 priority mirrored + "Read at" header fixed to the local connector path per CC9. Version bump v1.8 → v1.9: Batch 005.1 is structural (new BrandAdminDrawer component surface + deleted `settings/coverage` page/route) per §13 r23. DC-internal — no AC contract surface, so no CROSS_CLAUDE §6 entry. DO NOT PUSH — Lacey smoke-tests Commit A and pushes both. Prior (2026-06-10, v1.8): Batch 005.1 Phase 3 (Commit 3) PUSHED to `main` as commit `48ee281` (ef3ab04..48ee281), triggering the §13 r30 auto-deploy to production: Coverage KPI row reorged into one 9-card grid (teal long-range pair moved to front; three new non-teal cards — Overall Health, Brands Covered N/M, Quality Score — wired to the Phase 2 `computeCoverageHealth()`/`computeQualityScore()` exports, full-scope guard honored). First Batch 005.1 phase to reach prod. No version bump (no schema/structural change). Prior (2026-06-05, docs-only): new §15.5 In-Flight Batches section (seeded with Batch 005.1 — Coverage redesign + BrandAdminDrawer, spec at docs/batch-005.1-coverage-redesign-spec.md, Jenny PASS-WITH-FINDINGS folded), new §13 rule 34 (in-flight lifecycle: §15 backlog → §15.5 → §16, exactly-one-home), §15 backlog additions (Drought predicate off-by-one check / Path 2; Batch 010.2 expanded to Brand contract management). No version bump — no structural code change. Prior (v1.8, 2026-06-03): Batch 010 (Coverage pipeline visibility). New cookie-bound server route `app/api/coverage/pipeline` runs LIVE JQL per active project (token-paginated `/rest/api/3/search/jql`) for the union of five pipeline stages (Strategy · Design · Dev · Queued · Live; Done + Reporting excluded), buckets by brand + stage in-route via the §13 r13/r28 chain, returns per-brand counts + overlay per-stage subsets + ticket lists + `unresolved_count`. No `jira_tickets` cache (Batch 007 owns that); read-only against Jira (§13 r5). Stage→status map + overlay-tag defs are the single source of truth in `lib/coverage/pipeline-stages.ts` (prose companion `docs/batch-010-pipeline-stage-map.md`, committed first on its own). Overlays confirmed at impl to live on Jira multi-select `customfield_12528` "CRO Labels" (NOT `labels`), exact casing "Needs info"/"Troubleshooting"/"On hold" — verified vs prod 2026-06-03. New build-safe lazy JQL helper `lib/jira/search.ts`. Coverage page split into Output (unchanged, keeps its pill) + Pipeline tables (counts are click→`PipelineStageDrawer`), three visual-only overlay toggles producing stacking per-count badges, teal long-range KPI accent via new `--kpi-longrange-*` tokens (WCAG AA, §13 r25). No migration; §13 r33 added. Build green, tsc clean, route 401s unauthenticated, data path validated against live prod. DO NOT PUSH — Lacey smoke-tests + deploys manually. Prior (v1.7, 2026-05-29): Batch 009 (SharePoint integration LIVE). Read-only Microsoft Graph proxy: three GET routes under `/api/sharepoint/*` (`/folder` enumerate, `/xlsx` parse Preview Links, `/image` stream bytes), `Sites.Selected` scope, 60s in-memory cache, share-id folder resolution, 25 MB image cap; `lib/sharepoint/*` helpers + `lib/api/sharepoint-bearer-auth.ts` (CQIP_SHAREPOINT_API_TOKEN, separate blast radius from brands token); middleware carveout for /api/sharepoint + /api/brands; no DB migration (stateless). Six new env vars (CQIP_SHAREPOINT_API_TOKEN + 4 Azure/SharePoint config + SHAREPOINT_SITE_PATH). Four SHIP-day deviations from DESIGN: D1 share-id resolution (alias-drift robustness), D2 xlsx_not_found→422 hard-fail, D3 xlsx-js-style not xlsx (CVE-removed 2026-04-26), D4 token per logical request. Live-Azure smoke green (Test Task 001 / WDG 07: 12 screenshots, 6 Preview Links rows). Closes §14 Planned SharePoint entry + §15 Batch 009 pending. AZURE_CLIENT_SECRET hygiene rotation still queued (Worker-only, Fri/Mon target). Commits c7afede + 98a6133 (Step 2) + this SHIP docs commit. Advisor credit: AC (day-one needs), Jenny + Karen (five-finding review). DO NOT PUSH — three-commit chain pushed by Lacey after eyeball. Prior (v1.6, 2026-05-27): Batch 011 (Node 24 CI bump + public /api/health probe) — `app/api/health/route.ts` always-200 JSON, deploy.yml setup-node 20→24 + smoke check /login→/api/health; committed-not-pushed, handed to Lacey. Prior (v1.5, 2026-05-26):* Batch 005.31a + Azure prereqs verification + CC-namespace finalization, shipped same-day across three commits. 005.31a: SUPABASE_SERVICE_ROLE_KEY added to GH Actions build env so admin route module-eval imports succeed during page-data collection; §13 r31 documents workflow_dispatch as the only path to test workflow edits given paths-ignore: .github/**. Azure verification: end-to-end Graph curl (token/site/drive children all 200) confirmed admin consent on Sites.Selected + per-site CRO grant were already in place; "SHIP gated on Azure prereqs" framing removed from 4 doc surfaces (CLAUDE.md §14 + §15, CROSS_CLAUDE.md, batch-009 spec) as a phantom blocker that had carried 23 days. CROSS_CLAUDE.md CC-namespace finalized at CC1-CC8 (§2); three originally-proposed rules moved to DC-local CLAUDE_RULES.md R19 (stale-status re-verification) / R20 (last-verified timestamps) / R21 (blocker reality-check) per AC namespace-fit review. CROSS_CLAUDE section numbering settled: §3 contract surfaces, §4 pending rotations, §5 priority, §6 event log. §13 r32 reworked from a standalone rule into a discoverability hook pointing at R21 (canonical), so the §13 entry and the CLAUDE_RULES.md rule don't drift.*
+*Last updated: 2026-07-05 | CQIP v2.0 — Batch auth.2 (admin temp-password reset + account-recovery hardening). Two commits this session so far: (1) docs-only `8b5505b` saved `docs/batch-auth-spec.md` (v3, Jenny-folded); (2) this code commit builds auth.2 from spec §3. Migration `022_auth2_recovery.sql` (idempotent, three parts): `user_profiles.must_change_password` column + `audit_log_target_shape_chk` extended to admit `target_type='user'` [Jenny C1] + r22 trigger extended to `BEFORE UPDATE OF role, is_active, must_change_password` [Jenny M1]. `app/api/admin/users/route.ts`: `requireAdmin()` returns the cookie-bound client for `getChangedBy()` [M4]; new `assertTargetIsReadOnly` guard on ALL state-changing surfaces (set_temp_password/reset_password/generic role+is_active PATCH/DELETE) → 403 on admin targets [H1]; new `set_temp_password` action (server-gen 20-char pw, one-time `{temp_password}` + `Cache-Control:no-store`, never logged/persisted, sets flag); create/role/deactivate/reset now write `target_type='user'` audit rows (closes Jenny finding 4). New `POST /api/account/password-changed` clears the flag via service role (trigger-protected browser can't). `middleware.ts` consolidates the auth-dashboard profile lookup to one round-trip serving the new forced-change gate (flagged user pinned to `/dashboard/settings/profile`) + the existing r24 admin gate. `settings/profile/page.tsx` (corrected from spec's "layout" per Jenny M2) calls the flag-clear route after `updateUser` succeeds then redirects to `/dashboard`; forced-change banner while flagged. `settings/users/page.tsx`: "Set temp password" + one-time copy callout; admin rows show disabled controls + "Managed out-of-band". **Second CHECK gap found during build (parallel to C1): `audit_log.action` CHECK excludes the spec's literal `password_reset`/`email_change` — followed the codebase convention (`UPDATE`/`CREATE` + descriptive `field_name`) instead of a 4th migration part, so migration 022 stays at exactly three parts.** `tsc` clean, `npm run build` green (both new routes register), ESLint on changed files clean. §13 r35 added (app never mutates an admin + user-mutation audit + forced-change lifecycle); r22 extended; §5 schema updated. Version bump v1.9 → v2.0: structural (new column, new trigger scope, new route surface). DC-internal — no AC contract surface, no CROSS_CLAUDE §6 entry. **DO NOT PUSH — Karen review next; Lacey runs migration 022 + smoke-tests + pushes. auth.1 (email migration + dual-mode login + Last active/drift) is the NEXT, separate commit — not pulled forward.** Prior (2026-07-03, v1.9): Batch 005.1 CLOSE-OUT (Coverage redesign + BrandAdminDrawer). Two commits after Karen's full-chain post-flight (PASS-WITH-FINDINGS). Commit A (`eefc9f0`, code): `buildCoverageRows` + the five time-window helpers + `monthlyCounts` gained an injectable `now: Date = new Date()` (default preserves the page call site exactly), re-greening the Jenny-Critical exactly-THRESHOLD boundary test that had aged RED as of 2026-07-03 (production never affected — pill + KPI read the same wall clock at render); closes Karen Findings 1 + 3; suite 5/5, tsc clean, build green. Commit B (docs-only, this commit): §15.5 Batch 005.1 entry deleted + full §16 shipped entry written (r34); §15 backlog 5.1 closed; §15 priority re-sequenced per `docs/batch-outline-2026-07-03.md` (auth.2/.1 → 006 EXPANDED → 005.2 → 010.1 MERGED → 007 → per-brand config → 008); four new backlog entries (auth.1/.2, Batch 005.2 Coverage visual redesign, dashboard polish cluster, per-brand config pages); Batch 006 EXPANDED (edge-fn dispatcher, single channel, forward-only, self-announcing overflow cap, absorbs 5.21 cron-silence monitor, + daily morning digest); Batch 010.1 MERGED (absorbs former 010.2 + Path 2 off-by-one; per-brand targets on the brand record, BrandAdminDrawer tab as UI home, `contract_status` ≠ `is_paused`); 5.21 / Path 2 / 010.2 tombstoned to their new homes; Batch 007 banked the 2026-07-03 decisions (saved views via `board_views`, Jira-parity filter bar, compact-default density, last-synced + manual-sync CTA); Karen Finding 2 fixed (§5 schema-doc QA-config edit path now names the BrandAdminDrawer); `docs/batch-outline-2026-07-03.md` created + status flipped to ENCODED (CLAUDE.md canonical); CROSS_CLAUDE.md §5 priority mirrored + "Read at" header fixed to the local connector path per CC9. Version bump v1.8 → v1.9: Batch 005.1 is structural (new BrandAdminDrawer component surface + deleted `settings/coverage` page/route) per §13 r23. DC-internal — no AC contract surface, so no CROSS_CLAUDE §6 entry. DO NOT PUSH — Lacey smoke-tests Commit A and pushes both. Prior (2026-06-10, v1.8): Batch 005.1 Phase 3 (Commit 3) PUSHED to `main` as commit `48ee281` (ef3ab04..48ee281), triggering the §13 r30 auto-deploy to production: Coverage KPI row reorged into one 9-card grid (teal long-range pair moved to front; three new non-teal cards — Overall Health, Brands Covered N/M, Quality Score — wired to the Phase 2 `computeCoverageHealth()`/`computeQualityScore()` exports, full-scope guard honored). First Batch 005.1 phase to reach prod. No version bump (no schema/structural change). Prior (2026-06-05, docs-only): new §15.5 In-Flight Batches section (seeded with Batch 005.1 — Coverage redesign + BrandAdminDrawer, spec at docs/batch-005.1-coverage-redesign-spec.md, Jenny PASS-WITH-FINDINGS folded), new §13 rule 34 (in-flight lifecycle: §15 backlog → §15.5 → §16, exactly-one-home), §15 backlog additions (Drought predicate off-by-one check / Path 2; Batch 010.2 expanded to Brand contract management). No version bump — no structural code change. Prior (v1.8, 2026-06-03): Batch 010 (Coverage pipeline visibility). New cookie-bound server route `app/api/coverage/pipeline` runs LIVE JQL per active project (token-paginated `/rest/api/3/search/jql`) for the union of five pipeline stages (Strategy · Design · Dev · Queued · Live; Done + Reporting excluded), buckets by brand + stage in-route via the §13 r13/r28 chain, returns per-brand counts + overlay per-stage subsets + ticket lists + `unresolved_count`. No `jira_tickets` cache (Batch 007 owns that); read-only against Jira (§13 r5). Stage→status map + overlay-tag defs are the single source of truth in `lib/coverage/pipeline-stages.ts` (prose companion `docs/batch-010-pipeline-stage-map.md`, committed first on its own). Overlays confirmed at impl to live on Jira multi-select `customfield_12528` "CRO Labels" (NOT `labels`), exact casing "Needs info"/"Troubleshooting"/"On hold" — verified vs prod 2026-06-03. New build-safe lazy JQL helper `lib/jira/search.ts`. Coverage page split into Output (unchanged, keeps its pill) + Pipeline tables (counts are click→`PipelineStageDrawer`), three visual-only overlay toggles producing stacking per-count badges, teal long-range KPI accent via new `--kpi-longrange-*` tokens (WCAG AA, §13 r25). No migration; §13 r33 added. Build green, tsc clean, route 401s unauthenticated, data path validated against live prod. DO NOT PUSH — Lacey smoke-tests + deploys manually. Prior (v1.7, 2026-05-29): Batch 009 (SharePoint integration LIVE). Read-only Microsoft Graph proxy: three GET routes under `/api/sharepoint/*` (`/folder` enumerate, `/xlsx` parse Preview Links, `/image` stream bytes), `Sites.Selected` scope, 60s in-memory cache, share-id folder resolution, 25 MB image cap; `lib/sharepoint/*` helpers + `lib/api/sharepoint-bearer-auth.ts` (CQIP_SHAREPOINT_API_TOKEN, separate blast radius from brands token); middleware carveout for /api/sharepoint + /api/brands; no DB migration (stateless). Six new env vars (CQIP_SHAREPOINT_API_TOKEN + 4 Azure/SharePoint config + SHAREPOINT_SITE_PATH). Four SHIP-day deviations from DESIGN: D1 share-id resolution (alias-drift robustness), D2 xlsx_not_found→422 hard-fail, D3 xlsx-js-style not xlsx (CVE-removed 2026-04-26), D4 token per logical request. Live-Azure smoke green (Test Task 001 / WDG 07: 12 screenshots, 6 Preview Links rows). Closes §14 Planned SharePoint entry + §15 Batch 009 pending. AZURE_CLIENT_SECRET hygiene rotation still queued (Worker-only, Fri/Mon target). Commits c7afede + 98a6133 (Step 2) + this SHIP docs commit. Advisor credit: AC (day-one needs), Jenny + Karen (five-finding review). DO NOT PUSH — three-commit chain pushed by Lacey after eyeball. Prior (v1.6, 2026-05-27): Batch 011 (Node 24 CI bump + public /api/health probe) — `app/api/health/route.ts` always-200 JSON, deploy.yml setup-node 20→24 + smoke check /login→/api/health; committed-not-pushed, handed to Lacey. Prior (v1.5, 2026-05-26):* Batch 005.31a + Azure prereqs verification + CC-namespace finalization, shipped same-day across three commits. 005.31a: SUPABASE_SERVICE_ROLE_KEY added to GH Actions build env so admin route module-eval imports succeed during page-data collection; §13 r31 documents workflow_dispatch as the only path to test workflow edits given paths-ignore: .github/**. Azure verification: end-to-end Graph curl (token/site/drive children all 200) confirmed admin consent on Sites.Selected + per-site CRO grant were already in place; "SHIP gated on Azure prereqs" framing removed from 4 doc surfaces (CLAUDE.md §14 + §15, CROSS_CLAUDE.md, batch-009 spec) as a phantom blocker that had carried 23 days. CROSS_CLAUDE.md CC-namespace finalized at CC1-CC8 (§2); three originally-proposed rules moved to DC-local CLAUDE_RULES.md R19 (stale-status re-verification) / R20 (last-verified timestamps) / R21 (blocker reality-check) per AC namespace-fit review. CROSS_CLAUDE section numbering settled: §3 contract surfaces, §4 pending rotations, §5 priority, §6 event log. §13 r32 reworked from a standalone rule into a discoverability hook pointing at R21 (canonical), so the §13 entry and the CLAUDE_RULES.md rule don't drift.*

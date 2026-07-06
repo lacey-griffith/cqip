@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import { Card } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -28,6 +29,7 @@ interface ProfileData {
   theme_preference: Theme | null;
   avatar_url: string | null;
   role: 'admin' | 'read_only';
+  must_change_password: boolean;
 }
 
 const ALLOWED_AVATAR_MIME = ['image/jpeg', 'image/png', 'image/webp'];
@@ -35,6 +37,7 @@ const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
 
 export default function ProfileSettingsPage() {
   const { theme, setTheme } = useTheme();
+  const router = useRouter();
 
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [color, setColor] = useState<string>(DEFAULT_AVATAR_COLOR);
@@ -226,9 +229,9 @@ export default function ProfileSettingsPage() {
     }
 
     const { error } = await supabase.auth.updateUser({ password: newPassword });
-    setChangingPassword(false);
 
     if (error) {
+      setChangingPassword(false);
       setPasswordError(error.message);
       return;
     }
@@ -236,6 +239,30 @@ export default function ProfileSettingsPage() {
     setCurrentPassword('');
     setNewPassword('');
     setConfirmPassword('');
+
+    // Batch auth.2: if this was a forced change (admin issued a temp
+    // password), clear the must_change_password flag via the server route —
+    // the browser can't clear it directly (trigger-protected, migration 022) —
+    // then leave the pinned change-password screen for the dashboard.
+    if (profile?.must_change_password) {
+      try {
+        const res = await fetch('/api/account/password-changed', { method: 'POST' });
+        if (!res.ok) {
+          const result = await res.json().catch(() => ({}));
+          throw new Error(result.error || 'Password changed, but clearing the required-change flag failed.');
+        }
+      } catch (err) {
+        setChangingPassword(false);
+        setPasswordError(err instanceof Error ? err.message : 'Password changed, but a follow-up step failed. Please contact an admin.');
+        return;
+      }
+      setProfile(prev => (prev ? { ...prev, must_change_password: false } : prev));
+      setChangingPassword(false);
+      router.replace('/dashboard');
+      return;
+    }
+
+    setChangingPassword(false);
     setPasswordMessage('Password updated successfully.');
   }
 
@@ -256,6 +283,14 @@ export default function ProfileSettingsPage() {
 
   return (
     <div className="space-y-6">
+      {profile.must_change_password ? (
+        <div className="rounded-2xl border border-[color:var(--f92-orange)] bg-[color:var(--f92-warm)] p-5 shadow-sm">
+          <h2 className="text-base font-semibold text-[color:var(--f92-dark)]">Set a new password to continue</h2>
+          <p className="mt-1 text-sm text-[color:var(--f92-gray)]">
+            An administrator gave you a temporary password. Choose a new one below — you&apos;ll return to the dashboard once it&apos;s saved.
+          </p>
+        </div>
+      ) : null}
       <div className="rounded-3xl border border-[color:var(--f92-border)] bg-white p-8 shadow-sm">
         <p className="text-sm uppercase tracking-[0.3em] text-[color:var(--f92-navy)]">Settings</p>
         <h1 className="mt-3 text-3xl font-semibold text-[color:var(--f92-dark)]">Profile</h1>

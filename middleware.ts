@@ -43,35 +43,50 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(dashboardUrl);
   }
 
-  // Admin-route gating (Batch 004.8, §13 rule 24). The settings pages each
-  // run their own client-side isAdmin check and render "Admin access required"
-  // for non-admins, but the URLs were browseable — a guest hitting a
-  // bookmarked link landed on a useless page. Server-side gate, scoped to
-  // admin-only paths so the extra DB round-trip never fires for reads of
-  // /dashboard/coverage, /logs, /reports, etc.
+  // Admin-route gating (Batch 004.8, §13 rule 24) + forced-change gate
+  // (Batch auth.2). Both need a user_profiles lookup for an authenticated
+  // dashboard request, so we do ONE round-trip and serve both from it.
   //
-  // /dashboard/settings/profile is carved out — every user (admin or
-  // read_only) edits their own theme / avatar / password there.
+  // Forced-change gate: a user with must_change_password = TRUE (an admin
+  // issued them a temp password) is pinned to the change-password screen
+  // (/dashboard/settings/profile) until they change it and the flag clears.
+  // This runs BEFORE the admin gate so a flagged admin is sent to profile
+  // rather than bounced from an admin settings page.
+  //
+  // Admin gate: the settings pages each run their own client-side isAdmin
+  // check, but the URLs were browseable. Server-side gate, scoped to
+  // admin-only paths. /dashboard/settings/profile is carved out — every
+  // user (admin or read_only) edits their own theme / avatar / password there.
   //
   // Scenarios:
-  //   read_only on /dashboard/coverage         → pass (not /settings)
-  //   read_only on /dashboard/settings/profile → pass (carved out)
-  //   read_only on /dashboard/settings/users   → redirect to /dashboard
-  //   admin on /dashboard/settings/users       → pass
-  //   logged out on /dashboard/anything        → redirect to /login (handled above)
-  //   logged in on /login                      → redirect to /dashboard (handled above)
+  //   read_only on /dashboard/coverage          → pass (not /settings, no flag)
+  //   flagged user on /dashboard/anything       → redirect to /settings/profile
+  //   flagged user on /dashboard/settings/profile → pass (the change screen)
+  //   read_only on /dashboard/settings/profile  → pass (carved out)
+  //   read_only on /dashboard/settings/users    → redirect to /dashboard
+  //   admin on /dashboard/settings/users        → pass
+  //   logged out on /dashboard/anything         → redirect to /login (handled above)
+  //   logged in on /login                       → redirect to /dashboard (handled above)
+  const isProfilePage = pathname === '/dashboard/settings/profile';
   const isAdminSettingsPath =
-    pathname.startsWith('/dashboard/settings') &&
-    !pathname.startsWith('/dashboard/settings/profile');
+    pathname.startsWith('/dashboard/settings') && !isProfilePage;
 
-  if (isAdminSettingsPath && user) {
+  if (isDashboard && user) {
     const { data: profile } = await supabase
       .from('user_profiles')
-      .select('role, is_active')
+      .select('role, is_active, must_change_password')
       .eq('id', user.id)
       .maybeSingle();
 
-    if (!profile || profile.role !== 'admin' || !profile.is_active) {
+    if (profile?.must_change_password && !isProfilePage) {
+      const changePasswordUrl = request.nextUrl.clone();
+      changePasswordUrl.pathname = '/dashboard/settings/profile';
+      changePasswordUrl.search = '';
+      changePasswordUrl.searchParams.set('mustChangePassword', '1');
+      return NextResponse.redirect(changePasswordUrl);
+    }
+
+    if (isAdminSettingsPath && (!profile || profile.role !== 'admin' || !profile.is_active)) {
       const dashboardUrl = request.nextUrl.clone();
       dashboardUrl.pathname = '/dashboard';
       dashboardUrl.search = '';

@@ -37,6 +37,9 @@ export default function UsersSettingsPage() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [resettingId, setResettingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [settingTempId, setSettingTempId] = useState<string | null>(null);
+  const [tempInfo, setTempInfo] = useState<{ id: string; displayName: string; password: string } | null>(null);
+  const [copied, setCopied] = useState(false);
   const [showInactive, setShowInactive] = useState(false);
 
   useEffect(() => {
@@ -189,6 +192,40 @@ export default function UsersSettingsPage() {
     }
   }
 
+  async function setTempPassword(user: UserProfile) {
+    try {
+      setSettingTempId(user.id);
+      setMessage(null);
+      setError(null);
+      setCopied(false);
+      const response = await fetch('/api/admin/users', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: user.id, action: 'set_temp_password' }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || 'Unable to set a temp password.');
+      }
+      setTempInfo({ id: user.id, displayName: user.display_name, password: result.temp_password });
+    } catch (err) {
+      console.error(err);
+      setError(err instanceof Error ? err.message : 'Unable to set a temp password.');
+    } finally {
+      setSettingTempId(null);
+    }
+  }
+
+  async function copyTempPassword() {
+    if (!tempInfo) return;
+    try {
+      await navigator.clipboard.writeText(tempInfo.password);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  }
+
   async function deleteUser(user: UserProfile) {
     if (user.id === currentUserId) {
       setError('You cannot deactivate your own account.');
@@ -297,6 +334,36 @@ export default function UsersSettingsPage() {
         </div>
       </Card>
 
+      {tempInfo ? (
+        <Card className="border-[color:var(--f92-orange)] bg-[color:var(--f92-warm)] p-6 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-[color:var(--f92-navy)]">
+                Temp password for {capitalizeName(tempInfo.displayName)}
+              </h2>
+              <p className="text-sm text-[color:var(--f92-gray)]">
+                Share this over a secure channel. It won&apos;t be shown again — they&apos;ll be prompted to set a new password on next sign-in.
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => { setTempInfo(null); setCopied(false); }}
+            >
+              Dismiss
+            </Button>
+          </div>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <code className="rounded-lg border border-[color:var(--f92-border)] bg-white px-4 py-2 font-mono text-base tracking-wider text-[color:var(--f92-dark)]">
+              {tempInfo.password}
+            </code>
+            <Button size="sm" onClick={copyTempPassword}>
+              {copied ? 'Copied' : 'Copy'}
+            </Button>
+          </div>
+        </Card>
+      ) : null}
+
       <Card className="border-[color:var(--f92-border)] bg-white p-6 shadow-sm">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -341,11 +408,21 @@ export default function UsersSettingsPage() {
               ) : visibleUsers.map(user => {
                 const isLocal = user.email.endsWith(LOCAL_SUFFIX);
                 const isSelf = user.id === currentUserId;
+                // Batch auth.2: the app never mutates admin accounts (role /
+                // active / reset / temp-pw / delete are all server-refused on
+                // admin targets). Match the UI so admins aren't offered
+                // controls that would 403. Promotion still works — a read_only
+                // row keeps its enabled role select.
+                const isAdminTarget = user.role === 'admin';
                 return (
                   <tr key={user.id} className={cnRow(user)}>
                     <td className="px-3 py-3 font-medium">{capitalizeName(user.display_name)}</td>
                     <td className="px-3 py-3">
-                      <Select value={user.role} onValueChange={(value: 'admin' | 'read_only') => updateUser(user.id, { role: value })}>
+                      <Select
+                        value={user.role}
+                        onValueChange={(value: 'admin' | 'read_only') => updateUser(user.id, { role: value })}
+                        disabled={isAdminTarget}
+                      >
                         <SelectTrigger>
                           <SelectValue placeholder={user.role} />
                         </SelectTrigger>
@@ -361,6 +438,7 @@ export default function UsersSettingsPage() {
                           id={`active-${user.id}`}
                           checked={user.is_active}
                           onCheckedChange={(checked) => updateUser(user.id, { is_active: checked })}
+                          disabled={isAdminTarget || isSelf}
                         />
                         <Label htmlFor={`active-${user.id}`} className="text-xs">
                           {user.is_active ? 'Active' : 'Inactive'}
@@ -369,27 +447,40 @@ export default function UsersSettingsPage() {
                     </td>
                     <td className="px-3 py-3 text-xs text-[color:var(--f92-gray)]">{new Date(user.created_at).toLocaleDateString()}</td>
                     <td className="px-3 py-3">
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => resetPassword(user.id)}
-                          disabled={isLocal || resettingId === user.id}
-                          title={isLocal ? 'Local accounts cannot receive reset emails' : 'Send password reset email'}
-                        >
-                          {resettingId === user.id ? 'Sending...' : 'Reset password'}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => deleteUser(user)}
-                          disabled={isSelf || deletingId === user.id || !user.is_active}
-                          title={isSelf ? 'You cannot deactivate your own account' : 'Deactivate account'}
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          {deletingId === user.id ? 'Deactivating...' : 'Delete'}
-                        </Button>
-                      </div>
+                      {isAdminTarget ? (
+                        <span className="text-xs text-[color:var(--f92-gray)]">Managed out-of-band</span>
+                      ) : (
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setTempPassword(user)}
+                            disabled={settingTempId === user.id}
+                            title="Generate a one-time temp password the user must change on next sign-in"
+                          >
+                            {settingTempId === user.id ? 'Setting…' : 'Set temp password'}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => resetPassword(user.id)}
+                            disabled={isLocal || resettingId === user.id}
+                            title={isLocal ? 'Local accounts cannot receive reset emails — use Set temp password' : 'Send password reset email'}
+                          >
+                            {resettingId === user.id ? 'Sending...' : 'Reset password'}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => deleteUser(user)}
+                            disabled={isSelf || deletingId === user.id || !user.is_active}
+                            title={isSelf ? 'You cannot deactivate your own account' : 'Deactivate account'}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            {deletingId === user.id ? 'Deactivating...' : 'Delete'}
+                          </Button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 );
