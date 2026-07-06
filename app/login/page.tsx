@@ -167,6 +167,17 @@ function LoginView() {
     clearAttempts();
     setAttempts({ count: 0, lockedUntil: null });
 
+    // Fire-and-forget: record the successful login for later activity history
+    // (Batch login-events). The now-authenticated client satisfies the
+    // insert-own RLS policy. This is a non-critical side effect — a failure
+    // must never block or error the login, so it is not awaited and swallowed.
+    void supabase
+      .from('login_events')
+      .insert({ user_id: data.session.user.id })
+      .then(({ error: logError }) => {
+        if (logError) console.warn('[login] failed to record login_event', logError);
+      });
+
     // Remember-me: when unchecked, mark this as a short session. A
     // sessionStorage canary dies when the browser closes; the dashboard
     // layout checks the pair on next mount and signs the user back out
