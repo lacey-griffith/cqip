@@ -24,6 +24,34 @@ function toEmail(username: string): string {
   return `${normalizeUsername(username)}${LOCAL_SUFFIX}`;
 }
 
+// Batch auth.1 dual-mode login [Jenny H3]. If the identifier looks like an
+// email, use it directly; otherwise resolve username → email via user_profiles
+// (mirrors the reset flow below). Case-insensitive because display_name is
+// stored lowercase by the seed migration but capitalized by the create-user
+// path — a case-sensitive match would send a migrated, capitalized-name user
+// down the legacy fallback and lock them out, which is exactly the H3 failure.
+// TODO(auth.1): display_name has no UNIQUE constraint — a duplicate first name
+//   would make this ambiguous (maybeSingle → null → legacy fallback). Fine at
+//   7 distinct first names today.
+async function resolveIdentifierToEmail(identifier: string): Promise<string> {
+  const trimmed = identifier.trim();
+  if (trimmed.includes('@')) {
+    return trimmed.toLowerCase();
+  }
+  const { data: profile } = await supabase
+    .from('user_profiles')
+    .select('email')
+    .ilike('display_name', normalizeUsername(trimmed))
+    .maybeSingle();
+  if (profile?.email) {
+    return profile.email;
+  }
+  // TODO(auth.1-cleanup): legacy @cqip.local synthesis. Kept as the fallback
+  //   until all 7 accounts are migrated and the lookup always resolves. Do NOT
+  //   remove before the cleanup commit.
+  return toEmail(trimmed);
+}
+
 interface AttemptState {
   count: number;
   lockedUntil: number | null;
@@ -119,8 +147,9 @@ function LoginView() {
     setLoading(true);
     setMessage(null);
 
+    const resolvedEmail = await resolveIdentifierToEmail(username);
     const { data, error } = await supabase.auth.signInWithPassword({
-      email: toEmail(username),
+      email: resolvedEmail,
       password,
     });
 
@@ -215,7 +244,7 @@ function LoginView() {
             <p className="text-sm text-[color:var(--f92-gray)]">
               {showReset
                 ? 'Enter your username and we will send a reset link to the admin-registered address.'
-                : 'Enter your username and password to continue.'}
+                : 'Enter your email or username and password to continue.'}
             </p>
           </div>
         </div>
@@ -249,12 +278,12 @@ function LoginView() {
         ) : (
           <form onSubmit={handleSubmit} className="space-y-5" suppressHydrationWarning>
             <div>
-              <Label htmlFor="username">Username</Label>
+              <Label htmlFor="username">Email or username</Label>
               <Input
                 id="username"
                 type="text"
                 autoComplete="username"
-                placeholder="username"
+                placeholder="email or username"
                 value={username}
                 onChange={event => setUsername(event.target.value)}
                 required

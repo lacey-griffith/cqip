@@ -81,6 +81,56 @@ async function assertTargetIsReadOnly(id: string): Promise<NextResponse | null> 
   return null;
 }
 
+// [Jenny H2] auth.1 email migration: an admin may edit their OWN email (Lacey
+// migrates herself first) but not another admin's. Self is always allowed;
+// otherwise fall back to the read-only-only rule.
+async function assertTargetIsReadOnlyOrSelf(id: string, callerId: string): Promise<NextResponse | null> {
+  if (id === callerId) return null;
+  return assertTargetIsReadOnly(id);
+}
+
+// Loose RFC-ish email shape check. Deliberately permissive — auth.users is the
+// real uniqueness/validity authority (updateUserById rejects malformed/dupes).
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Centralized user-target audit write. Derives changed_by from the cookie-bound
+// route client (§13 r19) and is fully try/caught so a getChangedBy() throw or an
+// audit-insert failure can never fail a mutation that already succeeded
+// [Karen LOW — match /api/account/password-changed]. All rows are
+// target_type='user'; action stays in the CHECK-allowed set (CREATE/UPDATE)
+// with a descriptive field_name (no 'email_change'/'password_reset' literals).
+type UserAuditRow = {
+  target_id: string;
+  action: 'CREATE' | 'UPDATE';
+  field_name: string;
+  old_value: string | null;
+  new_value: string | null;
+  notes: string | null;
+};
+
+async function writeUserAudit(routeClient: RouteClient, rows: UserAuditRow[]) {
+  if (rows.length === 0) return;
+  try {
+    const changedBy = await getChangedBy(routeClient);
+    const { error } = await supabaseAdmin.from('audit_log').insert(
+      rows.map(r => ({
+        log_entry_id: null,
+        target_type: 'user',
+        target_id: r.target_id,
+        action: r.action,
+        field_name: r.field_name,
+        old_value: r.old_value,
+        new_value: r.new_value,
+        changed_by: changedBy,
+        notes: r.notes,
+      })),
+    );
+    if (error) console.warn('[admin/users audit] insert failed', error);
+  } catch (err) {
+    console.warn('[admin/users audit] skipped', err);
+  }
+}
+
 // [§13 r19] Never trust a client-supplied changed_by. Warn + discard.
 function warnIfClientChangedBy(scope: string, body: unknown, uid: string) {
   if (body && typeof body === 'object' && 'changed_by' in body) {
@@ -89,6 +139,46 @@ function warnIfClientChangedBy(scope: string, body: unknown, uid: string) {
       uid,
     });
   }
+}
+
+// GET — admin-gated user list with last_sign_in_at + email drift (Batch auth.1
+// §5). The client can't read auth.users.last_sign_in_at directly, so the page
+// switches its list load to this service-role route.
+export async function GET() {
+  const guard = await requireAdmin();
+  if (!guard.ok) return guard.response;
+
+  const { data: profiles, error: profErr } = await supabaseAdmin
+    .from('user_profiles')
+    .select('id, email, display_name, role, is_active, created_at')
+    .order('created_at', { ascending: false });
+  if (profErr) {
+    return NextResponse.json({ error: profErr.message }, { status: 500 });
+  }
+
+  // last_sign_in_at + the authoritative login email come from the Auth admin API.
+  // TODO(auth.1): listUsers() paginates (default ~50/page). Fine at 7 users;
+  //   page through perPage when the org outgrows one page.
+  const { data: authList, error: authErr } = await supabaseAdmin.auth.admin.listUsers();
+  if (authErr) {
+    return NextResponse.json({ error: authErr.message }, { status: 500 });
+  }
+  const authById = new Map(authList.users.map(u => [u.id, u]));
+
+  const users = (profiles ?? []).map(p => {
+    const au = authById.get(p.id);
+    const authEmail = au?.email ?? null;
+    return {
+      ...p,
+      last_sign_in_at: au?.last_sign_in_at ?? null,
+      auth_email: authEmail,
+      // [Jenny M3] drift: profile email vs the login source of truth. Nearly
+      // free — listUsers() is already fetched for last_sign_in_at.
+      email_drift: !!authEmail && authEmail.toLowerCase() !== (p.email ?? '').toLowerCase(),
+    };
+  });
+
+  return NextResponse.json({ users }, { headers: { 'Cache-Control': 'no-store' } });
 }
 
 export async function POST(req: NextRequest) {
@@ -157,21 +247,14 @@ export async function POST(req: NextRequest) {
 
     // [Jenny finding 4] Audit the create. Server-derived changed_by (§13 r19).
     if (newUserId) {
-      const changedBy = await getChangedBy(guard.supabase);
-      const { error: auditErr } = await supabaseAdmin.from('audit_log').insert({
-        log_entry_id: null,
-        target_type: 'user',
+      await writeUserAudit(guard.supabase, [{
         target_id: newUserId,
         action: 'CREATE',
         field_name: 'role',
         old_value: null,
         new_value: role,
-        changed_by: changedBy,
         notes: `Account created for ${display_name}`,
-      });
-      if (auditErr) {
-        console.warn('[admin/users POST] audit insert failed', auditErr);
-      }
+      }]);
     }
 
     if (!isLocal) {
@@ -221,21 +304,14 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ error: flagError.message }, { status: 500 });
       }
 
-      const changedBy = await getChangedBy(guard.supabase);
-      const { error: auditErr } = await supabaseAdmin.from('audit_log').insert({
-        log_entry_id: null,
-        target_type: 'user',
+      await writeUserAudit(guard.supabase, [{
         target_id: id,
         action: 'UPDATE',
         field_name: 'password',
         old_value: null,
         new_value: null, // never persist the temp password
-        changed_by: changedBy,
         notes: 'Temp password issued by admin; user must change on next login.',
-      });
-      if (auditErr) {
-        console.warn('[admin/users set_temp_password] audit insert failed', auditErr);
-      }
+      }]);
 
       // One-time display only — never cache the body.
       return NextResponse.json(
@@ -271,23 +347,102 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ error: resetError.message }, { status: 500 });
       }
 
-      const changedBy = await getChangedBy(guard.supabase);
-      const { error: auditErr } = await supabaseAdmin.from('audit_log').insert({
-        log_entry_id: null,
-        target_type: 'user',
+      await writeUserAudit(guard.supabase, [{
         target_id: id,
         action: 'UPDATE',
         field_name: 'password',
         old_value: null,
         new_value: null,
-        changed_by: changedBy,
         notes: 'Password reset email sent by admin.',
-      });
-      if (auditErr) {
-        console.warn('[admin/users reset_password] audit insert failed', auditErr);
-      }
+      }]);
 
       return NextResponse.json({ success: true });
+    }
+
+    // ---- Action: set/migrate email (Batch auth.1) -----------------------
+    if (action === 'set_email') {
+      // [Jenny H2] self-edit allowed; other admins blocked.
+      const blocked = await assertTargetIsReadOnlyOrSelf(id, guard.userId);
+      if (blocked) return blocked;
+
+      const nextEmail = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+      if (!nextEmail || !EMAIL_RE.test(nextEmail)) {
+        return NextResponse.json({ error: 'Enter a valid email address.' }, { status: 400 });
+      }
+      if (nextEmail.endsWith(LOCAL_EMAIL_SUFFIX)) {
+        return NextResponse.json({ error: `Email cannot use the ${LOCAL_EMAIL_SUFFIX} domain.` }, { status: 400 });
+      }
+
+      const { data: before, error: beforeErr } = await supabaseAdmin
+        .from('user_profiles')
+        .select('email')
+        .eq('id', id)
+        .maybeSingle();
+      if (beforeErr) {
+        return NextResponse.json({ error: 'Unable to load the target user.' }, { status: 500 });
+      }
+      if (!before) {
+        return NextResponse.json({ error: 'User not found.' }, { status: 404 });
+      }
+      const oldEmail = before.email ?? null;
+      if (oldEmail && oldEmail.toLowerCase() === nextEmail) {
+        return NextResponse.json({ error: 'That is already this account’s email.' }, { status: 400 });
+      }
+
+      // Duplicate pre-check (auth.users.email is the real unique authority, but
+      // this gives a clean 409 for the common case). ilike = case-insensitive.
+      const { data: dup } = await supabaseAdmin
+        .from('user_profiles')
+        .select('id')
+        .ilike('email', nextEmail)
+        .maybeSingle();
+      if (dup && dup.id !== id) {
+        return NextResponse.json({ error: 'That email is already in use by another account.' }, { status: 409 });
+      }
+
+      // [Jenny M3] Ordered two-write, NO rollback machinery. Auth first: it's
+      // the login source of truth, so if the profile write fails the user can
+      // still sign in with the new email (they were told out-of-band) — the
+      // recoverable state is the failure-landing state. email_confirm:true
+      // marks it confirmed WITHOUT sending anything.
+      const { error: authErr } = await supabaseAdmin.auth.admin.updateUserById(id, {
+        email: nextEmail,
+        email_confirm: true,
+      });
+      if (authErr) {
+        // Auth write failed → nothing changed on the login side; safe hard fail.
+        return NextResponse.json(
+          { error: `Failed to update the login email: ${authErr.message}` },
+          { status: authErr.message.toLowerCase().includes('already') ? 409 : 500 },
+        );
+      }
+
+      // Profile write, retried once [M3]. On persistent failure, auth.users is
+      // already the new email while user_profiles is stale — recovery reads
+      // user_profiles.email, so surface loudly which side won. No rollback.
+      let profileErr = (await supabaseAdmin.from('user_profiles').update({ email: nextEmail }).eq('id', id)).error;
+      if (profileErr) {
+        profileErr = (await supabaseAdmin.from('user_profiles').update({ email: nextEmail }).eq('id', id)).error;
+      }
+      if (profileErr) {
+        console.error('[admin/users set_email] auth updated but profile write failed', profileErr);
+        return NextResponse.json({
+          error: `Login email updated to ${nextEmail}, but the profile record still shows ${oldEmail ?? '(none)'}. They can sign in with the new email now; password recovery may use the old address until this is reconciled — retry the email edit.`,
+        }, { status: 500 });
+      }
+
+      // Audit: action='UPDATE' + field_name='email' (NOT a literal 'email_change'
+      // — same audit_log.action CHECK reason as auth.2).
+      await writeUserAudit(guard.supabase, [{
+        target_id: id,
+        action: 'UPDATE',
+        field_name: 'email',
+        old_value: oldEmail,
+        new_value: nextEmail,
+        notes: 'Email migrated (auth.1).',
+      }]);
+
+      return NextResponse.json({ success: true, email: nextEmail });
     }
 
     // ---- Generic role / is_active update --------------------------------
@@ -325,40 +480,28 @@ export async function PATCH(req: NextRequest) {
         });
       }
 
-      const changedBy = await getChangedBy(guard.supabase);
-      const auditRows: Record<string, unknown>[] = [];
+      const auditRows: UserAuditRow[] = [];
       if (role && before && before.role !== role) {
         auditRows.push({
-          log_entry_id: null,
-          target_type: 'user',
           target_id: id,
           action: 'UPDATE',
           field_name: 'role',
           old_value: before.role ?? null,
           new_value: role,
-          changed_by: changedBy,
           notes: null,
         });
       }
       if (typeof is_active === 'boolean' && before && before.is_active !== is_active) {
         auditRows.push({
-          log_entry_id: null,
-          target_type: 'user',
           target_id: id,
           action: 'UPDATE',
           field_name: 'is_active',
           old_value: String(before.is_active),
           new_value: String(is_active),
-          changed_by: changedBy,
           notes: null,
         });
       }
-      if (auditRows.length > 0) {
-        const { error: auditErr } = await supabaseAdmin.from('audit_log').insert(auditRows);
-        if (auditErr) {
-          console.warn('[admin/users PATCH] audit insert failed', auditErr);
-        }
-      }
+      await writeUserAudit(guard.supabase, auditRows);
     }
 
     return NextResponse.json({ success: true });
@@ -416,21 +559,14 @@ export async function DELETE(req: NextRequest) {
       console.warn('[admin/users DELETE] profile disabled but auth ban failed', banError);
     }
 
-    const changedBy = await getChangedBy(guard.supabase);
-    const { error: auditErr } = await supabaseAdmin.from('audit_log').insert({
-      log_entry_id: null,
-      target_type: 'user',
+    await writeUserAudit(guard.supabase, [{
       target_id: id,
       action: 'UPDATE',
       field_name: 'is_active',
       old_value: 'true',
       new_value: 'false',
-      changed_by: changedBy,
       notes: 'Account deactivated (sign-in banned).',
-    });
-    if (auditErr) {
-      console.warn('[admin/users DELETE] audit insert failed', auditErr);
-    }
+    }]);
 
     return NextResponse.json({ success: true });
   } catch (error) {

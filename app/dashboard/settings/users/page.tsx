@@ -20,9 +20,30 @@ interface UserProfile {
   role: 'admin' | 'read_only';
   is_active: boolean;
   created_at: string;
+  last_sign_in_at: string | null;
+  auth_email?: string | null;
+  email_drift?: boolean;
 }
 
 const LOCAL_SUFFIX = '@cqip.local';
+
+// Relative "last active" label. "Never" for accounts that have never signed in.
+function relativeTimeFromNow(iso: string | null | undefined): string {
+  if (!iso) return 'Never';
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return 'Never';
+  const sec = Math.round((Date.now() - then) / 1000);
+  if (sec < 60) return 'Just now';
+  const min = Math.round(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.round(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const day = Math.round(hr / 24);
+  if (day < 30) return `${day}d ago`;
+  const mo = Math.round(day / 30);
+  if (mo < 12) return `${mo}mo ago`;
+  return `${Math.round(mo / 12)}y ago`;
+}
 
 export default function UsersSettingsPage() {
   const [users, setUsers] = useState<UserProfile[]>([]);
@@ -41,6 +62,10 @@ export default function UsersSettingsPage() {
   const [tempInfo, setTempInfo] = useState<{ id: string; displayName: string; password: string } | null>(null);
   const [copied, setCopied] = useState(false);
   const [showInactive, setShowInactive] = useState(false);
+  const [emailEditor, setEmailEditor] = useState<{ id: string; displayName: string; currentEmail: string } | null>(null);
+  const [emailValue, setEmailValue] = useState('');
+  const [emailSaving, setEmailSaving] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
 
   useEffect(() => {
     async function init() {
@@ -70,13 +95,14 @@ export default function UsersSettingsPage() {
   async function loadUsers() {
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('id, email, display_name, role, is_active, created_at')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setUsers((data as UserProfile[]) || []);
+      // Batch auth.1 §5: service-role route so we get last_sign_in_at +
+      // email-drift (both need the Auth admin API, unreachable client-side).
+      const response = await fetch('/api/admin/users');
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || 'Unable to load user list.');
+      }
+      setUsers((result.users as UserProfile[]) || []);
     } catch (err) {
       console.error(err);
       setError('Unable to load user list.');
@@ -127,6 +153,8 @@ export default function UsersSettingsPage() {
           role,
           is_active: true,
           created_at: new Date().toISOString(),
+          last_sign_in_at: null,
+          email_drift: false,
         };
         setUsers(prev => [optimistic, ...prev.filter(u => u.id !== optimistic.id)]);
       }
@@ -223,6 +251,44 @@ export default function UsersSettingsPage() {
       setCopied(true);
     } catch {
       setCopied(false);
+    }
+  }
+
+  function openEmailEditor(user: UserProfile) {
+    setEmailEditor({ id: user.id, displayName: user.display_name, currentEmail: user.email });
+    setEmailValue(user.email.endsWith(LOCAL_SUFFIX) ? '' : user.email);
+    setEmailError(null);
+    setMessage(null);
+    setError(null);
+  }
+
+  async function saveEmail() {
+    if (!emailEditor) return;
+    try {
+      setEmailSaving(true);
+      setEmailError(null);
+      const response = await fetch('/api/admin/users', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: emailEditor.id, action: 'set_email', email: emailValue }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || 'Unable to update email.');
+      }
+      const newEmail: string = result.email ?? emailValue.trim().toLowerCase();
+      setUsers(prev => prev.map(u =>
+        u.id === emailEditor.id
+          ? { ...u, email: newEmail, auth_email: newEmail, email_drift: false }
+          : u,
+      ));
+      setEmailEditor(null);
+      setMessage(`Email updated to ${newEmail}. No email was sent — tell them their new sign-in address directly.`);
+    } catch (err) {
+      console.error(err);
+      setEmailError(err instanceof Error ? err.message : 'Unable to update email.');
+    } finally {
+      setEmailSaving(false);
     }
   }
 
@@ -364,6 +430,44 @@ export default function UsersSettingsPage() {
         </Card>
       ) : null}
 
+      {emailEditor ? (
+        <Card className="border-[color:var(--f92-orange)] bg-[color:var(--f92-warm)] p-6 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-[color:var(--f92-navy)]">
+                Edit email for {capitalizeName(emailEditor.displayName)}
+              </h2>
+              <p className="text-sm text-[color:var(--f92-gray)]">
+                Current: <span className="font-mono">{emailEditor.currentEmail}</span>. Set the fusion address from the
+                directory — <strong>no email is sent</strong>. They sign in with the new email and their existing password.
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => { setEmailEditor(null); setEmailError(null); }}
+              disabled={emailSaving}
+            >
+              Cancel
+            </Button>
+          </div>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <Input
+              type="email"
+              autoComplete="off"
+              placeholder="first.last@fusion92.com"
+              value={emailValue}
+              onChange={e => setEmailValue(e.target.value)}
+              className="max-w-xs"
+            />
+            <Button size="sm" onClick={saveEmail} disabled={emailSaving || !emailValue.trim()}>
+              {emailSaving ? 'Saving…' : 'Save email'}
+            </Button>
+          </div>
+          {emailError ? <p className="mt-3 text-sm text-red-600">{emailError}</p> : null}
+        </Card>
+      ) : null}
+
       <Card className="border-[color:var(--f92-border)] bg-white p-6 shadow-sm">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -392,6 +496,7 @@ export default function UsersSettingsPage() {
                 <th className="px-3 py-3 font-semibold">Username</th>
                 <th className="px-3 py-3 font-semibold">Role</th>
                 <th className="px-3 py-3 font-semibold">Active</th>
+                <th className="px-3 py-3 font-semibold">Last active</th>
                 <th className="px-3 py-3 font-semibold">Created</th>
                 <th className="px-3 py-3 font-semibold">Actions</th>
               </tr>
@@ -399,11 +504,11 @@ export default function UsersSettingsPage() {
             <tbody className="divide-y divide-[color:var(--f92-border)]">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-3 py-6 text-center text-[color:var(--f92-gray)]">Loading users...</td>
+                  <td colSpan={6} className="px-3 py-6 text-center text-[color:var(--f92-gray)]">Loading users...</td>
                 </tr>
               ) : visibleUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-3 py-6 text-center text-[color:var(--f92-gray)]">No users to show.</td>
+                  <td colSpan={6} className="px-3 py-6 text-center text-[color:var(--f92-gray)]">No users to show.</td>
                 </tr>
               ) : visibleUsers.map(user => {
                 const isLocal = user.email.endsWith(LOCAL_SUFFIX);
@@ -414,9 +519,25 @@ export default function UsersSettingsPage() {
                 // controls that would 403. Promotion still works — a read_only
                 // row keeps its enabled role select.
                 const isAdminTarget = user.role === 'admin';
+                // [Jenny H2] Email edit is allowed on read_only targets OR on
+                // one's own account (admin self-migration) — mirrors the
+                // server's assertTargetIsReadOnlyOrSelf.
+                const canEditEmail = isSelf || !isAdminTarget;
                 return (
                   <tr key={user.id} className={cnRow(user)}>
-                    <td className="px-3 py-3 font-medium">{capitalizeName(user.display_name)}</td>
+                    <td className="px-3 py-3 font-medium">
+                      <div className="flex flex-col gap-1">
+                        <span>{capitalizeName(user.display_name)}</span>
+                        {user.email_drift ? (
+                          <span
+                            className="inline-flex w-fit items-center rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-700"
+                            title={`Login email (${user.auth_email ?? 'unknown'}) differs from the profile record (${user.email}). Re-save the email to reconcile.`}
+                          >
+                            ⚠ email drift
+                          </span>
+                        ) : null}
+                      </div>
+                    </td>
                     <td className="px-3 py-3">
                       <Select
                         value={user.role}
@@ -445,42 +566,62 @@ export default function UsersSettingsPage() {
                         </Label>
                       </div>
                     </td>
+                    <td
+                      className="px-3 py-3 text-xs text-[color:var(--f92-gray)]"
+                      title={user.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleString() : 'Never signed in'}
+                    >
+                      {relativeTimeFromNow(user.last_sign_in_at)}
+                    </td>
                     <td className="px-3 py-3 text-xs text-[color:var(--f92-gray)]">{new Date(user.created_at).toLocaleDateString()}</td>
                     <td className="px-3 py-3">
-                      {isAdminTarget ? (
-                        <span className="text-xs text-[color:var(--f92-gray)]">Managed out-of-band</span>
-                      ) : (
-                        <div className="flex flex-wrap gap-2">
+                      <div className="flex flex-wrap gap-2">
+                        {!isAdminTarget && (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setTempPassword(user)}
+                              disabled={settingTempId === user.id}
+                              title="Generate a one-time temp password the user must change on next sign-in"
+                            >
+                              {settingTempId === user.id ? 'Setting…' : 'Set temp password'}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => resetPassword(user.id)}
+                              disabled={isLocal || resettingId === user.id}
+                              title={isLocal ? 'Local accounts cannot receive reset emails — use Set temp password' : 'Send password reset email'}
+                            >
+                              {resettingId === user.id ? 'Sending...' : 'Reset password'}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => deleteUser(user)}
+                              disabled={isSelf || deletingId === user.id || !user.is_active}
+                              title={isSelf ? 'You cannot deactivate your own account' : 'Deactivate account'}
+                              className="text-red-600 hover:text-red-700"
+                            >
+                              {deletingId === user.id ? 'Deactivating...' : 'Delete'}
+                            </Button>
+                          </>
+                        )}
+                        {canEditEmail && (
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => setTempPassword(user)}
-                            disabled={settingTempId === user.id}
-                            title="Generate a one-time temp password the user must change on next sign-in"
+                            onClick={() => openEmailEditor(user)}
+                            disabled={emailSaving && emailEditor?.id === user.id}
+                            title="Edit the sign-in email (no email is sent)"
                           >
-                            {settingTempId === user.id ? 'Setting…' : 'Set temp password'}
+                            Edit email
                           </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => resetPassword(user.id)}
-                            disabled={isLocal || resettingId === user.id}
-                            title={isLocal ? 'Local accounts cannot receive reset emails — use Set temp password' : 'Send password reset email'}
-                          >
-                            {resettingId === user.id ? 'Sending...' : 'Reset password'}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => deleteUser(user)}
-                            disabled={isSelf || deletingId === user.id || !user.is_active}
-                            title={isSelf ? 'You cannot deactivate your own account' : 'Deactivate account'}
-                            className="text-red-600 hover:text-red-700"
-                          >
-                            {deletingId === user.id ? 'Deactivating...' : 'Delete'}
-                          </Button>
-                        </div>
-                      )}
+                        )}
+                        {isAdminTarget && !isSelf ? (
+                          <span className="text-xs text-[color:var(--f92-gray)]">Managed out-of-band</span>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
                 );
