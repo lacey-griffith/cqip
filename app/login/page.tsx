@@ -25,30 +25,23 @@ function toEmail(username: string): string {
 }
 
 // Batch auth.1 dual-mode login [Jenny H3]. If the identifier looks like an
-// email, use it directly; otherwise resolve username → email via user_profiles
-// (mirrors the reset flow below). Case-insensitive because display_name is
-// stored lowercase by the seed migration but capitalized by the create-user
-// path — a case-sensitive match would send a migrated, capitalized-name user
-// down the legacy fallback and lock them out, which is exactly the H3 failure.
-// TODO(auth.1): display_name has no UNIQUE constraint — a duplicate first name
-//   would make this ambiguous (maybeSingle → null → legacy fallback). Fine at
-//   7 distinct first names today.
-async function resolveIdentifierToEmail(identifier: string): Promise<string> {
+// email, use it directly; otherwise synthesize the legacy @cqip.local address.
+//
+// Approach C (Karen HIGH fix): the earlier version did a username→email lookup
+// against user_profiles here. That lookup is DEAD from the login screen — the
+// browser client is unauthenticated and user_profiles RLS is authenticated-only
+// (migration 005), so it always returned null and fell through to synthesis
+// anyway. Dropped entirely rather than papered over with a resolver endpoint or
+// an anon RLS policy. Migrated users sign in via the '@' branch (they enter
+// their fusion email — the failed-login hint nudges them there); un-migrated
+// users still resolve by username via synthesis.
+function resolveIdentifierToEmail(identifier: string): string {
   const trimmed = identifier.trim();
   if (trimmed.includes('@')) {
     return trimmed.toLowerCase();
   }
-  const { data: profile } = await supabase
-    .from('user_profiles')
-    .select('email')
-    .ilike('display_name', normalizeUsername(trimmed))
-    .maybeSingle();
-  if (profile?.email) {
-    return profile.email;
-  }
-  // TODO(auth.1-cleanup): legacy @cqip.local synthesis. Kept as the fallback
-  //   until all 7 accounts are migrated and the lookup always resolves. Do NOT
-  //   remove before the cleanup commit.
+  // TODO(auth.1-cleanup): legacy @cqip.local synthesis. Removed once all 7
+  //   accounts are migrated and everyone signs in with their email.
   return toEmail(trimmed);
 }
 
@@ -147,7 +140,7 @@ function LoginView() {
     setLoading(true);
     setMessage(null);
 
-    const resolvedEmail = await resolveIdentifierToEmail(username);
+    const resolvedEmail = resolveIdentifierToEmail(username);
     const { data, error } = await supabase.auth.signInWithPassword({
       email: resolvedEmail,
       password,
@@ -164,7 +157,10 @@ function LoginView() {
       writeAttempts(next);
       setAttempts(next);
       setNow(Date.now());
-      setMessage(error?.message ?? 'Please check your credentials and try again.');
+      // Static hint (no lookup, no directory disclosure): migrated users who
+      // still type their old username will fail synthesis — point them at email.
+      const baseMessage = error?.message ?? 'Please check your credentials and try again.';
+      setMessage(`${baseMessage} Switched to email login? Enter your email address.`);
       return;
     }
 
@@ -195,19 +191,21 @@ function LoginView() {
     setResetLoading(true);
     setResetMessage(null);
 
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('email')
-      .eq('display_name', normalizeUsername(resetUsername))
-      .maybeSingle();
+    // Approach C (Karen HIGH fix): no user_profiles lookup — it was dead from
+    // the unauthenticated login screen (RLS is authenticated-only), so the old
+    // flow never actually reached resetPasswordForEmail. Email in → send the
+    // link directly. Username / non-email in → un-migrated (@cqip.local) account
+    // that can't receive reset email; keep the refusal message.
+    const identifier = resetUsername.trim();
 
-    if (!profile?.email) {
+    if (!identifier.includes('@')) {
       setResetLoading(false);
-      setResetMessage('If a matching account exists, a reset link has been sent.');
+      setResetMessage('Local accounts cannot receive reset emails. Please contact an admin.');
       return;
     }
 
-    if (profile.email.endsWith(LOCAL_SUFFIX)) {
+    const email = identifier.toLowerCase();
+    if (email.endsWith(LOCAL_SUFFIX)) {
       setResetLoading(false);
       setResetMessage('Local accounts cannot receive reset emails. Please contact an admin.');
       return;
@@ -217,7 +215,7 @@ function LoginView() {
       ? `${window.location.origin}/dashboard/settings/profile`
       : undefined;
 
-    const { error } = await supabase.auth.resetPasswordForEmail(profile.email, {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo,
     });
 
@@ -243,7 +241,7 @@ function LoginView() {
             </h1>
             <p className="text-sm text-[color:var(--f92-gray)]">
               {showReset
-                ? 'Enter your username and we will send a reset link to the admin-registered address.'
+                ? 'Enter your email address and we will send a reset link. Username-only accounts cannot receive reset emails — contact an admin.'
                 : 'Enter your email or username and password to continue.'}
             </p>
           </div>
@@ -252,11 +250,12 @@ function LoginView() {
         {showReset ? (
           <form onSubmit={handlePasswordReset} className="space-y-5" suppressHydrationWarning>
             <div>
-              <Label htmlFor="resetUsername">Username</Label>
+              <Label htmlFor="resetUsername">Email</Label>
               <Input
                 id="resetUsername"
                 type="text"
-                autoComplete="username"
+                autoComplete="email"
+                placeholder="you@fusion92.com"
                 value={resetUsername}
                 onChange={event => setResetUsername(event.target.value)}
                 required

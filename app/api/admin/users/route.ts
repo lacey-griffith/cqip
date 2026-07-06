@@ -389,12 +389,14 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ error: 'That is already this account’s email.' }, { status: 400 });
       }
 
-      // Duplicate pre-check (auth.users.email is the real unique authority, but
-      // this gives a clean 409 for the common case). ilike = case-insensitive.
+      // Duplicate pre-check for a clean 409 on the common case. Uses eq on the
+      // already-lowercased nextEmail — ilike would treat '_' in an address as a
+      // wildcard and false-match a different email (Karen LOW). auth.users.email
+      // remains the real unique authority (its error is surfaced as 409 below).
       const { data: dup } = await supabaseAdmin
         .from('user_profiles')
         .select('id')
-        .ilike('email', nextEmail)
+        .eq('email', nextEmail)
         .maybeSingle();
       if (dup && dup.id !== id) {
         return NextResponse.json({ error: 'That email is already in use by another account.' }, { status: 409 });
