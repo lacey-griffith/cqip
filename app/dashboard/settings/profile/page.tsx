@@ -266,6 +266,53 @@ export default function ProfileSettingsPage() {
     setPasswordMessage('Password updated successfully.');
   }
 
+  // Shared change-password form. Rendered in the normal profile Card
+  // (3-col on lg) and inside the forced-change modal (stacked). Same
+  // fields, same submit handler — only the layout classes differ.
+  function renderChangePasswordForm(formClassName: string, submitRowClassName: string) {
+    return (
+      <form onSubmit={handleChangePassword} className={formClassName}>
+        <div>
+          <Label htmlFor="currentPassword">Current password</Label>
+          <PasswordInput
+            id="currentPassword"
+            autoComplete="current-password"
+            value={currentPassword}
+            onChange={e => setCurrentPassword(e.target.value)}
+            required
+          />
+        </div>
+        <div>
+          <Label htmlFor="newPassword">New password</Label>
+          <PasswordInput
+            id="newPassword"
+            autoComplete="new-password"
+            value={newPassword}
+            onChange={e => setNewPassword(e.target.value)}
+            required
+          />
+        </div>
+        <div>
+          <Label htmlFor="confirmPassword">Confirm new password</Label>
+          <PasswordInput
+            id="confirmPassword"
+            autoComplete="new-password"
+            value={confirmPassword}
+            onChange={e => setConfirmPassword(e.target.value)}
+            required
+          />
+        </div>
+        <div className={`${submitRowClassName} flex flex-wrap items-center gap-3`}>
+          <Button type="submit" disabled={changingPassword}>
+            {changingPassword ? 'Updating...' : 'Update password'}
+          </Button>
+          {passwordMessage ? <p className="text-sm text-[color:var(--f92-navy)]">{passwordMessage}</p> : null}
+          {passwordError ? <p className="text-sm text-red-600">{passwordError}</p> : null}
+        </div>
+      </form>
+    );
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20 text-[color:var(--f92-gray)]">Loading profile...</div>
@@ -281,16 +328,38 @@ export default function ProfileSettingsPage() {
     );
   }
 
-  return (
-    <div className="space-y-6">
-      {profile.must_change_password ? (
-        <div className="rounded-2xl border border-[color:var(--f92-orange)] bg-[color:var(--f92-warm)] p-5 shadow-sm">
-          <h2 className="text-base font-semibold text-[color:var(--f92-dark)]">Set a new password to continue</h2>
+  // Forced password change (Batch auth.2): while must_change_password is set,
+  // present the change-password form as a centered, non-dismissable modal over
+  // a dimmed backdrop and suppress the rest of the profile page behind it. No
+  // close button, no click-outside, no Esc — the user must set a new password
+  // to proceed (the middleware gate keeps them pinned here regardless). Submit
+  // logic is unchanged; on success handleChangePassword clears the flag and
+  // redirects to /dashboard.
+  if (profile.must_change_password) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="forcePwTitle"
+          className="w-full max-w-md rounded-3xl border border-[color:var(--f92-border)] bg-white p-6 shadow-xl"
+        >
+          <h2 id="forcePwTitle" className="text-lg font-semibold text-[color:var(--f92-dark)]">
+            Set a new password to continue
+          </h2>
           <p className="mt-1 text-sm text-[color:var(--f92-gray)]">
             An administrator gave you a temporary password. Choose a new one below — you&apos;ll return to the dashboard once it&apos;s saved.
           </p>
+          <div className="mt-5">
+            {renderChangePasswordForm('grid gap-4', '')}
+          </div>
         </div>
-      ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
       <div className="rounded-3xl border border-[color:var(--f92-border)] bg-white p-8 shadow-sm">
         <p className="text-sm uppercase tracking-[0.3em] text-[color:var(--f92-navy)]">Settings</p>
         <h1 className="mt-3 text-3xl font-semibold text-[color:var(--f92-dark)]">Profile</h1>
@@ -501,45 +570,7 @@ export default function ProfileSettingsPage() {
           <h2 className="text-lg font-semibold text-[color:var(--f92-navy)]">Change password</h2>
           <p className="text-sm text-[color:var(--f92-gray)]">Update the password you use to sign in.</p>
         </div>
-        <form onSubmit={handleChangePassword} className="grid gap-4 lg:grid-cols-3">
-          <div>
-            <Label htmlFor="currentPassword">Current password</Label>
-            <PasswordInput
-              id="currentPassword"
-              autoComplete="current-password"
-              value={currentPassword}
-              onChange={e => setCurrentPassword(e.target.value)}
-              required
-            />
-          </div>
-          <div>
-            <Label htmlFor="newPassword">New password</Label>
-            <PasswordInput
-              id="newPassword"
-              autoComplete="new-password"
-              value={newPassword}
-              onChange={e => setNewPassword(e.target.value)}
-              required
-            />
-          </div>
-          <div>
-            <Label htmlFor="confirmPassword">Confirm new password</Label>
-            <PasswordInput
-              id="confirmPassword"
-              autoComplete="new-password"
-              value={confirmPassword}
-              onChange={e => setConfirmPassword(e.target.value)}
-              required
-            />
-          </div>
-          <div className="lg:col-span-3 flex flex-wrap items-center gap-3">
-            <Button type="submit" disabled={changingPassword}>
-              {changingPassword ? 'Updating...' : 'Update password'}
-            </Button>
-            {passwordMessage ? <p className="text-sm text-[color:var(--f92-navy)]">{passwordMessage}</p> : null}
-            {passwordError ? <p className="text-sm text-red-600">{passwordError}</p> : null}
-          </div>
-        </form>
+        {renderChangePasswordForm('grid gap-4 lg:grid-cols-3', 'lg:col-span-3')}
       </Card>
     </div>
   );
