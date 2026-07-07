@@ -32,6 +32,9 @@ import type { Milestone } from '@/lib/coverage/queries';
 const RANGES = [30, 60, 90] as const;
 type RangeDays = (typeof RANGES)[number];
 const DAY_MS = 86_400_000;
+// The drought window is a FIXED 28 days — the same window the drought counter
+// uses. This is NOT the selected 30/60/90 timeline range; see belongsToBrand.
+const DROUGHT_WINDOW_DAYS = 28;
 
 interface BrandLite {
   id: string;
@@ -41,15 +44,23 @@ interface BrandLite {
 }
 
 // Brand ↔ milestone resolution: brand_id primary, brand_jira_value fallback.
-// NOTE: the drought counter (buildCoverageRows/countInWindow) and the Reggie
-// drawer both match by brand_id ONLY. The jira_value fallback here is scoped to
-// rows whose brand_id never resolved at ingest (§13 r18) — it surfaces genuinely
-// -belonging legacy milestones a real-history proof should show, and for a brand
-// with working resolution it is identical to brand_id-only in the recent window,
-// so it never contradicts the drought flag for those brands.
-function belongsToBrand(m: Milestone, brand: BrandLite): boolean {
+//
+// The drought counter (buildCoverageRows/countInWindow) and the Reggie drawer
+// both match by brand_id ONLY. So INSIDE the fixed 28-day drought window this
+// matches brand_id ONLY too — exact parity, so the proof view can never surface
+// a recent milestone the flag doesn't count (Karen MEDIUM: a null-brand_id row
+// whose brand_jira_value matches — e.g. a brand renamed after ingest, or backfill
+// §13 r18 not yet re-run — would otherwise make a correctly-drought brand look
+// non-drought in the very view built to prove the drought is real).
+//
+// OUTSIDE the 28-day window the brand_jira_value fallback still applies: those
+// genuinely-belonging legacy orphans are full-history value and cannot contradict
+// a rolling-28d flag. `droughtCutoffMs` is nowMs - 28d — the FIXED drought window,
+// NOT the selected 30/60/90 timeline range.
+function belongsToBrand(m: Milestone, brand: BrandLite, droughtCutoffMs: number): boolean {
   if (m.brand_id === brand.id) return true;
-  return m.brand_id == null && m.brand_jira_value === brand.jira_value;
+  if (m.brand_id != null || m.brand_jira_value !== brand.jira_value) return false;
+  return new Date(m.reached_at).getTime() < droughtCutoffMs;
 }
 
 function fmtDate(iso: string): string {
@@ -122,22 +133,25 @@ export function BrandWellnessReport() {
     [brands, selectedId],
   );
 
+  // Pin "now" at mount — a lazy useState initializer is render-safe, whereas
+  // Date.now() inside a useMemo is flagged impure-during-render. The range
+  // window is relative to page load, which is fine for a report view.
+  const [nowMs] = useState(() => Date.now());
+  // Fixed 28-day drought window (NOT the 30/60/90 timeline range) — the cutoff
+  // below which belongsToBrand's brand_jira_value fallback is allowed.
+  const droughtCutoffMs = nowMs - DROUGHT_WINDOW_DAYS * DAY_MS;
+  const rangeStartMs = useMemo(() => nowMs - rangeDays * DAY_MS, [nowMs, rangeDays]);
+
   // All-time, newest first — the headline needs the true last milestone so a
   // drought brand proves "last delivery was N days ago", not "No milestones".
   const brandMilestones = useMemo(() => {
     if (!selectedBrand) return [] as Milestone[];
     return milestones
-      .filter(m => belongsToBrand(m, selectedBrand))
+      .filter(m => belongsToBrand(m, selectedBrand, droughtCutoffMs))
       .sort((a, b) => new Date(b.reached_at).getTime() - new Date(a.reached_at).getTime());
-  }, [milestones, selectedBrand]);
+  }, [milestones, selectedBrand, droughtCutoffMs]);
 
   const lastMilestone = brandMilestones[0] ?? null;
-
-  // Pin "now" at mount — a lazy useState initializer is render-safe, whereas
-  // Date.now() inside a useMemo is flagged impure-during-render. The range
-  // window is relative to page load, which is fine for a report view.
-  const [nowMs] = useState(() => Date.now());
-  const rangeStartMs = useMemo(() => nowMs - rangeDays * DAY_MS, [nowMs, rangeDays]);
 
   const inRange = useMemo(
     () => brandMilestones.filter(m => new Date(m.reached_at).getTime() >= rangeStartMs),
