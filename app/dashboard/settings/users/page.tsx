@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { Card } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { PasswordInput } from '@/components/ui/password-input';
@@ -38,6 +37,19 @@ function toFusionEmail(raw: string): string {
   return v.includes('@') ? v : `${v}${F92_DOMAIN}`;
 }
 
+// RFC-ish email shape check (mirrors the server's EMAIL_RE). auth.users is the
+// real validity/uniqueness authority; this is just a friendly client gate.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Friendly display name derived from the email local part (Batch create-flow):
+// separators → spaces, then title-cased. "lacey@…" → "Lacey";
+// "first.last@…" → "First Last". Keeps display_name as the friendly name now
+// that email is the login identity (no username field).
+function displayNameFromEmail(email: string): string {
+  const local = email.split('@')[0] ?? '';
+  return capitalizeName(local.replace(/[._-]+/g, ' '));
+}
+
 // Relative "last active" label. "Never" for accounts that have never signed in.
 function relativeTimeFromNow(iso: string | null | undefined): string {
   if (!iso) return 'Never';
@@ -58,7 +70,7 @@ function relativeTimeFromNow(iso: string | null | undefined): string {
 
 export default function UsersSettingsPage() {
   const [users, setUsers] = useState<UserProfile[]>([]);
-  const [username, setUsername] = useState('');
+  const [createEmail, setCreateEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<'admin' | 'read_only'>('read_only');
   const [loading, setLoading] = useState(true);
@@ -123,15 +135,24 @@ export default function UsersSettingsPage() {
   }
 
   async function createUser() {
-    const normalized = username.trim().toLowerCase();
-    if (!normalized || !/^[a-z0-9._-]+$/.test(normalized)) {
-      setMessage('Username must be lowercase letters, numbers, or . _ - only.');
+    // Batch create-flow: email is the login identity (no more @cqip.local).
+    // Bare local part → @fusion92.com; anything with '@' taken verbatim —
+    // same smart default as edit-email.
+    const effectiveEmail = toFusionEmail(createEmail);
+    if (!effectiveEmail || !EMAIL_RE.test(effectiveEmail)) {
+      setMessage('Enter a valid email address.');
+      return;
+    }
+    if (effectiveEmail.endsWith(LOCAL_SUFFIX)) {
+      setMessage('Email cannot use the @cqip.local domain.');
       return;
     }
     if (password.length < 8) {
       setMessage('Password must be at least 8 characters.');
       return;
     }
+
+    const displayName = displayNameFromEmail(effectiveEmail);
 
     try {
       setSaving(true);
@@ -142,10 +163,9 @@ export default function UsersSettingsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          account_type: 'local',
-          username: normalized,
+          email: effectiveEmail,
           password,
-          display_name: capitalizeName(normalized),
+          display_name: displayName,
           role,
         }),
       });
@@ -159,19 +179,20 @@ export default function UsersSettingsPage() {
       if (result.user) {
         const optimistic: UserProfile = {
           id: result.user,
-          email: `${normalized}${LOCAL_SUFFIX}`,
-          display_name: capitalizeName(normalized),
+          email: effectiveEmail,
+          display_name: displayName,
           role,
           is_active: true,
           created_at: new Date().toISOString(),
           last_sign_in_at: null,
+          auth_email: effectiveEmail,
           email_drift: false,
         };
         setUsers(prev => [optimistic, ...prev.filter(u => u.id !== optimistic.id)]);
       }
 
-      setMessage(`Account created. ${normalized} can now sign in with the password you set.`);
-      setUsername('');
+      setMessage(`Account created for ${effectiveEmail}. Share the password over a secure channel — they'll be prompted to set a new one on first sign-in.`);
+      setCreateEmail('');
       setPassword('');
       setRole('read_only');
 
@@ -358,7 +379,7 @@ export default function UsersSettingsPage() {
         <p className="text-sm uppercase tracking-[0.3em] text-[color:var(--f92-navy)]">Settings</p>
         <h1 className="mt-3 text-3xl font-semibold text-[color:var(--f92-dark)]">User Management</h1>
         <p className="mt-2 text-sm text-[color:var(--f92-gray)]">
-          Create username/password accounts for your CRO team. Users sign in with their username only.
+          Create accounts for your CRO team. Users sign in with their email address.
         </p>
       </div>
 
@@ -366,22 +387,38 @@ export default function UsersSettingsPage() {
         <div className="mb-6">
           <h2 className="text-lg font-semibold text-[color:var(--f92-navy)]">Create account</h2>
           <p className="text-sm text-[color:var(--f92-gray)]">
-            Usernames are lowercase first names (e.g. <code>lacey</code>, <code>xandor</code>).
+            Enter the person&apos;s fusion email (a bare name gets <code>@fusion92.com</code>; type a full
+            address for external accounts). They set a new password on first sign-in.
           </p>
         </div>
 
         <div className="grid gap-4 lg:grid-cols-3">
           <div>
-            <Label htmlFor="inviteUsername">Username</Label>
-            <Input
-              id="inviteUsername"
-              value={username}
-              onChange={e => setUsername(e.target.value)}
-              placeholder="username"
-            />
+            <Label htmlFor="inviteEmail">Email</Label>
+            <div className="flex items-stretch overflow-hidden rounded-md border border-[color:var(--f92-border)] bg-white focus-within:ring-2 focus-within:ring-[color:var(--f92-orange)]">
+              <input
+                id="inviteEmail"
+                type="text"
+                autoComplete="off"
+                placeholder="first.last"
+                value={createEmail}
+                onChange={e => setCreateEmail(e.target.value)}
+                className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm text-[color:var(--f92-dark)] outline-none"
+              />
+              {createEmail.includes('@') ? null : (
+                <span className="flex items-center whitespace-nowrap border-l border-[color:var(--f92-border)] bg-[color:var(--f92-warm)] px-3 text-sm text-[color:var(--f92-gray)]">
+                  {F92_DOMAIN}
+                </span>
+              )}
+            </div>
+            {createEmail.trim() ? (
+              <p className="mt-1 text-xs text-[color:var(--f92-gray)]">
+                Will create: <span className="font-mono text-[color:var(--f92-dark)]">{toFusionEmail(createEmail)}</span>
+              </p>
+            ) : null}
           </div>
           <div>
-            <Label htmlFor="invitePassword">Password</Label>
+            <Label htmlFor="invitePassword">Temporary password</Label>
             <PasswordInput
               id="invitePassword"
               autoComplete="new-password"

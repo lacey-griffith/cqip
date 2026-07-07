@@ -6,10 +6,6 @@ const LOCAL_EMAIL_SUFFIX = '@cqip.local';
 
 type RouteClient = Awaited<ReturnType<typeof createSupabaseRouteClient>>;
 
-function sanitizeUsername(raw: string): string {
-  return raw.trim().toLowerCase().replace(/[^a-z0-9._-]/g, '');
-}
-
 // Batch auth.2: server-generated temp password. Never client-supplied,
 // never logged, never persisted. Alphanumeric with ambiguous glyphs
 // (0/O, 1/l/I) dropped so it survives copy/paste over a chat channel.
@@ -187,39 +183,32 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
   warnIfClientChangedBy('POST', body, guard.userId);
-  const { email, username, display_name, role, password, account_type } = body;
+  const { email, display_name, role, password } = body;
 
   if (!display_name || !role) {
     return NextResponse.json({ error: 'Display name and role are required.' }, { status: 400 });
   }
 
-  const isLocal = account_type === 'local';
+  // Batch create-flow: accounts are created with a REAL email — the login
+  // identity (no more username@cqip.local mint). email_confirm:true marks it
+  // confirmed WITHOUT sending anything (no-unsolicited-email rule); the admin
+  // conveys the temp password out-of-band, and must_change_password forces a
+  // change on first login (same model as the temp-password reset flow).
+  const finalEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+  if (!finalEmail || !EMAIL_RE.test(finalEmail)) {
+    return NextResponse.json({ error: 'A valid email address is required.' }, { status: 400 });
+  }
+  if (finalEmail.endsWith(LOCAL_EMAIL_SUFFIX)) {
+    return NextResponse.json({ error: `Email cannot use the ${LOCAL_EMAIL_SUFFIX} domain.` }, { status: 400 });
+  }
+  if (!password || password.length < 8) {
+    return NextResponse.json({ error: 'Password must be at least 8 characters.' }, { status: 400 });
+  }
 
   try {
-    let finalEmail: string;
-    let finalPassword: string;
-
-    if (isLocal) {
-      const normalized = sanitizeUsername(username || '');
-      if (!normalized) {
-        return NextResponse.json({ error: 'A valid username is required for local accounts.' }, { status: 400 });
-      }
-      if (!password || password.length < 8) {
-        return NextResponse.json({ error: 'Password must be at least 8 characters.' }, { status: 400 });
-      }
-      finalEmail = `${normalized}${LOCAL_EMAIL_SUFFIX}`;
-      finalPassword = password;
-    } else {
-      if (!email) {
-        return NextResponse.json({ error: 'Email is required.' }, { status: 400 });
-      }
-      finalEmail = email;
-      finalPassword = `Cqip!${Math.random().toString(36).slice(2, 10)}A`;
-    }
-
     const { data, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email: finalEmail,
-      password: finalPassword,
+      password,
       email_confirm: true,
       user_metadata: {
         display_name,
@@ -228,7 +217,9 @@ export async function POST(req: NextRequest) {
     });
 
     if (authError) {
-      return NextResponse.json({ error: authError.message }, { status: 500 });
+      // Surface a duplicate email as a clean 409 (auth.users is the authority).
+      const status = authError.message.toLowerCase().includes('already') ? 409 : 500;
+      return NextResponse.json({ error: authError.message }, { status });
     }
 
     const newUserId = data.user?.id;
@@ -239,6 +230,7 @@ export async function POST(req: NextRequest) {
       display_name,
       role,
       is_active: true,
+      must_change_password: true, // forced change on first login
     });
 
     if (profile.error) {
@@ -257,10 +249,8 @@ export async function POST(req: NextRequest) {
       }]);
     }
 
-    if (!isLocal) {
-      await supabaseAdmin.auth.resetPasswordForEmail(finalEmail);
-    }
-
+    // No reset/invite email — no-unsolicited-email rule. Admin conveys the
+    // temp password out-of-band; must_change_password gates first login.
     return NextResponse.json({ success: true, user: newUserId });
   } catch (error) {
     console.error(error);
