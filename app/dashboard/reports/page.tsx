@@ -15,6 +15,7 @@ import { downloadBrandedCsv } from '@/lib/export/branded-csv';
 import { ScorecardReport } from '@/components/reports/scorecard-report';
 import { RootCauseReport } from '@/components/reports/root-cause-report';
 import { ClientReport } from '@/components/reports/client-report';
+import { BrandWellnessReport } from '@/components/reports/brand-wellness-report';
 import { SyncJiraButton } from '@/components/dashboard/sync-jira-button';
 import { BrandSelector, BRAND_SELECTOR_ALL } from '@/components/filters/brand-selector';
 import type { DateRange } from '@/components/reports/common';
@@ -448,6 +449,10 @@ export default function ReportsPage() {
           {activeReport === 'client' ? <ClientReport key={`${activeRange.startISO}-${activeRange.endISO}`} range={activeRange} /> : null}
         </div>
       ) : null}
+
+      {/* Brand Wellness — self-contained (own brand picker + range toggle, NOT
+          the ReportKind union / reportCards). Batch 005.2 re-homes this. */}
+      <BrandWellnessReport />
 
       <div className="cqip-skip-in-print rounded-3xl border border-[color:var(--f92-border)] bg-white p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-[color:var(--f92-navy)]">Custom filter &amp; export</h2>
