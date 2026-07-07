@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { Badge } from '@/components/ui/badge';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -59,6 +60,17 @@ export function BrandDetailDrawer({ row, milestones, open, onOpenChange }: Brand
             )}
           </div>
         </SheetHeader>
+
+        {/* Brand Wellness CTA — opens the read-only milestone-history proof for
+            this brand on /dashboard/reports (deep-linked via ?wellnessBrand).
+            Loose wiring (a plain Link, no new props): 005.2 re-homes this CTA
+            when the drawer is rebuilt. */}
+        <Link
+          href={`/dashboard/reports?wellnessBrand=${brand.id}`}
+          className="mt-4 inline-flex items-center gap-1 rounded-full border border-[color:var(--f92-border)] bg-white px-3 py-1.5 text-xs font-medium text-[color:var(--f92-navy)] transition hover:border-[color:var(--f92-orange)] hover:text-[color:var(--f92-orange)]"
+        >
+          View Brand Wellness →
+        </Link>
 
         {brand.is_paused ? (
           <div className="mt-4 rounded-xl border border-[color:var(--f92-border)] bg-[color:var(--f92-warm)] p-3 text-sm text-[color:var(--f92-dark)]">
