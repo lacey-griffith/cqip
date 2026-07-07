@@ -224,6 +224,14 @@ export default function CoveragePage() {
 
   const rows = useMemo(() => buildCoverageRows(brands, milestones, logs), [brands, milestones, logs]);
 
+  // Milestones with no brand linked at ingest (§13 r18) — not counted toward any
+  // brand's coverage. In-memory off the existing milestones state (no new query);
+  // mirror of the Pipeline table's unresolvedCount footer.
+  const orphanMilestoneCount = useMemo(
+    () => milestones.filter(m => !m.is_deleted && m.brand_id == null).length,
+    [milestones],
+  );
+
   // Program-health KPIs (Batch 005.1 Phase 3). FULL-SCOPE by design (Batch
   // 005.22 boundary, spec §3.1): computed from the FULL brands / milestones /
   // logs state arrays, NEVER from visibleRows (which is filter- AND
@@ -638,6 +646,15 @@ export default function CoveragePage() {
             </tbody>
           </table>
         </div>
+        {/* Orphan-milestone footer — mirrors the Pipeline table's unresolvedCount
+            footer. Milestones with no brand linked at ingest (§13 r18) aren't
+            counted toward any brand's coverage. All-user (not admin-gated),
+            matching the pipeline footer. */}
+        {orphanMilestoneCount > 0 ? (
+          <p className="border-t border-[color:var(--f92-border)] px-4 py-2 text-xs text-[color:var(--f92-gray)]">
+            {orphanMilestoneCount} milestone{orphanMilestoneCount === 1 ? '' : 's'} not counted toward coverage — no brand linked.
+          </p>
+        ) : null}
       </Card>
 
       <div className="flex flex-wrap items-end justify-between gap-3">
