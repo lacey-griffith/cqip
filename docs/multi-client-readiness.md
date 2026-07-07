@@ -636,6 +636,29 @@ leave this field empty, see §4.5 for the three fallback
 approaches (alias seed, default-brand-id column, or
 single-brand projection).
 
+**REQUIRED for single-brand projects — set `projects.default_brand_id`
+at onboarding.** Since Batch 005.22 Phase 1 (migration 019) the webhook's
+`single_brand` path skips the Jira brand field entirely and resolves
+`brand_id` from `projects.default_brand_id`. **Without it, milestones
+ingest with `null brand_id` (orphans — see the SPLCRO-107 pre-005.22
+case).** The `projects_brand_model_config_chk` CHECK constraint enforces
+that a `single_brand` project has a `default_brand_id`, but onboarding
+should set it *explicitly*, not rely on the constraint catching it. After
+the brand row exists, point the project at it (and set the model):
+
+```sql
+UPDATE projects
+   SET brand_model = 'single_brand',
+       brand_jira_field_id = NULL,
+       default_brand_id = (SELECT id FROM brands WHERE project_key = 'SPLCRO' AND brand_code = 'SPL')
+ WHERE jira_project_key = 'SPLCRO';
+```
+
+(Multi-brand projects keep `brand_model = 'multi_brand'` + a
+`brand_jira_field_id`, the migration-019 default — no `default_brand_id`
+needed, though it's allowed as an escape-hatch fallback. See CLAUDE.md §6
+brand-resolution flow + §13 r28.)
+
 For multi-brand clients, repeat the INSERT once per brand. Add
 rows to `brand_aliases` if historical data used different brand
 strings (e.g., name changes, typos):
