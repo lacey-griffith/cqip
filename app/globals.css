@@ -84,6 +84,45 @@
   --kpi-longrange-bg:     #E0F2F1;
   --kpi-longrange-border: #0F766E;
   --kpi-longrange-fg:     #0E5A52;
+
+  /* Coverage Ledger (Batch 005.2) — the mock's palette carried through the
+     token layer (§13 r25; --kpi-longrange-* precedent), NOT inline hex and
+     NOT a hardcoded dark island. LIGHT-mode values conform to F92 and are
+     desaturated so the decorative bars / sparklines clear ≥3:1 against the
+     white card; DARK-mode values (below) pixel-match the mock. EXCEPTION —
+     status-tag CHIP fills stay bright in BOTH themes: the README's chip
+     pattern is a solid bright fill + near-black text, which is
+     background-independent and WCAG-AA either way, so the chip tokens are
+     single-value (defined here, inherited by dark). */
+  --ledger-drought:        #EF4444;  /* rail + legend swatch (decorative) */
+  --ledger-active:         #22C55E;
+  --ledger-paused:         #9CA3AF;  /* muted paused rail (spec §4.5) */
+  /* Stacked-bar segment colors (decorative). Light = -600 stops for ≥3:1. */
+  --ledger-seg-ready:      #6366F1;
+  --ledger-seg-ni:         #0284C7;
+  --ledger-seg-oh:         #E11D48;
+  --ledger-seg-aci:        #9333EA;
+  --ledger-seg-ts:         #D97706;
+  --ledger-bar-track:      #EDE0D2;  /* warm track behind bar segments */
+  --ledger-bar-empty:      #E5E1DA;  /* WIP=0 single muted segment */
+  /* Sparkline (7-day delivery trend). */
+  --ledger-spark-line:     #6366F1;
+  --ledger-spark-dot:      #6366F1;
+  --ledger-spark-baseline: #E8D5C4;
+  /* KPI-strip donut gauges — arc + numeral. Light = -700 stops so the 14px
+     bold center label clears AA on white. */
+  --ledger-gauge-track:    #E8D5C4;
+  --ledger-gauge-health:   #B45309;
+  --ledger-gauge-quality:  #047857;
+  /* Mid-KPI numeral (This Week / Last Week / Rolling 28d / This Month). */
+  --ledger-kpi-mid:        #1E2D6B;
+  /* Status-tag chip fills — BRIGHT in both themes (single value). */
+  --ledger-chip-ni:        #38BDF8;
+  --ledger-chip-oh:        #FB7185;
+  --ledger-chip-aci:       #C084FC;
+  --ledger-chip-ts:        #F59E0B;
+  --ledger-chip-fg:        #0A0E16;  /* near-black chip text */
+  --ledger-chip-dot:       rgba(10, 14, 22, 0.55);
 }
 
 :root[data-theme="dark"] {
@@ -160,6 +199,25 @@
   --kpi-longrange-bg:     #0C2F2C;
   --kpi-longrange-border: #2DD4BF;
   --kpi-longrange-fg:     #5EEAD4;
+
+  /* Coverage Ledger (Batch 005.2) — dark values pixel-match the mock's
+     palette (README Design Tokens). Chip tokens (--ledger-chip-*) are NOT
+     overridden here: they stay bright in both themes by design. */
+  --ledger-paused:         #64748B;
+  --ledger-seg-ready:      #A5B4FC;  /* brightened from #7c89ff per README */
+  --ledger-seg-ni:         #38BDF8;
+  --ledger-seg-oh:         #FB7185;
+  --ledger-seg-aci:        #C084FC;
+  --ledger-seg-ts:         #F59E0B;
+  --ledger-bar-track:      #0F1726;
+  --ledger-bar-empty:      #141D2C;
+  --ledger-spark-line:     #818CF8;
+  --ledger-spark-dot:      #A5B4FC;
+  --ledger-spark-baseline: #16202E;
+  --ledger-gauge-track:    #16202E;
+  --ledger-gauge-health:   #F59E0B;
+  --ledger-gauge-quality:  #34D399;
+  --ledger-kpi-mid:        #AAB2FF;
 }
 
 @theme inline {

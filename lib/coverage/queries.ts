@@ -46,6 +46,10 @@ export interface CoverageRow {
   reworkRolling28: number;
   droughtFlag: boolean;
   monthly: Array<{ monthIso: string; count: number }>;
+  // 7 per-day milestone counts, oldest→newest, ending today (Batch 005.2
+  // Coverage Ledger sparkline). Length is always `days` (default 7); an
+  // all-zero series is legitimate ("no deliveries this week"), not missing.
+  daily7: number[];
 }
 
 // -----------------------------------------------------------------------
@@ -189,6 +193,42 @@ export function monthlyCounts(
   return buckets.map(b => ({ monthIso: b.monthIso, count: b.count }));
 }
 
+/**
+ * Per-day milestone counts for a brand over the trailing `days` days,
+ * oldest→newest, the last bucket ending "now". Batch 005.2 Coverage Ledger
+ * sparkline (mirror of monthlyCounts but at day granularity). Buckets are
+ * local-TZ calendar days. Returns exactly `days` numbers; an all-zero array
+ * is a legitimate "no deliveries" week, not a missing series.
+ */
+export function dailyCounts(
+  milestones: Milestone[],
+  brandId: string,
+  days = 7,
+  now: Date = new Date(),
+): number[] {
+  // Bucket boundaries: [dayStart(now - (days-1)) … dayStart(now)+1d).
+  const buckets: Array<{ start: number; end: number; count: number }> = [];
+  for (let i = days - 1; i >= 0; i -= 1) {
+    const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+    const dayEnd = new Date(dayStart.getFullYear(), dayStart.getMonth(), dayStart.getDate() + 1);
+    buckets.push({ start: dayStart.getTime(), end: dayEnd.getTime(), count: 0 });
+  }
+
+  for (const m of milestones) {
+    if (m.is_deleted) continue;
+    if (m.brand_id !== brandId) continue;
+    const t = new Date(m.reached_at).getTime();
+    for (const bucket of buckets) {
+      if (t >= bucket.start && t < bucket.end) {
+        bucket.count += 1;
+        break;
+      }
+    }
+  }
+
+  return buckets.map(b => b.count);
+}
+
 export function reworkCountForBrand(
   logs: QualityLog[],
   brandJiraValue: string,
@@ -227,6 +267,7 @@ export function buildCoverageRows(
     const reworkRolling28 = reworkCountForBrand(logs, brand.jira_value, rolling28Start, now);
     const droughtFlag = isInDrought(testsRolling28, brand.is_paused);
     const monthly = monthlyCounts(milestones, brand.id, 6, now);
+    const daily7 = dailyCounts(milestones, brand.id, 7, now);
 
     return {
       brand,
@@ -237,6 +278,7 @@ export function buildCoverageRows(
       reworkRolling28,
       droughtFlag,
       monthly,
+      daily7,
     };
   });
 }

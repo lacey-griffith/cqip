@@ -1,17 +1,20 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronUp, ChevronsUpDown, Settings } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Sparkline } from '@/components/coverage/sparkline';
 import { BrandDetailDrawer } from '@/components/coverage/brand-detail-drawer';
 import { BrandAdminDrawer } from '@/components/coverage/brand-admin-drawer';
 import { AddBrandDrawer } from '@/components/coverage/add-brand-drawer';
 import { PipelineStageDrawer } from '@/components/coverage/pipeline-stage-drawer';
-import { OverlayCountBadge, UntaggedCountBadge, OVERLAY_ACTIVE_CLASS } from '@/components/coverage/overlay-badge';
+import { CoverageGauge } from '@/components/coverage/coverage-gauge';
+import {
+  CoverageLedger,
+  buildLedgerRow,
+  type LedgerRow,
+  type LedgerSortKey,
+} from '@/components/coverage/coverage-ledger';
 import { SyncJiraButton } from '@/components/dashboard/sync-jira-button';
 import {
   ProjectBrandFilter,
@@ -23,6 +26,7 @@ import {
   computeCoverageHealth,
   computeQualityScore,
   countInWindow,
+  COVERAGE_THRESHOLD,
   endOfLastWeek,
   startOfCurrentMonth,
   startOfCurrentWeek,
@@ -34,44 +38,26 @@ import {
   type QualityLog,
 } from '@/lib/coverage/queries';
 import {
-  OVERLAY_KEYS,
-  OVERLAY_LABELS,
-  OVERLAY_TAG_VALUES,
-  PIPELINE_STAGES,
   STAGE_LABELS,
-  type OverlayKey,
   type PipelineBrand,
   type PipelineResponse,
   type PipelineStage,
   type PipelineTicket,
 } from '@/lib/coverage/pipeline-stages';
-import { cn } from '@/lib/utils';
 
-type SortKey =
-  | 'brand'
-  | 'thisWeek'
-  | 'lastWeek'
-  | 'rolling28'
-  | 'thisMonth'
-  | 'rework28'
-  | 'reworkRatio'
-  | 'status';
+// Sort key: the five sortable ledger columns plus 'status' — the default
+// order (drought floats to top). 'status' is NOT a clickable column; it's
+// the initial ordering, so when it's active none of the five column carets
+// is highlighted (the ledger shows neutral ⇅ on all five).
+type SortKey = LedgerSortKey | 'status';
 type SortDir = 'asc' | 'desc';
 
-// Status sort rank — higher wins on desc so the default (status desc)
-// floats drought brands to top, matching the pre-Batch-002.5b UX. The
-// spec's phrasing was internally inconsistent on the asc ordering; we
-// went with the "drought first on desc" reading since that matches the
-// stated default behavior.
+// Status sort rank — higher wins on desc so the default (status desc) floats
+// drought brands to top (paused sits between active and drought).
 function statusRank(row: CoverageRow): number {
   if (row.brand.is_paused) return 2;
   if (row.droughtFlag) return 3;
   return 1;
-}
-
-function ratioSortValue(tests: number, rework: number): number {
-  if (tests === 0) return -1; // '—' sorts lowest per spec
-  return rework / tests;
 }
 
 interface ProjectRow {
@@ -107,16 +93,9 @@ export default function CoveragePage() {
   const [addBrandOpen, setAddBrandOpen] = useState(false);
 
   // Live Jira pipeline (Batch 010). Keyed by brand_code; merged onto the
-  // shared CoverageRow brand set so both tables share filter + paused scope.
+  // shared CoverageRow brand set so the ledger + KPIs share filter + paused scope.
   const [pipelineBrands, setPipelineBrands] = useState<Map<string, PipelineBrand>>(new Map());
   const [unresolvedCount, setUnresolvedCount] = useState(0);
-  // Overlay toggles are visual-only (they never filter rows out). Local state.
-  const [overlays, setOverlays] = useState<Record<OverlayKey, boolean>>({
-    needs_info: false,
-    troubleshooting: false,
-    on_hold: false,
-    awaiting_client_input: false,
-  });
   const [stageDrawer, setStageDrawer] = useState<{
     brandLabel: string;
     stageLabel: string;
@@ -191,7 +170,7 @@ export default function CoveragePage() {
   }, [refetchAll]);
 
   // Refetch when the tab regains focus so external changes (other tabs,
-  // the settings-page fallback) don't leave this page showing stale counts.
+  // the admin drawer) don't leave this page showing stale counts.
   useEffect(() => {
     function onVisible() {
       if (document.visibilityState === 'visible') {
@@ -225,21 +204,19 @@ export default function CoveragePage() {
   const rows = useMemo(() => buildCoverageRows(brands, milestones, logs), [brands, milestones, logs]);
 
   // Milestones with no brand linked at ingest (§13 r18) — not counted toward any
-  // brand's coverage. In-memory off the existing milestones state (no new query);
-  // mirror of the Pipeline table's unresolvedCount footer.
+  // brand's coverage. In-memory off the existing milestones state (no new query).
   const orphanMilestoneCount = useMemo(
     () => milestones.filter(m => !m.is_deleted && m.brand_id == null).length,
     [milestones],
   );
 
-  // Program-health KPIs (Batch 005.1 Phase 3). FULL-SCOPE by design (Batch
-  // 005.22 boundary, spec §3.1): computed from the FULL brands / milestones /
-  // logs state arrays, NEVER from visibleRows (which is filter- AND
-  // paused-scoped). The KPI row reports program health and deliberately
-  // ignores the project/brand filter; only the tables below are filter-scoped.
-  // Overall Health + Brands Covered share a single pass (same numerator /
-  // denominator), routed through the shared isInDrought predicate so they can't
-  // diverge from the Output table's DROUGHT pill.
+  // Program-health KPIs (Batch 005.1). FULL-SCOPE by design (Batch 005.22
+  // boundary, spec §4.1): computed from the FULL brands / milestones / logs
+  // state arrays, NEVER from the filtered/paused ledger rows. The KPI strip
+  // reports program health and deliberately ignores the project/brand filter;
+  // only the ledger below is filter-scoped. Overall Health + Brands Covered
+  // share a single pass routed through the shared isInDrought predicate so
+  // they can't diverge from the ledger's drought rail.
   const healthKpi = useMemo(() => computeCoverageHealth(brands, milestones), [brands, milestones]);
   const qualityKpi = useMemo(() => computeQualityScore(milestones, logs), [milestones, logs]);
 
@@ -248,102 +225,64 @@ export default function CoveragePage() {
     [projects],
   );
 
-  const visibleRows = useMemo(() => {
-    // Project + brand filter (Batch 005.22 Phase 2). Applied BEFORE
-    // the paused-row toggle so the paused-set logic still keys off
-    // the project-scoped view, not the global brand list.
-    //
-    // Single-brand projects (Phase 2.1) are exempt from the
-    // brandCodes check — the project pill IS the entire filter
-    // affordance for them. Without this exemption, selecting both
-    // a multi-brand project's brand codes AND a single-brand project
-    // would hide the single-brand project's row, which is not the
-    // user's intent.
-    const filteredByProjectBrand = rows.filter(r => {
+  // Filtered + pipeline-merged + sorted ledger rows. Merge happens BEFORE the
+  // sort so the pipeline-derived keys (live / pipeline) can sort correctly.
+  const ledgerRows = useMemo<LedgerRow[]>(() => {
+    // Project + brand filter (Batch 005.22). Single-brand projects are exempt
+    // from the brandCodes check — the project pill IS their whole affordance.
+    const filtered = rows.filter(r => {
       if (filter.projectKeys.length > 0 && !filter.projectKeys.includes(r.brand.project_key)) return false;
       if (singleBrandProjectKeys.has(r.brand.project_key)) return true;
       if (filter.brandCodes.length > 0 && !filter.brandCodes.includes(r.brand.brand_code)) return false;
       return true;
     });
-    const filtered = showPaused ? filteredByProjectBrand : filteredByProjectBrand.filter(r => !r.brand.is_paused);
-    const sorted = [...filtered];
+    const scoped = showPaused ? filtered : filtered.filter(r => !r.brand.is_paused);
+    const merged = scoped.map(r => buildLedgerRow(r, pipelineBrands.get(r.brand.brand_code)));
+
     const dirMul = sortDir === 'asc' ? 1 : -1;
-    const alphaTieBreak = (a: CoverageRow, b: CoverageRow) => a.brand.display_name.localeCompare(b.brand.display_name);
-    sorted.sort((a, b) => {
+    const alpha = (a: LedgerRow, b: LedgerRow) => a.row.brand.display_name.localeCompare(b.row.brand.display_name);
+    merged.sort((a, b) => {
       let cmp = 0;
       switch (sortKey) {
         case 'brand':
-          cmp = a.brand.display_name.localeCompare(b.brand.display_name);
+          cmp = a.row.brand.display_name.localeCompare(b.row.brand.display_name);
           break;
-        case 'thisWeek':
-          cmp = a.testsCurrentWeek - b.testsCurrentWeek;
+        case 'delivered':
+          cmp = a.row.testsRolling28 - b.row.testsRolling28;
           break;
-        case 'lastWeek':
-          cmp = a.testsLastWeek - b.testsLastWeek;
+        case 'thisWk':
+          cmp = a.row.testsCurrentWeek - b.row.testsCurrentWeek;
           break;
-        case 'rolling28':
-          cmp = a.testsRolling28 - b.testsRolling28;
+        case 'live':
+          cmp = a.live.ready - b.live.ready;
           break;
-        case 'thisMonth':
-          cmp = a.testsCurrentMonth - b.testsCurrentMonth;
-          break;
-        case 'rework28':
-          cmp = a.reworkRolling28 - b.reworkRolling28;
-          break;
-        case 'reworkRatio':
-          cmp = ratioSortValue(a.testsRolling28, a.reworkRolling28)
-              - ratioSortValue(b.testsRolling28, b.reworkRolling28);
+        case 'pipeline':
+          cmp = a.wip - b.wip;
           break;
         case 'status':
-          cmp = statusRank(a) - statusRank(b);
+          cmp = statusRank(a.row) - statusRank(b.row);
           break;
       }
       if (cmp !== 0) return dirMul * cmp;
-      // Stable alphabetical tie-break, independent of sortDir, so equal
-      // rows don't flip order when the user toggles direction.
-      return alphaTieBreak(a, b);
+      // Stable alphabetical tie-break, independent of sortDir.
+      return alpha(a, b);
     });
-    return sorted;
-  }, [rows, sortKey, sortDir, showPaused, filter, singleBrandProjectKeys]);
+    return merged;
+  }, [rows, pipelineBrands, filter, showPaused, sortKey, sortDir, singleBrandProjectKeys]);
 
-  function toggleSort(key: SortKey) {
+  function toggleSort(key: LedgerSortKey) {
     if (key === sortKey) {
       setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
     } else {
       setSortKey(key);
-      // Status and brand default to the more-useful first direction
-      // (desc for status so drought floats up; asc for brand for A-Z).
+      // Brand defaults to A-Z (asc); numeric columns default to desc.
       setSortDir(key === 'brand' ? 'asc' : 'desc');
     }
   }
 
-  function SortIcon({ active }: { active: boolean }) {
-    if (!active) return <ChevronsUpDown className="ml-1 inline h-3 w-3 text-[color:var(--f92-lgray)]" aria-hidden="true" />;
-    return sortDir === 'asc'
-      ? <ChevronUp className="ml-1 inline h-3 w-3 text-[color:var(--f92-orange)]" aria-hidden="true" />
-      : <ChevronDown className="ml-1 inline h-3 w-3 text-[color:var(--f92-orange)]" aria-hidden="true" />;
-  }
-
-  function SortableHeader({ k, label, className }: { k: SortKey; label: string; className?: string }) {
-    const active = sortKey === k;
-    return (
-      <th className={cn('px-4 py-3', className)} aria-sort={active ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
-        <button
-          type="button"
-          onClick={() => toggleSort(k)}
-          className="inline-flex items-center font-semibold text-[color:var(--f92-dark)] hover:text-[color:var(--f92-navy)] focus-visible:outline-none focus-visible:underline"
-        >
-          {label}
-          <SortIcon active={active} />
-        </button>
-      </th>
-    );
-  }
-
   function handleExportXlsx() {
-    // Leadership-ready: always exclude paused brands (ignoring the
-    // show-paused toggle) and always sort alphabetically by brand name
-    // regardless of the table's current sort state.
+    // Leadership-ready: always exclude paused brands (ignoring the show-paused
+    // toggle) and always sort alphabetically by brand name.
     const exportRows = rows
       .filter(r => !r.brand.is_paused)
       .slice()
@@ -393,14 +332,6 @@ export default function CoveragePage() {
     });
   }
 
-  function openDrawer(row: CoverageRow) {
-    setDrawerRow(row);
-    setDrawerOpen(true);
-  }
-
-  // Output table gains a trailing admin-actions column only for admins.
-  const outputColSpan = isAdmin ? 10 : 9;
-
   function openStageDrawer(row: CoverageRow, stage: PipelineStage) {
     const pipeline = pipelineBrands.get(row.brand.brand_code);
     const tickets = (pipeline?.tickets ?? []).filter((t) => t.stage === stage);
@@ -411,55 +342,26 @@ export default function CoveragePage() {
     });
   }
 
-  const activeOverlayKeys = OVERLAY_KEYS.filter((k) => overlays[k]);
-  // Exact Jira tag values for the active overlays — used to compute the
-  // untagged remainder from tickets[] (NOT by summing per-overlay badges,
-  // which double-counts a ticket carrying two active tags).
-  const activeOverlayTagValues = activeOverlayKeys.map((k) => OVERLAY_TAG_VALUES[k]);
-
   const todayLabel = new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit' });
   const earliestLabel = crossBrand.earliest
     ? crossBrand.earliest.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
     : null;
 
-  // KPI row (Batch 005.1 Phase 3) — ONE responsive row, 9 cards, LOCKED order:
-  // teal long-range pair (moved to front) → existing four rolling-window cards
-  // (unchanged) → three new program-health cards. tone:'teal' keeps the
-  // --kpi-longrange-* tokens; tone:'standard' uses standard KPI styling. The
-  // three new cards read healthKpi / qualityKpi — full-scope (see memo above).
-  const kpiRow: Array<{
-    key: string;
-    tone: 'teal' | 'standard';
-    label: string;
-    value: string | number;
-    hint: string | null;
-  }> = [
-    { key: 'tests-year', tone: 'teal', label: 'Tests This Year', value: crossBrand.ytd, hint: `Through ${todayLabel}` },
-    { key: 'tests-all', tone: 'teal', label: 'Tests All Time', value: crossBrand.allTime, hint: earliestLabel ? `Since ${earliestLabel}` : null },
-    { key: 'this-week', tone: 'standard', label: 'This Week', value: crossBrand.thisWeek, hint: 'Tests reached' },
-    { key: 'last-week', tone: 'standard', label: 'Last Week', value: crossBrand.lastWeek, hint: 'Tests reached' },
-    { key: 'rolling28', tone: 'standard', label: 'Rolling 28 Days', value: crossBrand.rolling28, hint: 'Tests reached' },
-    { key: 'this-month', tone: 'standard', label: 'This Month', value: crossBrand.thisMonth, hint: 'Tests reached' },
-    // Overall Health — % active non-paused brands NOT in drought (28d); '—' when
-    // no active unpaused brands (0-denominator).
-    { key: 'health', tone: 'standard', label: 'Overall Health', value: healthKpi.healthPct === null ? '—' : `${healthKpi.healthPct}%`, hint: 'LAST 28 DAYS' },
-    // Brands Covered — N/M form of the SAME calc (same single pass). Subtitle is
-    // "LAST 28 DAYS" (the calc is inherently 28d), never "THIS WEEK".
-    { key: 'covered', tone: 'standard', label: 'Brands Covered', value: healthKpi.totalCount === 0 ? '—' : `${healthKpi.coveredCount}/${healthKpi.totalCount}`, hint: 'LAST 28 DAYS' },
-    // Quality Score — distinct clean / distinct delivered tickets (28d); '—'
-    // when 0 delivered.
-    { key: 'quality', tone: 'standard', label: 'Quality Score', value: qualityKpi.scorePct === null ? '—' : `${qualityKpi.scorePct}%`, hint: 'LAST 28 DAYS' },
-  ];
+  const ledgerSortKey: LedgerSortKey | null = sortKey === 'status' ? null : sortKey;
 
   return (
     <div className="space-y-6">
+      {/* Header — eyebrow, title, threshold subtitle (no hardcoded literal:
+          the number is sourced from COVERAGE_THRESHOLD, so Batch 010.1's
+          per-brand targets are a one-touch change, spec §3.3), Sync button
+          (which carries its own pass/fail status pill, Batch 005.10). */}
       <div className="rounded-3xl border border-[color:var(--f92-border)] bg-white p-6 md:p-7 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-sm uppercase tracking-[0.3em] text-[color:var(--f92-navy)]">Coverage</p>
             <h1 className="mt-2 text-3xl font-semibold text-[color:var(--f92-dark)]">Client Coverage</h1>
             <p className="mt-2 text-sm text-[color:var(--f92-gray)]">
-              Tests (Dev Client Review first-entries) by brand. Brands with ≤2 tests in the last 28 days are flagged.
+              Brands with {COVERAGE_THRESHOLD} or fewer tests in the last 28 days are flagged. Expand a row for trend, rework &amp; live pipeline detail.
             </p>
           </div>
           <SyncJiraButton />
@@ -473,37 +375,78 @@ export default function CoveragePage() {
         </div>
       ) : null}
 
-      {/* Single responsive KPI row — 9 cards, locked order (wraps: 2-up
-          mobile, 3×3 tablet, single row on xl). Teal long-range pair leads. */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-9">
-        {loading
-          ? Array.from({ length: 9 }, (_, i) => (
-              <Card key={i} className="border-[color:var(--f92-border)] bg-white p-3 md:p-4 shadow-sm">
-                <div className="h-3 w-24 animate-pulse rounded bg-[color:var(--f92-tint)]" />
-                <div className="mt-2 h-8 w-16 animate-pulse rounded bg-[color:var(--f92-tint)]" />
-              </Card>
-            ))
-          : kpiRow.map(k =>
-              k.tone === 'teal' ? (
-                // Long-range accent (Batch 010): teal treatment. Batch 005.1
-                // moved these two to the FRONT of the row — position-only
-                // change; tokens + styling unchanged (globals.css, §13 r25).
-                <Card
-                  key={k.key}
-                  className="border-2 border-[color:var(--kpi-longrange-border)] bg-[color:var(--kpi-longrange-bg)] p-3 md:p-4 shadow-sm"
-                >
-                  <p className="text-xs font-semibold uppercase tracking-wider text-[color:var(--kpi-longrange-fg)]">{k.label}</p>
-                  <p className="mt-2 text-3xl md:text-4xl font-bold text-[color:var(--kpi-longrange-fg)]">{k.value}</p>
-                  {k.hint ? <p className="mt-2 text-xs text-[color:var(--kpi-longrange-fg)] opacity-80">{k.hint}</p> : null}
-                </Card>
-              ) : (
-                <Card key={k.key} className="border-[color:var(--f92-border)] bg-white p-3 md:p-4 shadow-sm">
-                  <p className="text-xs font-medium uppercase tracking-wider text-[color:var(--f92-gray)]">{k.label}</p>
-                  <p className="mt-2 text-3xl md:text-4xl font-bold text-[color:var(--f92-navy)]">{k.value}</p>
-                  {k.hint ? <p className="mt-2 text-xs text-[color:var(--f92-gray)]">{k.hint}</p> : null}
-                </Card>
-              ),
+      {/* KPI strip — one connected strip (gap-px reveals the border). LOCKED
+          order: teal long-range pair · four rolling-window cards · Overall
+          Health gauge · Brands Covered · Quality Score gauge. All FULL-SCOPE
+          (crossBrand / healthKpi / qualityKpi read the full state arrays —
+          they never consult the filter/paused-scoped ledgerRows). */}
+      <div className="overflow-hidden rounded-2xl border border-[color:var(--f92-border)]">
+        <div className="grid grid-cols-2 gap-px bg-[color:var(--f92-border)] sm:grid-cols-3 xl:grid-cols-9">
+          {loading
+            ? Array.from({ length: 9 }, (_, i) => (
+                <div key={i} className="bg-white px-5 py-4">
+                  <div className="h-3 w-20 animate-pulse rounded bg-[color:var(--f92-tint)]" />
+                  <div className="mt-2 h-7 w-14 animate-pulse rounded bg-[color:var(--f92-tint)]" />
+                </div>
+              ))
+            : (
+              <>
+                {/* Long-range teal pair */}
+                {[
+                  { label: 'Tests This Year', value: crossBrand.ytd, sub: `Through ${todayLabel}` },
+                  { label: 'Tests All Time', value: crossBrand.allTime, sub: earliestLabel ? `Since ${earliestLabel}` : '' },
+                ].map(k => (
+                  <div key={k.label} className="bg-[color:var(--kpi-longrange-bg)] px-5 py-4">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[color:var(--kpi-longrange-fg)]">{k.label}</p>
+                    <p className="mt-1.5 text-[27px] font-bold leading-none tabular-nums text-[color:var(--kpi-longrange-fg)]">{k.value}</p>
+                    {k.sub ? <p className="mt-1.5 text-[10px] text-[color:var(--kpi-longrange-fg)] opacity-80">{k.sub}</p> : null}
+                  </div>
+                ))}
+                {/* Rolling-window mid KPIs */}
+                {[
+                  { label: 'This Week', value: crossBrand.thisWeek },
+                  { label: 'Last Week', value: crossBrand.lastWeek },
+                  { label: 'Rolling 28d', value: crossBrand.rolling28 },
+                  { label: 'This Month', value: crossBrand.thisMonth },
+                ].map(k => (
+                  <div key={k.label} className="bg-white px-5 py-4">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--f92-gray)]">{k.label}</p>
+                    <p className="mt-1.5 text-[23px] font-bold leading-none tabular-nums" style={{ color: 'var(--ledger-kpi-mid)' }}>{k.value}</p>
+                  </div>
+                ))}
+                {/* Overall Health gauge */}
+                <div className="flex flex-col bg-white px-5 py-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--f92-gray)]">Overall Health</p>
+                  <div className="mt-auto flex justify-center pt-2">
+                    <CoverageGauge
+                      value={healthKpi.healthPct}
+                      colorVar="var(--ledger-gauge-health)"
+                      ariaLabel={`Overall Health ${healthKpi.healthPct === null ? 'not available' : `${healthKpi.healthPct} percent`}`}
+                    />
+                  </div>
+                </div>
+                {/* Brands Covered */}
+                <div className="bg-white px-5 py-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--f92-gray)]">Brands Covered</p>
+                  <p className="mt-1.5 text-[23px] font-bold leading-none tabular-nums text-[color:var(--f92-dark)]">
+                    {healthKpi.totalCount === 0 ? '—' : `${healthKpi.coveredCount}/${healthKpi.totalCount}`}
+                  </p>
+                  <p className="mt-1.5 text-[10px] text-[color:var(--f92-gray)]">Last 28 days</p>
+                </div>
+                {/* Quality Score gauge */}
+                <div className="flex flex-col bg-white px-5 py-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--f92-gray)]">Quality Score</p>
+                  <div className="mt-auto flex justify-center pt-2">
+                    <CoverageGauge
+                      value={qualityKpi.scorePct}
+                      colorVar="var(--ledger-gauge-quality)"
+                      ariaLabel={`Quality Score ${qualityKpi.scorePct === null ? 'not available' : `${qualityKpi.scorePct} percent`}`}
+                    />
+                  </div>
+                </div>
+              </>
             )}
+        </div>
       </div>
 
       <ProjectBrandFilter
@@ -515,7 +458,7 @@ export default function CoveragePage() {
         showPaused={showPaused}
       />
 
-      <Card className="sticky top-2 z-10 p-3 md:p-4">
+      <Card className="p-3 md:p-4">
         <div className="flex flex-wrap items-center gap-3">
           {isAdmin ? (
             <Button size="sm" onClick={() => setAddBrandOpen(true)}>
@@ -544,252 +487,35 @@ export default function CoveragePage() {
         </div>
       </Card>
 
-      <div>
-        <h2 className="cqip-section-title text-sm font-semibold uppercase tracking-[0.2em] text-[color:var(--f92-navy)]">Output</h2>
-        <p className="mt-1 text-xs text-[color:var(--f92-gray)]">Tests delivered (Dev Client Review first-entries) by brand.</p>
-      </div>
-
-      <Card>
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-left text-sm">
-            <thead>
-              <tr className="text-[color:var(--f92-dark)]">
-                <SortableHeader k="brand" label="Brand" />
-                <SortableHeader k="thisWeek" label="This Week" />
-                <SortableHeader k="lastWeek" label="Last Week" />
-                <SortableHeader k="rolling28" label="Rolling 28d" />
-                <SortableHeader k="thisMonth" label="This Month" />
-                <SortableHeader k="rework28" label="Rework 28d" />
-                <SortableHeader k="reworkRatio" label="Rework Ratio" />
-                <th className="px-4 py-3 font-semibold">Trend</th>
-                <SortableHeader k="status" label="Status" />
-                {isAdmin ? <th className="px-4 py-3" aria-label="Actions" /> : null}
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                Array.from({ length: 8 }, (_, i) => (
-                  <tr key={i} className="border-t border-[color:var(--f92-border)]">
-                    <td colSpan={outputColSpan} className="px-4 py-4">
-                      <div className="h-4 w-full animate-pulse rounded bg-[color:var(--f92-tint)]" />
-                    </td>
-                  </tr>
-                ))
-              ) : visibleRows.length === 0 ? (
-                <tr>
-                  <td colSpan={outputColSpan} className="px-4 py-8 text-center text-[color:var(--f92-gray)]">
-                    {brands.length === 0
-                      ? 'No brands configured. Ask an admin to seed brands in Settings → Projects.'
-                      : 'No brands match the current filters.'}
-                  </td>
-                </tr>
-              ) : (
-                visibleRows.map(row => {
-                  const status = row.brand.is_paused
-                    ? { label: 'Paused', variant: 'default' as const }
-                    : row.droughtFlag
-                      ? { label: 'Drought', variant: 'critical' as const }
-                      : { label: 'Active', variant: 'resolved' as const };
-                  return (
-                    <tr
-                      key={row.brand.id}
-                      onClick={() => openDrawer(row)}
-                      className={cn(
-                        'cursor-pointer border-t border-[color:var(--f92-border)] transition hover:bg-[color:var(--f92-tint)]',
-                        row.brand.is_paused
-                          ? 'bg-slate-100 text-[color:var(--f92-gray)] opacity-75 dark:bg-slate-900/40'
-                          : row.droughtFlag
-                            ? 'bg-[color:var(--f92-warm)]'
-                            : '',
-                      )}
-                    >
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-[color:var(--f92-dark)]">{row.brand.display_name}</span>
-                          <span className="rounded-full border border-[color:var(--f92-border)] bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest text-[color:var(--f92-gray)]">
-                            {row.brand.brand_code}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-[color:var(--f92-dark)]">{row.testsCurrentWeek}</td>
-                      <td className="px-4 py-3 text-[color:var(--f92-dark)]">{row.testsLastWeek}</td>
-                      <td className="px-4 py-3 font-semibold text-[color:var(--f92-navy)]">{row.testsRolling28}</td>
-                      <td className="px-4 py-3 text-[color:var(--f92-dark)]">{row.testsCurrentMonth}</td>
-                      <td className="px-4 py-3 text-[color:var(--f92-dark)]">{row.reworkRolling28}</td>
-                      <td className="px-4 py-3 text-[color:var(--f92-dark)]">{formatRatio(row.testsRolling28, row.reworkRolling28)}</td>
-                      <td className="px-4 py-3">
-                        <Sparkline points={row.monthly} />
-                      </td>
-                      <td className="px-4 py-3">
-                        <Badge variant={status.variant}>{status.label}</Badge>
-                      </td>
-                      {isAdmin ? (
-                        <td className="px-4 py-3">
-                          <button
-                            type="button"
-                            aria-label={`Manage ${row.brand.display_name}`}
-                            onClick={e => {
-                              e.stopPropagation();
-                              setAdminBrand(row.brand);
-                              setAdminOpen(true);
-                            }}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--f92-gray)] transition hover:bg-[color:var(--f92-tint)] hover:text-[color:var(--f92-dark)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)]"
-                          >
-                            <Settings className="h-4 w-4" aria-hidden="true" />
-                          </button>
-                        </td>
-                      ) : null}
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-        {/* Orphan-milestone footer — mirrors the Pipeline table's unresolvedCount
-            footer. Milestones with no brand linked at ingest (§13 r18) aren't
-            counted toward any brand's coverage. All-user (not admin-gated),
-            matching the pipeline footer. */}
+      <Card className="p-4 md:p-5">
+        <CoverageLedger
+          rows={ledgerRows}
+          loading={loading}
+          brandsConfigured={brands.length > 0}
+          sortKey={ledgerSortKey}
+          sortDir={sortDir}
+          onSort={toggleSort}
+          isAdmin={isAdmin}
+          onAdmin={brand => {
+            setAdminBrand(brand);
+            setAdminOpen(true);
+          }}
+          onFullDetail={row => {
+            setDrawerRow(row);
+            setDrawerOpen(true);
+          }}
+          onStage={openStageDrawer}
+        />
+        {/* Footers — both all-user, mirror each other. Orphan milestones
+            (no brand linked at ingest, §13 r18) + live pipeline tickets with
+            no brand assigned in Jira. Neither is counted toward any brand. */}
         {orphanMilestoneCount > 0 ? (
-          <p className="border-t border-[color:var(--f92-border)] px-4 py-2 text-xs text-[color:var(--f92-gray)]">
+          <p className="mt-2 border-t border-[color:var(--f92-border)] px-1 pt-2 text-xs text-[color:var(--f92-gray)]">
             {orphanMilestoneCount} milestone{orphanMilestoneCount === 1 ? '' : 's'} not counted toward coverage — no brand linked.
           </p>
         ) : null}
-      </Card>
-
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="cqip-section-title text-sm font-semibold uppercase tracking-[0.2em] text-[color:var(--f92-navy)]">Pipeline</h2>
-          <p className="mt-1 text-xs text-[color:var(--f92-gray)]">
-            Live work-in-progress by stage (from Jira). Click any count to see the tickets.
-          </p>
-        </div>
-        {/* Overlay toggles live with the Pipeline table — they only badge
-            pipeline counts. State + handlers unchanged; render-location only. */}
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-semibold uppercase tracking-wider text-[color:var(--f92-gray)]">
-            Overlays
-          </span>
-          {OVERLAY_KEYS.map(k => (
-            <button
-              key={k}
-              type="button"
-              aria-pressed={overlays[k]}
-              onClick={() => setOverlays(o => ({ ...o, [k]: !o[k] }))}
-              className={cn(
-                'inline-flex h-7 items-center rounded-full border px-3 text-xs font-medium transition',
-                overlays[k]
-                  ? OVERLAY_ACTIVE_CLASS[k]
-                  : 'border-[color:var(--f92-border)] bg-transparent text-[color:var(--f92-gray)] hover:bg-[color:var(--f92-tint)]',
-              )}
-            >
-              {OVERLAY_LABELS[k]}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <Card>
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-left text-sm">
-            <thead>
-              <tr className="text-[color:var(--f92-dark)]">
-                <th className="px-4 py-3 font-semibold">Brand</th>
-                {PIPELINE_STAGES.map(stage => (
-                  <th key={stage} className="px-4 py-3 font-semibold">{STAGE_LABELS[stage]}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                Array.from({ length: 8 }, (_, i) => (
-                  <tr key={i} className="border-t border-[color:var(--f92-border)]">
-                    <td colSpan={1 + PIPELINE_STAGES.length} className="px-4 py-4">
-                      <div className="h-4 w-full animate-pulse rounded bg-[color:var(--f92-tint)]" />
-                    </td>
-                  </tr>
-                ))
-              ) : visibleRows.length === 0 ? (
-                <tr>
-                  <td colSpan={1 + PIPELINE_STAGES.length} className="px-4 py-8 text-center text-[color:var(--f92-gray)]">
-                    {brands.length === 0
-                      ? 'No brands configured. Ask an admin to seed brands in Settings → Projects.'
-                      : 'No brands match the current filters.'}
-                  </td>
-                </tr>
-              ) : (
-                visibleRows.map(row => {
-                  const pipeline = pipelineBrands.get(row.brand.brand_code);
-                  return (
-                    <tr
-                      key={row.brand.id}
-                      className={cn(
-                        'border-t border-[color:var(--f92-border)]',
-                        row.brand.is_paused
-                          ? 'bg-slate-100 text-[color:var(--f92-gray)] opacity-75 dark:bg-slate-900/40'
-                          : '',
-                      )}
-                    >
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-[color:var(--f92-dark)]">{row.brand.display_name}</span>
-                          <span className="rounded-full border border-[color:var(--f92-border)] bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest text-[color:var(--f92-gray)]">
-                            {row.brand.brand_code}
-                          </span>
-                        </div>
-                      </td>
-                      {PIPELINE_STAGES.map(stage => {
-                        const count = pipeline?.counts[stage] ?? 0;
-                        const overlayBadges = activeOverlayKeys
-                          .map(k => ({ k, n: pipeline?.overlays[k][stage] ?? 0 }))
-                          .filter(({ n }) => n > 0);
-                        // Untagged remainder: tickets in this stage carrying
-                        // NONE of the active overlay tags. Computed from
-                        // tickets[] so a ticket with two active tags counts
-                        // once (summing per-overlay badges would double it).
-                        // Invariant: union-tagged + untagged === stage total.
-                        // Chip shown only when ≥1 overlay is active and the
-                        // cell is non-empty.
-                        const showOverlays = activeOverlayKeys.length > 0 && count > 0;
-                        const untaggedCount = showOverlays
-                          ? (pipeline?.tickets ?? []).filter(
-                              t => t.stage === stage
-                                && !t.tags.some(tag => activeOverlayTagValues.includes(tag)),
-                            ).length
-                          : 0;
-                        return (
-                          <td key={stage} className="px-4 py-3 align-top">
-                            {count > 0 ? (
-                              <button
-                                type="button"
-                                onClick={() => openStageDrawer(row, stage)}
-                                className="font-semibold text-[color:var(--f92-navy)] hover:underline focus-visible:underline"
-                              >
-                                {count}
-                              </button>
-                            ) : (
-                              <span className="text-[color:var(--f92-lgray)]">0</span>
-                            )}
-                            {showOverlays ? (
-                              <div className="mt-1 flex flex-wrap gap-1">
-                                {overlayBadges.map(({ k, n }) => (
-                                  <OverlayCountBadge key={k} overlayKey={k} count={n} />
-                                ))}
-                                <UntaggedCountBadge count={untaggedCount} />
-                              </div>
-                            ) : null}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
         {unresolvedCount > 0 ? (
-          <p className="border-t border-[color:var(--f92-border)] px-4 py-2 text-xs text-[color:var(--f92-gray)]">
+          <p className={`${orphanMilestoneCount > 0 ? 'mt-1' : 'mt-2 border-t border-[color:var(--f92-border)] pt-2'} px-1 text-xs text-[color:var(--f92-gray)]`}>
             {unresolvedCount} active {unresolvedCount === 1 ? 'ticket' : 'tickets'} not shown — no brand assigned in Jira.
           </p>
         ) : null}
