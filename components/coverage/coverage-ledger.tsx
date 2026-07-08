@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Settings } from 'lucide-react';
 import { DeliverySparkline } from '@/components/coverage/sparkline';
-import type { Brand, CoverageRow } from '@/lib/coverage/queries';
+import { formatReworkRatio, type Brand, type CoverageRow } from '@/lib/coverage/queries';
 import {
   OVERLAY_KEYS,
   PIPELINE_STAGES,
@@ -124,11 +124,6 @@ function readyColorVar(total: number, ready: number): string {
   if (total === 0) return 'var(--f92-lgray)';
   if (ready > 0) return 'var(--ledger-seg-ready)';
   return 'var(--f92-gray)';
-}
-
-function reworkRatio(tests: number, rework: number): string {
-  if (tests === 0) return '—';
-  return (rework / tests).toFixed(2);
 }
 
 function caretFor(active: boolean, dir: 'asc' | 'desc'): string {
@@ -383,7 +378,7 @@ export function CoverageLedger({
                           {[
                             { l: 'Last Week', v: String(row.testsLastWeek), zero: row.testsLastWeek === 0 },
                             { l: 'This Month', v: String(row.testsCurrentMonth), zero: row.testsCurrentMonth === 0 },
-                            { l: 'Rework Ratio', v: reworkRatio(row.testsRolling28, row.reworkRolling28), muted: true },
+                            { l: 'Rework Ratio', v: formatReworkRatio(row.testsRolling28, row.reworkRolling28), muted: true },
                           ].map(stat => (
                             <div
                               key={stat.l}

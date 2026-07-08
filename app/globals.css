@@ -100,7 +100,7 @@
   /* Stacked-bar segment colors (decorative). Light = -600 stops for ≥3:1. */
   --ledger-seg-ready:      #6366F1;
   --ledger-seg-ni:         #0284C7;
-  --ledger-seg-oh:         #E11D48;
+  --ledger-seg-oh:         #4B5563;  /* On Hold = gray (app convention); gray-600, ≥3:1 on white */
   --ledger-seg-aci:        #9333EA;
   --ledger-seg-ts:         #D97706;
   --ledger-bar-track:      #EDE0D2;  /* warm track behind bar segments */
@@ -118,7 +118,7 @@
   --ledger-kpi-mid:        #1E2D6B;
   /* Status-tag chip fills — BRIGHT in both themes (single value). */
   --ledger-chip-ni:        #38BDF8;
-  --ledger-chip-oh:        #FB7185;
+  --ledger-chip-oh:        #9CA3AF;  /* On Hold = gray (app convention); near-black chip text #0A0E16 ≈ 6.9:1 AA, both themes */
   --ledger-chip-aci:       #C084FC;
   --ledger-chip-ts:        #F59E0B;
   --ledger-chip-fg:        #0A0E16;  /* near-black chip text */
@@ -206,7 +206,7 @@
   --ledger-paused:         #64748B;
   --ledger-seg-ready:      #A5B4FC;  /* brightened from #7c89ff per README */
   --ledger-seg-ni:         #38BDF8;
-  --ledger-seg-oh:         #FB7185;
+  --ledger-seg-oh:         #94A3B8;  /* On Hold = gray (app convention); slate-400, bright on the dark bar track */
   --ledger-seg-aci:        #C084FC;
   --ledger-seg-ts:         #F59E0B;
   --ledger-bar-track:      #0F1726;

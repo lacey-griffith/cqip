@@ -128,6 +128,17 @@ export function isInDrought(
 // Aggregators.
 // -----------------------------------------------------------------------
 
+/**
+ * Rework ratio display string: rework events per delivered test in a window,
+ * or '—' when there were no tests (division base is zero). Single source of
+ * truth — used by the Coverage page's XLSX export and the ledger's delivery
+ * stats (Batch 005.2 dedupe; was duplicated in both).
+ */
+export function formatReworkRatio(tests: number, rework: number): string {
+  if (tests === 0) return '—';
+  return (rework / tests).toFixed(2);
+}
+
 export function countInWindow(
   milestones: Milestone[],
   brandId: string | null,

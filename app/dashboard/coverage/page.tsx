@@ -27,6 +27,7 @@ import {
   computeQualityScore,
   countInWindow,
   COVERAGE_THRESHOLD,
+  formatReworkRatio,
   endOfLastWeek,
   startOfCurrentMonth,
   startOfCurrentWeek,
@@ -65,11 +66,6 @@ interface ProjectRow {
   client_name: string;
   display_name: string;
   brand_model: 'multi_brand' | 'single_brand';
-}
-
-function formatRatio(tests: number, rework: number): string {
-  if (tests === 0) return '—';
-  return (rework / tests).toFixed(2);
 }
 
 export default function CoveragePage() {
@@ -323,7 +319,7 @@ export default function CoveragePage() {
         r.testsRolling28,
         r.testsCurrentMonth,
         r.reworkRolling28,
-        formatRatio(r.testsRolling28, r.reworkRolling28),
+        formatReworkRatio(r.testsRolling28, r.reworkRolling28),
         r.droughtFlag ? 'DROUGHT' : '',
       ]),
       highlightRowWhen: row => row[8] === 'DROUGHT',
@@ -361,7 +357,7 @@ export default function CoveragePage() {
             <p className="text-sm uppercase tracking-[0.3em] text-[color:var(--f92-navy)]">Coverage</p>
             <h1 className="mt-2 text-3xl font-semibold text-[color:var(--f92-dark)]">Client Coverage</h1>
             <p className="mt-2 text-sm text-[color:var(--f92-gray)]">
-              Brands with {COVERAGE_THRESHOLD} or fewer tests in the last 28 days are flagged. Expand a row for trend, rework &amp; live pipeline detail.
+              {`Brands with ${COVERAGE_THRESHOLD} or fewer tests in the last 28 days are flagged. Expand a row for trend, rework & live pipeline detail.`}
             </p>
           </div>
           <SyncJiraButton />
