@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;}
+  body{margin:0;background:#070a12;font-family:'IBM Plex Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
+</style>
+</helmet>
+
+<div style="max-width:1460px;margin:0 auto;padding:34px 32px 64px;">
+
+  <!-- header -->
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:22px;">
+    <div>
+      <div style="font:600 11px 'IBM Plex Sans';letter-spacing:.18em;color:#6fb7c9;margin-bottom:7px;">COVERAGE</div>
+      <div style="font:700 29px 'IBM Plex Sans';color:#f2f4f9;line-height:1;">Client Coverage</div>
+      <div style="font:400 13.5px 'IBM Plex Sans';color:#7a8398;margin-top:9px;">Brands with ≤2 tests in the last 28 days are flagged. Expand a row for trend, rework &amp; live pipeline detail.</div>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <div style="display:flex;align-items:center;gap:7px;padding:9px 15px;border-radius:9px;background:#f97316;color:#1a0c02;font:600 13px 'IBM Plex Sans';cursor:pointer;" style-hover="background:#fb8a3c;">⟳ Sync with Jira</div>
+      <div style="display:flex;align-items:center;gap:6px;padding:9px 13px;border-radius:9px;background:#0f2418;border:1px solid #1d4d31;color:#5fd68f;font:500 12px 'IBM Plex Sans';">✓ 17 logs · 4h ago</div>
+    </div>
+  </div>
+
+  <!-- KPI strip -->
+  <div style="display:flex;align-items:stretch;margin-bottom:18px;border:1px solid #1b2436;border-radius:12px;background:#0c111d;overflow:hidden;">
+    <div style="display:flex;">
+      <sc-for list="{{ kpiLong }}" as="k" hint-placeholder-count="2">
+        <div style="padding:15px 22px;border-right:1px solid #14202e;background:rgba(45,212,191,.06);">
+          <div style="font:600 10px 'IBM Plex Sans';letter-spacing:.1em;color:#5fb9ad;margin-bottom:6px;">{{ k.l }}</div>
+          <div style="font:700 27px 'IBM Plex Sans';color:#2dd4bf;line-height:1;font-variant-numeric:tabular-nums;">{{ k.v }}</div>
+          <div style="font:400 10px 'IBM Plex Sans';color:#5d7a78;margin-top:5px;">{{ k.s }}</div>
+        </div>
+      </sc-for>
+    </div>
+    <div style="display:flex;flex:1;">
+      <sc-for list="{{ kpiMid }}" as="k" hint-placeholder-count="4">
+        <div style="flex:1;padding:15px 20px;border-right:1px solid #14202e;">
+          <div style="font:600 10px 'IBM Plex Sans';letter-spacing:.08em;color:#7a8398;margin-bottom:6px;">{{ k.l }}</div>
+          <div style="font:700 23px 'IBM Plex Sans';color:#aab2ff;line-height:1;font-variant-numeric:tabular-nums;">{{ k.v }}</div>
+        </div>
+      </sc-for>
+
+      <!-- Overall Health gauge -->
+      <div style="flex:1;padding:15px 20px;border-right:1px solid #14202e;display:flex;flex-direction:column;">
+        <div style="font:600 10px 'IBM Plex Sans';letter-spacing:.08em;color:#7a8398;margin-bottom:6px;">Overall Health</div>
+        <div style="margin-top:auto;margin-bottom:auto;display:flex;justify-content:center;">
+          <div style="position:relative;width:56px;height:56px;">
+            <svg width="56" height="56" viewBox="0 0 64 64">
+              <circle cx="32" cy="32" r="26" fill="none" stroke="#16202e" stroke-width="7"></circle>
+              <circle cx="32" cy="32" r="26" fill="none" stroke="{{ kpi.health.color }}" stroke-width="7" stroke-linecap="round" stroke-dasharray="{{ kpi.health.C }}" stroke-dashoffset="{{ kpi.health.off }}" transform="rotate(-90 32 32)"></circle>
+            </svg>
+            <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:700 14px 'IBM Plex Sans';color:{{ kpi.health.color }};font-variant-numeric:tabular-nums;">{{ kpi.health.num }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Brands Covered -->
+      <div style="flex:1;padding:15px 20px;border-right:1px solid #14202e;">
+        <div style="font:600 10px 'IBM Plex Sans';letter-spacing:.08em;color:#7a8398;margin-bottom:6px;">Brands Covered</div>
+        <div style="font:700 23px 'IBM Plex Sans';color:#cfd5e6;line-height:1;font-variant-numeric:tabular-nums;">5/13</div>
+      </div>
+
+      <!-- Quality Score gauge -->
+      <div style="flex:1;padding:15px 20px;display:flex;flex-direction:column;">
+        <div style="font:600 10px 'IBM Plex Sans';letter-spacing:.08em;color:#7a8398;margin-bottom:6px;">Quality Score</div>
+        <div style="margin-top:auto;margin-bottom:auto;display:flex;justify-content:center;">
+          <div style="position:relative;width:56px;height:56px;">
+            <svg width="56" height="56" viewBox="0 0 64 64">
+              <circle cx="32" cy="32" r="26" fill="none" stroke="#16202e" stroke-width="7"></circle>
+              <circle cx="32" cy="32" r="26" fill="none" stroke="{{ kpi.quality.color }}" stroke-width="7" stroke-linecap="round" stroke-dasharray="{{ kpi.quality.C }}" stroke-dashoffset="{{ kpi.quality.off }}" transform="rotate(-90 32 32)"></circle>
+            </svg>
+            <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:700 14px 'IBM Plex Sans';color:{{ kpi.quality.color }};font-variant-numeric:tabular-nums;">{{ kpi.quality.num }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- filter pills -->
+  <div style="padding:14px 18px;margin-bottom:24px;border:1px solid #1b2436;border-radius:12px;background:#0c111d;display:flex;flex-direction:column;gap:12px;">
+    <div style="display:flex;align-items:center;gap:9px;">
+      <span style="font:600 10px 'IBM Plex Sans';letter-spacing:.12em;color:#6c7588;width:54px;">PROJECT</span>
+      <sc-for list="{{ projectPills }}" as="p" hint-placeholder-count="2">
+        <span onClick="{{ p.onClick }}" style="{{ p.style }}">{{ p.label }}</span>
+      </sc-for>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <span style="font:600 10px 'IBM Plex Sans';letter-spacing:.12em;color:#6c7588;width:54px;">BRAND</span>
+      <span onClick="{{ clearBrands }}" style="padding:5px 12px;border-radius:999px;border:1px dashed #5a4326;color:#d9943f;font:600 11px 'IBM Plex Sans';cursor:pointer;">Clear all</span>
+      <sc-for list="{{ brandPills }}" as="p" hint-placeholder-count="13">
+        <span onClick="{{ p.onClick }}" style="{{ p.style }}">{{ p.label }}</span>
+      </sc-for>
+    </div>
+  </div>
+
+  <!-- table header -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+    <div style="display:flex;align-items:baseline;gap:14px;">
+      <span style="font:700 13px 'IBM Plex Sans';letter-spacing:.16em;color:#aeb6c8;">COVERAGE LEDGER</span>
+      <span style="font:400 12px 'IBM Plex Sans';color:#6c7588;">Delivered + live pipeline, one row per brand.</span>
+    </div>
+    <div style="display:flex;gap:14px;align-items:center;">
+      <span style="display:inline-flex;align-items:center;gap:6px;font:500 11px 'IBM Plex Sans';color:#9aa3b6;"><span style="width:8px;height:8px;border-radius:2px;background:#ef4444;"></span>Drought</span>
+      <span style="display:inline-flex;align-items:center;gap:6px;font:500 11px 'IBM Plex Sans';color:#9aa3b6;"><span style="width:8px;height:8px;border-radius:2px;background:#22c55e;"></span>Active</span>
+    </div>
+  </div>
+
+  <!-- column labels -->
+  <div style="display:grid;grid-template-columns:22px 4px minmax(220px,1.3fr) 120px 92px 96px minmax(280px,1.5fr);align-items:end;padding:0 14px 11px 0;border-bottom:1px solid #1b2436;font:600 10.5px 'IBM Plex Sans';color:#7a8398;text-transform:uppercase;letter-spacing:.05em;">
+    <div></div><div></div>
+    <div onClick="{{ sortBrand }}" style="padding-left:12px;cursor:pointer;user-select:none;" style-hover="color:#cfd5e6;">Brand<span style="color:#5a6378;">{{ caretBrand }}</span></div>
+    <div onClick="{{ sortDelivered }}" style="text-align:right;cursor:pointer;user-select:none;" style-hover="color:#cfd5e6;">Delivered 28d<span style="color:#5a6378;">{{ caretDelivered }}</span></div>
+    <div onClick="{{ sortThisWk }}" style="text-align:right;cursor:pointer;user-select:none;" style-hover="color:#cfd5e6;">This Wk<span style="color:#5a6378;">{{ caretThisWk }}</span></div>
+    <div onClick="{{ sortLive }}" style="text-align:right;cursor:pointer;user-select:none;" style-hover="color:#cfd5e6;">Live · ready / total<span style="color:#5a6378;">{{ caretLive }}</span></div>
+    <div onClick="{{ sortPipeline }}" style="padding-left:18px;cursor:pointer;user-select:none;" style-hover="color:#cfd5e6;">Pipeline · ready / WIP<span style="color:#5a6378;">{{ caretPipeline }}</span></div>
+  </div>
+
+  <!-- accordion rows -->
+  <sc-for list="{{ brands }}" as="r" hint-placeholder-count="13">
+    <div style="{{ r.itemStyle }}">
+      <!-- summary -->
+      <div onClick="{{ r.toggle }}" style="display:grid;grid-template-columns:22px 4px minmax(220px,1.3fr) 120px 92px 96px minmax(280px,1.5fr);align-items:center;padding:14px 14px 14px 0;cursor:pointer;" style-hover="background:#0e1421;">
+        <div style="display:flex;justify-content:center;color:#5a6378;font-size:12px;transition:transform .18s;{{ r.chevStyle }}">▶</div>
+        <div style="width:4px;height:32px;border-radius:3px;background:{{ r.railColor }};"></div>
+        <div style="display:flex;align-items:center;gap:9px;padding-left:12px;">
+          <span style="font:500 15px 'IBM Plex Sans';color:#e6e9f0;">{{ r.b }}</span>
+          <span style="font:600 9.5px 'IBM Plex Mono';color:#8a93a6;background:#161f30;border:1px solid #232d40;padding:2px 6px;border-radius:5px;">{{ r.c }}</span>
+        </div>
+        <div style="text-align:right;font-variant-numeric:tabular-nums;font:700 22px 'IBM Plex Sans';{{ r.roll28Style }}">{{ r.roll28 }}</div>
+        <div style="text-align:right;font-variant-numeric:tabular-nums;font:500 15px 'IBM Plex Sans';{{ r.thisWkStyle }}">{{ r.thisWk }}</div>
+        <div style="text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;">
+          <span style="font:700 18px 'IBM Plex Sans';{{ r.liveStyle }}">{{ r.liveReady }}</span>
+          <sc-if value="{{ r.liveShowTotal }}" hint-placeholder-val="{{ true }}"><span style="font:500 12px 'IBM Plex Sans';color:#525c74;"> / {{ r.liveTotal }}</span></sc-if>
+        </div>
+        <div style="padding-left:18px;display:flex;align-items:center;gap:13px;">
+          <div style="white-space:nowrap;">
+            <span style="font-variant-numeric:tabular-nums;font:700 18px 'IBM Plex Sans';color:#a5b4fc;">{{ r.wipReadyStr }}</span>
+            <span style="font-variant-numeric:tabular-nums;font:500 12px 'IBM Plex Sans';color:#525c74;"> / {{ r.wipStr }}</span>
+          </div>
+          <div style="flex:1;min-width:0;">
+            <div style="display:flex;height:7px;border-radius:4px;overflow:hidden;background:#0f1726;">
+              <sc-for list="{{ r.aggSegs }}" as="g" hint-placeholder-count="3"><div style="{{ g.style }}"></div></sc-for>
+            </div>
+            <div style="font:400 10px 'IBM Plex Sans';color:#5a6378;margin-top:5px;">{{ r.wipReadyStr }} ready · {{ r.wipBlockedStr }} held by tags</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- detail -->
+      <sc-if value="{{ r.open }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;gap:24px;padding:6px 16px 26px 38px;background:#080c15;border-bottom:1px solid #141d2c;">
+          <!-- delivery detail -->
+          <div style="width:236px;flex:none;">
+            <div style="font:700 10px 'IBM Plex Sans';letter-spacing:.14em;color:#8a93a6;margin-bottom:14px;">DELIVERY DETAIL</div>
+            <svg width="212" height="58" viewBox="0 0 212 58" style="overflow:visible;display:block;margin-bottom:16px;">
+              <line x1="0" y1="57" x2="212" y2="57" stroke="#16202e" stroke-width="1"></line>
+              <polyline points="{{ r.sparkLg }}" fill="none" stroke="#818cf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></polyline>
+              <circle cx="{{ r.dotLgX }}" cy="{{ r.dotLgY }}" r="3" fill="#a5b4fc"></circle>
+            </svg>
+            <div style="display:flex;flex-direction:column;gap:1px;background:#16202e;border:1px solid #16202e;border-radius:9px;overflow:hidden;">
+              <sc-for list="{{ r.deliveryStats }}" as="d" hint-placeholder-count="3">
+                <div style="background:#0c121e;padding:9px 13px;display:flex;align-items:center;justify-content:space-between;">
+                  <div style="font:600 9.5px 'IBM Plex Sans';letter-spacing:.06em;color:#6c7588;text-transform:uppercase;">{{ d.l }}</div>
+                  <div style="font-variant-numeric:tabular-nums;font:600 15px 'IBM Plex Sans';{{ d.style }}">{{ d.v }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <!-- pipeline detail -->
+          <div style="flex:1;min-width:0;">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px;">
+              <span style="font:700 10px 'IBM Plex Sans';letter-spacing:.14em;color:#8a93a6;">PIPELINE BY STAGE</span>
+              <span style="font:400 11px 'IBM Plex Sans';color:#5a6378;">Bold = ready (no tags) · remainder held: Needs Info · On Hold · Awaiting Client</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;">
+              <sc-for list="{{ r.pcells }}" as="c" hint-placeholder-count="5">
+                <div style="background:#0c121e;border:1px solid #16202e;border-radius:10px;padding:12px 13px;">
+                  <div style="font:600 10px 'IBM Plex Sans';letter-spacing:.04em;color:#7a8398;margin-bottom:9px;text-transform:uppercase;">{{ c.stage }}</div>
+                  <div style="display:flex;align-items:baseline;gap:5px;">
+                    <span style="font-variant-numeric:tabular-nums;font:700 21px 'IBM Plex Sans';{{ c.readyStyle }}">{{ c.readyStr }}</span>
+                    <sc-if value="{{ c.showTotal }}" hint-placeholder-val="{{ true }}"><span style="font-variant-numeric:tabular-nums;font:500 12px 'IBM Plex Sans';color:#525c74;">/ {{ c.totalStr }}</span></sc-if>
+                  </div>
+                  <sc-if value="{{ c.hasBar }}" hint-placeholder-val="{{ true }}">
+                    <div style="display:flex;height:6px;margin-top:9px;border-radius:3px;overflow:hidden;background:#0f1726;">
+                      <sc-for list="{{ c.segs }}" as="g" hint-placeholder-count="2"><div style="{{ g.style }}"></div></sc-for>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ c.hasTags }}" hint-placeholder-val="{{ true }}">
+                    <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:10px;">
+                      <sc-for list="{{ c.tagChips }}" as="t" hint-placeholder-count="2">
+                        <span style="{{ t.style }}"><span style="{{ t.dot }}"></span>{{ t.label }} {{ t.n }}</span>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ c.allReady }}" hint-placeholder-val="{{ false }}">
+                    <div style="font:500 10.5px 'IBM Plex Sans';color:#4f7a6a;margin-top:10px;">✓ all clear</div>
+                  </sc-if>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+  </sc-for>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  C = { none:'#a5b4fc', ni:'#38bdf8', ts:'#f59e0b', oh:'#fb7185', aci:'#c084fc' };
+  TAGLABEL = { ni:'Needs Info', ts:'Troubleshooting', oh:'On Hold', aci:'Awaiting' };
+
+  state = { brandsOff:{}, project:'NBLY', open:{ ASV:true }, anim:0, sort:{ key:null, dir:-1 } };
+
+  componentDidMount() {
+    const start = performance.now(), dur = 1000;
+    const tick = (now) => {
+      const t = Math.min(1, (now - start) / dur);
+      const e = 1 - Math.pow(1 - t, 3);
+      this.setState({ anim: e });
+      if (t < 1) this._raf = requestAnimationFrame(tick);
+    };
+    this._raf = requestAnimationFrame(tick);
+  }
+  componentWillUnmount() { if (this._raf) cancelAnimationFrame(this._raf); }
+
+  buildKpi() {
+    const a = this.state.anim;
+    const ring = (pct, color) => {
+      const C = 2 * Math.PI * 26;
+      return { C: +C.toFixed(2), off: +(C * (1 - (pct / 100) * a)).toFixed(2), color, num: Math.round(pct * a) + '%' };
+    };
+    return {
+      health: ring(38, '#f59e0b'),
+      quality: ring(81, '#34d399'),
+    };
+  }
+
+  raw() {
+    return [
+      {b:'Aire Serv',c:'ASV',st:'DROUGHT',o:[1,0,2,2,1],r:'0.50',t:[2,1,2,1,1,0,1],
+        p:[{t:6,ni:1,oh:1,aci:3,none:1},{t:2,none:2},{t:2,none:2},{t:2,none:2},{t:2,none:2}]},
+      {b:'Grounds Guys',c:'GUY',st:'DROUGHT',o:[2,0,2,2,1],r:'0.50',t:[0,2,2,2,1,1,2],
+        p:[{t:3,oh:2,aci:1,none:0},{t:2,none:2},{t:5,oh:1,none:4},{t:0},{t:2,none:2}]},
+      {b:'Molly Maid',c:'MLY',st:'DROUGHT',o:[1,0,1,1,1],r:'1.00',t:[2,1,1,1,1,0,1],
+        p:[{t:15,ni:2,oh:3,aci:6,none:4},{t:5,aci:2,none:3},{t:1,none:1},{t:0},{t:2,none:2}]},
+      {b:'Mosquito Joe',c:'MOJ',st:'DROUGHT',o:[0,0,2,2,2],r:'1.00',t:[1,2,1,2,1,2,0],
+        p:[{t:13,ni:1,oh:3,aci:3,none:6},{t:0},{t:0},{t:2,none:2},{t:2,none:2}]},
+      {b:'Mr. Appliance',c:'MRA',st:'DROUGHT',o:[0,0,2,2,1],r:'0.50',t:[1,2,1,2,1,2,0],
+        p:[{t:20,ni:2,oh:2,aci:5,none:11},{t:11,ni:1,none:10},{t:0},{t:2,oh:2,none:0},{t:1,none:1}]},
+      {b:'Precision Garage Door',c:'PDS',st:'DROUGHT',o:[1,0,2,2,2],r:'1.00',t:[0,1,2,1,2,1,1],
+        p:[{t:5,ni:1,oh:1,aci:3,none:0},{t:1,none:1},{t:2,none:2},{t:1,none:1},{t:1,none:1}]},
+      {b:'Rainbow Restoration',c:'RBW',st:'DROUGHT',o:[0,0,0,0,1],r:'—',t:[0,0,1,2,0,0,0],
+        p:[{t:7,aci:5,none:2},{t:2,none:2},{t:1,oh:1,none:0},{t:0},{t:1,none:1}]},
+      {b:'Spotloan',c:'SPL',st:'DROUGHT',o:[0,0,0,0,1],r:'—',t:[0,0,1,1,0,0,0],
+        p:[{t:8,ni:8,none:0},{t:0},{t:1,ni:1,none:0},{t:2,none:2},{t:1,none:1}]},
+      {b:'Glass Doctor',c:'MDG',st:'ACTIVE',o:[2,0,3,3,3],r:'1.00',t:[3,2,3,2,3,2,2],
+        p:[{t:13,ni:2,oh:5,none:6},{t:5,none:5},{t:3,ni:1,none:2},{t:0},{t:2,none:2}]},
+      {b:'Junk King',c:'JUK',st:'ACTIVE',o:[0,0,3,3,1],r:'0.33',t:[0,1,3,2,3,1,3],
+        p:[{t:1,aci:1,none:0},{t:0},{t:4,none:4},{t:6,oh:1,aci:1,none:4},{t:2,none:2}]},
+      {b:'Mr. Electric',c:'MRE',st:'ACTIVE',o:[3,0,7,7,2],r:'0.29',t:[2,3,2,3,2,3,3],
+        p:[{t:11,ni:1,oh:1,aci:2,none:7},{t:2,aci:1,none:1},{t:4,oh:1,none:3},{t:2,oh:1,none:1},{t:1,none:1}]},
+      {b:'Mr. Handyman',c:'MRH',st:'ACTIVE',o:[5,0,7,7,1],r:'0.14',t:[3,2,3,4,3,5,5],
+        p:[{t:9,ni:1,oh:2,aci:3,none:3},{t:2,oh:1,none:1},{t:5,none:5},{t:3,none:3},{t:1,none:1}]},
+      {b:'Mr. Rooter Plumbing',c:'MRR',st:'ACTIVE',o:[2,0,5,5,2],r:'0.40',t:[2,4,2,5,3,4,2],
+        p:[{t:6,oh:2,aci:2,none:2},{t:4,none:4},{t:2,none:2},{t:3,none:3},{t:2,none:2}]},
+    ];
+  }
+
+  spark(vals, w, h) {
+    const max = Math.max(...vals), min = Math.min(...vals), sp = (max - min) || 1, step = w / (vals.length - 1);
+    const pts = vals.map((v, i) => [+(i * step).toFixed(1), +(h - ((v - min) / sp) * (h - 4) - 2).toFixed(1)]);
+    return { points: pts.map(p => p.join(',')).join(' '), dot: pts[pts.length - 1] };
+  }
+
+  pcell(o, stageName) {
+    const t = o.t || 0, ready = o.none || 0;
+    const order = [['none', ready], ['ni', o.ni || 0], ['ts', o.ts || 0], ['oh', o.oh || 0], ['aci', o.aci || 0]];
+    const segs = order.filter(p => p[1] > 0).map(p => ({ style: `flex:${p[1]} 1 0;background:${this.C[p[0]]};height:100%;` }));
+    const tagChips = [['ni', o.ni || 0], ['ts', o.ts || 0], ['oh', o.oh || 0], ['aci', o.aci || 0]]
+      .filter(p => p[1] > 0).map(p => {
+        const col = this.C[p[0]];
+        return {
+          label: this.TAGLABEL[p[0]], n: p[1],
+          style: `display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:6px;font:700 10px 'IBM Plex Sans';color:#0a0e16;background:${col};border:1px solid ${col};`,
+          dot: `width:6px;height:6px;border-radius:50%;background:rgba(10,14,22,.55);`,
+        };
+      });
+    return {
+      t, ready, stage: stageName,
+      totalStr: String(t), readyStr: t === 0 ? '—' : String(ready),
+      showTotal: t > 0, hasBar: t > 0,
+      readyStyle: t === 0 ? 'color:#39435a;' : (ready > 0 ? `color:${this.C.none};` : 'color:#56607a;'),
+      segs, tagChips, hasTags: tagChips.length > 0,
+      allReady: t > 0 && tagChips.length === 0,
+    };
+  }
+
+  toggleBrand(c) { this.setState(s => ({ brandsOff: { ...s.brandsOff, [c]: !s.brandsOff[c] } })); }
+  setProject(p) { this.setState({ project: p }); }
+  toggleRow(c) { this.setState(s => ({ open: { ...s.open, [c]: !s.open[c] } })); }
+  setSort(key) {
+    this.setState(s => {
+      const cur = s.sort || { key:null, dir:-1 };
+      const dir = cur.key === key ? -cur.dir : (key === 'brand' ? 1 : -1);
+      return { sort: { key, dir } };
+    });
+  }
+
+  renderVals() {
+    const off = this.state.brandsOff, open = this.state.open;
+    const stages = ['Strategy', 'Design', 'Dev', 'Queued', 'Live'];
+    const all = this.raw();
+    const sort = this.state.sort || { key:null, dir:-1 };
+    const keyFns = {
+      brand: d => d.b.toLowerCase(),
+      delivered: d => d.o[2],
+      thisWk: d => d.o[0],
+      live: d => (d.p[4] && d.p[4].none) || 0,
+      pipeline: d => d.p.reduce((a, c) => a + (c.t || 0), 0),
+    };
+    let list = all.filter(d => !off[d.c]);
+    if (sort.key && keyFns[sort.key]) {
+      const f = keyFns[sort.key];
+      list = [...list].sort((a, b) => { const va = f(a), vb = f(b); return (va < vb ? -1 : va > vb ? 1 : 0) * sort.dir; });
+    }
+
+    const brands = list.map(d => {
+      const sp = this.spark(d.t, 84, 26), spLg = this.spark(d.t, 212, 58);
+      const isDr = d.st === 'DROUGHT', isOpen = !!open[d.c];
+      const pcells = d.p.map((c, i) => this.pcell(c, stages[i]));
+      const liveCell = pcells[4];
+
+      const agg = { none: 0, ni: 0, ts: 0, oh: 0, aci: 0 };
+      d.p.forEach(c => { agg.none += c.none || 0; agg.ni += c.ni || 0; agg.ts += c.ts || 0; agg.oh += c.oh || 0; agg.aci += c.aci || 0; });
+      const wip = d.p.reduce((a, c) => a + (c.t || 0), 0);
+      const aggOrder = [['none', agg.none], ['ni', agg.ni], ['ts', agg.ts], ['oh', agg.oh], ['aci', agg.aci]];
+      const aggSegs = wip > 0
+        ? aggOrder.filter(p => p[1] > 0).map(p => ({ style: `flex:${p[1]} 1 0;background:${this.C[p[0]]};height:100%;` }))
+        : [{ style: 'flex:1;background:#141d2c;height:100%;' }];
+
+      return {
+        b: d.b, c: d.c, railColor: isDr ? '#ef4444' : '#22c55e',
+        roll28: String(d.o[2]), thisWk: String(d.o[0]),
+        roll28Style: d.o[2] === 0 ? 'color:#56607a;' : (isDr ? 'color:#f2f4f9;' : 'color:#c7ccff;'),
+        thisWkStyle: d.o[0] === 0 ? 'color:#3a4256;' : 'color:#cfd5e6;',
+        pcells,
+        liveReady: liveCell.readyStr, liveTotal: liveCell.totalStr,
+        liveShowTotal: liveCell.showTotal, liveStyle: liveCell.readyStyle,
+        wipStr: String(wip), wipReadyStr: String(agg.none), wipBlockedStr: String(wip - agg.none),
+        aggSegs,
+        sparkLg: spLg.points, dotLgX: spLg.dot[0], dotLgY: spLg.dot[1],
+        open: isOpen,
+        toggle: () => this.toggleRow(d.c),
+        chevStyle: isOpen ? 'transform:rotate(90deg);' : '',
+        itemStyle: 'border-bottom:1px solid #121a28;' + (isOpen ? 'background:#0a0f1a;' : ''),
+        deliveryStats: [
+          { l: 'Last Week', v: String(d.o[1]), style: d.o[1] === 0 ? 'color:#3a4256;' : 'color:#dfe3ec;' },
+          { l: 'This Month', v: String(d.o[3]), style: d.o[3] === 0 ? 'color:#3a4256;' : 'color:#dfe3ec;' },
+          { l: 'Rework Ratio', v: d.r, style: 'color:#9aa3b6;' },
+        ],
+      };
+    });
+
+    const pillBase = "padding:5px 13px;border-radius:999px;font:600 11px 'IBM Plex Sans';cursor:pointer;";
+    const brandPills = all.map(d => {
+      const on = !off[d.c];
+      return {
+        label: on ? '✓ ' + d.c : d.c,
+        onClick: () => this.toggleBrand(d.c),
+        style: on
+          ? pillBase + 'background:#f97316;color:#231203;border:1px solid #f97316;'
+          : pillBase + 'background:transparent;color:#7a8398;border:1px solid #2a3550;',
+      };
+    });
+    const projectPills = ['NBLY', 'SPL'].map(p => {
+      const on = this.state.project === p;
+      return {
+        label: on ? '✓ ' + p : p,
+        onClick: () => this.setProject(p),
+        style: "padding:5px 14px;border-radius:8px;font:600 12px 'IBM Plex Sans';cursor:pointer;" + (on
+          ? 'background:#4f46e5;color:#fff;border:1px solid #4f46e5;'
+          : 'background:transparent;color:#9aa3b6;border:1px solid #2a3550;'),
+      };
+    });
+
+    const caret = k => sort.key === k ? (sort.dir === 1 ? ' ↑' : ' ↓') : ' ⇅';
+    return {
+      brands, projectPills, brandPills,
+      sortBrand: () => this.setSort('brand'),
+      sortDelivered: () => this.setSort('delivered'),
+      sortThisWk: () => this.setSort('thisWk'),
+      sortLive: () => this.setSort('live'),
+      sortPipeline: () => this.setSort('pipeline'),
+      caretBrand: caret('brand'), caretDelivered: caret('delivered'),
+      caretThisWk: caret('thisWk'), caretLive: caret('live'), caretPipeline: caret('pipeline'),
+      clearBrands: () => this.setState({ brandsOff: {} }),
+      kpi: this.buildKpi(),
+      kpiLong: [{ l: 'Tests This Year', v: '244', s: 'Through Jun 25' }, { l: 'Tests All Time', v: '314', s: 'Since Nov 2025' }],
+      kpiMid: [{ l: 'This Week', v: '17' }, { l: 'Last Week', v: '0' }, { l: 'Rolling 28d', v: '37' }, { l: 'This Month', v: '37' }],
+    };
+  }
+}
+</script>
+</body>
+</html>
