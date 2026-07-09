@@ -442,6 +442,9 @@ export default function CoveragePage() {
         </div>
       </div>
 
+      {/* Filter + control bar merged into ONE card (Batch 005.3 commit 3):
+          the Add brand / Show paused / Export controls ride the filter's
+          right-aligned action cluster instead of a second stacked Card. */}
       <ProjectBrandFilter
         storageKey="cqip-filter-coverage"
         projects={projects}
@@ -449,16 +452,13 @@ export default function CoveragePage() {
         value={filter}
         onChange={setFilter}
         showPaused={showPaused}
-      />
-
-      <Card className="p-3 md:p-4">
-        <div className="flex flex-wrap items-center gap-3">
-          {isAdmin ? (
-            <Button size="sm" onClick={() => setAddBrandOpen(true)}>
-              Add brand
-            </Button>
-          ) : null}
-          <div className="ml-auto flex flex-wrap items-center gap-3">
+        actions={
+          <>
+            {isAdmin ? (
+              <Button size="sm" onClick={() => setAddBrandOpen(true)}>
+                Add brand
+              </Button>
+            ) : null}
             <label className="flex h-9 items-center gap-2 text-sm text-[color:var(--f92-dark)]">
               <input
                 type="checkbox"
@@ -476,9 +476,9 @@ export default function CoveragePage() {
             >
               Export to Excel
             </Button>
-          </div>
-        </div>
-      </Card>
+          </>
+        }
+      />
 
       <Card className="p-4 md:p-5">
         <CoverageLedger

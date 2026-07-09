@@ -2684,10 +2684,26 @@ Live identified as `PIPELINE_STAGES[PIPELINE_STAGES.length - 1]` (not hardcoded)
 commit-3; version stays v2.5). Verified: `tsc --noEmit` clean; `npm run build`
 green (`/dashboard/coverage` prerenders); `tests/coverage-kpis.test.ts` 5/5
 (untouched — the Live-column removal is render-only, no KPI-calc change);
-ESLint on the three changed files → zero findings. **DO NOT PUSH** — Karen
-post-flight → Lacey smokes both themes → pushes. On ship: docs reconcile
-(§15.5 removed, full §16 entry recording the 5→4 sort-contract supersede of
-005.2 §3.4), r34.
+ESLint on the three changed files → zero findings.
+
+**Commit 3 (card merge, committed-not-pushed 2026-07-08; Karen PASS on commit
+2):** layout-only — combined the two stacked cards at the top of
+`/dashboard/coverage` into one, per the mock. `ProjectBrandFilter` gained an
+optional `actions?: ReactNode` prop rendered in the Project row's right cluster
+(wrapping, right-aligned, grouped with the existing "Clear"); the page's
+standalone control-bar `<Card>` (Add brand / Show paused / Export) is deleted and
+its three controls pass through `actions={…}` verbatim (same handlers, same
+`isAdmin` gate, same export-disabled condition; `showPaused` still drives page
+state → back into the filter). No logic/state change; Dashboard/Logs mounts pass
+no `actions` (unchanged). Tokens only. tsc clean, build green, `coverage-kpis`
+5/5, ESLint zero new on the two changed files (`project-brand-filter.tsx`,
+`page.tsx`). No version bump. (L1 from Karen's commit-2 review — the now-dead
+`LedgerRow.live` field + stale comment — intentionally NOT bundled here; still a
+deferred trivial prune.)
+
+**DO NOT PUSH** — Karen post-flight → Lacey smokes both themes → pushes. On ship:
+docs reconcile (§15.5 removed, full §16 entry recording the 5→4 sort-contract
+supersede of 005.2 §3.4 + the card merge), r34.
 
 ---
 

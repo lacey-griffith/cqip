@@ -16,7 +16,7 @@
 // sessionStorage under `storageKey`. On mount, hydrates from
 // storage if present.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronRight } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
@@ -52,6 +52,11 @@ interface ProjectBrandFilterProps {
   // existing showPaused state through; Dashboard / Logs mounts
   // leave this off.
   showPaused?: boolean;
+  // Optional right-aligned action cluster rendered in the Project row's
+  // right group alongside "Clear" (Batch 005.3 commit 3 — lets a page fold
+  // its control bar into this one card instead of stacking a second Card).
+  // Undefined on the Dashboard / Logs mounts → nothing extra renders.
+  actions?: ReactNode;
 }
 
 // Strip the "CRO" suffix common to CQIP-monitored Jira project keys
@@ -105,6 +110,7 @@ export function ProjectBrandFilter({
   value,
   onChange,
   showPaused = false,
+  actions,
 }: ProjectBrandFilterProps) {
   // --- Hydration / persistence -----------------------------------
   // Read once on mount; subsequent value changes flow back to storage.
@@ -365,14 +371,22 @@ export function ProjectBrandFilter({
             )}
           </div>
         </div>
-        {hasAnyFilter ? (
-          <button
-            type="button"
-            onClick={clearAll}
-            className="text-xs font-medium text-[color:var(--f92-orange)] transition hover:underline focus-visible:outline-none focus-visible:underline"
-          >
-            Clear
-          </button>
+        {/* Right cluster: page-supplied actions + Clear, one wrapping,
+            right-aligned group (Batch 005.3 commit 3). flex-wrap keeps it
+            stacking cleanly on narrow widths. */}
+        {actions || hasAnyFilter ? (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            {actions}
+            {hasAnyFilter ? (
+              <button
+                type="button"
+                onClick={clearAll}
+                className="text-xs font-medium text-[color:var(--f92-orange)] transition hover:underline focus-visible:outline-none focus-visible:underline"
+              >
+                Clear
+              </button>
+            ) : null}
+          </div>
         ) : null}
       </div>
 
