@@ -2349,11 +2349,13 @@ Spec: `docs/batch-005.5-brand-detail-drawer-spec.md`. **Dep:** 005.4 lands
 
 ### Admin drawer changes (`brand-admin-drawer.tsx`) (scoped 2026-07-09)
 Two items, priority #2:
-- **(a) Remove the preview/live QA-URL-pattern field from QA Config —
-  GATED: Jenny (admin/config surface) + AC/Forge coordination.** URL patterns
-  move to the Forge app, which *reads* that brand config; drop only the
-  dashboard editor and **KEEP the field/column** (removing it breaks Forge's
-  read). Confirm Forge ownership via AC before building (CROSS §6 relay owed).
+- **(a) QA-URL-pattern editor removal — HOLD (was GATED; AC answered
+  2026-07-09).** AC confirmed there is **no Forge write path** for the
+  preview/live QA-URL config: the Brands API is DC-owned and AC/Forge is
+  **read-only**, and the would-be writer (Forge Phase 2d) is **unbuilt**.
+  Removing the dashboard editor would therefore **strand the config** (nothing
+  else can set it), so **KEEP the editor + column** — this item is on HOLD, not
+  a near-term build. Revisit only if/when a Forge write path (Phase 2d) exists.
 - **(b) Remove the redundant Filter-by-brand control** — the drawer is already
   brand-scoped. Trivial, read-only, ride-along (can fold into 005.5 if wanted).
 
@@ -2363,9 +2365,10 @@ Sequenced **behind 006**, exact slot TBD. One-time importer producing
 **NO** milestones or quality_logs — in an **isolated** table (no FK; must NOT
 feed live coverage KPIs); admin-editable; a new "Client Archive" page for
 growth / all-time context. **Discovery gate (before any ClickUp fetch):** a
-Jira-first read-only key-coverage scan + an AC check for a structured
-ClickUp-ID custom field on Jira tickets (dedup key, mirroring the
-`customfield_12528` verification). Full brief:
+Jira-first read-only key-coverage scan. **AC answered 2026-07-09 (CROSS §6):
+there is NO structured Jira custom field carrying a ClickUp ID/URL** — the
+ClickUp URL lives in the **Jira issue description**, so the dedup strategy is
+**description-regex + fuzzy match**, not an exact custom-field key. Full brief:
 `docs/HANDOFF-clickup-archive-discovery.md` (to be drafted).
 
 ### Later / deferred — ledger + coverage (from Lacey's 2026-07-09 review)
@@ -2585,7 +2588,7 @@ this; "CLAUDE.md wins"):**
 ```
 NEXT (locked 2026-07-09; 005.4 SHIPPED 2026-07-09)
   1  005.5   Reggie brand-detail drawer polish   (dep: 005.4 monthly12 ✅)
-  2  Admin drawer changes                         (#5 anytime · #4 gated: Jenny + AC)
+  2  Admin drawer changes                         (#5 anytime · #4 HOLD — no Forge write path)
   3  006     Teams dispatch (expanded)            ← unblocks 010.1 live pings
   4  010.1   Pipeline alerts (merged 010.2 + Path 2)   — PM consult owed
   5  007     Custom Jira Boards

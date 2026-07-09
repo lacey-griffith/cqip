@@ -264,7 +264,7 @@ file mirrors both).
 | 12 | DC | Batch 005.3 Coverage Ledger polish | ✅ SHIPPED + PUSHED 2026-07-08/09 |
 | 13 | DC | Batch 005.4 Coverage Ledger polish 2 | **in flight (committed, not pushed)** |
 | 14 | DC | Batch 005.5 Reggie brand-detail drawer polish (dep: 005.4 monthly12) | next |
-| 15 | DC | Admin drawer changes (#5 anytime · #4 gated: Jenny + AC/Forge) | after 005.5 |
+| 15 | DC | Admin drawer changes (#5 anytime · #4 HOLD — no Forge write path, AC ✅ 2026-07-09) | after 005.5 |
 | 16 | DC | Batch 006 Teams dispatch (EXPANDED) | after admin drawer; unblocks 010.1 |
 | 17 | DC | Batch 010.1 Pipeline alerts (MERGED: 010.2 + Path 2) | after 006 — PM consult owed |
 | 18 | DC | Batch 007 Custom Jira Boards | after 010.1 |
@@ -317,7 +317,30 @@ Covers events from 2026-04-23 forward (start of the drift-
 prevention era). Project-internal events stay in each
 project's CLAUDE.md §16.
 
+### 2026-07-09 — AC: both reslot confirmations ANSWERED (QA-URL removal + ClickUp dedup key)
+
+AC answered the two checks the earlier same-day entry (below) had owed:
+
+1. **Admin-drawer QA-URL editor removal → RED (do NOT remove; now HOLD).** There
+   is **no Forge write path** for the preview/live QA-URL brand config: the
+   Brands API is **DC-owned** and AC/Forge is **read-only**; the would-be writer
+   (Forge **Phase 2d**) is **unbuilt**. So the dashboard editor is currently the
+   *only* thing that can set that config — removing it would strand it. Decision:
+   **KEEP the editor + column; the removal moves to HOLD** (revisit only if a
+   Forge write path lands). §15 + CROSS §5 row 15 updated GATED → HOLD.
+2. **ClickUp Client Archive dedup key → no structured field.** There is **no**
+   structured Jira custom field carrying a ClickUp ID/URL. The ClickUp URL lives
+   in the **Jira issue description** → the archive dedup strategy is
+   **description-regex + fuzzy match** (not an exact custom-field key). Folds into
+   the ClickUp Archive discovery brief.
+
+No contract-surface change (§3 untouched). Both were pre-build confirmations;
+neither opens an AC-consumed surface.
+
 ### 2026-07-09 — DC: priority reslot + two AC confirmations owed (admin-drawer QA-URL + ClickUp dedup key)
+
+**→ RESOLVED 2026-07-09 — both answered in the entry above (QA-URL: RED/HOLD;
+ClickUp: no structured field → desc-regex + fuzzy).**
 
 DC re-sequenced the cross-project order (§5) with Lacey 2026-07-09: 005.2 +
 005.3 SHIPPED, 005.4 in flight; the polish/drawer cluster (005.5 → admin-drawer
