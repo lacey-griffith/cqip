@@ -2324,7 +2324,9 @@ the LOCKED §15 four-chip set wired (verbatim `Awaiting client input`). Deferred
 follow-up (spec §6): the Reggie-drawer fold-in + Brand Wellness CTA re-home
 (kept as a "Full detail →" link this batch). Optional polish (Karen L2/L3:
 drought/active summary-numeral coloring + a "Paused" legend swatch) shipped in
-**Batch 005.3 — SHIPPED 2026-07-08 (see §16)**.
+**Batch 005.3 — SHIPPED 2026-07-08 (see §16)**. A further polish pass from
+Lacey's 2026-07-09 review is **Batch 005.4 — in flight → §15.5** (incl. the
+Karen 005.3 L1 `LedgerRow.live` prune).
 
 ### Dashboard polish cluster + Pipeline sortable columns + rework indicator (scoped 2026-07-03)
 Standalone entry — NOT part of Batch 005.2 (different page). Three grouped
@@ -2640,8 +2642,52 @@ phase/status, open questions, and a pointer to the spec. Lifecycle:
 appears in exactly one of §15.5 / §16 — on ship, the entry here is
 deleted in the same commit that writes the §16 shipped entry.
 
-*(Empty — no batches currently in flight. Batch 005.3 — Coverage Ledger
-polish — shipped 2026-07-08 and moved to §16 per §13 rule 34.)*
+### Batch 005.4 — Coverage Ledger polish, pass 2 — in flight (spec committed 2026-07-09)
+
+Second UX-polish pass on the Coverage Ledger, from Lacey's 2026-07-09 live review
+of 005.3. Read-only render/copy tweaks + one data-source swap (sparkline).
+**No migration, no route, no new mutation surface, no new token, no new dep, no
+Jenny.** Canonical spec: `docs/batch-005.4-ledger-polish-2-spec.md`.
+
+**Files:** `components/coverage/coverage-ledger.tsx` (most; #1/#2 values/#3/#4/#5/#6a
++ L1 — the `LedgerRow` type + `buildLedgerRow` both live here, not queries.ts),
+`lib/coverage/queries.ts` (#2 new `monthly12` field), `components/coverage/sparkline.tsx`
+(only if `DeliverySparkline` hard-assumed 7 pts — it does NOT; n-agnostic).
+
+**Locked changes (spec §2, numbered to Lacey's #1–#6a list):**
+- **#1** Revert the This-Wk (`testsCurrentWeek`) summary numeral to the pre-005.3
+  `=== 0 ? --f92-lgray : --f92-dark`; LEAVE Delivered-28d (`testsRolling28`) on the
+  005.3 §2.7 status coloring (partial revert of §2.7).
+- **#2** Repoint `DeliverySparkline` from `row.daily7` (7-day, ~always flat at
+  current volume) to a NEW 12-month `monthly12` field (`monthlyCounts(…, 12, now)`)
+  for the growth read. `monthly` (6mo) is UNTOUCHED (feeds the Reggie drawer bars);
+  building `monthly12` as its own field also serves the coming 005.5 drawer 6/12
+  toggle. KEEP `daily7`/`dailyCounts` (parked for a future daily surface).
+- **#3** Normalize the linked stage-name `<button>` typography to be
+  computed-identical to the non-linked `<span>` (UA button-style leak; only intended
+  diffs = color, "→", hover/focus underline).
+- **#4** Delete the "Bold = ready (no tags) · remainder held by status tags" caption
+  in the Pipeline-by-Stage header.
+- **#5** Rename the pipeline summary column header "PIPELINE · READY / WIP" →
+  "Ready / Gated"; change "{n} ready · {n} held by tags" → "{n} ready · {n} gated"
+  (uniform ready/gated vocabulary, matching the §2.4 drawer copy).
+- **#6a** Fixed-width, `tabular-nums`, right-aligned container on the "N / M"
+  ready/total label before each pipeline bar so bar left-edges align across rows.
+- **L1** (Karen 005.3 deferral) Prune the now-dead `LedgerRow.live` field + its
+  assignment in `buildLedgerRow` + the stale "live / pipeline" comment. Grep-confirmed
+  only two refs; §2.2's Live presence card reads the live stage via
+  `stages[…]`/`LIVE_STAGE` inside `stages.map`, not `lr.live`, so it's safe.
+
+**NOT in scope (spec §4):** #8/#9 (Full-detail placement + equal-height panel → Claude
+Design), #6b (resizable columns → real feature), #7 (alert colors → future token swap);
+no change to chip loudness, KPI scope, drought predicate, or locked 005.2/005.3 behavior
+beyond the #1 partial revert.
+
+**Process:** No Jenny. Commit 1 = spec + this §15.5 entry (docs-only). Commit 2 =
+build #1–#6a + L1, atomic §15.5 status. Recommended **no version bump** (render/copy
+only). tsc clean, build green, `coverage-kpis` 5/5, ESLint zero new. **DO NOT PUSH** —
+Karen post-flight → Lacey smokes both themes → pushes. On ship: docs reconcile
+(§15.5 → §16), r34, mirroring 005.3.
 
 ---
 
