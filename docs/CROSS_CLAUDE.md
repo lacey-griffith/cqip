@@ -241,8 +241,12 @@ See §6 entry for full context.
 Spans both projects. Last locked 2026-07-03 (per
 `docs/batch-outline-2026-07-03.md`); re-sequenced 2026-07-06 (auth chain
 DONE; Brand Wellness slotted first, 005.2 pulled ahead of 006 per Lacey
-2026-07-05); 2026-07-07: Brand Wellness SHIPPED + pushed (DC-internal,
-read-only, no §3/§6 per project-internal scoping); 005.2 now next-open.
+2026-07-05); 2026-07-07: Brand Wellness SHIPPED + pushed; **re-sequenced
+2026-07-09 (confirmed with Lacey): 005.2 + 005.3 SHIPPED, 005.4 in flight;
+the polish/drawer cluster (005.5 → admin-drawer changes) clears ahead of 006;
+ClickUp Client Archive is discovery-first, sequenced behind 006.** Mirrors DC
+CLAUDE.md §15 (canonical — "CLAUDE.md wins"; the `CQIP Batch Outline` project
+file mirrors both).
 
 | # | Owner | Item | Status |
 | --- | --- | --- | --- |
@@ -256,12 +260,17 @@ read-only, no §3/§6 per project-internal scoping); 005.2 now next-open.
 | 8 | DC | Batch 005.1 Coverage redesign + BrandAdminDrawer | ✅ SHIPPED 2026-07-03 |
 | 9 | DC | auth chain + login-events plumbing + create-flow | ✅ SHIPPED + PUSHED 2026-07-06/07 |
 | 10 | DC | Brand Wellness (read-only report + Reggie-drawer CTA) | ✅ SHIPPED + PUSHED 2026-07-07 |
-| 11 | DC | Batch 005.2 Coverage Ledger redesign | **next open DC batch** |
-| 12 | DC | Batch 006 Teams dispatch (EXPANDED) | after 005.2 |
-| 13 | DC | Batch 010.1 Pipeline alerts (MERGED: 010.2 + Path 2) | after 006 |
-| 14 | DC | Batch 007 Custom Jira Boards | after 010.1 |
-| 15 | DC | Per-brand config pages | prereq for Batch 008 |
-| 16 | DC | Batch 008 Convert.com automation | last |
+| 11 | DC | Batch 005.2 Coverage Ledger redesign | ✅ SHIPPED + PUSHED 2026-07-08 |
+| 12 | DC | Batch 005.3 Coverage Ledger polish | ✅ SHIPPED + PUSHED 2026-07-08/09 |
+| 13 | DC | Batch 005.4 Coverage Ledger polish 2 | **in flight (committed, not pushed)** |
+| 14 | DC | Batch 005.5 Reggie brand-detail drawer polish (dep: 005.4 monthly12) | next |
+| 15 | DC | Admin drawer changes (#5 anytime · #4 gated: Jenny + AC/Forge) | after 005.5 |
+| 16 | DC | Batch 006 Teams dispatch (EXPANDED) | after admin drawer; unblocks 010.1 |
+| 17 | DC | Batch 010.1 Pipeline alerts (MERGED: 010.2 + Path 2) | after 006 — PM consult owed |
+| 18 | DC | Batch 007 Custom Jira Boards | after 010.1 |
+| 19 | DC | Per-brand config pages | prereq for Batch 008 |
+| 20 | DC | Batch 008 Convert.com automation | last |
+| 21 | DC + AC | ClickUp Client Archive (discovery-first) | behind 006, slot TBD |
 
 **Scope corrections logged 2026-07-03** (re-sequenced per the batch
 outline; supersedes the 2026-06-04 lock):
@@ -307,6 +316,29 @@ Cross-project events worth durable record. Newest at top.
 Covers events from 2026-04-23 forward (start of the drift-
 prevention era). Project-internal events stay in each
 project's CLAUDE.md §16.
+
+### 2026-07-09 — DC: priority reslot + two AC confirmations owed (admin-drawer QA-URL + ClickUp dedup key)
+
+DC re-sequenced the cross-project order (§5) with Lacey 2026-07-09: 005.2 +
+005.3 SHIPPED, 005.4 in flight; the polish/drawer cluster (005.5 → admin-drawer
+changes) clears ahead of Batch 006; ClickUp Client Archive is discovery-first,
+sequenced behind 006. Two AC checks are owed before the affected builds start:
+
+1. **Admin-drawer QA-URL removal (gated).** DC plans to remove the preview/live
+   **QA-URL-pattern editor** from the dashboard's `brand-admin-drawer.tsx` QA
+   Config tab. The plan is to drop only the **dashboard editor** and KEEP the
+   underlying brand field/column, because the Forge QA-automation app *reads*
+   that brand config. **AC to confirm** the Forge app owns/edits that
+   preview/live QA-URL config and that dropping the dashboard editor won't
+   orphan a field Forge depends on. Build is blocked on this confirm (+ Jenny,
+   DC-side, for the admin/config surface).
+2. **ClickUp Client Archive dedup key.** Before any ClickUp fetch, DC will run a
+   Jira-first read-only key-coverage scan. **AC to verify** whether a structured
+   Jira custom field carries a ClickUp ID/URL (the archive's dedup key), mirroring
+   the `customfield_12528` "CRO Labels" verification pattern.
+
+No contract-surface change yet (§3 untouched); these are pre-build confirmations.
+005.2/005.3/005.4 remain DC-internal (read-only ledger UI, no AC surface).
 
 ### 2026-06-23 — AC: Phase 2c spike consumes /image (third SharePoint surface)
 

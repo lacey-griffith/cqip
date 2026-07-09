@@ -2328,6 +2328,50 @@ drought/active summary-numeral coloring + a "Paused" legend swatch) shipped in
 Lacey's 2026-07-09 review is **Batch 005.4 — in flight → §15.5** (incl. the
 Karen 005.3 L1 `LedgerRow.live` prune).
 
+### Batch 005.5 — Reggie brand-detail drawer polish (scoped 2026-07-09)
+Read-only, no Jenny. On the all-user brand-detail (Reggie) drawer: a
+**6/12-month range dropdown** (reuses the 005.4 `monthly12` field alongside the
+existing 6mo `monthly`) · **click-a-month → filter the ticket list** to that
+month · **drop the "This Month" KPI** (keep This Week / Last Week / Rolling 28D).
+Spec: `docs/batch-005.5-brand-detail-drawer-spec.md`. **Dep:** 005.4 lands
+`monthly12` (done — shipped with 005.4's build). Next after 005.4 (priority #1).
+
+### Admin drawer changes (`brand-admin-drawer.tsx`) (scoped 2026-07-09)
+Two items, priority #2:
+- **(a) Remove the preview/live QA-URL-pattern field from QA Config —
+  GATED: Jenny (admin/config surface) + AC/Forge coordination.** URL patterns
+  move to the Forge app, which *reads* that brand config; drop only the
+  dashboard editor and **KEEP the field/column** (removing it breaks Forge's
+  read). Confirm Forge ownership via AC before building (CROSS §6 relay owed).
+- **(b) Remove the redundant Filter-by-brand control** — the drawer is already
+  brand-scoped. Trivial, read-only, ride-along (can fold into 005.5 if wanted).
+
+### ClickUp Client Archive — proposed, discovery-first (scoped 2026-07-09)
+Sequenced **behind 006**, exact slot TBD. One-time importer producing
+**overview-only** records (title / client / brand / date, maybe a url-id) —
+**NO** milestones or quality_logs — in an **isolated** table (no FK; must NOT
+feed live coverage KPIs); admin-editable; a new "Client Archive" page for
+growth / all-time context. **Discovery gate (before any ClickUp fetch):** a
+Jira-first read-only key-coverage scan + an AC check for a structured
+ClickUp-ID custom field on Jira tickets (dedup key, mirroring the
+`customfield_12528` verification). Full brief:
+`docs/HANDOFF-clickup-archive-discovery.md` (to be drafted).
+
+### Later / deferred — ledger + coverage (from Lacey's 2026-07-09 review)
+- **Resizable ledger columns (#6b)** — a real feature (width state + drag +
+  persistence + survive-sort), not polish. Reassess after 005.4's bar-alignment
+  fix (#6a) — may be moot.
+- **Ledger alert-color palette (#7)** — the segment purples / gray / blue read
+  too close to tell apart; Lacey researching a palette → a `globals.css` token
+  swap when delivered.
+- **Expanded-panel layout (#8/#9)** — Full-detail moved up + equal-height /
+  bottom-aligned expanded panel. With **Claude Design**; folds into a ledger
+  batch on return.
+- **Add-milestone form polish** — with **Claude Design** (admin drawer).
+- **Coverage "true all-time incl. pre-Jira" decision** — whether the ClickUp
+  archive count bridges onto the coverage page or stays archive-only. Tied to
+  ClickUp; parked.
+
 ### Dashboard polish cluster + Pipeline sortable columns + rework indicator (scoped 2026-07-03)
 Standalone entry — NOT part of Batch 005.2 (different page). Three grouped
 items: (1) dashboard polish — KPI hover popovers, stacked issue-category
@@ -2523,26 +2567,38 @@ four SHIP-day deviations (D1-D4). Full spec at
 `docs/batch-009-sharepoint-spec.md` (status header now
 SHIPPED). Day-one consumer AC's Phase 2 is unblocked.
 
-**Priority order (updated 2026-07-08 — Brand Wellness + Batch 005.2 both
-SHIPPED; Batch 006 now leads; mirrors CROSS_CLAUDE.md §5):**
-Batch 006 (Teams dispatch, EXPANDED) → Batch 010.1 (Pipeline alerts, MERGED —
-absorbs 010.2 + Path 2) → Batch 007 (Custom Jira Boards) → per-brand
-config pages → Batch 008 (Convert.com).
+**Priority order (reslotted 2026-07-09, confirmed with Lacey; mirrors
+CROSS_CLAUDE.md §5. Canonical — the `CQIP Batch Outline` project file mirrors
+this; "CLAUDE.md wins"):**
 
-Rationale: the auth chain (auth.2 → auth.1 → Approach-C fix →
-auth-cleanup) plus login-events plumbing all shipped (§16), clearing the
-only operational-risk item on the board; Brand Wellness (2026-07-07) and
-Batch 005.2 (Coverage Ledger redesign, 2026-07-08) then shipped, so the
-Coverage layout is settled before 010.1's per-brand pill lands on it. 006
-leads next; 010.1 lands after it so pipeline alerts fire Teams pings from
-day one instead of shipping stubbed. 007 → per-brand config (hard prereq
-for 008) → 008.
+```
+IN FLIGHT
+  005.4  Coverage Ledger polish 2   (§15.5)
+
+NEXT (locked 2026-07-09)
+  1  005.5   Reggie brand-detail drawer polish   (dep: 005.4 monthly12)
+  2  Admin drawer changes                         (#5 anytime · #4 gated: Jenny + AC)
+  3  006     Teams dispatch (expanded)            ← unblocks 010.1 live pings
+  4  010.1   Pipeline alerts (merged 010.2 + Path 2)   — PM consult owed
+  5  007     Custom Jira Boards
+  6  —       Per-brand config pages               (prereq for 008)
+  7  008     Convert.com integration              (discovery-first)
+
+  •  ClickUp Client Archive — discovery-first; sequence behind 006, exact slot TBD
+```
+
+Rationale: the polish/drawer cluster (005.4 → 005.5 → admin) clears first while
+the ledger/drawer context is hot; 006 then leads the feature work and unblocks
+010.1's live Teams pings; 010.1 after 006; 007 → per-brand config (hard prereq
+for 008) → 008. ClickUp Client Archive is discovery-first, sequenced behind 006
+(exact slot TBD).
 
 (SHIPPED, no longer upcoming — all in §16: 5.19, Batch 005.25, Batch 011,
 Batch 009, Batch 010, Batch 005.1, Batch auth.2, Batch auth.1 [+
 Approach-C fix + auth-cleanup], Batch login-events, Brand Wellness,
-Batch 005.2, Batch 005.3. DISSOLVED: Batch 010.2 and the standalone Path 2 off-by-one
-item are folded into Batch 010.1; backlog 5.21 is absorbed into Batch 006.)
+Batch 005.2, Batch 005.3. IN FLIGHT: Batch 005.4 [§15.5]. DISSOLVED: Batch 010.2
+and the standalone Path 2 off-by-one item are folded into Batch 010.1; backlog
+5.21 is absorbed into Batch 006.)
 
 **SHIP-day open questions resolved:** multi-site support
 stays deferred (single Fusion92 tenant via env-config, per
