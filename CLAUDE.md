@@ -2339,7 +2339,7 @@ Lacey's 2026-07-09 review shipped as **Batch 005.4 — SHIPPED 2026-07-09 (see
 §16)** (incl. the Karen 005.3 L1 `LedgerRow.live` prune). Next: **Batch 005.5**
 (Reggie drawer polish).
 
-### Batch 005.5 — Reggie brand-detail drawer polish (scoped 2026-07-09)
+### Batch 005.5 — Reggie brand-detail drawer polish (scoped 2026-07-09) — IN FLIGHT → §15.5
 Read-only, no Jenny. On the all-user brand-detail (Reggie) drawer: a
 **6/12-month range dropdown** (reuses the 005.4 `monthly12` field alongside the
 existing 6mo `monthly`) · **click-a-month → filter the ticket list** to that
@@ -2709,8 +2709,45 @@ phase/status, open questions, and a pointer to the spec. Lifecycle:
 appears in exactly one of §15.5 / §16 — on ship, the entry here is
 deleted in the same commit that writes the §16 shipped entry.
 
-*(Empty — no batches currently in flight. Batch 005.4 — Coverage Ledger
-polish pass 2 — shipped 2026-07-09 and moved to §16 per §13 rule 34.)*
+### Batch 005.5 — Reggie brand-detail drawer polish — in flight (spec committed 2026-07-09)
+
+Read-only render/interaction polish on the all-user **Reggie** brand-detail
+drawer (`components/coverage/brand-detail-drawer.tsx` — opened by clicking a
+brand *name*; has the "View Brand Wellness" CTA, 6-month bars, KPI cards,
+recent-ticket list). Three tweaks from Lacey's 2026-07-09 review + one admin
+ride-along. **No migration, no route, no new mutation surface, no Jenny.**
+Canonical spec: `docs/batch-005.5-brand-detail-drawer-spec.md`.
+
+**Dependency:** #1 reuses `row.monthly12` (12-month series added in Batch 005.4,
+shipped) — do NOT re-aggregate.
+
+**Locked changes (spec §2):**
+- **#1** Replace the static "LAST 6 MONTHS" label above the bar chart with a
+  range dropdown — **"Last 6 Months"** (default) / **"Last 12 Months"**. 6 reads
+  `row.monthly`, 12 reads `row.monthly12`. Local state; bars + axis re-render.
+- **#2** Make each month bar **clickable** → scope the ticket list below from
+  "last 28 days" to that month's non-deleted milestones (date · ticket Jira link
+  · source); header → "Tests in {Month YYYY} (N)"; reset via re-click active bar
+  or a small control; selected bar reads selected (token highlight); empty month
+  → "No tests in {Month YYYY}." Client-side filter over data already in the
+  drawer — no new fetch.
+- **#3** Remove the **THIS MONTH** KPI card (keep This Week / Last Week /
+  Rolling 28D); re-flow the grid 4 → 3 (no orphaned cell).
+- **#4 RIDE-ALONG** (`components/coverage/brand-admin-drawer.tsx`): remove the
+  redundant **Filter-by-brand** control on the Milestones tab (drawer is already
+  brand-scoped). Read-only, no Jenny. **DO NOT touch the QA-URL-pattern editor —
+  it is on HOLD** (AC gate RED; the dashboard editor is the only writer for the
+  config). Leave editor + column intact.
+
+**NOT in scope (spec §4):** the QA-URL editor removal (HOLD); the add-milestone
+form (Claude Design); the Reggie→accordion fold-in + BW CTA re-home (deferred
+005.2 item, own batch); Brand Wellness v2 (rework overlay / export / compare).
+
+**Process:** No Jenny. Commit 1 = spec + this §15.5 entry (docs-only). Commit 2 =
+build #1–#4, atomic §15.5 status. Recommended **no version bump** (render/
+interaction only). tsc clean, build green, ESLint zero new. **DO NOT PUSH** —
+Karen post-flight → Lacey smokes both themes → pushes. On ship: docs reconcile
+(§15.5 → §16), r34.
 
 ---
 
