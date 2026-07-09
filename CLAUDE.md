@@ -2642,7 +2642,7 @@ phase/status, open questions, and a pointer to the spec. Lifecycle:
 appears in exactly one of §15.5 / §16 — on ship, the entry here is
 deleted in the same commit that writes the §16 shipped entry.
 
-### Batch 005.4 — Coverage Ledger polish, pass 2 — in flight (spec committed 2026-07-09)
+### Batch 005.4 — Coverage Ledger polish, pass 2 — built, committed-not-pushed 2026-07-09
 
 Second UX-polish pass on the Coverage Ledger, from Lacey's 2026-07-09 live review
 of 005.3. Read-only render/copy tweaks + one data-source swap (sparkline).
@@ -2683,10 +2683,21 @@ Design), #6b (resizable columns → real feature), #7 (alert colors → future t
 no change to chip loudness, KPI scope, drought predicate, or locked 005.2/005.3 behavior
 beyond the #1 partial revert.
 
-**Process:** No Jenny. Commit 1 = spec + this §15.5 entry (docs-only). Commit 2 =
-build #1–#6a + L1, atomic §15.5 status. Recommended **no version bump** (render/copy
-only). tsc clean, build green, `coverage-kpis` 5/5, ESLint zero new. **DO NOT PUSH** —
-Karen post-flight → Lacey smokes both themes → pushes. On ship: docs reconcile
+**Process:** No Jenny. Commit 1 = spec + §15.5 entry (docs-only, `ea5f8a5`).
+**Commit 2 = build #1–#6a + L1 + this atomic §15.5 status — DONE,
+committed-not-pushed 2026-07-09.** Landed exactly as scoped: #1 This-Wk numeral
+reverted (Delivered-28d kept on status color); #2 sparkline repointed to the new
+12-month `monthly12` (`monthly` 6mo + `daily7`/`dailyCounts` both untouched;
+`DeliverySparkline` needed no change — n-agnostic); #3 stage-name button/span
+share a `STAGE_NAME_TYPE` const (`appearance-none`/`leading-none`, computed-
+identical); #4 legend caption deleted; #5 column header "Ready / Gated" + caption
+"{n} ready · {n} gated"; #6a `min-w-[3.25rem]` right-aligned ready/total label so
+bar left-edges align; L1 `LedgerRow.live` field + assignment + stale comment
+removed (grep-confirmed the only two refs; presence card unaffected). **No version
+bump** (render/copy only; stays v2.5). Verified: `tsc --noEmit` clean; `npm run
+build` green (`/dashboard/coverage` prerenders); `tests/coverage-kpis.test.ts` 5/5
+(KPI calc untouched); ESLint on the changed files → zero findings. **DO NOT PUSH**
+— Karen post-flight → Lacey smokes both themes → pushes. On ship: docs reconcile
 (§15.5 → §16), r34, mirroring 005.3.
 
 ---

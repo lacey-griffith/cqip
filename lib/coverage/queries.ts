@@ -45,10 +45,16 @@ export interface CoverageRow {
   testsCurrentMonth: number;
   reworkRolling28: number;
   droughtFlag: boolean;
+  // 6-month per-month series — feeds the Reggie drawer's bar chart. Kept
+  // exactly as-is (do NOT repoint to 12mo).
   monthly: Array<{ monthIso: string; count: number }>;
-  // 7 per-day milestone counts, oldest→newest, ending today (Batch 005.2
-  // Coverage Ledger sparkline). Length is always `days` (default 7); an
-  // all-zero series is legitimate ("no deliveries this week"), not missing.
+  // 12-month per-month series — feeds the Coverage Ledger sparkline (Batch
+  // 005.4 #2, the growth read). A reusable field so the coming 005.5 drawer
+  // 6/12 toggle can read both `monthly` and `monthly12`.
+  monthly12: Array<{ monthIso: string; count: number }>;
+  // 7 per-day milestone counts, oldest→newest, ending today (Batch 005.2).
+  // No longer fed to the ledger sparkline (005.4 #2 moved that to monthly12);
+  // KEPT — parked for a possible future daily surface. Length is always `days`.
   daily7: number[];
 }
 
@@ -278,6 +284,7 @@ export function buildCoverageRows(
     const reworkRolling28 = reworkCountForBrand(logs, brand.jira_value, rolling28Start, now);
     const droughtFlag = isInDrought(testsRolling28, brand.is_paused);
     const monthly = monthlyCounts(milestones, brand.id, 6, now);
+    const monthly12 = monthlyCounts(milestones, brand.id, 12, now);
     const daily7 = dailyCounts(milestones, brand.id, 7, now);
 
     return {
@@ -289,6 +296,7 @@ export function buildCoverageRows(
       reworkRolling28,
       droughtFlag,
       monthly,
+      monthly12,
       daily7,
     };
   });

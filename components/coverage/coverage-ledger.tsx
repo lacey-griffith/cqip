@@ -67,6 +67,13 @@ const SEG_ORDER: Array<'ready' | OverlayKey> = ['ready', ...OVERLAY_KEYS];
 // order, not hardcoded, so it tracks any future change to PIPELINE_STAGES.
 const LIVE_STAGE: PipelineStage = PIPELINE_STAGES[PIPELINE_STAGES.length - 1];
 
+// Shared stage-name typography (Batch 005.4 #3) — the linked <button> and the
+// non-linked <span> render computed-identical type; only color, the "→", and
+// the hover/focus underline differ. `appearance-none` + `leading-none` kill the
+// UA button-style leak (size/family already inherit via the globals.css
+// `button { font: inherit }` rule).
+const STAGE_NAME_TYPE = 'appearance-none text-[10px] font-semibold uppercase tracking-[0.04em] leading-none';
+
 export interface StageSummary {
   stage: PipelineStage;
   total: number;
@@ -85,7 +92,6 @@ export interface LedgerRow {
   wipReady: number; // Σ stage ready (untagged)
   wipHeld: number; // wip − wipReady
   aggPerTag: Record<OverlayKey, number>;
-  live: StageSummary; // stages[4]
 }
 
 function emptyPerTag(): Record<OverlayKey, number> {
@@ -105,8 +111,8 @@ function summarizeStage(pipeline: PipelineBrand | undefined, stage: PipelineStag
 }
 
 // Pure merge of a CoverageRow with its live pipeline data. Exported so the
-// page can build the array once, then sort by the pipeline-derived keys
-// (live / pipeline) alongside the coverage-derived keys.
+// page can build the array once, then sort by the pipeline-derived key
+// (pipeline WIP) alongside the coverage-derived keys.
 export function buildLedgerRow(row: CoverageRow, pipeline: PipelineBrand | undefined): LedgerRow {
   const stages = PIPELINE_STAGES.map(s => summarizeStage(pipeline, s));
   const wip = stages.reduce((a, s) => a + s.total, 0);
@@ -120,7 +126,6 @@ export function buildLedgerRow(row: CoverageRow, pipeline: PipelineBrand | undef
     wipReady,
     wipHeld: wip - wipReady,
     aggPerTag,
-    live: stages[4],
   };
 }
 
@@ -155,7 +160,7 @@ const SORT_COLUMNS: Array<{ key: LedgerSortKey; label: string; align: 'left' | '
   { key: 'brand', label: 'Brand', align: 'left', padLeft: 12 },
   { key: 'delivered', label: 'Delivered 28d', align: 'right' },
   { key: 'thisWk', label: 'This Wk', align: 'right' },
-  { key: 'pipeline', label: 'Pipeline · ready / WIP', align: 'left', padLeft: 18 },
+  { key: 'pipeline', label: 'Ready / Gated', align: 'left', padLeft: 18 },
 ];
 
 export function CoverageLedger({
@@ -369,16 +374,19 @@ export function CoverageLedger({
                     >
                       {row.testsRolling28}
                     </div>
-                    {/* this wk — colored by status (§2.7) */}
+                    {/* this wk — reverted to zero-vs-nonzero (005.4 #1);
+                        Delivered-28d keeps the §2.7 status coloring. */}
                     <div
                       className="text-right text-[15px] font-medium tabular-nums"
-                      style={{ color: numeralColor }}
+                      style={{ color: row.testsCurrentWeek === 0 ? 'var(--f92-lgray)' : 'var(--f92-dark)' }}
                     >
                       {row.testsCurrentWeek}
                     </div>
                     {/* pipeline */}
                     <div className="flex items-center gap-3 pl-[18px]">
-                      <div className="whitespace-nowrap tabular-nums">
+                      {/* Fixed-width, right-aligned "N / M" so every row's bar
+                          starts at the same x (005.4 #6a). */}
+                      <div className="min-w-[3.25rem] shrink-0 whitespace-nowrap text-right tabular-nums">
                         <span className="text-[18px] font-bold" style={{ color: 'var(--ledger-seg-ready)' }}>
                           {wipReady}
                         </span>
@@ -400,7 +408,7 @@ export function CoverageLedger({
                           )}
                         </div>
                         <div className="mt-1 text-[10px] text-[color:var(--f92-gray)]">
-                          {wipReady} ready · {wipHeld} held by tags
+                          {wipReady} ready · {wipHeld} gated
                         </div>
                       </div>
                     </div>
@@ -414,8 +422,10 @@ export function CoverageLedger({
                         <div className="mb-3.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--f92-gray)]">
                           Delivery Detail
                         </div>
+                        {/* 12-month growth series (005.4 #2), not the 7-day
+                            daily series (~always flat at current volume). */}
                         <div className="mb-4">
-                          <DeliverySparkline values={row.daily7} />
+                          <DeliverySparkline values={row.monthly12.map(m => m.count)} />
                         </div>
                         <dl className="divide-y divide-[color:var(--f92-border)] overflow-hidden rounded-xl border border-[color:var(--f92-border)]">
                           {[
@@ -462,9 +472,6 @@ export function CoverageLedger({
                           <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[color:var(--f92-gray)]">
                             Pipeline by Stage
                           </span>
-                          <span className="text-[11px] text-[color:var(--f92-gray)]">
-                            Bold = ready (no tags) · remainder held by status tags
-                          </span>
                         </div>
                         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-5">
                           {stages.map(st => {
@@ -491,12 +498,12 @@ export function CoverageLedger({
                                       type="button"
                                       onClick={() => onStage(row, st.stage)}
                                       aria-label={`View ${STAGE_LABELS[st.stage]} tickets for ${brand.display_name}`}
-                                      className="text-[10px] font-semibold uppercase tracking-[0.04em] text-[color:var(--f92-navy)] transition hover:text-[color:var(--f92-orange)] hover:underline focus-visible:underline"
+                                      className={cn(STAGE_NAME_TYPE, 'text-[color:var(--f92-navy)] transition hover:text-[color:var(--f92-orange)] hover:underline focus-visible:underline')}
                                     >
                                       {STAGE_LABELS[st.stage]} →
                                     </button>
                                   ) : (
-                                    <span className="text-[10px] font-semibold uppercase tracking-[0.04em] text-[color:var(--f92-gray)]">
+                                    <span className={cn(STAGE_NAME_TYPE, 'text-[color:var(--f92-gray)]')}>
                                       {STAGE_LABELS[st.stage]}
                                     </span>
                                   )}
