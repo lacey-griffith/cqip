@@ -32,6 +32,11 @@ interface ManageMilestonesDialogProps {
   // (e.g. the coverage-page BrandAdminDrawer) can refetch its own counts.
   // Defaults to a no-op — the settings page works unchanged without it.
   onChanged?: () => void;
+  // Batch 005.5 #4: hide the "Filter by brand" control. The BrandAdminDrawer is
+  // already scoped to a single brand (`initialBrandId`), so the filter is
+  // redundant there; the list stays pinned to that brand. Defaults false so any
+  // un-scoped caller keeps the filter.
+  hideBrandFilter?: boolean;
 }
 
 interface EditState {
@@ -66,7 +71,7 @@ function sourceVariant(source: string): 'default' | 'in_progress' | 'resolved' |
   }
 }
 
-export function ManageMilestonesDialog({ brands, initialBrandId, onChanged }: ManageMilestonesDialogProps) {
+export function ManageMilestonesDialog({ brands, initialBrandId, onChanged, hideBrandFilter = false }: ManageMilestonesDialogProps) {
   const { toast } = useToast();
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [loading, setLoading] = useState(true);
@@ -348,20 +353,25 @@ export function ManageMilestonesDialog({ brands, initialBrandId, onChanged }: Ma
 
       <Card className="p-4">
         <div className="flex flex-wrap items-end gap-3">
-          <div className="min-w-[14rem]">
-            <Label htmlFor="filterBrand" className="text-[10px] uppercase tracking-widest text-[color:var(--f92-gray)]">Filter by brand</Label>
-            <Select value={brandFilter} onValueChange={setBrandFilter}>
-              <SelectTrigger id="filterBrand" className="h-9 text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL}>All brands</SelectItem>
-                {brands.map(b => (
-                  <SelectItem key={b.id} value={b.id}>{b.display_name} ({b.brand_code})</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {/* Batch 005.5 #4: brand filter hidden when the host is already
+              brand-scoped (BrandAdminDrawer). brandFilter stays pinned to
+              initialBrandId so the list still shows only the current brand. */}
+          {!hideBrandFilter ? (
+            <div className="min-w-[14rem]">
+              <Label htmlFor="filterBrand" className="text-[10px] uppercase tracking-widest text-[color:var(--f92-gray)]">Filter by brand</Label>
+              <Select value={brandFilter} onValueChange={setBrandFilter}>
+                <SelectTrigger id="filterBrand" className="h-9 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL}>All brands</SelectItem>
+                  {brands.map(b => (
+                    <SelectItem key={b.id} value={b.id}>{b.display_name} ({b.brand_code})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
           <p className="ml-auto text-xs text-[color:var(--f92-gray)]">
             {loading ? 'Loading…' : `${visible.length} milestone${visible.length === 1 ? '' : 's'}`}
           </p>

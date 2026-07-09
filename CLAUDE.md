@@ -2709,7 +2709,7 @@ phase/status, open questions, and a pointer to the spec. Lifecycle:
 appears in exactly one of §15.5 / §16 — on ship, the entry here is
 deleted in the same commit that writes the §16 shipped entry.
 
-### Batch 005.5 — Reggie brand-detail drawer polish — in flight (spec committed 2026-07-09)
+### Batch 005.5 — Reggie brand-detail drawer polish — built, committed-not-pushed 2026-07-09
 
 Read-only render/interaction polish on the all-user **Reggie** brand-detail
 drawer (`components/coverage/brand-detail-drawer.tsx` — opened by clicking a
@@ -2743,11 +2743,26 @@ shipped) — do NOT re-aggregate.
 form (Claude Design); the Reggie→accordion fold-in + BW CTA re-home (deferred
 005.2 item, own batch); Brand Wellness v2 (rework overlay / export / compare).
 
-**Process:** No Jenny. Commit 1 = spec + this §15.5 entry (docs-only). Commit 2 =
-build #1–#4, atomic §15.5 status. Recommended **no version bump** (render/
-interaction only). tsc clean, build green, ESLint zero new. **DO NOT PUSH** —
-Karen post-flight → Lacey smokes both themes → pushes. On ship: docs reconcile
-(§15.5 → §16), r34.
+**Process:** No Jenny. Commit 1 = spec + §15.5 entry (docs-only, `9e3a458`).
+**Commit 2 = build #1–#4 + this atomic §15.5 status — DONE, committed-not-pushed
+2026-07-09.** Landed as scoped: #1 native range `<select>` (6 default / 12) feeds
+the bar chart from `row.monthly` / `row.monthly12`; #2 clickable bars (recharts
+`<Cell>` per month; selected = full `--f92-orange` + `--f92-navy` outline, others
+dim to 0.3 opacity; Bar `onClick` toggles) scope the list to that month with a
+"← last 28 days" reset + empty-month copy; #3 THIS MONTH KPI dropped, grid
+`grid-cols-2` → `grid-cols-3` (This Week / Last Week / Rolling 28d); #4 the
+`ManageMilestonesDialog` "Filter by brand" control is hidden via a new
+`hideBrandFilter` prop (default false; `BrandAdminDrawer` passes it — the list
+stays pinned to `initialBrandId`), QA-URL editor + column untouched (HOLD). Month
+selection resets on brand/open change via a render-time reset (no effect → no
+`set-state-in-effect`). Only pre-existing hex in the drawer is the recharts axis
+`stroke="#6B7280"` (verbatim, matches sibling charts); new bar colors are tokens.
+**No version bump** (render/interaction only; stays v2.5). Verified: `tsc
+--noEmit` clean; `npm run build` green (`/dashboard/coverage` prerenders);
+`tests/coverage-kpis.test.ts` 5/5; ESLint on the 3 changed files → zero findings.
+Files: `brand-detail-drawer.tsx`, `brand-admin-drawer.tsx`,
+`manage-milestones-dialog.tsx`. **DO NOT PUSH** — Karen post-flight → Lacey smokes
+both themes → pushes. On ship: docs reconcile (§15.5 → §16), r34.
 
 ---
 

@@ -213,6 +213,7 @@ export function BrandAdminDrawer({ brand, brands, open, onOpenChange, onMutated 
               brands={brands}
               initialBrandId={brand.id}
               onChanged={onMutated}
+              hideBrandFilter
             />
           ) : null}
 

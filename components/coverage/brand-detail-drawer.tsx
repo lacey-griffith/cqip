@@ -1,7 +1,8 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { Badge } from '@/components/ui/badge';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import type { CoverageRow, Milestone } from '@/lib/coverage/queries';
@@ -27,12 +28,45 @@ function formatDateTime(iso: string | null): string {
   return d.toLocaleString('en-US', { month: 'short', day: '2-digit', year: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
+// Short axis label ("Mar") for a "YYYY-MM" bucket key.
 function monthLabel(monthIso: string): string {
   const [y, m] = monthIso.split('-');
   return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('en-US', { month: 'short' });
 }
 
+// Full label ("March 2026") for the selected-month list header.
+function monthYearLabel(monthIso: string): string {
+  const [y, m] = monthIso.split('-');
+  return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+}
+
+// Is a timestamp inside the calendar month named by a "YYYY-MM" key?
+function inMonth(iso: string, monthIso: string): boolean {
+  const [y, m] = monthIso.split('-').map(Number);
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return false;
+  const start = new Date(y, m - 1, 1).getTime();
+  const end = new Date(y, m, 1).getTime();
+  return t >= start && t < end;
+}
+
 export function BrandDetailDrawer({ row, milestones, open, onOpenChange }: BrandDetailDrawerProps) {
+  // Chart range (Batch 005.5 #1) + clicked-month filter (#2). Hooks run
+  // unconditionally (before the null-guard below).
+  const [rangeMonths, setRangeMonths] = useState<6 | 12>(6);
+  const [selectedMonthIso, setSelectedMonthIso] = useState<string | null>(null);
+
+  // Reset the month filter whenever the drawer opens or the brand changes, so a
+  // stale selection never carries across brands / reopens. Render-time reset
+  // per React's "adjusting state on a prop change" pattern (no effect → avoids
+  // set-state-in-effect); React re-renders immediately with the reset value.
+  const resetKey = `${row?.brand.id ?? ''}:${open}`;
+  const [prevResetKey, setPrevResetKey] = useState(resetKey);
+  if (resetKey !== prevResetKey) {
+    setPrevResetKey(resetKey);
+    setSelectedMonthIso(null);
+  }
+
   if (!row) return null;
 
   const { brand } = row;
@@ -42,7 +76,25 @@ export function BrandDetailDrawer({ row, milestones, open, onOpenChange }: Brand
     .sort((a, b) => new Date(b.reached_at).getTime() - new Date(a.reached_at).getTime())
     .slice(0, 20);
 
-  const chartData = row.monthly.map(m => ({ month: monthLabel(m.monthIso), count: m.count }));
+  // Bar-chart series follows the range dropdown (#1): 12mo reuses the 005.4
+  // `monthly12` field, 6mo the existing `monthly`.
+  const series = rangeMonths === 12 ? row.monthly12 : row.monthly;
+  const chartData = series.map(m => ({ label: monthLabel(m.monthIso), monthIso: m.monthIso, count: m.count }));
+
+  // List scope (#2): a clicked month filters to that month's milestones for this
+  // brand; otherwise the default rolling-28d list. Client-side over data already
+  // held — no new fetch.
+  const monthMilestones = selectedMonthIso
+    ? milestones
+        .filter(m => !m.is_deleted && m.brand_id === brand.id && inMonth(m.reached_at, selectedMonthIso))
+        .sort((a, b) => new Date(b.reached_at).getTime() - new Date(a.reached_at).getTime())
+    : null;
+  const listItems = monthMilestones ?? recentMilestones;
+  const selectedLabel = selectedMonthIso ? monthYearLabel(selectedMonthIso) : null;
+
+  function toggleMonth(iso: string) {
+    setSelectedMonthIso(prev => (prev === iso ? null : iso));
+  }
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -79,7 +131,10 @@ export function BrandDetailDrawer({ row, milestones, open, onOpenChange }: Brand
           </div>
         ) : null}
 
-        <div className="mt-4 grid grid-cols-2 gap-2">
+        {/* KPI cards — This Week / Last Week / Rolling 28d (Batch 005.5 #3
+            dropped THIS MONTH: it duplicated the bar chart's current month and
+            the Rolling 28d drought window). 3-up grid, no orphaned cell. */}
+        <div className="mt-4 grid grid-cols-3 gap-2">
           <div className="rounded-xl border border-[color:var(--f92-border)] bg-white p-3">
             <p className="text-[10px] uppercase tracking-widest text-[color:var(--f92-gray)]">This Week</p>
             <p className="mt-1 text-2xl font-bold text-[color:var(--f92-navy)]">{row.testsCurrentWeek}</p>
@@ -92,18 +147,31 @@ export function BrandDetailDrawer({ row, milestones, open, onOpenChange }: Brand
             <p className="text-[10px] uppercase tracking-widest text-[color:var(--f92-gray)]">Rolling 28d</p>
             <p className="mt-1 text-2xl font-bold text-[color:var(--f92-navy)]">{row.testsRolling28}</p>
           </div>
-          <div className="rounded-xl border border-[color:var(--f92-border)] bg-white p-3">
-            <p className="text-[10px] uppercase tracking-widest text-[color:var(--f92-gray)]">This Month</p>
-            <p className="mt-1 text-2xl font-bold text-[color:var(--f92-navy)]">{row.testsCurrentMonth}</p>
-          </div>
         </div>
 
         <div className="mt-6">
-          <p className="text-[10px] uppercase tracking-widest text-[color:var(--f92-gray)]">Last 6 months</p>
-          <div className="mt-2">
+          {/* Range dropdown (#1) replaces the old static "Last 6 months" label. */}
+          <div className="flex items-center justify-between gap-2">
+            <label htmlFor="brand-range" className="text-[10px] uppercase tracking-widest text-[color:var(--f92-gray)]">
+              Deliveries by month
+            </label>
+            <select
+              id="brand-range"
+              value={rangeMonths}
+              onChange={e => {
+                setRangeMonths(Number(e.target.value) === 12 ? 12 : 6);
+                setSelectedMonthIso(null); // range change clears the month filter
+              }}
+              className="rounded-md border border-[color:var(--f92-border)] bg-white px-2 py-1 text-xs text-[color:var(--f92-dark)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)]"
+            >
+              <option value={6}>Last 6 Months</option>
+              <option value={12}>Last 12 Months</option>
+            </select>
+          </div>
+          <div className="mt-2 [&_.recharts-bar-rectangle]:cursor-pointer">
             <ResponsiveContainer width="100%" height={140}>
               <BarChart data={chartData}>
-                <XAxis dataKey="month" fontSize={11} stroke="#6B7280" />
+                <XAxis dataKey="label" fontSize={11} stroke="#6B7280" />
                 <YAxis fontSize={11} stroke="#6B7280" allowDecimals={false} />
                 <Tooltip
                   cursor={{ fill: 'var(--f92-tint)' }}
@@ -117,19 +185,56 @@ export function BrandDetailDrawer({ row, milestones, open, onOpenChange }: Brand
                   labelStyle={{ color: 'var(--f92-dark)', fontWeight: 600 }}
                   itemStyle={{ color: 'var(--f92-dark)' }}
                 />
-                <Bar dataKey="count" fill="#F47920" radius={[6, 6, 0, 0]} />
+                {/* Clickable bars (#2): click a month → filter the list below;
+                    the selected bar reads selected (navy outline), others dim. */}
+                <Bar
+                  dataKey="count"
+                  radius={[6, 6, 0, 0]}
+                  onClick={(_, index) => {
+                    const iso = chartData[index]?.monthIso;
+                    if (iso) toggleMonth(iso);
+                  }}
+                >
+                  {chartData.map(d => (
+                    <Cell
+                      key={d.monthIso}
+                      fill="var(--f92-orange)"
+                      fillOpacity={selectedMonthIso && selectedMonthIso !== d.monthIso ? 0.3 : 1}
+                      stroke={selectedMonthIso === d.monthIso ? 'var(--f92-navy)' : undefined}
+                      strokeWidth={selectedMonthIso === d.monthIso ? 2 : 0}
+                    />
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
+          <p className="mt-1 text-[10px] text-[color:var(--f92-lgray)]">Click a month to filter the list below.</p>
         </div>
 
         <div className="mt-6">
-          <p className="text-[10px] uppercase tracking-widest text-[color:var(--f92-gray)]">Tests in last 28 days ({recentMilestones.length})</p>
-          {recentMilestones.length === 0 ? (
-            <p className="mt-2 text-sm text-[color:var(--f92-gray)]">No tests recorded in the last 28 days.</p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[10px] uppercase tracking-widest text-[color:var(--f92-gray)]">
+              {selectedMonthIso
+                ? `Tests in ${selectedLabel} (${listItems.length})`
+                : `Tests in last 28 days (${recentMilestones.length})`}
+            </p>
+            {selectedMonthIso ? (
+              <button
+                type="button"
+                onClick={() => setSelectedMonthIso(null)}
+                className="text-[10px] font-medium text-[color:var(--f92-navy)] transition hover:text-[color:var(--f92-orange)] hover:underline"
+              >
+                ← last 28 days
+              </button>
+            ) : null}
+          </div>
+          {listItems.length === 0 ? (
+            <p className="mt-2 text-sm text-[color:var(--f92-gray)]">
+              {selectedMonthIso ? `No tests in ${selectedLabel}.` : 'No tests recorded in the last 28 days.'}
+            </p>
           ) : (
             <ul className="mt-2 max-h-64 space-y-2 overflow-y-auto">
-              {recentMilestones.map(m => (
+              {listItems.map(m => (
                 <li key={m.id} className="rounded-xl border border-[color:var(--f92-border)] bg-white p-3 text-sm">
                   <div className="flex items-center justify-between gap-2">
                     {m.jira_ticket_url ? (
