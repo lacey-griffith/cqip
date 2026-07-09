@@ -2310,8 +2310,9 @@ Merged the Batch 010 split Output + Pipeline tables into one accordion
 "Coverage Ledger". Read-only render redesign; all four scope forks resolved and
 the LOCKED §15 four-chip set wired (verbatim `Awaiting client input`). Deferred
 follow-up (spec §6): the Reggie-drawer fold-in + Brand Wellness CTA re-home
-(kept as a "Full detail →" link this batch). Optional polish deferred (Karen
-L2/L3): drought/active summary-numeral coloring + a "Paused" legend swatch.
+(kept as a "Full detail →" link this batch). Optional polish (Karen L2/L3:
+drought/active summary-numeral coloring + a "Paused" legend swatch) picked up
+by **Batch 005.3 — in flight → §15.5**.
 
 ### Dashboard polish cluster + Pipeline sortable columns + rework indicator (scoped 2026-07-03)
 Standalone entry — NOT part of Batch 005.2 (different page). Three grouped
@@ -2627,8 +2628,57 @@ phase/status, open questions, and a pointer to the spec. Lifecycle:
 appears in exactly one of §15.5 / §16 — on ship, the entry here is
 deleted in the same commit that writes the §16 shipped entry.
 
-*(Empty — no batches currently in flight. Batch 005.2 — Coverage Ledger
-redesign — shipped 2026-07-08 and moved to §16 per §13 rule 34.)*
+### Batch 005.3 — Coverage Ledger polish — in flight (spec committed 2026-07-08)
+
+Read-only render/UX polish on the 005.2 Coverage Ledger (shipped `324677a`).
+Surfaced in 005.2 smoke + folds in Karen L2/L3. **No migration, no route, no new
+mutation surface, no new token, no new dep, no Jenny.** Reuses the 005.2 ledger
+components + `--ledger-*` tokens. Canonical spec:
+`docs/batch-005.3-ledger-polish-spec.md` (Commit 1, this docs commit).
+
+**Files (only three):** `components/coverage/coverage-ledger.tsx` (most of it),
+`app/dashboard/coverage/page.tsx` (sort case + one prop),
+`components/coverage/pipeline-stage-drawer.tsx` (subheader).
+
+**Locked scope (spec §2–§3):**
+- **§2.1 Remove the top-level "Live · ready/total" summary column** (5 → 4:
+  Brand · Delivered 28d · This Wk · Pipeline). Drops `'live'` from
+  `LedgerSortKey` / `SORT_COLUMNS` / the `GRID` 96px track + the page sort
+  `case 'live'`; freed width → the Pipeline bar. **Supersedes the 005.2 §3.4
+  five-sortable-column contract → now four.** Why (Lacey's workflow rule): a
+  live test never carries a hold tag (it becomes a quality log and leaves Live),
+  so `held` is structurally 0 and Live's ratio is always N/N — no information.
+- **§2.2 Live stage card = presence** ("N live", no `/N`) when clean
+  (`isLive && held === 0`); **defensive fallback** — if `held > 0` on Live
+  (mid-sync tag, cron lag, dirty history) render the NORMAL stage card so the
+  anomaly SURFACES. Do NOT hardcode `held === 0`. Live = `PIPELINE_STAGES[4]`.
+- **§2.3 Stage NAME becomes the drawer link** (`LABEL →`, hover/focus underline,
+  navy→orange) when `st.total > 0`; retire the separate `view →` button; empty
+  stage = plain non-clickable span, no arrow.
+- **§2.4 Drawer subheader** "N ticket(s) in stage" → "N ticket(s) gated in
+  {stageLabel}" (pluralized).
+- **§2.5 "Full detail →"** text link → secondary/outlined button, same placement.
+- **§2.6 All-collapsed on load** — ALREADY the behavior; verify no regression,
+  do not add auto-open.
+- **§2.7 Numeral color-coding** — Delivered-28d + This-Wk numerals by status:
+  paused → `--f92-lgray`, drought (`row.droughtFlag`) → `--ledger-drought`,
+  active → `--ledger-active` (replaces zero-vs-nonzero; tokens only). [Karen L2]
+- **§2.8 Paused legend swatch** — add `showPaused: boolean` to
+  `CoverageLedgerProps`, pass from the page, render a `--ledger-paused` swatch in
+  the legend only when `showPaused`. [Karen L3]
+- **§3 Expand all / Collapse all** — two header buttons on the existing `open`
+  Set (`new Set(rows.map(lr => lr.row.brand.id))` / `new Set()`); disable when
+  loading or `rows.length === 0`; no state lift.
+
+**NOT in scope:** chip loudness, KPI scope, drought predicate, sparkline data,
+any 005.2-locked behavior; the Reggie fold-in / BW CTA re-home (own later batch).
+
+**Process:** No Jenny. Commit 1 = spec + this §15.5 entry (docs-only). Commit 2 =
+build §2.1–§2.8 + §3, atomic CLAUDE.md (§15.5 status). Recommended **no version
+bump** (render/UX only, no new structural surface — mirrors 005.2 commit-3).
+tsc clean, build green, `coverage-kpis` 5/5, ESLint zero new. **DO NOT PUSH** —
+Karen post-flight → Lacey smokes both themes → pushes. On ship: docs reconcile
+(§15.5 removed, full §16 entry recording the 5→4 sort-contract supersede), r34.
 
 ---
 
