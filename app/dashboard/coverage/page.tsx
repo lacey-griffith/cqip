@@ -249,9 +249,6 @@ export default function CoveragePage() {
         case 'thisWk':
           cmp = a.row.testsCurrentWeek - b.row.testsCurrentWeek;
           break;
-        case 'live':
-          cmp = a.live.ready - b.live.ready;
-          break;
         case 'pipeline':
           cmp = a.wip - b.wip;
           break;
@@ -488,6 +485,7 @@ export default function CoveragePage() {
           rows={ledgerRows}
           loading={loading}
           brandsConfigured={brands.length > 0}
+          showPaused={showPaused}
           sortKey={ledgerSortKey}
           sortDir={sortDir}
           onSort={toggleSort}

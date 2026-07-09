@@ -2628,7 +2628,7 @@ phase/status, open questions, and a pointer to the spec. Lifecycle:
 appears in exactly one of §15.5 / §16 — on ship, the entry here is
 deleted in the same commit that writes the §16 shipped entry.
 
-### Batch 005.3 — Coverage Ledger polish — in flight (spec committed 2026-07-08)
+### Batch 005.3 — Coverage Ledger polish — built, committed-not-pushed 2026-07-08
 
 Read-only render/UX polish on the 005.2 Coverage Ledger (shipped `324677a`).
 Surfaced in 005.2 smoke + folds in Karen L2/L3. **No migration, no route, no new
@@ -2673,12 +2673,21 @@ components + `--ledger-*` tokens. Canonical spec:
 **NOT in scope:** chip loudness, KPI scope, drought predicate, sparkline data,
 any 005.2-locked behavior; the Reggie fold-in / BW CTA re-home (own later batch).
 
-**Process:** No Jenny. Commit 1 = spec + this §15.5 entry (docs-only). Commit 2 =
-build §2.1–§2.8 + §3, atomic CLAUDE.md (§15.5 status). Recommended **no version
-bump** (render/UX only, no new structural surface — mirrors 005.2 commit-3).
-tsc clean, build green, `coverage-kpis` 5/5, ESLint zero new. **DO NOT PUSH** —
-Karen post-flight → Lacey smokes both themes → pushes. On ship: docs reconcile
-(§15.5 removed, full §16 entry recording the 5→4 sort-contract supersede), r34.
+**Process:** No Jenny. Commit 1 = spec + §15.5 entry (docs-only, `619a259`).
+**Commit 2 = build §2.1–§2.8 + §3 + this atomic §15.5 status update — DONE,
+committed-not-pushed 2026-07-08.** Three files touched exactly as scoped
+(`coverage-ledger.tsx`, `page.tsx` sort-case + `showPaused` prop,
+`pipeline-stage-drawer.tsx` subheader); the Live stage-card presence path is
+defensive (falls back to the full ready/total render if `held > 0` on Live);
+Live identified as `PIPELINE_STAGES[PIPELINE_STAGES.length - 1]` (not hardcoded).
+**No version bump** (render/UX only, no new structural surface — mirrors 005.2
+commit-3; version stays v2.5). Verified: `tsc --noEmit` clean; `npm run build`
+green (`/dashboard/coverage` prerenders); `tests/coverage-kpis.test.ts` 5/5
+(untouched — the Live-column removal is render-only, no KPI-calc change);
+ESLint on the three changed files → zero findings. **DO NOT PUSH** — Karen
+post-flight → Lacey smokes both themes → pushes. On ship: docs reconcile
+(§15.5 removed, full §16 entry recording the 5→4 sort-contract supersede of
+005.2 §3.4), r34.
 
 ---
 

@@ -16,21 +16,23 @@ import {
 import { cn } from '@/lib/utils';
 
 // ---------------------------------------------------------------------------
-// Coverage Ledger (Batch 005.2). One accordion row per brand: collapsed
-// summary (delivered / this-week / live / pipeline) + inline expandable detail
-// (7-day sparkline, delivery stats, per-stage pipeline with status-tag chips).
-// Merges the Batch 010 split Output + Pipeline tables into one structure.
+// Coverage Ledger (Batch 005.2, polished 005.3). One accordion row per brand:
+// collapsed summary (delivered / this-week / pipeline) + inline expandable
+// detail (7-day sparkline, delivery stats, per-stage pipeline with status-tag
+// chips). Merges the Batch 010 split Output + Pipeline tables into one structure.
 //
 // Read-only render. All numbers come from functions/state the page already
 // owns (lib/coverage/queries.ts + /api/coverage/pipeline); this file only
 // derives per-stage ready/held from the shared pipeline data and renders.
 // ---------------------------------------------------------------------------
 
-// Exact 7-column grid from the design bundle (README §5). Fixed-px + fr mix,
-// so it lives in the layout (inline), not as a color token.
-const GRID = '22px 4px minmax(220px,1.3fr) 120px 92px 96px minmax(280px,1.5fr)';
+// 6-column grid (Batch 005.3 §2.1 dropped the standalone "Live" summary column —
+// a live test never carries a hold tag, so its ratio is always N/N; the freed
+// width goes to the pipeline bar). Fixed-px + fr mix, so it lives in the layout
+// (inline), not as a color token.
+const GRID = '22px 4px minmax(220px,1.3fr) 120px 92px minmax(320px,1.7fr)';
 
-export type LedgerSortKey = 'brand' | 'delivered' | 'thisWk' | 'live' | 'pipeline';
+export type LedgerSortKey = 'brand' | 'delivered' | 'thisWk' | 'pipeline';
 
 // Stacked-bar / chip segment colors — tokens (§13 r25). `ready` = untagged.
 const SEG_VAR: Record<'ready' | OverlayKey, string> = {
@@ -60,6 +62,10 @@ const CHIP_LABEL: Record<OverlayKey, string> = {
 
 // Segment render order (mock order): ready first, then the four hold tags.
 const SEG_ORDER: Array<'ready' | OverlayKey> = ['ready', ...OVERLAY_KEYS];
+
+// The last pipeline stage is Live (Batch 005.3 §2.2). Derived from the SoT
+// order, not hardcoded, so it tracks any future change to PIPELINE_STAGES.
+const LIVE_STAGE: PipelineStage = PIPELINE_STAGES[PIPELINE_STAGES.length - 1];
 
 export interface StageSummary {
   stage: PipelineStage;
@@ -135,6 +141,7 @@ interface CoverageLedgerProps {
   rows: LedgerRow[];
   loading: boolean;
   brandsConfigured: boolean;
+  showPaused: boolean; // drives the Paused legend swatch (§2.8)
   sortKey: LedgerSortKey | null; // null = default (status), no active column
   sortDir: 'asc' | 'desc';
   onSort: (k: LedgerSortKey) => void;
@@ -148,7 +155,6 @@ const SORT_COLUMNS: Array<{ key: LedgerSortKey; label: string; align: 'left' | '
   { key: 'brand', label: 'Brand', align: 'left', padLeft: 12 },
   { key: 'delivered', label: 'Delivered 28d', align: 'right' },
   { key: 'thisWk', label: 'This Wk', align: 'right' },
-  { key: 'live', label: 'Live · ready / total', align: 'right' },
   { key: 'pipeline', label: 'Pipeline · ready / WIP', align: 'left', padLeft: 18 },
 ];
 
@@ -156,6 +162,7 @@ export function CoverageLedger({
   rows,
   loading,
   brandsConfigured,
+  showPaused,
   sortKey,
   sortDir,
   onSort,
@@ -164,6 +171,8 @@ export function CoverageLedger({
   onFullDetail,
   onStage,
 }: CoverageLedgerProps) {
+  // Single source of expand state (§3): a Set of brand ids. Order-independent,
+  // so it survives a sort. Inits empty → all rows collapsed on load (§2.6).
   const [open, setOpen] = useState<Set<string>>(new Set());
 
   function toggle(id: string) {
@@ -175,6 +184,12 @@ export function CoverageLedger({
     });
   }
 
+  // Expand/collapse all operate on the currently filter/paused-scoped `rows`,
+  // so "expand all" opens exactly what's visible (§3).
+  const expandAll = () => setOpen(new Set(rows.map(lr => lr.row.brand.id)));
+  const collapseAll = () => setOpen(new Set());
+  const bulkDisabled = loading || rows.length === 0;
+
   return (
     <div>
       {/* Ledger header + legend */}
@@ -185,21 +200,50 @@ export function CoverageLedger({
           </span>
           <span className="text-xs text-[color:var(--f92-gray)]">Delivered + live pipeline, one row per brand.</span>
         </div>
-        <div className="flex items-center gap-4">
-          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[color:var(--f92-gray)]">
-            <span className="h-2 w-2 rounded-[2px]" style={{ background: 'var(--ledger-drought)' }} />
-            Drought
-          </span>
-          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[color:var(--f92-gray)]">
-            <span className="h-2 w-2 rounded-[2px]" style={{ background: 'var(--ledger-active)' }} />
-            Active
-          </span>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          {/* Expand all / Collapse all (§3) — operate on the existing open Set. */}
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={expandAll}
+              disabled={bulkDisabled}
+              className="text-[11px] font-medium text-[color:var(--f92-gray)] transition hover:text-[color:var(--f92-dark)] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Expand all
+            </button>
+            <button
+              type="button"
+              onClick={collapseAll}
+              disabled={bulkDisabled}
+              className="text-[11px] font-medium text-[color:var(--f92-gray)] transition hover:text-[color:var(--f92-dark)] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Collapse all
+            </button>
+          </div>
+          {/* Legend */}
+          <div className="flex items-center gap-4">
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[color:var(--f92-gray)]">
+              <span className="h-2 w-2 rounded-[2px]" style={{ background: 'var(--ledger-drought)' }} />
+              Drought
+            </span>
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[color:var(--f92-gray)]">
+              <span className="h-2 w-2 rounded-[2px]" style={{ background: 'var(--ledger-active)' }} />
+              Active
+            </span>
+            {/* Paused swatch only when paused brands are being shown (§2.8). */}
+            {showPaused ? (
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[color:var(--f92-gray)]">
+                <span className="h-2 w-2 rounded-[2px]" style={{ background: 'var(--ledger-paused)' }} />
+                Paused
+              </span>
+            ) : null}
+          </div>
         </div>
       </div>
 
       <div className="overflow-x-auto">
         <div className="min-w-[900px]">
-          {/* Column labels — five sortable cells */}
+          {/* Column labels — four sortable cells (Live column dropped, §2.1) */}
           <div
             className="grid items-end border-b border-[color:var(--f92-border)] pb-3 pr-3.5 text-[10.5px] font-semibold uppercase tracking-[0.05em] text-[color:var(--f92-gray)]"
             style={{ gridTemplateColumns: GRID }}
@@ -245,11 +289,19 @@ export function CoverageLedger({
             </div>
           ) : (
             rows.map(lr => {
-              const { row, stages, wip, wipReady, wipHeld, live } = lr;
+              const { row, stages, wip, wipReady, wipHeld } = lr;
               const { brand } = row;
               const isOpen = open.has(brand.id);
               const railColor = brand.is_paused
                 ? 'var(--ledger-paused)'
+                : row.droughtFlag
+                  ? 'var(--ledger-drought)'
+                  : 'var(--ledger-active)';
+              // Summary numerals (Delivered 28d + This Wk) are colored by brand
+              // status (§2.7), NOT zero-vs-nonzero. Paused uses muted grey (the
+              // row is already opacity-75); drought/active reuse the rail tokens.
+              const numeralColor = brand.is_paused
+                ? 'var(--f92-lgray)'
                 : row.droughtFlag
                   ? 'var(--ledger-drought)'
                   : 'var(--ledger-active)';
@@ -310,28 +362,19 @@ export function CoverageLedger({
                         </button>
                       ) : null}
                     </div>
-                    {/* delivered 28d */}
+                    {/* delivered 28d — colored by status (§2.7) */}
                     <div
                       className="text-right text-[22px] font-bold tabular-nums"
-                      style={{ color: row.testsRolling28 === 0 ? 'var(--f92-lgray)' : 'var(--f92-dark)' }}
+                      style={{ color: numeralColor }}
                     >
                       {row.testsRolling28}
                     </div>
-                    {/* this wk */}
+                    {/* this wk — colored by status (§2.7) */}
                     <div
                       className="text-right text-[15px] font-medium tabular-nums"
-                      style={{ color: row.testsCurrentWeek === 0 ? 'var(--f92-lgray)' : 'var(--f92-dark)' }}
+                      style={{ color: numeralColor }}
                     >
                       {row.testsCurrentWeek}
-                    </div>
-                    {/* live */}
-                    <div className="whitespace-nowrap text-right tabular-nums">
-                      <span className="text-[18px] font-bold" style={{ color: readyColorVar(live.total, live.ready) }}>
-                        {live.total === 0 ? '—' : live.ready}
-                      </span>
-                      {live.total > 0 ? (
-                        <span className="text-xs font-medium text-[color:var(--f92-gray)]"> / {live.total}</span>
-                      ) : null}
                     </div>
                     {/* pipeline */}
                     <div className="flex items-center gap-3 pl-[18px]">
@@ -402,10 +445,12 @@ export function CoverageLedger({
                             </div>
                           ))}
                         </dl>
+                        {/* Secondary/outlined button (§2.5) — was a text link,
+                            too easy to miss in smoke. */}
                         <button
                           type="button"
                           onClick={() => onFullDetail(row)}
-                          className="mt-4 inline-flex items-center gap-1 text-xs font-medium text-[color:var(--f92-navy)] transition hover:text-[color:var(--f92-orange)] hover:underline"
+                          className="mt-4 inline-flex items-center gap-1 rounded-lg border border-[color:var(--f92-border)] px-3 py-1.5 text-xs font-medium text-[color:var(--f92-navy)] transition hover:border-[color:var(--f92-orange)] hover:text-[color:var(--f92-orange)]"
                         >
                           Full detail →
                         </button>
@@ -425,72 +470,101 @@ export function CoverageLedger({
                           {stages.map(st => {
                             const chips = OVERLAY_KEYS.filter(k => st.perTag[k] > 0);
                             const hasBar = st.total > 0;
+                            // Live shows presence ("N live"), not a ready/total
+                            // fraction — a live test never carries a hold tag
+                            // (§2.2). DEFENSIVE: if a tag ever lands on Live
+                            // (held > 0 — mid-sync, cron lag, dirty data), fall
+                            // back to the normal ready/total + bar + chips render
+                            // so the anomaly SURFACES. Do NOT hardcode held === 0.
+                            const presence = st.stage === LIVE_STAGE && st.held === 0;
                             return (
                               <div
                                 key={st.stage}
                                 className="rounded-[10px] border border-[color:var(--f92-border)] bg-white p-3"
                               >
-                                <div className="mb-2 flex items-center justify-between">
-                                  <span className="text-[10px] font-semibold uppercase tracking-[0.04em] text-[color:var(--f92-gray)]">
-                                    {STAGE_LABELS[st.stage]}
-                                  </span>
+                                {/* Stage NAME is the drawer link when the stage
+                                    has tickets (§2.3); empty stage = plain span,
+                                    no arrow, no dead drawer. */}
+                                <div className="mb-2">
                                   {st.total > 0 ? (
                                     <button
                                       type="button"
                                       onClick={() => onStage(row, st.stage)}
                                       aria-label={`View ${STAGE_LABELS[st.stage]} tickets for ${brand.display_name}`}
-                                      className="text-[10px] font-medium text-[color:var(--f92-navy)] hover:underline focus-visible:underline"
+                                      className="text-[10px] font-semibold uppercase tracking-[0.04em] text-[color:var(--f92-navy)] transition hover:text-[color:var(--f92-orange)] hover:underline focus-visible:underline"
                                     >
-                                      view →
+                                      {STAGE_LABELS[st.stage]} →
                                     </button>
-                                  ) : null}
-                                </div>
-                                <div className="flex items-baseline gap-1.5">
-                                  <span
-                                    className="text-[21px] font-bold tabular-nums"
-                                    style={{ color: readyColorVar(st.total, st.ready) }}
-                                  >
-                                    {st.total === 0 ? '—' : st.ready}
-                                  </span>
-                                  {st.total > 0 ? (
-                                    <span className="text-xs font-medium tabular-nums text-[color:var(--f92-gray)]">
-                                      / {st.total}
+                                  ) : (
+                                    <span className="text-[10px] font-semibold uppercase tracking-[0.04em] text-[color:var(--f92-gray)]">
+                                      {STAGE_LABELS[st.stage]}
                                     </span>
-                                  ) : null}
+                                  )}
                                 </div>
-                                {hasBar ? (
-                                  <div
-                                    className="mt-2.5 flex h-1.5 overflow-hidden rounded-[3px]"
-                                    style={{ background: 'var(--ledger-bar-track)' }}
-                                  >
-                                    {SEG_ORDER.map(seg => {
-                                      const n = seg === 'ready' ? st.ready : st.perTag[seg];
-                                      if (n <= 0) return null;
-                                      return <div key={seg} style={{ flex: `${n} 1 0`, background: SEG_VAR[seg] }} />;
-                                    })}
+                                {presence ? (
+                                  // Live, clean: presence only ("N live"), no
+                                  // fraction / bar / chips.
+                                  <div className="flex items-baseline gap-1.5">
+                                    <span
+                                      className="text-[21px] font-bold tabular-nums"
+                                      style={{ color: readyColorVar(st.total, st.ready) }}
+                                    >
+                                      {st.total === 0 ? '—' : st.total}
+                                    </span>
+                                    {st.total > 0 ? (
+                                      <span className="text-xs font-medium text-[color:var(--f92-gray)]">live</span>
+                                    ) : null}
                                   </div>
-                                ) : null}
-                                {chips.length > 0 ? (
-                                  <div className="mt-2.5 flex flex-wrap gap-1.5">
-                                    {chips.map(k => (
+                                ) : (
+                                  <>
+                                    <div className="flex items-baseline gap-1.5">
                                       <span
-                                        key={k}
-                                        className="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-bold"
-                                        style={{ background: CHIP_VAR[k], borderColor: CHIP_VAR[k], color: 'var(--ledger-chip-fg)' }}
+                                        className="text-[21px] font-bold tabular-nums"
+                                        style={{ color: readyColorVar(st.total, st.ready) }}
                                       >
-                                        <span
-                                          className="h-1.5 w-1.5 rounded-full"
-                                          style={{ background: 'var(--ledger-chip-dot)' }}
-                                        />
-                                        {CHIP_LABEL[k]} {st.perTag[k]}
+                                        {st.total === 0 ? '—' : st.ready}
                                       </span>
-                                    ))}
-                                  </div>
-                                ) : hasBar ? (
-                                  <div className="mt-2.5 text-[10.5px] font-medium text-[color:var(--ledger-active)]">
-                                    ✓ all clear
-                                  </div>
-                                ) : null}
+                                      {st.total > 0 ? (
+                                        <span className="text-xs font-medium tabular-nums text-[color:var(--f92-gray)]">
+                                          / {st.total}
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                    {hasBar ? (
+                                      <div
+                                        className="mt-2.5 flex h-1.5 overflow-hidden rounded-[3px]"
+                                        style={{ background: 'var(--ledger-bar-track)' }}
+                                      >
+                                        {SEG_ORDER.map(seg => {
+                                          const n = seg === 'ready' ? st.ready : st.perTag[seg];
+                                          if (n <= 0) return null;
+                                          return <div key={seg} style={{ flex: `${n} 1 0`, background: SEG_VAR[seg] }} />;
+                                        })}
+                                      </div>
+                                    ) : null}
+                                    {chips.length > 0 ? (
+                                      <div className="mt-2.5 flex flex-wrap gap-1.5">
+                                        {chips.map(k => (
+                                          <span
+                                            key={k}
+                                            className="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-bold"
+                                            style={{ background: CHIP_VAR[k], borderColor: CHIP_VAR[k], color: 'var(--ledger-chip-fg)' }}
+                                          >
+                                            <span
+                                              className="h-1.5 w-1.5 rounded-full"
+                                              style={{ background: 'var(--ledger-chip-dot)' }}
+                                            />
+                                            {CHIP_LABEL[k]} {st.perTag[k]}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    ) : hasBar ? (
+                                      <div className="mt-2.5 text-[10.5px] font-medium text-[color:var(--ledger-active)]">
+                                        ✓ all clear
+                                      </div>
+                                    ) : null}
+                                  </>
+                                )}
                               </div>
                             );
                           })}

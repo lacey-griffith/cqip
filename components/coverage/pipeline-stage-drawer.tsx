@@ -41,7 +41,7 @@ export function PipelineStageDrawer({
             {brandLabel} · {stageLabel}
           </SheetTitle>
           <SheetDescription>
-            {tickets.length} {tickets.length === 1 ? 'ticket' : 'tickets'} in stage
+            {tickets.length} {tickets.length === 1 ? 'ticket' : 'tickets'} gated in {stageLabel}
           </SheetDescription>
         </SheetHeader>
 
