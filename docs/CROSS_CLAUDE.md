@@ -317,6 +317,20 @@ Covers events from 2026-04-23 forward (start of the drift-
 prevention era). Project-internal events stay in each
 project's CLAUDE.md §16.
 
+### 2026-07-10 — ClickUp Client Archive discovery (DC/Lacey)
+
+Brief v1 drafted (`docs/HANDOFF-clickup-archive-discovery.md`, supersedes v0).
+Effort/delivery metric model LOCKED: design = ever-reached Active Design · dev =
+ever-reached Active Dev · delivered = ever-reached DCR · total effort = union
+(counted once) · Ready-for-X excluded. Step A DONE (read-only Jira scan,
+NBLYCRO + SPLCRO + FPOO): 1,232 ClickUp-linked tickets · 100% parseable ids ·
+1,153 unique → exact-key dedup settled (dedup only, NOT sizing; Jira reaches back
+only to 2025-09). Step B (ClickUp volume + status-history retrievability) is the
+go/no-go, behind 006. FPOO confirmed real CRO project (archived — historical data
+only; in scope for all-time / Client Archive counts, excluded from active-client
+and live-coverage views; carried 268 of the 1,232 Step-A tickets). AC dedup-key
+verification (§6, 2026-07-09 entry) unchanged.
+
 ### 2026-07-09 — AC: both reslot confirmations ANSWERED (QA-URL removal + ClickUp dedup key)
 
 AC answered the two checks the earlier same-day entry (below) had owed:

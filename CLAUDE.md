@@ -710,6 +710,19 @@ ALTER TABLE projects ADD CONSTRAINT projects_brand_model_config_chk CHECK (
   `default_brand_id=<SPL brand uuid>`. The single-brand path skips
   Jira-field extraction entirely.
 
+These are the ONLY two rows in `projects` (verified against prod
+2026-07-11). **`FPOO` is NOT in this table** — it is an archived CRO
+Jira project (historical data only, no longer an active client) that
+was never onboarded into CQIP, so it carries no `projects` row and no
+CQIP brand/coverage config. It is reachable only by read-only JQL
+against Jira directly (that is how the 2026-07-10 ClickUp-Archive Step-A
+scan reached its 268 FPOO tickets — see §15). It is in scope for
+all-time / Client Archive counts and excluded from active-client and
+live-coverage views. Do not add an FPOO `projects` row to make it
+"appear archived": there is nothing to seed, and a row with
+`is_active=FALSE` would still pull it into brand-resolution and
+onboarding code paths it has never been part of.
+
 Migration 019 also UPDATEd the SPL brand row's `jira_value` from
 `'SPL'` (the bare brand-code shape used at SPL onboarding 2026-05-07)
 to `'SPL - Spotloan'`, aligning all brands on the
@@ -2378,8 +2391,23 @@ growth / all-time context. **Discovery gate (before any ClickUp fetch):** a
 Jira-first read-only key-coverage scan. **AC answered 2026-07-09 (CROSS §6):
 there is NO structured Jira custom field carrying a ClickUp ID/URL** — the
 ClickUp URL lives in the **Jira issue description**, so the dedup strategy is
-**description-regex + fuzzy match**, not an exact custom-field key. Full brief:
-`docs/HANDOFF-clickup-archive-discovery.md` (to be drafted).
+**description-regex + fuzzy match**, not an exact custom-field key. Full brief
+DRAFTED (v1, 2026-07-10): `docs/HANDOFF-clickup-archive-discovery.md` — supersedes
+v0; adds the LOCKED effort/delivery metric model (design/dev/delivered = "ever
+reached" Active Design / Active Dev / DCR; total effort = UNION, counted once) +
+an isolation amendment (archive PAGE may read a live Jira aggregate; coverage KPIs
+never read the archive). **Discovery Step A DONE (2026-07-10):** Jira-first
+key-coverage scan across NBLYCRO + SPLCRO + FPOO — 1,232 ClickUp-referencing
+tickets, **100% parseable ids**, 1,153 unique (exact-dedup allowlist), so the fuzzy
+pile ≈ 0. But Jira only reaches back to 2025-09 (migration window), so it settled
+**dedup, not sizing** — the entire pre-2025 history lives only in ClickUp. Next:
+Step B (ClickUp sample-Space probe + Step B′ status-history retrievability),
+token handled out-of-band, still sequenced behind 006. **FPOO** is a real but
+**ARCHIVED** CRO project (no longer an active client; historical data only) —
+**in scope** for all-time / Client Archive counts, **excluded** from
+active-client and live-coverage views; it carried 268 of the 1,232 Step-A
+tickets. Active CRO projects: NBLYCRO · SPLCRO. All CRO projects incl. archived:
+NBLYCRO · SPLCRO · FPOO.
 
 ### Later / deferred — ledger + coverage (from Lacey's 2026-07-09 review)
 - **Resizable ledger columns (#6b)** — a real feature (width state + drag +
