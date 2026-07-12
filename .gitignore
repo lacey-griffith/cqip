@@ -53,3 +53,6 @@ supabase/.temp
 
 # vs code settings
 .vscode/settings.json
+
+# clickup archive — raw crawl snapshot (contains descriptions + assignee PII; never commit)
+docs/clickup-archive/raw/

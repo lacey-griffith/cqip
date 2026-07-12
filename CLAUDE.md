@@ -2408,6 +2408,53 @@ token handled out-of-band, still sequenced behind 006. **FPOO** is a real but
 active-client and live-coverage views; it carried 268 of the 1,232 Step-A
 tickets. Active CRO projects: NBLYCRO · SPLCRO. All CRO projects incl. archived:
 NBLYCRO · SPLCRO · FPOO.
+**Discovery COMPLETE (Step B + B′ DONE 2026-07-11; see the HANDOFF doc):** headline
+**16,761 worked-on / 15,827 delivered** (ideation stripped; `orderindex` best-effort
+floor accepted). The **importer batch is now being drafted phase-by-phase** (Phase 1
+schema → Phase 2 ETL → Phase 3 page/live-read → Karen/smoke/push). **Phase 1 (schema +
+migration spec) LANDED:** `docs/importer-spec-phase1-schema.md` — `client_archive` +
+`parent_clients` tables, the twin-fix dedup (twins are imported WITH their true ClickUp
+dates and deduped by the Step-A **1,153-id allowlist**, NOT by a date cutoff — the
+migration ran rolling Sep–Nov 2025 with genuinely-new Jira work in the same window, so
+there is no clean date seam), the isolation contract, and the classification rules.
+The spec is **docs-only**; the importer itself is **Jenny-gated** (migration + mutation
++ new route) and still **sequenced behind 006**. Phase 2 (ETL) not yet drafted. **Twin
+allowlist COMMITTED (2026-07-12):** the Step-A **1,153-id twin allowlist** is now a
+committed artifact at `docs/clickup-archive/jira-twin-allowlist.json` (verified valid /
+1,153 unique / 0 dupes) — Phase 2's ETL reads it directly, **no re-scan needed** (Phase 1
+spec §6 open item #1 → CLEARED). Provenance is honest: this is the **original 2026-07-10
+extraction RECOVERED**, not a fresh re-scan — so it matches the discovery numbers exactly
+and is **not** re-derivable from *current* live Jira (which has drifted since 07-10).
+**FREEZER CRAWL DONE (2026-07-12):** the full raw ClickUp source is now snapshotted before
+decommission — read-only crawl, 07-11 method (`include_closed=true&subtasks=false`, no
+status prefilter, no bucketing in raw), 4 CRO-archive spaces, **36,922 tasks / 337 lists /
+545 calls / 0 errors**. Three artifacts (see `docs/clickup-archive/README.md`): **raw**
+full task objects `docs/clickup-archive/raw/clickup-full-crawl-2026-07-12.jsonl` (~464 MB,
+**GITIGNORED — descriptions + assignee PII; must be moved to durable storage, NOT
+committed**); **metadata** PII-free projection `crawl-metadata-2026-07-12.json` (~16 MB,
+committable — Lacey's call); **manifest** `crawl-manifest-2026-07-12.json` (~4 KB,
+committable). **CANONICAL & 🔒 LOCKED HEADLINE — corrected footprint (Lacey-confirmed
+2026-07-12): 14,785 worked-on / 13,858 delivered** — this is the number that goes to the
+page, NOT 15,681 (wrong scope) and NOT 16,761 (transcribed, wrong scope). **LOCKED footprint
+(authoritative — any future crawl must reproduce exactly; source of truth =
+`scope_rules_authoritative` in `crawl-manifest-corrected-2026-07-12.json`):** ADM `ADM - CRO`
+folderless list ONLY (NEW crawl, 207 tasks/64 worked-on; excl. ADM-SEO/ADM-Design) + CRO
+Projects 4 client lists DWH/FPOO/LF/SPL (702/450; **excl. Conversion Fanatics + both New
+Client Template lists**) + CRO Internal Projects **Client Archive folder ONLY** (31,009/12,757;
+excl. 12 other folders) + Neighborly all (2,869/1,342) + Sonrava all (344/172) = **35,131
+tasks / 14,785 worked-on**; `needs_review` 47 (clean); **262 client-codes / 267 list surfaces
+worked-on** (264/269 all); worked-on by year 2019→2026 peaking 2022 (3,678). Page source =
+`crawl-metadata-corrected-2026-07-12.json` (35,131 rows) + `crawl-manifest-corrected-2026-07-12.json`;
+full-capture metadata + gitignored raw retained as freezer (ADM-CRO appended to both). Client
+Archive completeness verified (248 folder lists, 3 zero-task). Final lock dropped the 2 New
+Client Template lists (53 setup tasks, 0 worked-on → headline unchanged). **Why the earlier numbers were wrong = SCOPE, not classification** (Neighborly
+1,342 + Sonrava 172 reproduce exactly; the prior 15,681 counted the whole CRO Internal space
+incl. 12 non-CRO folders + Conversion Fanatics and missed ADM-CRO; 16,761 was transcribed off
+a mutating source whose raw is gone). Archived state + pagination both ruled out as factors
+(count-only probe: 450 archived total, 70 in Client Archive). Optional pre-shutdown,
+owner-run: a ClickUp workspace export could add per-task **status history** (API exposes only
+current status + `orderindex`; `time_in_status` 403 on this plan) — non-blocking, not
+attempted.
 
 ### Later / deferred — ledger + coverage (from Lacey's 2026-07-09 review)
 - **Resizable ledger columns (#6b)** — a real feature (width state + drag +
