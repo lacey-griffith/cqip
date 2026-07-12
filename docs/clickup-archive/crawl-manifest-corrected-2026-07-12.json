@@ -1,0 +1,151 @@
+{
+  "recompute_date": "2026-07-12",
+  "footprint": "CORRECTED + LOCKED (Lacey 2026-07-12)",
+  "scope_status": "LOCKED — authoritative. Any future crawl MUST reproduce exactly this scope.",
+  "scope_rules_authoritative": {
+    "ADM": {
+      "include": "ONLY the folderless list 'ADM - CRO' (list_id 901103430868)",
+      "exclude": "everything else in the ADM space (ADM - SEO, ADM - Design)"
+    },
+    "CRO Projects": {
+      "include": "the 4 client lists in the 'hidden' folder — DWH - David Weekley Homes, FPOO - Fresh Pressed Olive Oil, LF - LightsFest, SPL - Spotloan",
+      "exclude": "Conversion Fanatics (list_id 901103171325) AND both 'New Client Template' folder lists (list_ids 901100831704, 901100831691)"
+    },
+    "CRO Internal Projects": {
+      "include": "ONLY the 'Client Archive' folder lists",
+      "exclude": "the other 12 folders in the space (Weekly Checklists, Internal Projects Archive, Client Admin, New Client Template, Biz Dev, Sandbox, New Hire Onboarding Templates, [Client] SEO Template, Gina's To-Do's, Development, Fun Office Things, Swipe File)"
+    },
+    "Neighborly": {
+      "include": "ALL lists",
+      "exclude": "none"
+    },
+    "Sonrava": {
+      "include": "ALL lists",
+      "exclude": "none"
+    },
+    "other Fusion92 spaces": {
+      "exclude": "Lacey's Space, Sandbox (Experimental), Jira Import Sandbox (experiment), SEO Team (Internal), and the rest of the ADM space — NOT CRO archive"
+    }
+  },
+  "method": "GET /list/{id}/task?include_closed=true&subtasks=false (no status prefilter; archived=false; no bucketing baked into raw)",
+  "totals": {
+    "tasks_in_footprint": 35131
+  },
+  "buckets": {
+    "never_started": 20299,
+    "limbo": 715,
+    "strategy_cf": 212,
+    "done": 13858,
+    "needs_review": 47
+  },
+  "headline": {
+    "worked_on": 14785,
+    "delivered": 13858,
+    "limbo": 715,
+    "strategy_cf": 212,
+    "never_started": 20299,
+    "needs_review": 47
+  },
+  "per_space": {
+    "CRO Projects": {
+      "never_started": 252,
+      "limbo": 12,
+      "strategy_cf": 5,
+      "done": 433
+    },
+    "CRO Internal Projects": {
+      "done": 11958,
+      "never_started": 18212,
+      "limbo": 648,
+      "strategy_cf": 151,
+      "needs_review": 40
+    },
+    "Neighborly": {
+      "never_started": 1526,
+      "limbo": 42,
+      "done": 1255,
+      "strategy_cf": 45,
+      "needs_review": 1
+    },
+    "Sonrava": {
+      "limbo": 5,
+      "done": 156,
+      "strategy_cf": 11,
+      "never_started": 168,
+      "needs_review": 4
+    },
+    "ADM": {
+      "done": 56,
+      "limbo": 8,
+      "needs_review": 2,
+      "never_started": 141
+    }
+  },
+  "per_folder": {
+    "CRO Projects / hidden": {
+      "never_started": 252,
+      "limbo": 12,
+      "strategy_cf": 5,
+      "done": 433
+    },
+    "CRO Internal Projects / Client Archive": {
+      "done": 11958,
+      "never_started": 18212,
+      "limbo": 648,
+      "strategy_cf": 151,
+      "needs_review": 40
+    },
+    "Neighborly / hidden": {
+      "never_started": 1526,
+      "limbo": 42,
+      "done": 1255,
+      "strategy_cf": 45,
+      "needs_review": 1
+    },
+    "Sonrava / hidden": {
+      "limbo": 5,
+      "done": 156,
+      "strategy_cf": 11,
+      "never_started": 168,
+      "needs_review": 4
+    },
+    "ADM / ADM - CRO": {
+      "done": 56,
+      "limbo": 8,
+      "needs_review": 2,
+      "never_started": 141
+    }
+  },
+  "by_year_worked_on": {
+    "2019": 1742,
+    "2020": 1721,
+    "2021": 3276,
+    "2022": 3678,
+    "2023": 2250,
+    "2024": 1364,
+    "2025": 753,
+    "2026": 1
+  },
+  "by_year_all_tasks": {
+    "2019": 2572,
+    "2020": 3960,
+    "2021": 7090,
+    "2022": 10603,
+    "2023": 6582,
+    "2024": 3197,
+    "2025": 1126,
+    "2026": 1
+  },
+  "distinct": {
+    "list_surfaces_worked_on": 267,
+    "client_codes_worked_on": 262,
+    "list_surfaces_all": 269,
+    "client_codes_all": 264
+  },
+  "adm_cro_task_count": 207,
+  "files": {
+    "corrected_metadata": "docs/clickup-archive/crawl-metadata-corrected-2026-07-12.json",
+    "full_capture_metadata": "docs/clickup-archive/crawl-metadata-2026-07-12.json",
+    "raw_gitignored": "docs/clickup-archive/raw/clickup-full-crawl-2026-07-12.jsonl"
+  }
+}

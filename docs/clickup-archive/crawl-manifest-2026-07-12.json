@@ -1,0 +1,138 @@
+{
+  "crawl_date": "2026-07-12",
+  "method": "GET /list/{id}/task?include_closed=true&subtasks=false&page=N (mirrors 07-11 Step-B; no status prefilter; no archived-task pull)",
+  "team": "1226028",
+  "scope": {
+    "in_scope_spaces": [
+      "CRO Projects",
+      "CRO Internal Projects",
+      "Neighborly",
+      "Sonrava"
+    ],
+    "excluded_spaces": [
+      "Lacey's Space",
+      "Sandbox (Experimental)",
+      "Jira Import Sandbox (experiment)",
+      "SEO Team (Internal)",
+      "ADM"
+    ],
+    "note": "Scoped to the 4 CRO-archive spaces (270-list / 07-11 anchor). Other Fusion92 spaces excluded as non-CRO-archive."
+  },
+  "totals": {
+    "lists": 337,
+    "top_level_tasks": 36922,
+    "api_calls": 545,
+    "errors": 0,
+    "list_errors": []
+  },
+  "buckets": {
+    "never_started": 20684,
+    "limbo": 734,
+    "strategy_cf": 213,
+    "done": 14734,
+    "needs_review": 557
+  },
+  "headline": {
+    "worked_on": 15681,
+    "delivered": 14734,
+    "limbo": 734,
+    "strategy_cf": 213,
+    "never_started": 20684,
+    "needs_review": 557
+  },
+  "compare_to_0711": {
+    "worked_on_0711": 16761,
+    "delivered_0711": 15827,
+    "worked_on_delta": -1080,
+    "delivered_delta": -1093
+  },
+  "per_space": {
+    "CRO Projects": {
+      "never_started": 410,
+      "limbo": 14,
+      "strategy_cf": 5,
+      "done": 448
+    },
+    "CRO Internal Projects": {
+      "done": 12875,
+      "needs_review": 552,
+      "never_started": 18580,
+      "limbo": 673,
+      "strategy_cf": 152
+    },
+    "Neighborly": {
+      "never_started": 1526,
+      "limbo": 42,
+      "done": 1255,
+      "strategy_cf": 45,
+      "needs_review": 1
+    },
+    "Sonrava": {
+      "limbo": 5,
+      "done": 156,
+      "strategy_cf": 11,
+      "never_started": 168,
+      "needs_review": 4
+    }
+  },
+  "needs_review_status_dump": {
+    "with client": 26,
+    "upcoming": 20,
+    "in dev": 5,
+    "in qa": 3,
+    "queued": 16,
+    "needs info": 2,
+    "in creative": 1,
+    "new requests (not started)": 5,
+    "posted to slack": 33,
+    "complete": 71,
+    "in progress": 12,
+    "internal qa": 1,
+    "client review": 6,
+    "pending live": 1,
+    "blocked": 1,
+    "completed": 11,
+    "archive completed": 54,
+    "new": 8,
+    "2/19-2/23": 2,
+    "3/4- 3/8": 2,
+    "nbly": 5,
+    "sort": 1,
+    "2/26- 3/1": 2,
+    "cro clients": 13,
+    "bryce": 10,
+    "rahul": 7,
+    "khang": 7,
+    "neighborly": 2,
+    "lacey": 2,
+    "zahid": 6,
+    "alex": 8,
+    "dejan": 8,
+    "thursday": 9,
+    "lineup queue": 9,
+    "this week": 13,
+    "churn": 10,
+    "to do": 14,
+    "active": 41,
+    "notes/todo": 8,
+    "wednesday": 9,
+    "tuesday": 8,
+    "monday": 7,
+    "friday": 8,
+    "not completed": 20,
+    "pending strategy approval": 5,
+    "losses": 2,
+    "approval (cre)": 1,
+    "null": 2,
+    "wins": 2,
+    "launch queue": 3,
+    "client priority strategy": 2,
+    "direct implementation": 4,
+    "bucket": 19,
+    "task templates": 7,
+    "reoccuring": 2,
+    "navigation": 1
+  },
+  "raw_file": "docs/clickup-archive/raw/clickup-full-crawl-2026-07-12.jsonl  (GITIGNORED — contains descriptions + assignee PII)",
+  "metadata_file": "docs/clickup-archive/crawl-metadata-2026-07-12.json  (committable — no PII)"
+}
