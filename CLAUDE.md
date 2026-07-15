@@ -2823,8 +2823,74 @@ phase/status, open questions, and a pointer to the spec. Lifecycle:
 appears in exactly one of §15.5 / §16 — on ship, the entry here is
 deleted in the same commit that writes the §16 shipped entry.
 
-*(Empty — no batches currently in flight. Batch 005.5 — Reggie brand-detail
-drawer polish — shipped 2026-07-09 and moved to §16 per §13 rule 34.)*
+### Batch 012 — Client Library, Phase A (Directive Matrix MVP) — IN FLIGHT
+
+Spec (canonical build doc): `docs/batch-012-client-library-phase-a-spec.md`.
+Jenny pre-flighted. **Built, committed, NOT pushed** — Karen post-flight next;
+then Lacey applies migration 024, smoke-tests, and deploys manually.
+
+**Phase A = shippable MVP.** A read-for-all / admin-writable directive × brand
+status matrix. B/C/D are OUT OF SCOPE (TODOs in-code only): monitoring ingest
+(the surface Batch 008 will consume), Jira ticketing, public bug form, per-cell
+ticket links, brand-target picker UI, directive edit/archive UI.
+
+**Locked decisions (do not relitigate mid-build):**
+- **Two new tables only** — `directives` + `directive_brand_status` (migration
+  024). ISOLATION: never reads/writes the live coverage tables; no coverage KPI
+  reads from them. RLS mirrors migration 009 (authenticated SELECT, admin
+  `FOR ALL` via `public.is_admin()`).
+- **Fan-out rule (spec §2):** on directive create, one cell per ACTIVE brand in
+  the project — non-paused → `todo`, paused → `n_a`. Matrix complete on
+  creation; paused brands don't inflate the outstanding count (same
+  paused-exclusion principle as the 005.1 coverage KPIs). No unpause-backfill
+  in Phase A (flip a cell manually).
+- **Outstanding count** = cells in {`todo`,`in_progress`,`blocked`}; `done` +
+  `n_a` don't owe. Single source of truth in `lib/client-library/directives.ts`
+  (imported by both routes + the page + the test — mirrors the
+  `lib/coverage/queries.ts` ↔ `tests/coverage-kpis.test.ts` split).
+- **Two admin mutation routes**, mirroring `app/api/admin/brands/qa-config`
+  exactly (session→admin gate, `supabaseAdmin` write, `getChangedBy()`
+  server-side, client `changed_by` ignored with a warn, one `audit_log` row per
+  changed field): `POST /api/admin/directives` (create + fan-out; fan-out
+  audited as ONE summary row, not N) and `PATCH /api/admin/directives/status`
+  (set one cell; 404 if the cell doesn't exist; no-op → `changed:0`).
+- **Page `/dashboard/client-library` + nav entry** (under Reports). Viewable by
+  any authenticated user — NOT middleware-admin-gated (matches
+  coverage/reports); edit affordances render only for admins and the routes
+  enforce admin server-side regardless. Single client-side fetch of
+  `{ projects, brands, directives (active), cells }` per selected project
+  (default NBLYCRO), mirroring the coverage page (RLS permits authenticated
+  SELECT, so no read route). Matrix: directives as rows (type pill + title),
+  active brands as columns (horizontal scroll for ≥16), status dot per cell,
+  Outstanding pill per row; admin cell-click opens a status/note editor →
+  PATCH → reload.
+- **`globals.css` token pass (spec §5):** added the scale layer the reskin
+  assumed — `--radius-{sm,md,lg,xl,2xl,3xl,full}`, `--shadow-sm`,
+  `--tracking-eyebrow`, `--tracking-wide`, `--f92-on-orange`,
+  `--f92-orange-hover` (+ dark overrides for `--shadow-sm` /
+  `--f92-orange-hover`). Component styling uses the app's Tailwind + token vars
+  (no standalone `styles.css`). Cell colors reference tokens (§13 r25): `done` →
+  `--status-resolved`, `blocked` → `--status-blocked` (kept RED — load-bearing
+  signal), the two misnamed reskin `*-border` tokens NOT introduced.
+
+**Spec gap closed during build (flag for Karen):** the spec's §3 audit rows use
+`target_type='directive'` / `'directive_brand_status'`, but the
+`audit_log_target_shape_chk` constraint (migration 011, extended by 015/022)
+admitted only `quality_log`/`test_milestone`/`brand`/`alert_event`/`user` — so
+every audit INSERT would have thrown a CHECK violation. **Migration 024 extends
+the CHECK to admit both new target types** (same DROP + re-ADD pattern as
+migrations 015/022). `audit_log.action` is unchanged — routes reuse the
+CHECK-allowed `CREATE`/`UPDATE` with a descriptive `field_name` (§13 r15/r35
+precedent).
+
+**Tests:** `tests/directives.test.ts` (node:test via `npx tsx --test`, mirrors
+`tests/errors.test.ts`) — outstanding-count owed set, paused→`n_a` fan-out,
+status/type validation guards. **Verification bar per spec §6 is clicking
+through the running app** (create directive → cells fan out → set statuses →
+count updates) — Lacey's smoke step after migration 024 is applied.
+
+**No AC contract surface** (DC-internal dashboard route) → no CROSS_CLAUDE.md
+§3/§6 entry (consistent with 005.1 / 010 / Brand Wellness handling).
 
 ---
 

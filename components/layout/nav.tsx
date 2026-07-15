@@ -32,6 +32,7 @@ const navLinks = [
   { href: '/dashboard/coverage', label: 'Client Coverage' },
   { href: '/dashboard/logs', label: 'Logs' },
   { href: '/dashboard/reports', label: 'Reports' },
+  { href: '/dashboard/client-library', label: 'Client Library' },
   { href: '/dashboard/settings/profile', label: 'Profile' },
 ];
 

@@ -123,6 +123,19 @@
   --ledger-chip-ts:        #F59E0B;
   --ledger-chip-fg:        #0A0E16;  /* near-black chip text */
   --ledger-chip-dot:       rgba(10, 14, 22, 0.55);
+
+  /* Scale layer for the Client Library reskin (Batch 012). Theme-agnostic
+     radius + tracking; shadow-sm + orange-hover get a dark override below.
+     These fill the gap the reskin's standalone styles.css assumed — the app
+     had no radius / shadow scale tokens, so port onto these. */
+  --radius-sm: 6px;  --radius-md: 8px;  --radius-lg: 10px;
+  --radius-xl: 12px; --radius-2xl: 14px; --radius-3xl: 18px;
+  --radius-full: 9999px;
+  --shadow-sm: 0 1px 2px rgba(26, 26, 46, .06), 0 1px 3px rgba(26, 26, 46, .10);
+  --tracking-eyebrow: .16em;
+  --tracking-wide: .12em;
+  --f92-on-orange: #FFFFFF;
+  --f92-orange-hover: #DA6A17;
 }
 
 :root[data-theme="dark"] {
@@ -147,6 +160,12 @@
 
   /* Active border: toned orange at 80% opacity */
   --f92-active-border: rgba(212, 104, 26, 0.8);
+
+  /* Client Library scale layer (Batch 012) — dark overrides. Shadow reads
+     as a soft dark cast; orange-hover steps down from dark-mode --f92-orange
+     (#D4681A) so the hover stays darker than the base. */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .4);
+  --f92-orange-hover: #C05E17;
 
   /* Soften the "open"/admin-badge blue in dark */
   --status-open: #3E68CC;
