@@ -241,10 +241,17 @@ See §6 entry for full context.
 Spans both projects. Last locked 2026-07-03 (per
 `docs/batch-outline-2026-07-03.md`); re-sequenced 2026-07-06 (auth chain
 DONE; Brand Wellness slotted first, 005.2 pulled ahead of 006 per Lacey
-2026-07-05); 2026-07-07: Brand Wellness SHIPPED + pushed; **re-sequenced
-2026-07-09 (confirmed with Lacey): 005.2 + 005.3 SHIPPED, 005.4 in flight;
-the polish/drawer cluster (005.5 → admin-drawer changes) clears ahead of 006;
-ClickUp Client Archive is discovery-first, sequenced behind 006.** Mirrors DC
+2026-07-05); 2026-07-07: Brand Wellness SHIPPED + pushed; re-sequenced
+2026-07-09 (confirmed with Lacey): 005.2 + 005.3 SHIPPED, the polish/drawer
+cluster (005.4, 005.5, admin filter-by-brand ride-along) SHIPPED + pushed
+2026-07-09; ClickUp Client Archive discovery + data-lock DONE (2026-07-12;
+commits 51cfb03 + 944ebd7). **Re-sequenced 2026-07-15 (DC/Lacey): new Batch
+012 "Client Library" (cross-brand experimentation) inserted and leads the
+open board — Client Library → Convert (008) → Teams dispatch (006). 006 drops
+below 008 (externally parked on the alerts-channel build); 010.1 stays behind
+006 (dependency preserved) and ClickUp Phase 2 ETL + Phase 3 stay behind 006.
+Per-brand config pages are absorbed into Batch 012, and 008 consumes 012's
+Phase B monitoring-ingest surface rather than rebuilding it.** Mirrors DC
 CLAUDE.md §15 (canonical — "CLAUDE.md wins"; the `CQIP Batch Outline` project
 file mirrors both).
 
@@ -262,15 +269,33 @@ file mirrors both).
 | 10 | DC | Brand Wellness (read-only report + Reggie-drawer CTA) | ✅ SHIPPED + PUSHED 2026-07-07 |
 | 11 | DC | Batch 005.2 Coverage Ledger redesign | ✅ SHIPPED + PUSHED 2026-07-08 |
 | 12 | DC | Batch 005.3 Coverage Ledger polish | ✅ SHIPPED + PUSHED 2026-07-08/09 |
-| 13 | DC | Batch 005.4 Coverage Ledger polish 2 | **in flight (committed, not pushed)** |
-| 14 | DC | Batch 005.5 Reggie brand-detail drawer polish (dep: 005.4 monthly12) | next |
-| 15 | DC | Admin drawer changes (#5 anytime · #4 HOLD — no Forge write path, AC ✅ 2026-07-09) | after 005.5 |
-| 16 | DC | Batch 006 Teams dispatch (EXPANDED) | after admin drawer; unblocks 010.1 |
-| 17 | DC | Batch 010.1 Pipeline alerts (MERGED: 010.2 + Path 2) | after 006 — PM consult owed |
-| 18 | DC | Batch 007 Custom Jira Boards | after 010.1 |
-| 19 | DC | Per-brand config pages | prereq for Batch 008 |
-| 20 | DC | Batch 008 Convert.com automation | last |
-| 21 | DC + AC | ClickUp Client Archive (discovery-first) | behind 006, slot TBD |
+| 13 | DC | Batch 005.4 Coverage Ledger polish 2 | ✅ SHIPPED + PUSHED 2026-07-09 |
+| 14 | DC | Batch 005.5 Reggie brand-detail drawer polish | ✅ SHIPPED + PUSHED 2026-07-09 |
+| 15 | DC | Admin drawer changes (#5 filter-by-brand ride-along ✅ 2026-07-09 · #4 QA-URL removal HOLD — no Forge write path, AC ✅ 2026-07-09) | #5 done · #4 HOLD |
+| 16 | DC | Batch 012 Client Library (cross-brand experimentation; Phase A = MVP; absorbs per-brand config) | next |
+| 17 | DC | Batch 008 Convert.com automation (consumes 012 Phase B monitoring ingest) | after 012 |
+| 18 | DC | Batch 006 Teams dispatch (EXPANDED) | after 008; unblocks 010.1 |
+| 19 | DC | Batch 010.1 Pipeline alerts (MERGED: 010.2 + Path 2) | after 006 — PM consult owed |
+| 20 | DC | Batch 007 Custom Jira Boards | after 010.1 |
+| 21 | DC + AC | ClickUp Client Archive — discovery + data-lock DONE (51cfb03, 944ebd7); Phase 2 ETL + Phase 3 page remain | behind 006 |
+
+**Scope corrections logged 2026-07-15** (DC/Lacey; supersedes the
+2026-07-09 order):
+- **Batch 012 Client Library** (new) — cross-brand experimentation:
+  directive × brand status matrix + monitoring ingest + Jira ticketing +
+  public bug form. Four phases A–D; Phase A = shippable MVP. Number 012
+  provisional-confirmed. Leads the open board.
+- **Per-brand config pages** — ABSORBED into Batch 012; no longer a
+  standalone item and no longer the standalone prereq for Batch 008.
+- **Batch 008 (Convert.com)** — now consumes Batch 012's Phase B
+  monitoring-ingest surface instead of rebuilding a targeting/monitoring
+  layer. *(If this overlap resolution changes, only this line + the 008
+  prereq framing move.)*
+- **Batch 006 (Teams dispatch)** drops below 008 — externally parked on the
+  alerts-channel build. **Batch 010.1** stays behind 006 (dependency
+  preserved), moving down with it. **ClickUp Client Archive** Phase 2 ETL +
+  Phase 3 stay behind 006.
+- DC-internal — no §3 contract surface. Full scope in DC CLAUDE.md §15.
 
 **Scope corrections logged 2026-07-03** (re-sequenced per the batch
 outline; supersedes the 2026-06-04 lock):
@@ -316,6 +341,12 @@ Cross-project events worth durable record. Newest at top.
 Covers events from 2026-04-23 forward (start of the drift-
 prevention era). Project-internal events stay in each
 project's CLAUDE.md §16.
+
+### 2026-07-15 — Priority resequence + Batch 012 Client Library inserted (DC/Lacey)
+
+Client Library → 008 → 006; 010.1 + ClickUp Ph2/3 remain behind 006; per-brand
+config absorbed into 012; 008 consumes 012 Phase B ingest. DC-internal — no §3
+contract surface. Full scope in CLAUDE.md §15.
 
 ### 2026-07-10 — ClickUp Client Archive discovery (DC/Lacey)
 
@@ -862,7 +893,14 @@ Shareable Screenshots/ folder.
 
 ---
 
-*Last updated: 2026-06-23 | §6: AC Phase 2c spike now consumes
+*Last updated: 2026-07-15 | §5 + §6: priority resequence (DC/Lacey) —
+new Batch 012 "Client Library" inserted and leads the open board;
+Client Library → 008 → 006 → 010.1 → 007, with ClickUp Phase 2 ETL +
+Phase 3 behind 006. Per-brand config pages absorbed into 012; 008
+consumes 012's Phase B monitoring-ingest surface. §5 rows renumbered
+(13–14 marked SHIPPED, 15 admin-drawer #5-done/#4-HOLD, old per-brand
+config row dropped); §6 entry appended. DC-internal — no §3 contract
+surface. Prior (2026-06-23): §6: AC Phase 2c spike now consumes
 GET /api/sharepoint/image (AC v3.5.0, dev 2026-06-22) — third and
 final SharePoint route consumed; verified green 2026-06-23. Open
 /image Content-Length contract question resolved (DC sets it per
