@@ -2889,6 +2889,18 @@ status/type validation guards. **Verification bar per spec §6 is clicking
 through the running app** (create directive → cells fan out → set statuses →
 count updates) — Lacey's smoke step after migration 024 is applied.
 
+**Karen post-flight: PASS** (independently re-verified isolation, the audit-CHECK
+non-regression, fan-out/paused exclusion, the outstanding count, the
+admin-gate-on-server / view-for-all model, token discipline, tests + tsc +
+build). One LOW cosmetic finding **fixed in a render-only follow-on commit**
+(no migration, no route, no data change): a brand added AFTER a directive was
+created has no `directive_brand_status` cell and was rendering as a solid
+`todo`-colored dot (falsely reading "owes this directive"). Fix — a missing cell
+now renders the hollow `n_a` style; it stays non-interactive (no cell to edit)
+and out of the Outstanding count (counting was already correct, untouched). The
+real fix (cell backfill on brand-add / a target picker) stays deferred past
+Phase A.
+
 **No AC contract surface** (DC-internal dashboard route) → no CROSS_CLAUDE.md
 §3/§6 entry (consistent with 005.1 / 010 / Brand Wellness handling).
 

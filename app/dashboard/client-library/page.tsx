@@ -340,7 +340,13 @@ export default function ClientLibraryPage() {
                       </td>
                       {brands.map((brand) => {
                         const cell = cellByKey.get(`${directive.id}:${brand.id}`);
-                        const status = cell?.status ?? 'todo';
+                        // A brand added AFTER this directive was created has no
+                        // cell yet (Phase A has no backfill). Render it as the
+                        // hollow n_a style — NOT a solid todo dot, which would
+                        // falsely read as "owes this directive". It stays
+                        // non-interactive (clickable needs a real cell) and out
+                        // of the Outstanding count (computed from `cells` only).
+                        const status = cell?.status ?? 'n_a';
                         const dotColor = STATUS_DOT[status];
                         const clickable = isAdmin && !!cell;
                         return (
