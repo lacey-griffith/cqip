@@ -532,6 +532,7 @@ WEBHOOK_SECRET=                  # Random secret to validate Jira webhook payloa
 CQIP_SYNC_AUTH_KEY=              # Shared secret between Worker and jira-sync edge function. Can be any random string — generate with `openssl rand -hex 32`. Not a JWT.
 CQIP_BRANDS_API_TOKEN=           # Shared secret for the read-only /api/brands endpoints (consumed by the Forge QA-automation app). Same value must be set as an encrypted Forge variable on the Forge side. Generate with `openssl rand -hex 32`. Not a JWT.
 CQIP_DROUGHT_AUTH_KEY=           # Shared secret between the daily pg_cron job and the drought-evaluator edge function. Generate with `openssl rand -hex 32`. Not a JWT. Set on Supabase Edge Functions secrets only — Worker does not need this one.
+CQIP_CONVERT_MONITORING_TOKEN=   # Batch 012 Phase B — Bearer secret for the external POST /api/monitoring/findings ingest (Convert 008 + any monitoring tool post through it). Timing-safe compare in lib/api/monitoring-bearer-auth.ts. Separate blast radius from the other tokens per §13 rule 27. Generate with `openssl rand -hex 32`. Not a JWT. Set on the Worker via `wrangler secret put` and wherever the monitoring tool runs.
 
 # SharePoint (Batch 009 — Microsoft Graph proxy)
 CQIP_SHAREPOINT_API_TOKEN=       # AC (Forge) ↔ Worker bearer for /api/sharepoint/* (timing-safe compare). Separate blast radius from CQIP_BRANDS_API_TOKEN — NOT shared. Generate with `openssl rand -hex 32`. Not a JWT. Rotates atomically across four surfaces (Worker · Forge dev · Forge prod · DC .env.local) per §13 rule 27.
@@ -2903,6 +2904,111 @@ Phase A.
 
 **No AC contract surface** (DC-internal dashboard route) → no CROSS_CLAUDE.md
 §3/§6 entry (consistent with 005.1 / 010 / Brand Wellness handling).
+
+### Batch 012 — Client Library, Phase B (Monitoring Ingest) — IN FLIGHT
+
+Spec (canonical build doc): `docs/batch-012-client-library-phase-b-spec.md`.
+Jenny pre-flighted. **Built, committed, NOT pushed** — Karen post-flight next;
+then Lacey sets `CQIP_CONVERT_MONITORING_TOKEN`, applies migration 025,
+smoke-tests, and deploys manually. Builds ON Phase A (must be on main).
+
+**Phase B = the monitoring-ingest surface Batch 008 (Convert) consumes** rather
+than rebuilding a targeting/monitoring layer. Source-agnostic: 008 POSTs here
+with `source='convert'`. C/D remain OUT OF SCOPE (TODOs in-code only): Jira
+ticketing from a finding, the public bug form, per-finding ticket links.
+
+**Locked decisions (do not relitigate mid-build):**
+- **One new table** — `monitoring_findings` (migration 025). ISOLATION: reads/
+  writes ONLY this table; references `brands(id)` by FK for column population;
+  no coverage KPI reads from it. RLS mirrors migration 009 (authenticated
+  SELECT, admin `FOR ALL` via `public.is_admin()`).
+- **Dedupe on `(source, external_ref)`** via a **partial** unique index
+  `WHERE external_ref IS NOT NULL` (so NULL-ref findings never collide). A
+  re-post of an existing finding UPDATEs `summary`/`detail`/`severity`/
+  `detected_at`/`updated_at` but **LEAVES `status` untouched** — a
+  dismissed/actioned finding never resurrects to `new`. Encoded structurally:
+  `buildUpdatePatch()` never emits a `status` key.
+- **Brand resolution** (spec §2): the tool sends a brand string; resolve
+  `brand_code` primary, `jira_value` fallback (mirrors the `buildCoverageRows`
+  literal match). Unresolved → `brand_id = NULL`, still ingested; the ingest
+  response returns `unresolved_brands[]`.
+- **Two routes.** `POST /api/monitoring/findings` — external, **Bearer** vs
+  the new env secret `CQIP_CONVERT_MONITORING_TOKEN` (new
+  `lib/api/monitoring-bearer-auth.ts`, separate blast radius per §13 r27,
+  mirrors the brands/sharepoint bearer helpers), `supabaseAdmin` write,
+  batch-capable (single object OR array, `MAX_BATCH=500`, all-or-nothing
+  validation), **no per-ingest audit** (fire-and-forget machine feed). Returns
+  `{ ok, ingested, updated, unresolved_brands }`. `/api/monitoring/*` is carved
+  out of the **middleware matcher** (like `/api/brands`) so it never hits the
+  session cookie — the admin route below is `/api/admin/monitoring/*` and is
+  deliberately NOT carved out. `PATCH /api/admin/monitoring/findings/status` —
+  session+admin gate, `supabaseAdmin` write, `getChangedBy()` server-side
+  (client `changed_by` ignored with a warn), one `audit_log` row per changed
+  field (`target_type='monitoring_finding'`, `action='UPDATE'`); mirrors the
+  Phase A directives/status route exactly.
+- **audit_log CHECK extended (migration 025)** — reproduces migration 024's
+  FULL allowed set (`quality_log`/`test_milestone`/`brand`/`alert_event`/`user`/
+  `directive`/`directive_brand_status`) PLUS `monitoring_finding`, same DROP +
+  re-ADD pattern; no value 024 admitted is dropped. `audit_log.action`
+  unchanged (`UPDATE` + descriptive `field_name`, §13 r15/r35 precedent).
+- **"Needs action" panel** on `/dashboard/client-library` (spec §4), below the
+  directive matrix. Folded into the page's single per-project data load
+  (`status='new'` findings + embedded `brand`). View-for-all; **admin-only
+  Dismiss/Action** controls (optimistic — a finding leaving `new` drops out of
+  the panel; the route enforces admin server-side regardless). Cards: severity
+  dot + `<brand> — <summary>` + `<source> · <test> · <issue> · <ago>`, sorted
+  by severity then `detected_at` desc (`compareForPanel`). Project-scoped via
+  `brand.project_key`; **null-brand findings surface under an "Unassigned"
+  group** so they're never lost. Panel hidden entirely when no open findings.
+- **Pure logic in `lib/client-library/monitoring.ts`** (mirrors the
+  `directives.ts` + test split): enums + guards, `resolveBrandId`,
+  `parseFinding` (injectable `now`), `buildInsertRow`/`buildUpdatePatch`
+  (no-status invariant), `dedupeKey`, `compareForPanel`/`countNew`. Imported by
+  both routes, the page, and the test.
+
+**Tests:** `tests/monitoring-findings.test.ts` (node:test via `npx tsx --test`,
+mirrors `tests/errors.test.ts` / `tests/directives.test.ts`) — 7 cases: dedupe
+key match + update-patch fields; dismissed-stays-dismissed (update patch has no
+`status` key); brand resolution (code / jira-value / unknown→null, still
+ingested); new-count + panel sort; parse validation; type-guard sentinels.
+Verification bar per spec §5 = clicking through the running app (curl a finding
+with the Bearer token → it appears in the panel → dismiss → re-POST → stays
+dismissed) — Lacey's smoke step after migration 025 is applied.
+
+**Verification:** `tsc --noEmit` clean; `npm run build` green (both routes
+register as `ƒ` dynamic, `/dashboard/client-library` prerenders); tests 7/7
+(+ Phase A `directives` 4/4 unregressed); ESLint on all changed/new files → zero
+findings. Migration 025 must be applied in Supabase before this code deploys.
+New env var `CQIP_CONVERT_MONITORING_TOKEN` documented in §4 + `.env.example`.
+
+**No AC contract surface** (DC-internal dashboard route + a token-gated machine
+feed) → no CROSS_CLAUDE.md §3/§6 entry (consistent with the Phase A handling).
+**008 coupling:** this is the surface Convert (008) consumes — do not build a
+second ingest path in 008.
+
+**Karen post-flight: PASS-WITH-FINDINGS** (independently re-verified isolation,
+the audit-CHECK non-regression vs 024, the dedupe + no-status-resurrection
+invariant, same-ref-different-source non-collision, Bearer/middleware split +
+token non-leak, the panel scoping/Unassigned/admin-gate, §13 r19, and every §0
+done-definition claim; tsc + tests 11/11 + build + ESLint reproduced). Two LOW
+findings:
+- **LOW-1 (FOLDED, ingest hardening):** an intra-batch duplicate
+  `(source, external_ref)` used to route both rows to the bulk insert and hit
+  the partial unique index → an opaque 500 for a malformed batch. The route now
+  collapses intra-batch dupes by dedupe key (keyed pending-insert Map + a
+  per-id update Map, last-write-wins) so the insert never ships a colliding
+  pair; null-`external_ref` findings still each insert. No spec change (spec
+  §2 didn't require intra-batch dedup); pure robustness.
+- **LOW-2 (as-scoped, informational — my flagged call):** on a re-post the
+  update refreshes only `summary`/`detail`/`severity`/`detected_at`/`updated_at`
+  (spec §2 list); `brand_id`/`issue_type`/`convert_test_id` are frozen at first
+  ingest (Phase-A "no backfill" precedent). Consequence worth Lacey knowing: a
+  finding first ingested while its brand was unresolved (`brand_id=null`) stays
+  under "Unassigned" permanently — a re-post won't re-resolve it and the admin
+  status route only edits status/note, so there's no re-attribution path in
+  Phase B. `unresolved_brands[]` in the ingest response is the operator's
+  signal to add the brand/alias BEFORE first ingest. A manual reassign
+  affordance is a reasonable future add. Left as-scoped.
 
 ---
 

@@ -44,6 +44,12 @@ import {
   type CellStatus,
   type DirectiveType,
 } from '@/lib/client-library/directives';
+import {
+  compareForPanel,
+  type AdminStatus,
+  type FindingSeverity,
+  type IssueType,
+} from '@/lib/client-library/monitoring';
 
 interface ProjectRow {
   jira_project_key: string;
@@ -74,6 +80,22 @@ interface CellRow {
   note: string | null;
 }
 
+// Batch 012 Phase B — a monitoring finding for the "Needs action" panel.
+// `brand` is the embedded brands row (null when brand_id is unresolved).
+interface FindingRow {
+  id: string;
+  source: string;
+  external_ref: string | null;
+  brand_id: string | null;
+  convert_test_id: string | null;
+  issue_type: IssueType;
+  severity: FindingSeverity | null;
+  summary: string;
+  status: string;
+  detected_at: string;
+  brand: { brand_code: string; display_name: string; project_key: string } | null;
+}
+
 const TYPE_LABEL: Record<DirectiveType, string> = {
   goal: 'Goal',
   trigger: 'Trigger',
@@ -101,6 +123,39 @@ const STATUS_DOT: Record<CellStatus, string> = {
   n_a: 'transparent',
 };
 
+// Batch 012 Phase B — severity dot colors (§13 r25, tokens only). critical is
+// the load-bearing red signal; unset severity falls through to gray.
+const SEVERITY_DOT: Record<FindingSeverity, string> = {
+  critical: 'var(--status-blocked)',
+  medium: 'var(--pill-amber-border)',
+  low: 'var(--f92-lgray)',
+};
+function severityDot(severity: FindingSeverity | null): string {
+  return severity === null ? 'var(--f92-lgray)' : SEVERITY_DOT[severity];
+}
+
+const ISSUE_LABEL: Record<IssueType, string> = {
+  no_conversions: 'No conversions',
+  no_visitors: 'No visitors',
+  high_bounce: 'High bounce',
+  low_engagement: 'Low engagement',
+  error: 'Error',
+  other: 'Other',
+};
+
+function timeAgo(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return '';
+  const secs = Math.max(0, Math.round((Date.now() - then) / 1000));
+  if (secs < 60) return 'just now';
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.round(hrs / 24);
+  return `${days}d ago`;
+}
+
 const DEFAULT_PROJECT = 'NBLYCRO';
 
 export default function ClientLibraryPage() {
@@ -110,6 +165,7 @@ export default function ClientLibraryPage() {
   const [brands, setBrands] = useState<BrandRow[]>([]);
   const [directives, setDirectives] = useState<DirectiveRow[]>([]);
   const [cells, setCells] = useState<CellRow[]>([]);
+  const [findings, setFindings] = useState<FindingRow[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -128,7 +184,12 @@ export default function ClientLibraryPage() {
   // SELECT on both new tables, so direct client queries are fine (spec §4).
   const loadProject = useCallback(async (key: string) => {
     if (!key) return;
-    const [brandsRes, directivesRes] = await Promise.all([
+    // Single data load per §4: brands + directives + monitoring findings.
+    // Findings are fetched status='new' across all brands (RLS allows
+    // authenticated SELECT) and scoped to this project client-side via the
+    // embedded brand.project_key; null-brand findings surface under
+    // "Unassigned" regardless of project so they're never lost.
+    const [brandsRes, directivesRes, findingsRes] = await Promise.all([
       supabase
         .from('brands')
         .select('id, brand_code, display_name, is_paused')
@@ -141,11 +202,19 @@ export default function ClientLibraryPage() {
         .eq('project_key', key)
         .eq('status', 'active')
         .order('created_at'),
+      supabase
+        .from('monitoring_findings')
+        .select(
+          'id, source, external_ref, brand_id, convert_test_id, issue_type, severity, summary, status, detected_at, brand:brands(brand_code, display_name, project_key)',
+        )
+        .eq('status', 'new')
+        .order('detected_at', { ascending: false }),
     ]);
 
     const failures: string[] = [];
     if (brandsRes.error) failures.push(`brands: ${brandsRes.error.message}`);
     if (directivesRes.error) failures.push(`directives: ${directivesRes.error.message}`);
+    if (findingsRes.error) failures.push(`findings: ${findingsRes.error.message}`);
 
     const directiveRows = (directivesRes.data ?? []) as DirectiveRow[];
     let cellRows: CellRow[] = [];
@@ -158,9 +227,20 @@ export default function ClientLibraryPage() {
       cellRows = (cellData ?? []) as CellRow[];
     }
 
+    // supabase-js returns a to-one embed (brand_id → brands.id) as a single
+    // object, but its generated type widens to an array; normalize to one.
+    const findingRows: FindingRow[] = ((findingsRes.data ?? []) as unknown[]).map((raw) => {
+      const r = raw as Omit<FindingRow, 'brand'> & {
+        brand: FindingRow['brand'] | FindingRow['brand'][];
+      };
+      const brand = Array.isArray(r.brand) ? (r.brand[0] ?? null) : r.brand;
+      return { ...r, brand };
+    });
+
     setBrands((brandsRes.data ?? []) as BrandRow[]);
     setDirectives(directiveRows);
     setCells(cellRows);
+    setFindings(findingRows);
     setLoadError(failures.length > 0 ? failures.join(' · ') : null);
     if (failures.length > 0) console.error('[client-library] fetch failures', failures);
   }, []);
@@ -233,6 +313,48 @@ export default function ClientLibraryPage() {
     }
     return result;
   }, [cells]);
+
+  // "Needs action" panel (spec §4). Assigned findings are scoped to the
+  // selected project via the embedded brand.project_key; null-brand findings
+  // surface under "Unassigned" regardless of project. Both sorted by severity
+  // then detected_at desc.
+  const assignedFindings = useMemo(
+    () =>
+      findings
+        .filter((f) => f.brand_id !== null && f.brand?.project_key === projectKey)
+        .sort(compareForPanel),
+    [findings, projectKey],
+  );
+  const unassignedFindings = useMemo(
+    () => findings.filter((f) => f.brand_id === null).sort(compareForPanel),
+    [findings],
+  );
+  const hasFindings = assignedFindings.length > 0 || unassignedFindings.length > 0;
+
+  const handleFindingStatus = useCallback(
+    async (findingId: string, status: AdminStatus) => {
+      // Optimistic: a finding that leaves 'new' drops out of the panel.
+      setFindings((prev) => prev.filter((f) => f.id !== findingId));
+      try {
+        const res = await fetch('/api/admin/monitoring/findings/status', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ finding_id: findingId, status }),
+        });
+        const result: { ok?: boolean; error?: string } = await res.json().catch(() => ({}));
+        if (!res.ok || !result.ok) {
+          toast(`❌ ${result.error ?? `Update failed (${res.status})`}`);
+          void loadProject(projectKey); // reconcile — put it back
+          return;
+        }
+        toast(status === 'dismissed' ? '✅ Dismissed' : '✅ Marked actioned');
+      } catch (err) {
+        toast(`❌ ${err instanceof Error ? err.message : String(err)}`);
+        void loadProject(projectKey);
+      }
+    },
+    [projectKey, loadProject, toast],
+  );
 
   const projectLabel = projects.find((p) => p.jira_project_key === projectKey)?.display_name ?? projectKey;
 
@@ -408,6 +530,42 @@ export default function ClientLibraryPage() {
           </div>
         </Card>
       )}
+
+      {/* Needs-action panel (spec §4). Hidden entirely when there are no open
+          findings. View-for-all; dismiss/action controls render only for
+          admins (the route enforces admin server-side regardless). */}
+      {!loading && hasFindings ? (
+        <section className="mt-8">
+          <h2 className="mb-1 text-lg font-semibold text-[color:var(--f92-dark)]">Needs action</h2>
+          <p className="mb-3 text-sm text-[color:var(--f92-gray)]">
+            Open monitoring findings for {projectLabel}. Sorted by severity.
+          </p>
+
+          {assignedFindings.length > 0 ? (
+            <div className="space-y-2">
+              {assignedFindings.map((f) => (
+                <FindingCard key={f.id} finding={f} isAdmin={isAdmin} onStatus={handleFindingStatus} />
+              ))}
+            </div>
+          ) : null}
+
+          {unassignedFindings.length > 0 ? (
+            <div className="mt-5">
+              <p
+                className="mb-2 text-[10px] font-semibold uppercase text-[color:var(--f92-gray)]"
+                style={{ letterSpacing: 'var(--tracking-wide)' }}
+              >
+                Unassigned · no brand resolved
+              </p>
+              <div className="space-y-2">
+                {unassignedFindings.map((f) => (
+                  <FindingCard key={f.id} finding={f} isAdmin={isAdmin} onStatus={handleFindingStatus} />
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
 
       {isAdmin ? (
         <CreateDirectiveDialog
@@ -681,5 +839,59 @@ function EditCellDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// -------------------------------------------------------------------------
+// A single "Needs action" card (spec §4). severity dot + <brand> — <summary>
+// + <source> · <convert_test_id> · <detected_at ago>. Admin-only Dismiss /
+// Action controls; read-only users see the card without controls.
+// -------------------------------------------------------------------------
+function FindingCard({
+  finding,
+  isAdmin,
+  onStatus,
+}: {
+  finding: FindingRow;
+  isAdmin: boolean;
+  onStatus: (findingId: string, status: AdminStatus) => void;
+}) {
+  const brandLabel = finding.brand?.display_name ?? 'Unassigned';
+  const meta = [
+    finding.source,
+    finding.convert_test_id ? `test ${finding.convert_test_id}` : null,
+    ISSUE_LABEL[finding.issue_type],
+    timeAgo(finding.detected_at),
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  return (
+    <Card className="flex items-start gap-3 p-3" style={{ boxShadow: 'var(--shadow-sm)' }}>
+      <span
+        className="mt-1.5 block h-2.5 w-2.5 shrink-0 rounded-full"
+        style={{ background: severityDot(finding.severity) }}
+        title={finding.severity ?? 'unset severity'}
+        aria-label={`Severity: ${finding.severity ?? 'unset'}`}
+      />
+      <div className="min-w-0 flex-1">
+        <p className="text-sm text-[color:var(--f92-dark)]">
+          <span className="font-semibold">{brandLabel}</span>
+          <span className="text-[color:var(--f92-gray)]"> — </span>
+          {finding.summary}
+        </p>
+        <p className="mt-0.5 text-xs text-[color:var(--f92-gray)]">{meta}</p>
+      </div>
+      {isAdmin ? (
+        <div className="flex shrink-0 gap-2">
+          <Button variant="outline" size="sm" onClick={() => onStatus(finding.id, 'dismissed')}>
+            Dismiss
+          </Button>
+          <Button size="sm" onClick={() => onStatus(finding.id, 'actioned')}>
+            Action
+          </Button>
+        </div>
+      ) : null}
+    </Card>
   );
 }
