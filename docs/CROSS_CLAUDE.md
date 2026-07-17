@@ -342,6 +342,18 @@ Covers events from 2026-04-23 forward (start of the drift-
 prevention era). Project-internal events stay in each
 project's CLAUDE.md §16.
 
+### 2026-07-17 — Batch 012 Phase B (monitoring ingest) shipped + pushed (DC)
+
+Batch 012 Phase B (monitoring ingest) shipped + pushed (`7c9fec3`); CLAUDE.md
+§16 reconciled. Ingest surface is LIVE for Pulse/008 to consume: external Bearer
+`POST /api/monitoring/findings` (`source='convert'|'manual'`), deduped on
+`(source, external_ref)`, dismissed-stays-dismissed on re-post. **Inbound brand
+field is `brand`** (a brand code OR a jira value), resolved server-side. Post
+through this surface — do not build a second ingest path in 008. Phase A + B
+both shipped 2026-07-17; Phase C (Jira ticketing) is next, gated on a
+Jira-create-permission verify (a §13 r5 read-only-scope expansion). DC-internal
+— no §3 contract change.
+
 ### 2026-07-15 — Priority resequence + Batch 012 Client Library inserted (DC/Lacey)
 
 Client Library → 008 → 006; 010.1 + ClickUp Ph2/3 remain behind 006; per-brand
@@ -893,7 +905,14 @@ Shareable Screenshots/ folder.
 
 ---
 
-*Last updated: 2026-07-15 | §5 + §6: priority resequence (DC/Lacey) —
+*Last updated: 2026-07-17 | §6: Batch 012 Phase B (monitoring ingest)
+shipped + pushed (`7c9fec3`); the ingest surface is LIVE for Pulse/008
+to consume — external Bearer `POST /api/monitoring/findings`, inbound
+brand field is `brand` (code or jira value); post through it, don't
+build a second path in 008. Phase A + B both shipped 2026-07-17; Phase C
+(Jira ticketing) next, gated on a Jira-create-permission verify.
+DC-internal — no §3 contract change. Prior (2026-07-15): §5 + §6:
+priority resequence (DC/Lacey) —
 new Batch 012 "Client Library" inserted and leads the open board;
 Client Library → 008 → 006 → 010.1 → 007, with ClickUp Phase 2 ETL +
 Phase 3 behind 006. Per-brand config pages absorbed into 012; 008
