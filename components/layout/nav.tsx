@@ -12,6 +12,7 @@ import {
   type AvatarPattern,
 } from '@/components/layout/user-avatar';
 import { F92Logo } from '@/components/layout/f92-logo';
+import { PulseClientNav } from '@/components/layout/pulse-client-nav';
 import { useTheme } from '@/components/layout/theme-provider';
 import { supabase } from '@/lib/supabase/client';
 import { useToast } from '@/components/layout/toaster';
@@ -32,7 +33,7 @@ const navLinks = [
   { href: '/dashboard/coverage', label: 'Client Coverage' },
   { href: '/dashboard/logs', label: 'Logs' },
   { href: '/dashboard/reports', label: 'Reports' },
-  { href: '/dashboard/client-library', label: 'Client Library' },
+  { href: '/dashboard/pulse', label: 'Pulse' },
   { href: '/dashboard/settings/profile', label: 'Profile' },
 ];
 
@@ -587,6 +588,9 @@ export function Nav() {
             );
           })}
         </nav>
+
+        {/* Contextual client list — renders only under /dashboard/pulse. */}
+        <PulseClientNav />
 
         </div>
 

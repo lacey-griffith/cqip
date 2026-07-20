@@ -1,16 +1,30 @@
 'use client';
 
-// Batch 012 — Client Library, Phase A (Directive Matrix MVP).
+// Batch 012 — Pulse (Directive Matrix). The main Pulse view.
 //
-// A directive × brand status matrix per project. Any authenticated user can
-// VIEW; edit affordances render only for admins and the routes enforce admin
-// server-side regardless. Reads/writes ONLY the two new tables (directives +
-// directive_brand_status) — never the live coverage tables.
+// Phase A shipped this as "Client Library"; Phase E1 (2026-07-17) renamed the
+// user-facing area to Pulse, moved the route to /dashboard/pulse, and added
+// deep-linkable per-brand pages + a contextual client nav. This page is
+// unchanged in content — it is the directive × brand status matrix per project.
+// (Internal identifiers under lib/client-library/* keep their name — they are
+// concern-named, not page-named; API routes are untouched.)
 //
-// Phase B/C/D are OUT OF SCOPE — TODOs only:
-// TODO(Phase B): monitoring ingest (the surface Batch 008 will consume).
+// Any authenticated user can VIEW; edit affordances render only for admins and
+// the routes enforce admin server-side regardless. Reads/writes ONLY the two
+// directive tables (directives + directive_brand_status) + monitoring_findings
+// (Phase B panel) — never the live coverage tables.
+//
+// This page broadcasts its selected project (sessionStorage + a `pulse:project`
+// CustomEvent) so the contextual client nav can mirror the picker without a
+// URL-search-param dependency (the shared nav can't use useSearchParams under
+// statically-prerendered dashboard pages). Brand pages carry the project in
+// the URL instead.
+//
+// Phase C/D + E2/E3 are OUT OF SCOPE — TODOs only:
 // TODO(Phase C): Jira ticketing from a cell.
 // TODO(Phase D): public bug-submission form + per-cell ticket links.
+// TODO(Phase E2): Convert config sync on the brand page.
+// TODO(Phase E3): expandable directive rows with comments + lifecycle dates.
 // TODO(follow-on): directive edit/archive UI; brand-target picker (fan-out is
 //   all-active-brands in Phase A).
 
@@ -158,6 +172,24 @@ function timeAgo(iso: string): string {
 
 const DEFAULT_PROJECT = 'NBLYCRO';
 
+// Phase E1: the contextual client nav mirrors this page's project picker via a
+// sessionStorage handoff + a CustomEvent (the shared nav can't read search
+// params under statically-prerendered dashboard pages). Keep these string keys
+// in sync with components/layout/pulse-client-nav.tsx.
+const PULSE_PROJECT_STORAGE_KEY = 'pulse:project';
+const PULSE_PROJECT_EVENT = 'pulse:project';
+
+function broadcastPulseProject(key: string) {
+  if (!key || typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.setItem(PULSE_PROJECT_STORAGE_KEY, key);
+  } catch {
+    // sessionStorage can throw in private modes — the nav then falls back to
+    // its default project; not worth surfacing.
+  }
+  window.dispatchEvent(new CustomEvent(PULSE_PROJECT_EVENT, { detail: key }));
+}
+
 export default function ClientLibraryPage() {
   const { toast } = useToast();
   const [projects, setProjects] = useState<ProjectRow[]>([]);
@@ -242,7 +274,7 @@ export default function ClientLibraryPage() {
     setCells(cellRows);
     setFindings(findingRows);
     setLoadError(failures.length > 0 ? failures.join(' · ') : null);
-    if (failures.length > 0) console.error('[client-library] fetch failures', failures);
+    if (failures.length > 0) console.error('[pulse] fetch failures', failures);
   }, []);
 
   // Initial load: projects + admin role, then the default project's matrix.
@@ -261,7 +293,17 @@ export default function ClientLibraryPage() {
         return;
       }
       const projectRows = (projectData ?? []) as ProjectRow[];
+      // Prefer the last-picked project (shared with the contextual client nav
+      // via sessionStorage) so navigating back from a brand page restores the
+      // pick, then the default, then the first project.
+      let storedKey: string | null = null;
+      try {
+        storedKey = window.sessionStorage.getItem(PULSE_PROJECT_STORAGE_KEY);
+      } catch {
+        storedKey = null;
+      }
       const initialKey =
+        (storedKey && projectRows.some((p) => p.jira_project_key === storedKey) ? storedKey : null) ??
         projectRows.find((p) => p.jira_project_key === DEFAULT_PROJECT)?.jira_project_key ??
         projectRows[0]?.jira_project_key ??
         '';
@@ -280,6 +322,7 @@ export default function ClientLibraryPage() {
       if (cancelled) return;
       setProjects(projectRows);
       setProjectKey(initialKey);
+      broadcastPulseProject(initialKey);
       await loadProject(initialKey);
       if (!cancelled) setLoading(false);
     }
@@ -291,6 +334,7 @@ export default function ClientLibraryPage() {
 
   function handleProjectChange(key: string) {
     setProjectKey(key);
+    broadcastPulseProject(key);
     void loadProject(key);
   }
 
@@ -363,7 +407,7 @@ export default function ClientLibraryPage() {
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-[10px] uppercase text-[color:var(--f92-gray)]" style={{ letterSpacing: 'var(--tracking-eyebrow)' }}>
-            Client Library
+            Pulse
           </p>
           <h1 className="text-2xl font-semibold text-[color:var(--f92-dark)]">Directive Matrix</h1>
           <p className="mt-1 text-sm text-[color:var(--f92-gray)]">

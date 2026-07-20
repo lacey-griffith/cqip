@@ -65,6 +65,24 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  // Batch 012 Phase E1: "Client Library" moved to "Pulse". Redirect the old
+  // route (and any sub-path) so bookmarks/links don't 404. Temporary (307) —
+  // the rename could in principle be revisited; nothing depends on a permanent
+  // 308 here.
+  async redirects() {
+    return [
+      {
+        source: '/dashboard/client-library',
+        destination: '/dashboard/pulse',
+        permanent: false,
+      },
+      {
+        source: '/dashboard/client-library/:path*',
+        destination: '/dashboard/pulse/:path*',
+        permanent: false,
+      },
+    ];
+  },
 };
 
 export default nextConfig;
