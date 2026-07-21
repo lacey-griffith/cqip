@@ -28,7 +28,7 @@
 // TODO(follow-on): directive edit/archive UI; brand-target picker (fan-out is
 //   all-active-brands in Phase A).
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -42,14 +42,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from '@/components/ui/dialog';
 import { useToast } from '@/components/layout/toaster';
 import {
   CELL_STATUSES,
@@ -201,14 +193,14 @@ export default function ClientLibraryPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  // Create-directive dialog.
+  // Inline create affordance (admin) — collapsed behind the header button,
+  // expands as a pinned strip at the top of the matrix (no overlay).
   const [createOpen, setCreateOpen] = useState(false);
-  // Cell editor dialog.
-  const [editCell, setEditCell] = useState<{
+  // Inline cell editor — which cell's row-expansion strip is open (one at a
+  // time). Keyed by (directiveId, brandId); only real cells are ever set here.
+  const [expandedCell, setExpandedCell] = useState<{
     directiveId: string;
-    directiveTitle: string;
-    brand: BrandRow;
-    cell: CellRow;
+    brandId: string;
   } | null>(null);
 
   // Fetch brands + directives + cells for a project. RLS allows authenticated
@@ -328,6 +320,7 @@ export default function ClientLibraryPage() {
 
   function handleProjectChange(key: string) {
     setProjectKey(key);
+    setExpandedCell(null); // stale across a project switch
     writeStoredPulseProject(key); // persist only — this page owns the state (no self-dispatch)
     void loadProject(key);
   }
@@ -356,6 +349,7 @@ export default function ClientLibraryPage() {
       const detail = (e as CustomEvent<string>).detail;
       if (typeof detail === 'string' && detail && detail !== projectKey) {
         setProjectKey(detail);
+        setExpandedCell(null); // symmetric with handleProjectChange — no stale open editor across a switch
         void loadProject(detail);
       }
     }
@@ -425,6 +419,49 @@ export default function ClientLibraryPage() {
     [projectKey, loadProject, toast],
   );
 
+  // Inline cell save (admin). Optimistic + reconcile-on-error, mirroring
+  // handleFindingStatus: update the cell locally (so the dot + Outstanding
+  // recompute immediately) and collapse the strip, then PATCH; on failure
+  // reload to reconcile. `nextNote` arrives already normalized (trim || null).
+  const handleCellSave = useCallback(
+    async (cell: CellRow, nextStatus: CellStatus, nextNote: string | null) => {
+      setCells((prev) =>
+        prev.map((c) => (c.id === cell.id ? { ...c, status: nextStatus, note: nextNote } : c)),
+      );
+      setExpandedCell(null);
+      try {
+        const res = await fetch('/api/admin/directives/status', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            directive_id: cell.directive_id,
+            brand_id: cell.brand_id,
+            status: nextStatus,
+            note: nextNote,
+          }),
+        });
+        const result: { ok?: boolean; error?: string; changed?: number; auditError?: string } =
+          await res.json().catch(() => ({}));
+        if (!res.ok || !result.ok) {
+          toast(`❌ ${result.error ?? `Save failed (${res.status})`}`);
+          void loadProject(projectKey); // reconcile — revert the optimistic change
+          return;
+        }
+        if (result.auditError) {
+          toast('⚠️ Saved, but audit write failed');
+        } else if ((result.changed ?? 0) === 0) {
+          toast('No changes');
+        } else {
+          toast('✅ Updated');
+        }
+      } catch (err) {
+        toast(`❌ ${err instanceof Error ? err.message : String(err)}`);
+        void loadProject(projectKey);
+      }
+    },
+    [projectKey, loadProject, toast],
+  );
+
   const projectLabel = projects.find((p) => p.jira_project_key === projectKey)?.display_name ?? projectKey;
 
   return (
@@ -457,8 +494,13 @@ export default function ClientLibraryPage() {
             </Select>
           </div>
           {isAdmin ? (
-            <Button onClick={() => setCreateOpen(true)} disabled={!projectKey}>
-              + New directive
+            <Button
+              onClick={() => setCreateOpen((o) => !o)}
+              disabled={!projectKey}
+              aria-expanded={createOpen}
+              variant={createOpen ? 'outline' : 'default'}
+            >
+              {createOpen ? 'Close' : '+ New directive'}
             </Button>
           ) : null}
         </div>
@@ -472,131 +514,192 @@ export default function ClientLibraryPage() {
 
       {loading ? (
         <Card className="p-8 text-center text-sm text-[color:var(--f92-gray)]">Loading…</Card>
-      ) : directives.length === 0 ? (
+      ) : directives.length === 0 && !createOpen ? (
         <Card className="p-8 text-center text-sm text-[color:var(--f92-gray)]">
           No active directives for {projectLabel}.{' '}
           {isAdmin ? 'Create one to seed the matrix.' : 'An admin can create one.'}
         </Card>
       ) : (
         <Card className="overflow-hidden p-0" style={{ boxShadow: 'var(--shadow-sm)' }}>
-          {/* Horizontal scroll keeps ≥16-brand projects usable (spec §4). */}
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-sm">
-              <thead>
-                <tr className="border-b border-[color:var(--f92-border)]">
-                  <th className="sticky left-0 z-10 bg-[color:var(--f92-surface)] px-4 py-3 text-left text-[10px] font-semibold uppercase text-[color:var(--f92-gray)]" style={{ letterSpacing: 'var(--tracking-wide)' }}>
-                    Directive
-                  </th>
-                  {brands.map((brand) => (
-                    <th
-                      key={brand.id}
-                      className="px-3 py-3 text-center text-[10px] font-semibold uppercase"
-                      style={{
-                        letterSpacing: 'var(--tracking-wide)',
-                        color: brand.is_paused ? 'var(--f92-lgray)' : 'var(--f92-gray)',
-                      }}
-                      title={brand.is_paused ? `${brand.display_name} (paused)` : brand.display_name}
-                    >
-                      {brand.brand_code}
-                      {brand.is_paused ? <span className="ml-0.5 opacity-70">·</span> : null}
+          {/* Inline create (admin) — a pinned strip at the top of the matrix
+              Card, above the horizontal-scroll region so it never scrolls out
+              of view. Replaces the old create modal; expands in place, no
+              overlay. */}
+          {isAdmin && createOpen ? (
+            <InlineCreateForm
+              projectKey={projectKey}
+              projectLabel={projectLabel}
+              onCreated={() => {
+                setCreateOpen(false);
+                void loadProject(projectKey);
+              }}
+              onCancel={() => setCreateOpen(false)}
+            />
+          ) : null}
+
+          {directives.length === 0 ? (
+            <div className="p-8 text-center text-sm text-[color:var(--f92-gray)]">
+              No active directives for {projectLabel} yet.{' '}
+              {isAdmin ? 'Add one above.' : 'An admin can add one.'}
+            </div>
+          ) : (
+            /* Horizontal scroll keeps ≥16-brand projects usable (spec §4). */
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-[color:var(--f92-border)]">
+                    <th className="sticky left-0 z-10 bg-[color:var(--f92-surface)] px-4 py-3 text-left text-[10px] font-semibold uppercase text-[color:var(--f92-gray)]" style={{ letterSpacing: 'var(--tracking-wide)' }}>
+                      Directive
                     </th>
-                  ))}
-                  <th className="px-4 py-3 text-right text-[10px] font-semibold uppercase text-[color:var(--f92-gray)]" style={{ letterSpacing: 'var(--tracking-wide)' }}>
-                    Outstanding
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {directives.map((directive) => {
-                  const outstanding = outstandingByDirective.get(directive.id) ?? 0;
-                  return (
-                    <tr key={directive.id} className="border-b border-[color:var(--f92-border)] last:border-0">
-                      <td className="sticky left-0 z-10 bg-[color:var(--f92-surface)] px-4 py-3 align-top">
-                        <div className="flex flex-col gap-1">
-                          <span
-                            className="inline-flex w-fit items-center px-2 py-0.5 text-[10px] font-semibold uppercase text-[color:var(--f92-navy)]"
-                            style={{
-                              letterSpacing: 'var(--tracking-wide)',
-                              background: 'var(--pill-filter-bg)',
-                              borderRadius: 'var(--radius-full)',
-                            }}
-                          >
-                            {TYPE_LABEL[directive.directive_type]}
-                          </span>
-                          <span className="font-medium text-[color:var(--f92-dark)]">{directive.title}</span>
-                          {directive.description ? (
-                            <span className="max-w-xs text-xs text-[color:var(--f92-gray)]">{directive.description}</span>
-                          ) : null}
-                        </div>
-                      </td>
-                      {brands.map((brand) => {
-                        const cell = cellByKey.get(`${directive.id}:${brand.id}`);
-                        // A brand added AFTER this directive was created has no
-                        // cell yet (Phase A has no backfill). Render it as the
-                        // hollow n_a style — NOT a solid todo dot, which would
-                        // falsely read as "owes this directive". It stays
-                        // non-interactive (clickable needs a real cell) and out
-                        // of the Outstanding count (computed from `cells` only).
-                        const status = cell?.status ?? 'n_a';
-                        const dotColor = STATUS_DOT[status];
-                        const clickable = isAdmin && !!cell;
-                        return (
-                          <td key={brand.id} className="px-3 py-3 text-center">
-                            <button
-                              type="button"
-                              disabled={!clickable}
-                              onClick={() =>
-                                cell &&
-                                setEditCell({
-                                  directiveId: directive.id,
-                                  directiveTitle: directive.title,
-                                  brand,
-                                  cell,
-                                })
-                              }
-                              aria-label={`${directive.title} — ${brand.display_name}: ${STATUS_LABEL[status]}${clickable ? ' (edit)' : ''}`}
-                              title={`${STATUS_LABEL[status]}${cell?.note ? ` — ${cell.note}` : ''}`}
-                              className={
-                                'mx-auto flex h-6 w-6 items-center justify-center rounded-full transition ' +
-                                (clickable
-                                  ? 'cursor-pointer hover:ring-2 hover:ring-[color:var(--f92-orange)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)]'
-                                  : 'cursor-default')
-                              }
-                            >
+                    {brands.map((brand) => (
+                      <th
+                        key={brand.id}
+                        className="px-3 py-3 text-center text-[10px] font-semibold uppercase"
+                        style={{
+                          letterSpacing: 'var(--tracking-wide)',
+                          color: brand.is_paused ? 'var(--f92-lgray)' : 'var(--f92-gray)',
+                        }}
+                        title={brand.is_paused ? `${brand.display_name} (paused)` : brand.display_name}
+                      >
+                        {brand.brand_code}
+                        {brand.is_paused ? <span className="ml-0.5 opacity-70">·</span> : null}
+                      </th>
+                    ))}
+                    <th className="px-4 py-3 text-right text-[10px] font-semibold uppercase text-[color:var(--f92-gray)]" style={{ letterSpacing: 'var(--tracking-wide)' }}>
+                      Outstanding
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {directives.map((directive) => {
+                    const outstanding = outstandingByDirective.get(directive.id) ?? 0;
+                    // The one open cell-editor strip, if it belongs to this row.
+                    const editorBrand =
+                      expandedCell?.directiveId === directive.id
+                        ? brands.find((b) => b.id === expandedCell.brandId)
+                        : undefined;
+                    const editorCell = editorBrand
+                      ? cellByKey.get(`${directive.id}:${editorBrand.id}`)
+                      : undefined;
+                    return (
+                      <Fragment key={directive.id}>
+                        <tr className="border-b border-[color:var(--f92-border)] last:border-0">
+                          <td className="sticky left-0 z-10 bg-[color:var(--f92-surface)] px-4 py-3 align-top">
+                            <div className="flex flex-col gap-1">
                               <span
-                                className="block h-3 w-3 rounded-full"
-                                style={
-                                  status === 'n_a'
-                                    ? { border: '1.5px dashed var(--f92-lgray)' }
-                                    : { background: dotColor }
-                                }
-                              />
-                              {cell?.note ? (
-                                <span className="sr-only">has note</span>
+                                className="inline-flex w-fit items-center px-2 py-0.5 text-[10px] font-semibold uppercase text-[color:var(--f92-navy)]"
+                                style={{
+                                  letterSpacing: 'var(--tracking-wide)',
+                                  background: 'var(--pill-filter-bg)',
+                                  borderRadius: 'var(--radius-full)',
+                                }}
+                              >
+                                {TYPE_LABEL[directive.directive_type]}
+                              </span>
+                              <span className="font-medium text-[color:var(--f92-dark)]">{directive.title}</span>
+                              {directive.description ? (
+                                <span className="max-w-xs text-xs text-[color:var(--f92-gray)]">{directive.description}</span>
                               ) : null}
-                            </button>
+                            </div>
                           </td>
-                        );
-                      })}
-                      <td className="px-4 py-3 text-right">
-                        <span
-                          className="inline-flex min-w-6 items-center justify-center px-2 py-0.5 text-xs font-semibold"
-                          style={{
-                            borderRadius: 'var(--radius-full)',
-                            background: outstanding > 0 ? 'var(--pill-amber-bg)' : 'var(--pill-green-bg)',
-                            border: `1px solid ${outstanding > 0 ? 'var(--pill-amber-border)' : 'var(--pill-green-border)'}`,
-                            color: outstanding > 0 ? 'var(--pill-amber-fg)' : 'var(--pill-green-fg)',
-                          }}
-                        >
-                          {outstanding}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                          {brands.map((brand) => {
+                            const cell = cellByKey.get(`${directive.id}:${brand.id}`);
+                            // A brand added AFTER this directive was created has
+                            // no cell yet (Phase A has no backfill). Render it as
+                            // the hollow n_a style — NOT a solid todo dot, which
+                            // would falsely read as "owes this directive". It
+                            // stays non-interactive (clickable needs a real cell)
+                            // and out of the Outstanding count (computed from
+                            // `cells` only).
+                            const status = cell?.status ?? 'n_a';
+                            const dotColor = STATUS_DOT[status];
+                            const clickable = isAdmin && !!cell;
+                            const isExpanded =
+                              !!cell &&
+                              expandedCell?.directiveId === directive.id &&
+                              expandedCell?.brandId === brand.id;
+                            return (
+                              <td key={brand.id} className="px-3 py-3 text-center">
+                                <button
+                                  type="button"
+                                  disabled={!clickable}
+                                  aria-expanded={clickable ? isExpanded : undefined}
+                                  onClick={() =>
+                                    cell &&
+                                    setExpandedCell((cur) =>
+                                      cur && cur.directiveId === directive.id && cur.brandId === brand.id
+                                        ? null
+                                        : { directiveId: directive.id, brandId: brand.id },
+                                    )
+                                  }
+                                  aria-label={`${directive.title} — ${brand.display_name}: ${STATUS_LABEL[status]}${clickable ? (isExpanded ? ' (editing — activate to close)' : ' (edit)') : ''}`}
+                                  title={`${STATUS_LABEL[status]}${cell?.note ? ` — ${cell.note}` : ''}`}
+                                  className={
+                                    'mx-auto flex h-6 w-6 items-center justify-center rounded-full transition ' +
+                                    (clickable
+                                      ? 'cursor-pointer hover:ring-2 hover:ring-[color:var(--f92-orange)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)] '
+                                      : 'cursor-default ') +
+                                    (isExpanded ? 'ring-2 ring-[color:var(--f92-orange)]' : '')
+                                  }
+                                >
+                                  <span
+                                    className="block h-3 w-3 rounded-full"
+                                    style={
+                                      status === 'n_a'
+                                        ? { border: '1.5px dashed var(--f92-lgray)' }
+                                        : { background: dotColor }
+                                    }
+                                  />
+                                  {cell?.note ? <span className="sr-only">has note</span> : null}
+                                </button>
+                              </td>
+                            );
+                          })}
+                          <td className="px-4 py-3 text-right">
+                            <span
+                              className="inline-flex min-w-6 items-center justify-center px-2 py-0.5 text-xs font-semibold"
+                              style={{
+                                borderRadius: 'var(--radius-full)',
+                                background: outstanding > 0 ? 'var(--pill-amber-bg)' : 'var(--pill-green-bg)',
+                                border: `1px solid ${outstanding > 0 ? 'var(--pill-amber-border)' : 'var(--pill-green-border)'}`,
+                                color: outstanding > 0 ? 'var(--pill-amber-fg)' : 'var(--pill-green-fg)',
+                              }}
+                            >
+                              {outstanding}
+                            </span>
+                          </td>
+                        </tr>
+
+                        {/* Inline cell editor — a row-expansion strip spanning
+                            the full table width under this directive (one open
+                            at a time). This is the E3 seam: E3 enriches this
+                            same container with comments / timeline / lifecycle
+                            dates — extend it, don't rebuild. */}
+                        {editorBrand && editorCell ? (
+                          <tr className="border-b border-[color:var(--f92-border)] bg-[color:var(--f92-tint)]">
+                            <td colSpan={brands.length + 2} className="p-0">
+                              {/* sticky-left so the editor stays visible when a
+                                  ≥16-brand row is scrolled horizontally. */}
+                              <div className="sticky left-0 w-[min(44rem,100%)] p-4">
+                                <CellEditStrip
+                                  key={editorCell.id}
+                                  brand={editorBrand}
+                                  cell={editorCell}
+                                  directiveTitle={directive.title}
+                                  onSave={(s, n) => handleCellSave(editorCell, s, n)}
+                                  onCancel={() => setExpandedCell(null)}
+                                />
+                              </div>
+                            </td>
+                          </tr>
+                        ) : null}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </Card>
       )}
 
@@ -636,65 +739,32 @@ export default function ClientLibraryPage() {
         </section>
       ) : null}
 
-      {isAdmin ? (
-        <CreateDirectiveDialog
-          open={createOpen}
-          onOpenChange={setCreateOpen}
-          projectKey={projectKey}
-          projectLabel={projectLabel}
-          onCreated={() => {
-            setCreateOpen(false);
-            void loadProject(projectKey);
-          }}
-        />
-      ) : null}
-
-      {isAdmin && editCell ? (
-        <EditCellDialog
-          open={!!editCell}
-          onOpenChange={(open) => { if (!open) setEditCell(null); }}
-          directiveTitle={editCell.directiveTitle}
-          brand={editCell.brand}
-          cell={editCell.cell}
-          onSaved={() => {
-            setEditCell(null);
-            void loadProject(projectKey);
-          }}
-        />
-      ) : null}
     </div>
   );
 }
 
 // -------------------------------------------------------------------------
-// Create-directive dialog (admin only).
+// Inline create-directive form (admin only). Renders as a pinned strip at the
+// top of the matrix Card (no overlay). Mounted fresh each time it opens, so
+// useState initializers reset the fields — no seeding effect. POST is unchanged
+// from the retired modal; toast handling (fanOut / audit / cell count) kept.
 // -------------------------------------------------------------------------
-function CreateDirectiveDialog({
-  open,
-  onOpenChange,
+function InlineCreateForm({
   projectKey,
   projectLabel,
   onCreated,
+  onCancel,
 }: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
   projectKey: string;
   projectLabel: string;
   onCreated: () => void;
+  onCancel: () => void;
 }) {
   const { toast } = useToast();
   const [title, setTitle] = useState('');
   const [directiveType, setDirectiveType] = useState<DirectiveType>('goal');
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
-
-  useEffect(() => {
-    if (open) {
-      setTitle('');
-      setDirectiveType('goal');
-      setDescription('');
-    }
-  }, [open]);
 
   const canSubmit = title.trim().length > 0 && !!projectKey && !submitting;
 
@@ -733,181 +803,168 @@ function CreateDirectiveDialog({
     }
   }
 
+  function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (e.key === 'Escape' && !submitting) onCancel();
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>New directive</DialogTitle>
-          <DialogDescription>
-            Fans out one status cell per active brand in {projectLabel}. Paused
-            brands start as N/A.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4">
-          <div>
-            <Label htmlFor="dirTitle" className="text-[10px] uppercase tracking-widest text-[color:var(--f92-gray)]">
-              Title
-            </Label>
-            <Input
-              id="dirTitle"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Add exit-intent modal"
-              className="h-9 text-sm"
-            />
-          </div>
-          <div>
-            <Label htmlFor="dirType" className="text-[10px] uppercase tracking-widest text-[color:var(--f92-gray)]">
-              Type
-            </Label>
-            <Select value={directiveType} onValueChange={(v) => setDirectiveType(v as DirectiveType)}>
-              <SelectTrigger id="dirType" className="h-9 text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {DIRECTIVE_TYPES.map((t) => (
-                  <SelectItem key={t} value={t}>{TYPE_LABEL[t]}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label htmlFor="dirDesc" className="text-[10px] uppercase tracking-widest text-[color:var(--f92-gray)]">
-              Description (optional)
-            </Label>
-            <Textarea
-              id="dirDesc"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Context for the team"
-              rows={3}
-            />
-          </div>
+    <div
+      onKeyDown={handleKeyDown}
+      aria-label={`New directive for ${projectLabel}`}
+      className="border-b border-[color:var(--f92-border)] bg-[color:var(--f92-tint)] p-4"
+    >
+      <p className="mb-3 text-xs text-[color:var(--f92-gray)]">
+        Fans out one status cell per active brand in {projectLabel}. Paused brands start as N/A.
+      </p>
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="min-w-[16rem] flex-1">
+          <Label htmlFor="dirTitle" className="text-[10px] uppercase tracking-widest text-[color:var(--f92-gray)]">
+            Title
+          </Label>
+          <Input
+            id="dirTitle"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="e.g. Add exit-intent modal"
+            className="h-9 text-sm"
+            autoFocus
+          />
         </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>Cancel</Button>
+        <div className="w-44">
+          <Label htmlFor="dirType" className="text-[10px] uppercase tracking-widest text-[color:var(--f92-gray)]">
+            Type
+          </Label>
+          <Select value={directiveType} onValueChange={(v) => setDirectiveType(v as DirectiveType)}>
+            <SelectTrigger id="dirType" className="h-9 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {DIRECTIVE_TYPES.map((t) => (
+                <SelectItem key={t} value={t}>{TYPE_LABEL[t]}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="min-w-[16rem] flex-1">
+          <Label htmlFor="dirDesc" className="text-[10px] uppercase tracking-widest text-[color:var(--f92-gray)]">
+            Description (optional)
+          </Label>
+          <Input
+            id="dirDesc"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Context for the team"
+            className="h-9 text-sm"
+          />
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={onCancel} disabled={submitting}>Cancel</Button>
           <Button onClick={handleCreate} disabled={!canSubmit}>
-            {submitting ? 'Creating…' : 'Create directive'}
+            {submitting ? 'Adding…' : 'Add'}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </div>
+      </div>
+    </div>
   );
 }
 
 // -------------------------------------------------------------------------
-// Cell status/note editor dialog (admin only).
+// Inline cell status/note editor (admin only). Rendered inside a full-width
+// row-expansion strip under its directive row. Mounted fresh per cell (keyed by
+// cell.id upstream), so useState initializers seed from the cell — no seeding
+// effect. Save delegates to the parent's optimistic handleCellSave; PATCH is
+// unchanged from the retired modal. Esc collapses. This is the E3 seam — E3
+// enriches this container with comments / timeline / lifecycle dates.
 // -------------------------------------------------------------------------
-function EditCellDialog({
-  open,
-  onOpenChange,
-  directiveTitle,
+function CellEditStrip({
   brand,
   cell,
-  onSaved,
+  directiveTitle,
+  onSave,
+  onCancel,
 }: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  directiveTitle: string;
   brand: BrandRow;
   cell: CellRow;
-  onSaved: () => void;
+  directiveTitle: string;
+  onSave: (status: CellStatus, note: string | null) => void | Promise<void>;
+  onCancel: () => void;
 }) {
-  const { toast } = useToast();
   const [status, setStatus] = useState<CellStatus>(cell.status);
   const [note, setNote] = useState(cell.note ?? '');
   const [submitting, setSubmitting] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
 
+  // Move focus into the strip on open so Esc works immediately and screen
+  // readers announce it. Ref focus, not setState — the set-state-in-effect
+  // rule doesn't apply. Runs once (keyed remount per cell).
   useEffect(() => {
-    if (open) {
-      setStatus(cell.status);
-      setNote(cell.note ?? '');
-    }
-  }, [open, cell.status, cell.note]);
+    rootRef.current?.focus();
+  }, []);
 
   async function handleSave() {
     if (submitting) return;
     setSubmitting(true);
+    // Parent applies the optimistic update + collapses this strip; if it
+    // throws we still release the button.
     try {
-      const res = await fetch('/api/admin/directives/status', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          directive_id: cell.directive_id,
-          brand_id: cell.brand_id,
-          status,
-          note: note.trim() || null,
-        }),
-      });
-      const result: { ok?: boolean; error?: string; changed?: number; auditError?: string } =
-        await res.json().catch(() => ({}));
-      if (!res.ok || !result.ok) {
-        toast(`❌ ${result.error ?? `Save failed (${res.status})`}`);
-        return;
-      }
-      if (result.auditError) {
-        toast('⚠️ Saved, but audit write failed');
-      } else if ((result.changed ?? 0) === 0) {
-        toast('No changes');
-      } else {
-        toast('✅ Updated');
-      }
-      onSaved();
-    } catch (err) {
-      toast(`❌ ${err instanceof Error ? err.message : String(err)}`);
+      await onSave(status, note.trim() || null);
     } finally {
       setSubmitting(false);
     }
   }
 
+  function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (e.key === 'Escape' && !submitting) onCancel();
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{brand.display_name}</DialogTitle>
-          <DialogDescription>{directiveTitle}</DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4">
-          <div>
-            <Label htmlFor="cellStatus" className="text-[10px] uppercase tracking-widest text-[color:var(--f92-gray)]">
-              Status
-            </Label>
-            <Select value={status} onValueChange={(v) => setStatus(v as CellStatus)}>
-              <SelectTrigger id="cellStatus" className="h-9 text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {CELL_STATUSES.map((s) => (
-                  <SelectItem key={s} value={s}>{STATUS_LABEL[s]}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label htmlFor="cellNote" className="text-[10px] uppercase tracking-widest text-[color:var(--f92-gray)]">
-              Note (optional)
-            </Label>
-            <Textarea
-              id="cellNote"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="Context for this brand"
-              rows={3}
-            />
-          </div>
+    <div
+      ref={rootRef}
+      tabIndex={-1}
+      onKeyDown={handleKeyDown}
+      aria-label={`Edit ${brand.display_name} — ${directiveTitle}`}
+      className="rounded-xl border border-[color:var(--f92-border)] bg-[color:var(--f92-surface)] p-4 focus:outline-none"
+    >
+      <p className="mb-3 text-sm font-medium text-[color:var(--f92-dark)]">
+        {brand.display_name}
+        <span className="ml-2 font-normal text-[color:var(--f92-gray)]">· {directiveTitle}</span>
+      </p>
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="w-44">
+          <Label htmlFor="cellStatus" className="text-[10px] uppercase tracking-widest text-[color:var(--f92-gray)]">
+            Status
+          </Label>
+          <Select value={status} onValueChange={(v) => setStatus(v as CellStatus)}>
+            <SelectTrigger id="cellStatus" className="h-9 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {CELL_STATUSES.map((s) => (
+                <SelectItem key={s} value={s}>{STATUS_LABEL[s]}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>Cancel</Button>
+        <div className="min-w-[16rem] flex-1">
+          <Label htmlFor="cellNote" className="text-[10px] uppercase tracking-widest text-[color:var(--f92-gray)]">
+            Note (optional)
+          </Label>
+          <Textarea
+            id="cellNote"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Context for this brand"
+            rows={2}
+          />
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={onCancel} disabled={submitting}>Cancel</Button>
           <Button onClick={handleSave} disabled={submitting}>
             {submitting ? 'Saving…' : 'Save'}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </div>
+      </div>
+    </div>
   );
 }
 

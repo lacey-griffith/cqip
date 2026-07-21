@@ -3059,6 +3059,90 @@ byte-equivalent channel extraction, read-only, and set-state discipline.
 ESLint on all new/changed files → zero findings. **No AC contract surface**
 (DC-internal) → no CROSS_CLAUDE.md entry.
 
+### Batch 012 — Pulse: inline directive editing (kill both modals) — IN FLIGHT
+
+Spec (canonical): `docs/batch-012-pulse-inline-edit-spec.md`. **Built,
+committed, NOT pushed** — Karen post-flight next; then Lacey clicks through the
+running app + deploys. **Render/interaction only — NO migration, NO new mutation
+route, NO new page route, NO schema change** (reuses the two existing admin
+routes); **no Jenny gate**; **no version bump.** Built on the pushed E1 follow-on
+(`0da2a57`) — same file (`app/dashboard/pulse/page.tsx`).
+
+**Problem:** the matrix page had two modals — the "+ New directive" create
+dialog and the click-a-dot cell editor. Too much friction. Both become inline.
+
+**Locked decisions (do not relitigate mid-build):**
+- **Inline create** (`InlineCreateForm`): the header "+ New directive" button is
+  now a toggle (`aria-expanded`, label → "Close"); when open, a form renders as
+  a **pinned strip at the top of the matrix Card, above the horizontal-scroll
+  region** (never scrolls out of view — realizes the "pinned/sticky-left" intent
+  without in-table colSpan+sticky fragility). Mounted fresh on open → `useState`
+  initializers reset the fields (no seeding effect). `POST /api/admin/directives`
+  unchanged; existing toasts (`fanOutError`/`auditError`/cell count) kept; Esc
+  collapses. The matrix Card now renders when `createOpen` even with zero
+  directives (so the form shows); the standalone empty Card shows only when
+  `directives.length === 0 && !createOpen`.
+- **Inline cell edit — ROW EXPANSION** (`CellEditStrip`): `editCell` replaced by
+  `expandedCell: {directiveId, brandId} | null` (one open at a time). Clicking an
+  editable dot toggles (same dot → collapse; another → move); n_a hollow dots
+  with no cell stay non-interactive. The editor renders as a second `<tr>` after
+  the directive row — one `<td colSpan={brands.length + 2}>` with the strip in a
+  `sticky left-0` inner container so it stays visible when a ≥16-brand row is
+  scrolled right. Keyed by `cell.id` → fresh mount per cell, so `useState` seeds
+  from the cell (no seeding effect). Save = **optimistic + reconcile-on-error**
+  mirroring `handleFindingStatus` (local cell update → dot + Outstanding
+  recompute immediately + collapse, then `PATCH /api/admin/directives/status`
+  unchanged; on failure `loadProject` reverts). Existing toasts (Updated / No
+  changes / audit warning) kept. a11y: dot is a real button with `aria-expanded`;
+  focus moves into the strip on open (ref focus, not setState); Esc collapses;
+  strip has an `aria-label`.
+- **E3 seam:** the row-expansion strip is the container E3 enriches with
+  comments / timeline / lifecycle dates — extend it, don't rebuild (noted in
+  code).
+- **Removed:** `CreateDirectiveDialog`, `EditCellDialog`, and the `Dialog*`
+  imports (no modals remain on this page).
+
+**Preserved semantics (regression checklist):** n_a-no-cell non-interactive ·
+Outstanding recompute (now also on the optimistic update) · paused brand columns
+· sticky left directive column · horizontal scroll for ≥16 brands · admin-only
+affordances, server-enforced.
+
+**Tests:** no new pure function (UI + fetch), so the suite is unchanged — 17/17
+across the three 012 test files. **The real bar is Lacey clicking through the
+running app** (inline create; cell edit with optimistic dot/Outstanding update;
+re-click / Esc collapse; paused column; ≥16-brand horizontal scroll with the
+editor open) — build-green alone is not "done."
+
+**Karen post-flight: PASS-WITH-FINDINGS** (independently re-verified the §0
+done-definition, zero set-state-in-effect [the `rootRef.current?.focus()` effect
+is ref-focus not setState; both child forms seed via keyed fresh-mount useState,
+no seeding effect; optimistic setState runs in the async handler], the
+optimistic+reconcile correctness [`nextNote` normalized identically for the
+local write + PATCH body; server per-field diff keeps "No changes" reachable],
+preserved semantics [n_a non-interactive, colSpan `brands.length + 2` matches the
+header, sticky-left reuse, server enforcement], the toggle/expansion state
+machine + keyed reseed, and the zero-directive paths; tsc/build/17-tests/ESLint
+reproduced). One LOW, **FOLDED**:
+- **LOW — FOLDED (symmetry).** The external `pulse:project` listener re-scoped
+  the matrix without resetting `expandedCell`, unlike `handleProjectChange`.
+  Fully guarded already (the `editorBrand && editorCell` lookups return undefined
+  for a foreign-project cell → no editor row renders), so it was cosmetic stale
+  state, not a defect. Added `setExpandedCell(null)` to the listener so both
+  project-change paths are symmetric.
+
+**Flagged for Lacey's click-through** (static review can't fully confirm — spec
+§4 is the real bar): (1) sticky-left editor visibility on a ≥16-brand
+horizontally-scrolled row (nested sticky inside a colSpan td behaves differently
+across browsers); (2) focus/Esc — Esc inside an open Radix Select should close
+the dropdown, not the strip; (3) the optimistic collapse-on-failure UX (strip
+disappears + dot reverts + error toast — spec-conformant, mirrors
+`handleFindingStatus`, but worth an eyeball).
+
+**Verification (re-run after the fold):** `tsc --noEmit` clean; `npm run build`
+green (`/dashboard/pulse` `○`, brand page `ƒ`); tests 17/17; ESLint on `page.tsx`
+→ zero findings. **No AC contract surface** (DC-internal) → no CROSS_CLAUDE.md
+entry.
+
 ---
 
 ## 16. Shipped Features Log
