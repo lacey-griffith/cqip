@@ -22,6 +22,7 @@ import {
   type BrandCell,
   type BrandDirectiveRow,
 } from '@/lib/client-library/pulse';
+import { broadcastPulseProject } from '@/lib/client-library/pulse-project-channel';
 import type { CellStatus, DirectiveType } from '@/lib/client-library/directives';
 
 interface BrandRow {
@@ -89,6 +90,15 @@ export default function PulseBrandPage({
   const [loadedFor, setLoadedFor] = useState<string | null>(null);
   const currentKey = `${projectKey}/${brandCode}`;
   const ready = !loading && loadedFor === currentKey;
+
+  // Return-context ride-along (Karen E1 observation B): broadcast this brand's
+  // project onto the shared channel so "← Pulse" opens the matrix on the
+  // deep-linked brand's client, and the cross-project client nav highlights
+  // consistently. Side effect only (sessionStorage + event) — no setState, so
+  // the set-state-in-effect rule doesn't apply.
+  useEffect(() => {
+    broadcastPulseProject(projectKey);
+  }, [projectKey]);
 
   // Fetch is an inline async function inside the effect (mirrors the matrix
   // page) with a `cancelled` guard — all setState runs after an await, so the

@@ -7,34 +7,94 @@
 import type { CellStatus } from './directives';
 
 // -------------------------------------------------------------------------
-// Contextual client nav (spec §4). The list = active brands for the current
-// project; paused brands are KEPT but flagged (greyed-but-linked); inactive
-// brands are excluded entirely. Sorted alpha by display name.
+// Cross-project client nav (Pulse E1 follow-on). Groups ALL active brands by
+// project (client) into an ordered, render-ready structure:
+//   - single_brand project → ONE collapsed entry under the client's name,
+//     linking straight to its brand page.
+//   - multi_brand project → a group header (client name → matrix, scoped) plus
+//     its brands.
+// Groups alpha by project display name; brands alpha by display name; paused
+// kept + flagged (greyed-but-linked); inactive projects/brands excluded; a
+// project with zero active brands is skipped. Every node carries projectKey
+// (+ brandCode where it links to a brand) so the renderer builds hrefs with no
+// further logic — the nav moves to the top in a later batch, so all the logic
+// lives here and the renderer stays thin.
 // -------------------------------------------------------------------------
-export interface ClientNavBrandInput {
+export interface ClientNavProjectInput {
+  jira_project_key: string;
+  display_name: string;
+  brand_model: string; // 'multi_brand' | 'single_brand' (migration 019)
+  is_active: boolean;
+}
+
+export interface ClientNavBrandRow {
+  project_key: string;
   brand_code: string;
   display_name: string;
   is_active: boolean;
   is_paused: boolean;
 }
 
-export interface ClientNavItem {
-  brand_code: string;
-  display_name: string;
+export interface ClientNavBrandEntry {
+  projectKey: string;
+  brandCode: string;
+  displayName: string;
   paused: boolean;
 }
 
-export function toClientNavItems(
-  brands: ReadonlyArray<ClientNavBrandInput>,
-): ClientNavItem[] {
-  return brands
-    .filter((b) => b.is_active)
-    .map((b) => ({
-      brand_code: b.brand_code,
-      display_name: b.display_name,
+export type ClientNavGroup =
+  | { kind: 'single'; projectKey: string; label: string; entry: ClientNavBrandEntry }
+  | { kind: 'multi'; projectKey: string; label: string; brands: ClientNavBrandEntry[] };
+
+export function toClientNavGroups(
+  projects: ReadonlyArray<ClientNavProjectInput>,
+  brands: ReadonlyArray<ClientNavBrandRow>,
+): ClientNavGroup[] {
+  // Group active brands by project_key.
+  const byProject = new Map<string, ClientNavBrandEntry[]>();
+  for (const b of brands) {
+    if (!b.is_active) continue;
+    const list = byProject.get(b.project_key) ?? [];
+    list.push({
+      projectKey: b.project_key,
+      brandCode: b.brand_code,
+      displayName: b.display_name,
       paused: b.is_paused,
-    }))
+    });
+    byProject.set(b.project_key, list);
+  }
+
+  const activeProjects = projects
+    .filter((p) => p.is_active)
+    .slice()
     .sort((a, b) => a.display_name.localeCompare(b.display_name));
+
+  const groups: ClientNavGroup[] = [];
+  for (const project of activeProjects) {
+    const entries = (byProject.get(project.jira_project_key) ?? [])
+      .slice()
+      .sort((a, b) => a.displayName.localeCompare(b.displayName));
+    if (entries.length === 0) continue; // nothing to link — skip empty client
+
+    if (project.brand_model === 'single_brand') {
+      // The project IS the client — collapse to one entry under its name,
+      // linking to the (single) brand's page.
+      groups.push({
+        kind: 'single',
+        projectKey: project.jira_project_key,
+        label: project.display_name,
+        entry: entries[0],
+      });
+    } else {
+      groups.push({
+        kind: 'multi',
+        projectKey: project.jira_project_key,
+        label: project.display_name,
+        brands: entries,
+      });
+    }
+  }
+  return groups;
 }
 
 // -------------------------------------------------------------------------

@@ -1,110 +1,78 @@
 'use client';
 
-// Batch 012 — Phase E1 (Pulse shell). Contextual client list rendered in the
-// side nav ONLY while the user is under /dashboard/pulse. Active brands link to
-// their brand page; paused brands are greyed but still linked (the page exists
-// even when empty). Outside /dashboard/pulse this renders nothing.
-//
-// Which project the list reflects (spec §4):
-//   - brand page  → the projectKey in the URL (authoritative).
-//   - main page   → the matrix picker, mirrored via sessionStorage + a
-//                   `pulse:project` CustomEvent broadcast by the Pulse page
-//                   (the shared nav can't use useSearchParams under
-//                   statically-prerendered dashboard pages), else DEFAULT.
+// Batch 012 — Pulse E1 follow-on. Cross-project contextual client list in the
+// side nav, rendered ONLY under /dashboard/pulse. Lists EVERY active client:
+// multi-brand clients as a group (header → matrix scoped to that client via the
+// shared pulse:project channel; brands link to their pages), single-brand
+// clients collapsed to one direct entry. Paused = greyed-but-linked; inactive
+// excluded. Presentation is intentionally thin — all grouping/sort/collapse
+// logic lives in lib/client-library/pulse.ts (toClientNavGroups) so the later
+// top-nav reorg only re-skins the renderer.
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
-import { toClientNavItems, type ClientNavItem } from '@/lib/client-library/pulse';
+import {
+  toClientNavGroups,
+  type ClientNavGroup,
+  type ClientNavProjectInput,
+  type ClientNavBrandRow,
+  type ClientNavBrandEntry,
+} from '@/lib/client-library/pulse';
+import { broadcastPulseProject } from '@/lib/client-library/pulse-project-channel';
 
 const PULSE_ROOT = '/dashboard/pulse';
-// Keep these in sync with app/dashboard/pulse/page.tsx.
-const PROJECT_STORAGE_KEY = 'pulse:project';
-const PROJECT_EVENT = 'pulse:project';
-const DEFAULT_PROJECT = 'NBLYCRO';
 
 function isUnderPulse(pathname: string): boolean {
   return pathname === PULSE_ROOT || pathname.startsWith(`${PULSE_ROOT}/`);
 }
 
-// Brand-page URL shape: /dashboard/pulse/<projectKey>/<brandCode>.
-function projectKeyFromPath(pathname: string): string | null {
-  const parts = pathname.split('/').filter(Boolean); // ['dashboard','pulse',proj,brand]
-  if (parts[0] === 'dashboard' && parts[1] === 'pulse' && parts.length >= 4) {
-    return decodeURIComponent(parts[2]);
-  }
-  return null;
-}
-
-interface BrandFetchRow {
-  brand_code: string;
-  display_name: string;
-  is_active: boolean;
-  is_paused: boolean;
+function brandHref(entry: ClientNavBrandEntry): string {
+  return `${PULSE_ROOT}/${entry.projectKey}/${entry.brandCode}`;
 }
 
 export function PulseClientNav() {
   const pathname = usePathname() || '';
   const underPulse = isUnderPulse(pathname);
-  const urlProject = projectKeyFromPath(pathname);
+  const [groups, setGroups] = useState<ClientNavGroup[]>([]);
 
-  // Seed the picker mirror from sessionStorage at mount (lazy init — guarded
-  // for SSR, and it never setStates inside an effect body). The main page
-  // re-broadcasts its project on every mount + change, so the listener below
-  // keeps this current regardless of mount order.
-  const [pickerProject, setPickerProject] = useState<string | null>(() => {
-    if (typeof window === 'undefined') return null;
-    try {
-      return window.sessionStorage.getItem(PROJECT_STORAGE_KEY);
-    } catch {
-      return null;
-    }
-  });
-  const [brands, setBrands] = useState<ClientNavItem[]>([]);
-
-  // Listener only — no synchronous setState in the effect body. The handler's
-  // setState runs on the event, which the lint rule does not flag.
+  // Fetch all active projects + brands cross-project. All setState is inside the
+  // async function after the await (mirrors the matrix page), so the
+  // set-state-in-effect rule stays quiet.
   useEffect(() => {
-    function onProject(e: Event) {
-      const detail = (e as CustomEvent<string>).detail;
-      if (typeof detail === 'string' && detail) setPickerProject(detail);
-    }
-    window.addEventListener(PROJECT_EVENT, onProject);
-    return () => window.removeEventListener(PROJECT_EVENT, onProject);
-  }, []);
-
-  // URL project wins (brand page); else the picker; else the default.
-  const projectKey = urlProject ?? pickerProject ?? DEFAULT_PROJECT;
-
-  // Fetch the current project's active brands. All setState is inside the async
-  // function after the await (mirrors the matrix page pattern), so the
-  // set-state-in-effect rule stays quiet. Between project switches the prior
-  // list shows briefly until the new fetch resolves — fine for a small list.
-  useEffect(() => {
-    if (!underPulse || !projectKey) return;
+    if (!underPulse) return;
     let cancelled = false;
-    async function loadBrands(key: string) {
-      const { data, error } = await supabase
-        .from('brands')
-        .select('brand_code, display_name, is_active, is_paused')
-        .eq('project_key', key)
-        .eq('is_active', true)
-        .order('display_name');
+    async function load() {
+      const [projectsRes, brandsRes] = await Promise.all([
+        supabase
+          .from('projects')
+          .select('jira_project_key, display_name, brand_model, is_active')
+          .eq('is_active', true),
+        supabase
+          .from('brands')
+          .select('project_key, brand_code, display_name, is_active, is_paused')
+          .eq('is_active', true),
+      ]);
       if (cancelled) return;
-      if (error) {
-        console.error('[pulse-client-nav] brand fetch failed', error);
-        setBrands([]);
-      } else {
-        setBrands(toClientNavItems((data ?? []) as BrandFetchRow[]));
+      if (projectsRes.error || brandsRes.error) {
+        console.error('[pulse-client-nav] fetch failed', projectsRes.error ?? brandsRes.error);
+        setGroups([]);
+        return;
       }
+      setGroups(
+        toClientNavGroups(
+          (projectsRes.data ?? []) as ClientNavProjectInput[],
+          (brandsRes.data ?? []) as ClientNavBrandRow[],
+        ),
+      );
     }
-    void loadBrands(projectKey);
+    void load();
     return () => {
       cancelled = true;
     };
-  }, [underPulse, projectKey]);
+  }, [underPulse]);
 
   if (!underPulse) return null;
 
@@ -116,35 +84,82 @@ export function PulseClientNav() {
       >
         Clients
       </p>
-      {brands.length === 0 ? (
-        <p className="px-4 text-xs text-[color:var(--f92-gray)]">No clients for this project.</p>
+      {groups.length === 0 ? (
+        <p className="px-4 text-xs text-[color:var(--f92-gray)]">No clients.</p>
       ) : (
-        <nav aria-label="Clients" className="space-y-0.5">
-          {brands.map((b) => {
-            const href = `${PULSE_ROOT}/${projectKey}/${b.brand_code}`;
-            const active = pathname === href;
-            return (
-              <Link
-                key={b.brand_code}
-                href={href}
-                aria-current={active ? 'page' : undefined}
-                title={b.paused ? `${b.display_name} (paused)` : b.display_name}
-                className={cn(
-                  'block truncate rounded-xl py-2 pr-3 text-sm transition min-h-[40px]',
-                  active
-                    ? 'border-l-4 border-[color:var(--f92-active-border)] bg-[color:var(--f92-tint)] pl-3 text-[color:var(--f92-navy)]'
-                    : 'pl-4 hover:bg-[color:var(--f92-tint)]',
-                  b.paused && !active ? 'text-[color:var(--f92-lgray)]' : '',
-                  !b.paused && !active ? 'text-[color:var(--f92-dark)]' : '',
-                )}
-              >
-                {b.display_name}
-                {b.paused ? <span className="ml-1 text-[10px] uppercase opacity-80">paused</span> : null}
-              </Link>
-            );
-          })}
+        <nav aria-label="Clients" className="space-y-2">
+          {groups.map((group) =>
+            group.kind === 'single' ? (
+              <BrandLink
+                key={group.projectKey}
+                entry={group.entry}
+                label={group.label}
+                pathname={pathname}
+              />
+            ) : (
+              <div key={group.projectKey} className="space-y-0.5">
+                {/* Group header → matrix, scoped to this client via the shared
+                    handoff (sessionStorage carries across the navigation). */}
+                <Link
+                  href={PULSE_ROOT}
+                  onClick={() => broadcastPulseProject(group.projectKey)}
+                  title={`${group.label} — open matrix`}
+                  className="block truncate rounded-xl px-3 py-1.5 text-[11px] font-semibold uppercase text-[color:var(--f92-gray)] transition hover:bg-[color:var(--f92-tint)] hover:text-[color:var(--f92-navy)]"
+                  style={{ letterSpacing: 'var(--tracking-wide, 0.08em)' }}
+                >
+                  {group.label}
+                </Link>
+                <div className="space-y-0.5">
+                  {group.brands.map((entry) => (
+                    <BrandLink key={entry.brandCode} entry={entry} pathname={pathname} indent />
+                  ))}
+                </div>
+              </div>
+            ),
+          )}
         </nav>
       )}
     </div>
+  );
+}
+
+// A single brand link. `label` overrides the shown text (single-brand clients
+// show the client name, not the brand name). `indent` nests it under a
+// multi-brand group header.
+function BrandLink({
+  entry,
+  label,
+  pathname,
+  indent,
+}: {
+  entry: ClientNavBrandEntry;
+  label?: string;
+  pathname: string;
+  indent?: boolean;
+}) {
+  const href = brandHref(entry);
+  const active = pathname === href;
+  const text = label ?? entry.displayName;
+  // Active adds a 4px left border, so drop 1 unit of left padding to keep the
+  // text aligned (matches the E1 nav-link compensation).
+  const pad = indent ? (active ? 'pl-5' : 'pl-6') : active ? 'pl-3' : 'pl-4';
+  return (
+    <Link
+      href={href}
+      aria-current={active ? 'page' : undefined}
+      title={entry.paused ? `${text} (paused)` : text}
+      className={cn(
+        'block truncate rounded-xl py-2 pr-3 text-sm transition min-h-[40px]',
+        pad,
+        active
+          ? 'border-l-4 border-[color:var(--f92-active-border)] bg-[color:var(--f92-tint)] text-[color:var(--f92-navy)]'
+          : 'hover:bg-[color:var(--f92-tint)]',
+        entry.paused && !active ? 'text-[color:var(--f92-lgray)]' : '',
+        !entry.paused && !active ? 'text-[color:var(--f92-dark)]' : '',
+      )}
+    >
+      {text}
+      {entry.paused ? <span className="ml-1 text-[10px] uppercase opacity-80">paused</span> : null}
+    </Link>
   );
 }

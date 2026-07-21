@@ -64,6 +64,11 @@ import {
   type FindingSeverity,
   type IssueType,
 } from '@/lib/client-library/monitoring';
+import {
+  writeStoredPulseProject,
+  readStoredPulseProject,
+  PULSE_PROJECT_EVENT,
+} from '@/lib/client-library/pulse-project-channel';
 
 interface ProjectRow {
   jira_project_key: string;
@@ -172,23 +177,17 @@ function timeAgo(iso: string): string {
 
 const DEFAULT_PROJECT = 'NBLYCRO';
 
-// Phase E1: the contextual client nav mirrors this page's project picker via a
-// sessionStorage handoff + a CustomEvent (the shared nav can't read search
-// params under statically-prerendered dashboard pages). Keep these string keys
-// in sync with components/layout/pulse-client-nav.tsx.
-const PULSE_PROJECT_STORAGE_KEY = 'pulse:project';
-const PULSE_PROJECT_EVENT = 'pulse:project';
-
-function broadcastPulseProject(key: string) {
-  if (!key || typeof window === 'undefined') return;
-  try {
-    window.sessionStorage.setItem(PULSE_PROJECT_STORAGE_KEY, key);
-  } catch {
-    // sessionStorage can throw in private modes — the nav then falls back to
-    // its default project; not worth surfacing.
-  }
-  window.dispatchEvent(new CustomEvent(PULSE_PROJECT_EVENT, { detail: key }));
-}
+// This page is the live consumer of the pulse:project channel. The channel
+// (lib/client-library/pulse-project-channel.ts) hands a project selection
+// across the app without a URL param (the shared nav can't read search params
+// under statically-prerendered dashboard pages): sessionStorage persists the
+// pick across navigation — initialLoad seeds from it on mount — and a
+// CustomEvent lets EXTERNAL producers (the cross-project client nav's group
+// headers, the brand page's return-context broadcast) re-scope the matrix live
+// while it's already mounted (see the listener effect below). This page's own
+// producers persist the pick with writeStoredPulseProject (no self-dispatch —
+// they update state + load directly). One definition shared by the page, nav,
+// and brand page (extracted from the E1 page-local copy in the E1 follow-on).
 
 export default function ClientLibraryPage() {
   const { toast } = useToast();
@@ -294,14 +293,9 @@ export default function ClientLibraryPage() {
       }
       const projectRows = (projectData ?? []) as ProjectRow[];
       // Prefer the last-picked project (shared with the contextual client nav
-      // via sessionStorage) so navigating back from a brand page restores the
-      // pick, then the default, then the first project.
-      let storedKey: string | null = null;
-      try {
-        storedKey = window.sessionStorage.getItem(PULSE_PROJECT_STORAGE_KEY);
-      } catch {
-        storedKey = null;
-      }
+      // via the pulse:project channel) so navigating back from a brand page
+      // restores the pick, then the default, then the first project.
+      const storedKey = readStoredPulseProject();
       const initialKey =
         (storedKey && projectRows.some((p) => p.jira_project_key === storedKey) ? storedKey : null) ??
         projectRows.find((p) => p.jira_project_key === DEFAULT_PROJECT)?.jira_project_key ??
@@ -322,7 +316,7 @@ export default function ClientLibraryPage() {
       if (cancelled) return;
       setProjects(projectRows);
       setProjectKey(initialKey);
-      broadcastPulseProject(initialKey);
+      writeStoredPulseProject(initialKey); // persist only — this page owns the state (no self-dispatch)
       await loadProject(initialKey);
       if (!cancelled) setLoading(false);
     }
@@ -334,9 +328,40 @@ export default function ClientLibraryPage() {
 
   function handleProjectChange(key: string) {
     setProjectKey(key);
-    broadcastPulseProject(key);
+    writeStoredPulseProject(key); // persist only — this page owns the state (no self-dispatch)
     void loadProject(key);
   }
+
+  // Live consumer of the pulse:project channel for EXTERNAL producers only —
+  // the cross-project client nav's multi-brand group headers and the brand
+  // page. Those `broadcastPulseProject`; when the user is ALREADY on the matrix
+  // a same-URL header Link doesn't remount the page, so initialLoad's one-time
+  // sessionStorage read never re-fires — this listener re-scopes in place on
+  // the event. (On a real navigation to a fresh mount, initialLoad's
+  // readStoredPulseProject() handles it; the two paths are complementary.)
+  //
+  // This page's OWN producers (initialLoad / handleProjectChange) intentionally
+  // use writeStoredPulseProject (persist only, no dispatch): they already set
+  // projectKey + load directly, so routing through the event would double-fire
+  // loadProject (broadcast dispatches synchronously, before React commits the
+  // setState, so the guard's projectKey closure would still be stale). The
+  // `detail !== projectKey` guard here then only needs to skip a redundant load
+  // when a nav header for the already-current project is clicked.
+  //
+  // The handler's setState runs on the event, not synchronously in the effect
+  // body, so the set-state-in-effect rule doesn't apply. Re-subscribes when
+  // projectKey changes so the guard reads a fresh committed value (cheap).
+  useEffect(() => {
+    function onProject(e: Event) {
+      const detail = (e as CustomEvent<string>).detail;
+      if (typeof detail === 'string' && detail && detail !== projectKey) {
+        setProjectKey(detail);
+        void loadProject(detail);
+      }
+    }
+    window.addEventListener(PULSE_PROJECT_EVENT, onProject);
+    return () => window.removeEventListener(PULSE_PROJECT_EVENT, onProject);
+  }, [projectKey, loadProject]);
 
   const cellByKey = useMemo(() => {
     const map = new Map<string, CellRow>();
