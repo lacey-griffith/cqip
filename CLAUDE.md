@@ -3061,12 +3061,25 @@ ESLint on all new/changed files → zero findings. **No AC contract surface**
 
 ### Batch 012 — Pulse: inline directive editing (kill both modals) — IN FLIGHT
 
-Spec (canonical): `docs/batch-012-pulse-inline-edit-spec.md`. **Built,
-committed, NOT pushed** — Karen post-flight next; then Lacey clicks through the
-running app + deploys. **Render/interaction only — NO migration, NO new mutation
-route, NO new page route, NO schema change** (reuses the two existing admin
-routes); **no Jenny gate**; **no version bump.** Built on the pushed E1 follow-on
-(`0da2a57`) — same file (`app/dashboard/pulse/page.tsx`).
+Spec (canonical): `docs/batch-012-pulse-inline-edit-spec.md`. **SHIPPED**
+(commits `96a6e0a` spec + `705bd37` code; Karen PASS-WITH-FINDINGS, LOW folded;
+PUSHED + auto-deployed 2026-07-21). **Render/interaction only — NO migration, NO
+new mutation route, NO new page route, NO schema change** (reuses the two
+existing admin routes); **no Jenny gate**; **no version bump.** Built on the
+pushed E1 follow-on (`0da2a57`) — same file (`app/dashboard/pulse/page.tsx`).
+Still in §15.5 pending the docs-only §15.5→§16 reconcile (deferred while a
+post-ship refinement is in flight — below).
+
+**Post-ship follow-on (committed, NOT pushed) — compact cell editor.** Per
+Lacey's 2026-07-21 live request ("shorter, less space, without losing any input
+spaces"), `CellEditStrip` collapsed from a stacked block (header + labeled
+fields + 2-row textarea) to a single dense row: brand context inline, then
+status + note + Save/Cancel on one line (wraps only when narrow). Visible field
+labels dropped for height (controls carry `aria-label` + placeholder); the note
+is now a single-line `Input` (was a 2-row `Textarea`) — **both inputs preserved**,
+just shorter. `Textarea` import removed (last user); expansion-cell wrapper
+padding `p-4`→`p-2`. tsc/build/17-tests/ESLint all still green. Karen re-check +
+Lacey click-through pending.
 
 **Problem:** the matrix page had two modals — the "+ New directive" create
 dialog and the click-a-dot cell editor. Too much friction. Both become inline.

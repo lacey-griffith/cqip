@@ -34,7 +34,6 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -680,7 +679,7 @@ export default function ClientLibraryPage() {
                             <td colSpan={brands.length + 2} className="p-0">
                               {/* sticky-left so the editor stays visible when a
                                   ≥16-brand row is scrolled horizontally. */}
-                              <div className="sticky left-0 w-[min(44rem,100%)] p-4">
+                              <div className="sticky left-0 w-[min(48rem,100%)] p-2">
                                 <CellEditStrip
                                   key={editorCell.id}
                                   brand={editorBrand}
@@ -917,53 +916,46 @@ function CellEditStrip({
     if (e.key === 'Escape' && !submitting) onCancel();
   }
 
+  // Compact single-row editor: brand context inline, then status + note + the
+  // Save/Cancel buttons on one line (wraps only on a narrow viewport). Visible
+  // field labels are dropped for height — the controls carry aria-labels +
+  // placeholders instead. Both inputs are preserved; the note is a single-line
+  // Input (was a 2-row Textarea) to cut vertical space without losing the field.
   return (
     <div
       ref={rootRef}
       tabIndex={-1}
       onKeyDown={handleKeyDown}
       aria-label={`Edit ${brand.display_name} — ${directiveTitle}`}
-      className="rounded-xl border border-[color:var(--f92-border)] bg-[color:var(--f92-surface)] p-4 focus:outline-none"
+      className="flex flex-wrap items-center gap-2 rounded-lg border border-[color:var(--f92-border)] bg-[color:var(--f92-surface)] px-3 py-2 focus:outline-none"
     >
-      <p className="mb-3 text-sm font-medium text-[color:var(--f92-dark)]">
+      <span
+        className="shrink-0 text-xs font-medium text-[color:var(--f92-dark)]"
+        title={directiveTitle}
+      >
         {brand.display_name}
-        <span className="ml-2 font-normal text-[color:var(--f92-gray)]">· {directiveTitle}</span>
-      </p>
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="w-44">
-          <Label htmlFor="cellStatus" className="text-[10px] uppercase tracking-widest text-[color:var(--f92-gray)]">
-            Status
-          </Label>
-          <Select value={status} onValueChange={(v) => setStatus(v as CellStatus)}>
-            <SelectTrigger id="cellStatus" className="h-9 text-sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {CELL_STATUSES.map((s) => (
-                <SelectItem key={s} value={s}>{STATUS_LABEL[s]}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="min-w-[16rem] flex-1">
-          <Label htmlFor="cellNote" className="text-[10px] uppercase tracking-widest text-[color:var(--f92-gray)]">
-            Note (optional)
-          </Label>
-          <Textarea
-            id="cellNote"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="Context for this brand"
-            rows={2}
-          />
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={onCancel} disabled={submitting}>Cancel</Button>
-          <Button onClick={handleSave} disabled={submitting}>
-            {submitting ? 'Saving…' : 'Save'}
-          </Button>
-        </div>
-      </div>
+      </span>
+      <Select value={status} onValueChange={(v) => setStatus(v as CellStatus)}>
+        <SelectTrigger aria-label="Status" className="h-8 w-36 shrink-0 text-sm">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {CELL_STATUSES.map((s) => (
+            <SelectItem key={s} value={s}>{STATUS_LABEL[s]}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Input
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        aria-label="Note (optional)"
+        placeholder="Note (optional)"
+        className="h-8 min-w-[10rem] flex-1 text-sm"
+      />
+      <Button variant="outline" size="sm" onClick={onCancel} disabled={submitting}>Cancel</Button>
+      <Button size="sm" onClick={handleSave} disabled={submitting}>
+        {submitting ? 'Saving…' : 'Save'}
+      </Button>
     </div>
   );
 }
