@@ -2905,6 +2905,52 @@ deleted in the same commit that writes the §16 shipped entry.
 
 ---
 
+### Batch 012 — Pulse: inline directive editing on the brand page — IN FLIGHT
+
+**Phase:** E-track, sibling of the matrix inline-edit work shipped 2026-07-21.
+Render/interaction only — NO migration, NO new route, NO schema change → no
+Jenny (E-track profile). Independent of the parallel matrix-controls batch
+(different file: `app/dashboard/pulse/[projectKey]/[brandCode]/page.tsx`, not
+the matrix `page.tsx`); no sequencing dependency, though the shared-save +
+shared-strip extraction does touch the matrix page minimally.
+
+**Goal:** admins edit a directive's status/note for THIS brand directly from
+the brand page — no bounce back to the matrix. Non-admins keep the E1
+read-only view UNCHANGED (server enforces admin regardless of what renders).
+
+**Locked decisions:**
+- Reuse `PATCH /api/admin/directives/status` unchanged — same route the matrix
+  uses. No new endpoint.
+- Extract the optimistic-save + reconcile-on-error orchestration out of the
+  matrix's inline `handleCellSave` into a shared, testable
+  `lib/client-library/directive-cell-save.ts` (`saveDirectiveCell`); BOTH the
+  matrix and the brand page call it — the optimistic/reconcile/toast logic is
+  defined ONCE, not duplicated.
+- Extract the matrix's `CellEditStrip` into a shared
+  `components/client-library/cell-edit-strip.tsx`, decoupled from either page's
+  row types, reused by both. It is already single-brand-shaped (no brand-picker
+  inside the strip) — the brand page uses it as-is.
+- Admin-gated: the edit affordance renders only for admins, and a cell must
+  EXIST to be editable (Phase A design — hollow `n_a` "no cell" rows stay
+  non-interactive; do NOT loosen the disabled-state logic).
+- E3 seam preserved: the strip is the container E3 later enriches
+  (comments / timeline / lifecycle dates).
+
+**Explicitly NOT in scope (needs Lacey's input first):** the handful of
+pre-existing NBLYCRO directives with zero `directive_brand_status` cells
+(at least: Chat Appointment Made, Chat Started, Chat Lead Submitted, [GTM]
+Submits Lead Combined [intentional placeholder], [Rev] Time Spent on Pricing
+(15s)) — they predate the goal-directive bulk load and were correctly SKIPPED
+by its idempotency guard, so they render all-hollow/non-editable. This is a
+DATA GAP (separate targeted backfill, pending Lacey's source values), NOT a UI
+bug.
+
+**Spec:** the DC handoff ticket (2026-07-21). **Gates:** tsc clean, build
+green, existing tests pass + a new `tests/directive-cell-save.test.ts`, ESLint
+zero new findings. Two commits (docs-then-code). DO NOT PUSH — Report → Karen.
+
+---
+
 ## 16. Shipped Features Log
 
 ### Batch 012 — Pulse: inline directive editing (kill both modals) — 2026-07-21
