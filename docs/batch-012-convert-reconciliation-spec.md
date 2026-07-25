@@ -1,10 +1,80 @@
 # HANDOFF — Convert reconciliation backfill (Pulse / Batch 012)
 
 **For:** Lacey (review) → Claudette (build loader) → Karen → Lacey approve + run
-**Source:** `proposed_backfill.csv` (215 rows) from the Convert goal reconciliation
-pass, 2026-07-25 (all 13 active NBLY brands, manually cross-referenced against
-real Convert exports — not fuzzy-matched).
-**Status:** Mapping complete. No code changes made. Backfill deliberately NOT run yet.
+**Source:** `scripts/data/convert-reconciliation-backfill.csv` (215 rows) from the
+Convert goal reconciliation pass, 2026-07-25 (all 13 active NBLY brands, manually
+cross-referenced against real Convert exports — not fuzzy-matched).
+**Status:** Loader BUILT (`scripts/backfill-convert-reconciliation.ts`, 2026-07-25),
+dry-run verified against prod, Jenny gate-confirmed, Karen-reviewed. Backfill
+deliberately NOT run yet — Lacey approves + runs.
+
+> **Addenda applied 2026-07-25 at build time.** The sections below are the
+> as-written spec; these five points supersede them where they conflict:
+>
+> 1. **Input filename** is `scripts/data/convert-reconciliation-backfill.csv`
+>    (§2 named it `proposed_backfill.csv`). The reference-only siblings live in
+>    `docs/convert-reconciliation-2026-07-25/`. Note `rename-cleanup.csv` (§4)
+>    is NOT in the repo — it was never committed, which is consistent with it
+>    being Convert-side work rather than a CQIP artifact.
+> 2. **Write path is the DIRECT service-role write, not the PATCH route** (§1
+>    left this open). The route requires a cookie-bound admin session and derives
+>    `changed_by` via `getChangedBy()`, so a script cannot use it without
+>    attributing 215 rows to a human email instead of the §13 r20 system string.
+> 3. **`old_value` is read from the live DB, not from the CSV's `our_status`**
+>    (§2 said `our_status`). The inline cell editor has been live since
+>    2026-07-21, so a cell can have moved since the 07-25 pass; recording the
+>    CSV's claim would put a fiction in the audit trail. `old_value`/`new_value`
+>    are the canonical `done`/`todo` values, not the CSV's `Done`/`To do`
+>    labels, so these rows match UI-written rows for the same `field_name`.
+>    `target_id` is the `directive_brand_status.id` (the CELL id), matching
+>    `app/api/admin/directives/status/route.ts`.
+> 4. **The downgrade audit note branches on data presence, not flip direction**
+>    (§2 assigned the placeholder note to all 8 downgrades). Two downgrades
+>    reference a REAL but ARCHIVED Convert goal — MRA `Submits Form Lead -
+>    Combined` (id 1004101324) and MDG `Step 1 | Contact Info | Validation Error
+>    Exposure` (id 1004117395) — so writing "no real Convert goal" over those
+>    would discard the archived id from the only forensic trail we keep. Both of
+>    §2's note formats are still produced verbatim; the branch picks the truthful
+>    one per row.
+> 5. **§5's verification arithmetic** ("215 cells updated" AND "`audit_log` == 215")
+>    contradicts §2's own idempotency guarantee. The correct invariant is
+>    `changed + already_at_target == 215`, and `audit_log` rows == `changed`.
+>    Against prod on 2026-07-25 that is **209 changed + 6 already correct = 215**
+>    (the 6 are `[Rev] Time Spent on Site (15s)` ×5 and `[Rev] Time Spent on
+>    Financing (15s)` ×1, already `Done` in prod).
+>
+> One §3 entry needs two corrections. The MDG row's title is abbreviated —
+> it reads `Step 1 Validation Error Exposure` there, but the CSV and the live
+> directive are `Step 1 | Contact Info | Validation Error Exposure` (the CSV
+> spelling is authoritative; titles must be byte-exact to resolve). Its stated
+> reason, "goal doesn't exist", is also superseded: the CSV shows the goal DOES
+> exist but is **archived** in Convert (id `1004117395`), same shape as the MRA
+> `Submits Form Lead - Combined` row. The flip to To do is correct either way —
+> only the reasoning changes.
+>
+> **Karen post-flight (2026-07-25) folded into the loader.** One HIGH: an
+> `audit_log` insert failure printed a warning and then **exited 0**, so a run
+> that flipped 209 cells and wrote zero audit rows looked green — it now exits
+> non-zero, and post-verify asserts the audit row count for this run's cells
+> rather than printing a cumulative total. Three MEDIUMs: a paused/inactive
+> brand referenced by a regenerated CSV would have been written despite §4
+> (now hard-fails); duplicate directive titles are possible (no unique
+> constraint in migration 024, no duplicate check in
+> `POST /api/admin/directives`) and a title→id map would silently flip the
+> wrong cell while still passing post-verify (now hard-fails). Plus: the two
+> legal transitions are asserted explicitly (counts alone don't pin direction),
+> archived directives are refused (an invisible write), and a partial-update
+> failure now prints the flipped cell ids with revert SQL. The two
+> silent-failure helpers (`classifyRow`, `auditNote`) are exported and covered
+> by `tests/convert-reconciliation.test.ts`.
+>
+> Karen also flagged one **mapping** judgment for Lacey — not a script defect:
+> `MLY / FLF: Views Step #1 | Contact Info` and
+> `MLY / FLF: Views Step #2 | Service Details` both map to Convert id
+> `100480830`, one goal named `FLF: Step #1 Reached - Contact Info & Service
+> Details`. It's the only place two directives are marked Done off a single
+> goal. Plausible if Convert merged steps 1+2, but "Step #2" would then be Done
+> on evidence measuring 1+2 combined. Worth a look before running.
 
 ---
 
