@@ -28,7 +28,7 @@
 // TODO(follow-on): directive edit/archive UI; brand-target picker (fan-out is
 //   all-active-brands in Phase A).
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -42,13 +42,14 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useToast } from '@/components/layout/toaster';
+import { CellEditStrip } from '@/components/client-library/cell-edit-strip';
 import {
-  CELL_STATUSES,
   DIRECTIVE_TYPES,
   outstandingCount,
   type CellStatus,
   type DirectiveType,
 } from '@/lib/client-library/directives';
+import { saveDirectiveCell } from '@/lib/client-library/directive-cell-save';
 import {
   compareForPanel,
   type AdminStatus,
@@ -418,46 +419,29 @@ export default function ClientLibraryPage() {
     [projectKey, loadProject, toast],
   );
 
-  // Inline cell save (admin). Optimistic + reconcile-on-error, mirroring
-  // handleFindingStatus: update the cell locally (so the dot + Outstanding
-  // recompute immediately) and collapse the strip, then PATCH; on failure
-  // reload to reconcile. `nextNote` arrives already normalized (trim || null).
+  // Inline cell save (admin). The optimistic + reconcile-on-error orchestration
+  // now lives in the shared saveDirectiveCell (lib/client-library/
+  // directive-cell-save.ts) so the matrix and the per-brand page share one
+  // implementation. This wrapper supplies the matrix-specific bits: the local
+  // optimistic update (keyed by the unique directive_id/brand_id pair) +
+  // collapsing the open strip, and the reconcile (reload the project).
+  // `nextNote` arrives already normalized (trim || null).
   const handleCellSave = useCallback(
-    async (cell: CellRow, nextStatus: CellStatus, nextNote: string | null) => {
-      setCells((prev) =>
-        prev.map((c) => (c.id === cell.id ? { ...c, status: nextStatus, note: nextNote } : c)),
-      );
-      setExpandedCell(null);
-      try {
-        const res = await fetch('/api/admin/directives/status', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            directive_id: cell.directive_id,
-            brand_id: cell.brand_id,
-            status: nextStatus,
-            note: nextNote,
-          }),
-        });
-        const result: { ok?: boolean; error?: string; changed?: number; auditError?: string } =
-          await res.json().catch(() => ({}));
-        if (!res.ok || !result.ok) {
-          toast(`❌ ${result.error ?? `Save failed (${res.status})`}`);
-          void loadProject(projectKey); // reconcile — revert the optimistic change
-          return;
-        }
-        if (result.auditError) {
-          toast('⚠️ Saved, but audit write failed');
-        } else if ((result.changed ?? 0) === 0) {
-          toast('No changes');
-        } else {
-          toast('✅ Updated');
-        }
-      } catch (err) {
-        toast(`❌ ${err instanceof Error ? err.message : String(err)}`);
-        void loadProject(projectKey);
-      }
-    },
+    (cell: CellRow, nextStatus: CellStatus, nextNote: string | null) =>
+      saveDirectiveCell(cell, nextStatus, nextNote, {
+        applyOptimistic: (target, status, note) => {
+          setCells((prev) =>
+            prev.map((c) =>
+              c.directive_id === target.directive_id && c.brand_id === target.brand_id
+                ? { ...c, status, note }
+                : c,
+            ),
+          );
+          setExpandedCell(null);
+        },
+        reconcile: () => void loadProject(projectKey),
+        toast,
+      }),
     [projectKey, loadProject, toast],
   );
 
@@ -682,9 +666,10 @@ export default function ClientLibraryPage() {
                               <div className="sticky left-0 w-[min(48rem,100%)] p-2">
                                 <CellEditStrip
                                   key={editorCell.id}
-                                  brand={editorBrand}
-                                  cell={editorCell}
+                                  brandLabel={editorBrand.display_name}
                                   directiveTitle={directive.title}
+                                  initialStatus={editorCell.status}
+                                  initialNote={editorCell.note}
                                   onSave={(s, n) => handleCellSave(editorCell, s, n)}
                                   onCancel={() => setExpandedCell(null)}
                                 />
@@ -863,99 +848,6 @@ function InlineCreateForm({
           </Button>
         </div>
       </div>
-    </div>
-  );
-}
-
-// -------------------------------------------------------------------------
-// Inline cell status/note editor (admin only). Rendered inside a full-width
-// row-expansion strip under its directive row. Mounted fresh per cell (keyed by
-// cell.id upstream), so useState initializers seed from the cell — no seeding
-// effect. Save delegates to the parent's optimistic handleCellSave; PATCH is
-// unchanged from the retired modal. Esc collapses. This is the E3 seam — E3
-// enriches this container with comments / timeline / lifecycle dates.
-// -------------------------------------------------------------------------
-function CellEditStrip({
-  brand,
-  cell,
-  directiveTitle,
-  onSave,
-  onCancel,
-}: {
-  brand: BrandRow;
-  cell: CellRow;
-  directiveTitle: string;
-  onSave: (status: CellStatus, note: string | null) => void | Promise<void>;
-  onCancel: () => void;
-}) {
-  const [status, setStatus] = useState<CellStatus>(cell.status);
-  const [note, setNote] = useState(cell.note ?? '');
-  const [submitting, setSubmitting] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  // Move focus into the strip on open so Esc works immediately and screen
-  // readers announce it. Ref focus, not setState — the set-state-in-effect
-  // rule doesn't apply. Runs once (keyed remount per cell).
-  useEffect(() => {
-    rootRef.current?.focus();
-  }, []);
-
-  async function handleSave() {
-    if (submitting) return;
-    setSubmitting(true);
-    // Parent applies the optimistic update + collapses this strip; if it
-    // throws we still release the button.
-    try {
-      await onSave(status, note.trim() || null);
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
-    if (e.key === 'Escape' && !submitting) onCancel();
-  }
-
-  // Compact single-row editor: brand context inline, then status + note + the
-  // Save/Cancel buttons on one line (wraps only on a narrow viewport). Visible
-  // field labels are dropped for height — the controls carry aria-labels +
-  // placeholders instead. Both inputs are preserved; the note is a single-line
-  // Input (was a 2-row Textarea) to cut vertical space without losing the field.
-  return (
-    <div
-      ref={rootRef}
-      tabIndex={-1}
-      onKeyDown={handleKeyDown}
-      aria-label={`Edit ${brand.display_name} — ${directiveTitle}`}
-      className="flex flex-wrap items-center gap-2 rounded-lg border border-[color:var(--f92-border)] bg-[color:var(--f92-surface)] px-3 py-2 focus:outline-none"
-    >
-      <span
-        className="shrink-0 text-xs font-medium text-[color:var(--f92-dark)]"
-        title={directiveTitle}
-      >
-        {brand.display_name}
-      </span>
-      <Select value={status} onValueChange={(v) => setStatus(v as CellStatus)}>
-        <SelectTrigger aria-label="Status" className="h-8 w-36 shrink-0 text-sm">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {CELL_STATUSES.map((s) => (
-            <SelectItem key={s} value={s}>{STATUS_LABEL[s]}</SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Input
-        value={note}
-        onChange={(e) => setNote(e.target.value)}
-        aria-label="Note (optional)"
-        placeholder="Note (optional)"
-        className="h-8 min-w-[10rem] flex-1 text-sm"
-      />
-      <Button variant="outline" size="sm" onClick={onCancel} disabled={submitting}>Cancel</Button>
-      <Button size="sm" onClick={handleSave} disabled={submitting}>
-        {submitting ? 'Saving…' : 'Save'}
-      </Button>
     </div>
   );
 }

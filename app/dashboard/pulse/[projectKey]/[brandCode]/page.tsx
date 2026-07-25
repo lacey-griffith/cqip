@@ -9,20 +9,27 @@
 //     allows authenticated SELECT, so no new read endpoint)
 //   - Convert config: a framed placeholder — E2 fills it.
 //
-// Directive editing stays on the matrix (the existing PATCH route); nothing
-// here writes. E3 swaps the read-only directive rows for expandable
-// comment/timeline rows — kept as a clean seam.
+// Admins edit a directive's status/note for THIS brand inline (same PATCH
+// route the matrix uses, via the shared saveDirectiveCell + CellEditStrip).
+// Non-admins see the read-only view UNCHANGED — the route enforces admin
+// server-side regardless of what renders. A cell must EXIST to be editable
+// (Phase A design: hollow n_a "no cell" rows stay non-interactive). E3 swaps
+// the read-only directive rows for expandable comment/timeline rows — the
+// CellEditStrip container is the same seam E3 enriches.
 
-import { use, useEffect, useMemo, useState } from 'react';
+import { use, useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase/client';
 import { Card } from '@/components/ui/card';
+import { useToast } from '@/components/layout/toaster';
+import { CellEditStrip } from '@/components/client-library/cell-edit-strip';
 import {
   brandDirectiveView,
   type BrandCell,
   type BrandDirectiveRow,
 } from '@/lib/client-library/pulse';
 import { broadcastPulseProject } from '@/lib/client-library/pulse-project-channel';
+import { saveDirectiveCell } from '@/lib/client-library/directive-cell-save';
 import type { CellStatus, DirectiveType } from '@/lib/client-library/directives';
 
 interface BrandRow {
@@ -73,11 +80,17 @@ export default function PulseBrandPage({
   params: Promise<{ projectKey: string; brandCode: string }>;
 }) {
   const { projectKey, brandCode } = use(params);
+  const { toast } = useToast();
 
   const [brand, setBrand] = useState<BrandRow | null>(null);
   const [projectLabel, setProjectLabel] = useState<string>(projectKey);
   const [directives, setDirectives] = useState<DirectiveRow[]>([]);
   const [cells, setCells] = useState<BrandCell[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
+  // Which directive's cell is being edited inline (admin). One open at a time,
+  // keyed by directive id — the brand is fixed (this page), so a directive id
+  // uniquely identifies the cell.
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -99,6 +112,28 @@ export default function PulseBrandPage({
   useEffect(() => {
     broadcastPulseProject(projectKey);
   }, [projectKey]);
+
+  // Admin gate for the inline-edit affordance. Read-only users never see the
+  // editor; the PATCH route enforces admin server-side regardless. Fetched once
+  // on mount (independent of brand→brand nav). setState runs after an await, so
+  // the set-state-in-effect rule stays quiet.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
+      if (!userId) return;
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('role')
+        .eq('id', userId)
+        .maybeSingle();
+      if (!cancelled) setIsAdmin(profile?.role === 'admin');
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Fetch is an inline async function inside the effect (mirrors the matrix
   // page) with a `cancelled` guard — all setState runs after an await, so the
@@ -126,9 +161,12 @@ export default function PulseBrandPage({
 
       if (projectRes.data?.display_name) setProjectLabel(projectRes.data.display_name);
       // Reset stale flags now that data is back (covers brand→brand nav where
-      // the component instance is reused).
+      // the component instance is reused). editingId is reset too so an open
+      // editor on the previous brand doesn't re-open on the new one (mirrors
+      // the matrix's expandedCell reset on project change).
       setLoadError(null);
       setNotFound(false);
+      setEditingId(null);
 
       if (brandRes.error) {
         setBrand(null);
@@ -194,6 +232,41 @@ export default function PulseBrandPage({
   const rows: BrandDirectiveRow<DirectiveRow>[] = useMemo(
     () => (brand ? brandDirectiveView(directives, cells, brand.id) : []),
     [brand, directives, cells],
+  );
+
+  // Reconcile helper for the shared save handler's error path — re-fetch just
+  // this brand's cells (cheaper than the full load()).
+  const refetchCells = useCallback(async () => {
+    if (!brand || directives.length === 0) return;
+    const { data, error } = await supabase
+      .from('directive_brand_status')
+      .select('directive_id, brand_id, status, note')
+      .in('directive_id', directives.map((d) => d.id))
+      .eq('brand_id', brand.id);
+    if (!error) setCells((data ?? []) as BrandCell[]);
+  }, [brand, directives]);
+
+  // Inline cell save (admin), via the shared saveDirectiveCell — same
+  // optimistic + reconcile + toast core the matrix uses. The brand is fixed
+  // (this page), so the (directive_id, brand_id) pair on the BrandCell is the
+  // save target. `nextNote` arrives already normalized (trim || null).
+  const handleSave = useCallback(
+    (cell: BrandCell, nextStatus: CellStatus, nextNote: string | null) =>
+      saveDirectiveCell(cell, nextStatus, nextNote, {
+        applyOptimistic: (target, status, note) => {
+          setCells((prev) =>
+            prev.map((c) =>
+              c.directive_id === target.directive_id && c.brand_id === target.brand_id
+                ? { ...c, status, note }
+                : c,
+            ),
+          );
+          setEditingId(null);
+        },
+        reconcile: () => void refetchCells(),
+        toast,
+      }),
+    [refetchCells, toast],
   );
 
   return (
@@ -264,11 +337,18 @@ export default function PulseBrandPage({
           <section className="mb-8">
             <h2 className="mb-1 text-lg font-semibold text-[color:var(--f92-dark)]">Directives</h2>
             <p className="mb-3 text-sm text-[color:var(--f92-gray)]">
-              This brand&rsquo;s status on each active directive. Edit statuses on the{' '}
-              <Link href="/dashboard/pulse" className="text-[color:var(--f92-orange)] hover:underline">
-                directive matrix
-              </Link>
-              .
+              This brand&rsquo;s status on each active directive.{' '}
+              {isAdmin ? (
+                <>Click a status to edit it for this brand.</>
+              ) : (
+                <>
+                  Edit statuses on the{' '}
+                  <Link href="/dashboard/pulse" className="text-[color:var(--f92-orange)] hover:underline">
+                    directive matrix
+                  </Link>
+                  .
+                </>
+              )}
             </p>
             {rows.length === 0 ? (
               <Card className="p-6 text-center text-sm text-[color:var(--f92-gray)]">
@@ -278,52 +358,95 @@ export default function PulseBrandPage({
               <div className="space-y-2">
                 {rows.map(({ directive, cell }) => {
                   const status = cell?.status ?? 'n_a';
+                  // A cell must EXIST to be editable (Phase A design): a
+                  // directive with no directive_brand_status row for this brand
+                  // renders hollow n_a and stays non-interactive.
+                  const editable = isAdmin && !!cell;
+                  const isEditing = editable && editingId === directive.id;
                   return (
                     <Card
                       key={directive.id}
-                      className="flex items-start gap-3 p-3"
+                      className="p-3"
                       style={{ boxShadow: 'var(--shadow-sm)' }}
                     >
-                      <span
-                        className="mt-1.5 block h-3 w-3 shrink-0 rounded-full"
-                        style={
-                          status === 'n_a'
-                            ? { border: '1.5px dashed var(--f92-lgray)' }
-                            : { background: STATUS_DOT[status] }
-                        }
-                        aria-hidden="true"
-                      />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span
-                            className="inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase text-[color:var(--f92-navy)]"
-                            style={{
-                              letterSpacing: 'var(--tracking-wide, 0.08em)',
-                              background: 'var(--pill-filter-bg)',
-                              borderRadius: 'var(--radius-full)',
-                            }}
-                          >
-                            {TYPE_LABEL[directive.directive_type]}
-                          </span>
-                          <span className="font-medium text-[color:var(--f92-dark)]">
-                            {directive.title}
-                          </span>
+                      <div className="flex items-start gap-3">
+                        <span
+                          className="mt-1.5 block h-3 w-3 shrink-0 rounded-full"
+                          style={
+                            status === 'n_a'
+                              ? { border: '1.5px dashed var(--f92-lgray)' }
+                              : { background: STATUS_DOT[status] }
+                          }
+                          aria-hidden="true"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span
+                              className="inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase text-[color:var(--f92-navy)]"
+                              style={{
+                                letterSpacing: 'var(--tracking-wide, 0.08em)',
+                                background: 'var(--pill-filter-bg)',
+                                borderRadius: 'var(--radius-full)',
+                              }}
+                            >
+                              {TYPE_LABEL[directive.directive_type]}
+                            </span>
+                            <span className="font-medium text-[color:var(--f92-dark)]">
+                              {directive.title}
+                            </span>
+                          </div>
+                          {directive.description ? (
+                            <p className="mt-1 text-xs text-[color:var(--f92-gray)]">
+                              {directive.description}
+                            </p>
+                          ) : null}
+                          {cell?.note ? (
+                            <p className="mt-1 text-xs text-[color:var(--f92-dark)]">
+                              <span className="text-[color:var(--f92-gray)]">Note: </span>
+                              {cell.note}
+                            </p>
+                          ) : null}
                         </div>
-                        {directive.description ? (
-                          <p className="mt-1 text-xs text-[color:var(--f92-gray)]">
-                            {directive.description}
-                          </p>
-                        ) : null}
-                        {cell?.note ? (
-                          <p className="mt-1 text-xs text-[color:var(--f92-dark)]">
-                            <span className="text-[color:var(--f92-gray)]">Note: </span>
-                            {cell.note}
-                          </p>
-                        ) : null}
+                        {editable ? (
+                          <button
+                            type="button"
+                            aria-expanded={isEditing}
+                            onClick={() =>
+                              setEditingId((cur) => (cur === directive.id ? null : directive.id))
+                            }
+                            aria-label={`${directive.title}: ${STATUS_LABEL[status]}${isEditing ? ' (editing — activate to close)' : ' (edit)'}`}
+                            className={
+                              'shrink-0 rounded-full px-2 py-0.5 text-xs font-medium text-[color:var(--f92-gray)] transition ' +
+                              'cursor-pointer hover:text-[color:var(--f92-orange)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)] ' +
+                              (isEditing ? 'ring-2 ring-[color:var(--f92-orange)]' : '')
+                            }
+                          >
+                            {STATUS_LABEL[status]}
+                          </button>
+                        ) : (
+                          <span className="shrink-0 text-xs font-medium text-[color:var(--f92-gray)]">
+                            {STATUS_LABEL[status]}
+                          </span>
+                        )}
                       </div>
-                      <span className="shrink-0 text-xs font-medium text-[color:var(--f92-gray)]">
-                        {STATUS_LABEL[status]}
-                      </span>
+
+                      {/* Inline editor (admin). The CellEditStrip container is
+                          the E3 seam — E3 enriches it with comments / timeline /
+                          lifecycle dates. Keyed by directive id → fresh mount
+                          seeds from this cell. */}
+                      {isEditing && cell && brand ? (
+                        <div className="mt-2">
+                          <CellEditStrip
+                            key={directive.id}
+                            brandLabel={brand.display_name}
+                            directiveTitle={directive.title}
+                            initialStatus={cell.status}
+                            initialNote={cell.note}
+                            onSave={(s, n) => handleSave(cell, s, n)}
+                            onCancel={() => setEditingId(null)}
+                          />
+                        </div>
+                      ) : null}
                     </Card>
                   );
                 })}
