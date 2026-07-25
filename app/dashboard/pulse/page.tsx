@@ -482,6 +482,10 @@ export default function ClientLibraryPage() {
   );
 
   const projectLabel = projects.find((p) => p.jira_project_key === projectKey)?.display_name ?? projectKey;
+  // A blank query matches everything (matchesSearch), so "did the user actually
+  // search?" is a separate question from "are rows hidden?" — the hidden-match
+  // correction is only meaningful once a search is active (Karen LOW-6).
+  const searchActive = search.trim().length > 0;
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-8 md:px-8">
@@ -572,7 +576,12 @@ export default function ClientLibraryPage() {
             </div>
 
             <div>
-              <Label htmlFor="matrixStatus" className="sr-only">Filter by resolve status</Label>
+              {/* No sr-only Label here: the trigger's own content is now
+                  "Status: Open", which IS the accessible name (buttons take
+                  their name from their subtree). A Label would only add
+                  "Filter by resolve status Status: Open" verbosity. The search
+                  input and the sort trigger DO keep theirs — a placeholder is
+                  not a label, and "Title (A–Z)" alone doesn't say "sort". */}
               <Select
                 value={statusFilter}
                 onValueChange={(v) => setStatusFilter(v as MatrixStatusFilter)}
@@ -622,31 +631,51 @@ export default function ClientLibraryPage() {
               </label>
             ) : null}
 
-            <span className="ml-auto text-xs font-medium text-[color:var(--f92-gray)]" aria-live="polite">
-              {matrixRows.length === directives.length
-                ? `${directives.length} directive${directives.length === 1 ? '' : 's'}`
-                : `${matrixRows.length} of ${directives.length} directives`}
-            </span>
+            {/* ONE polite live region holding the count AND the hidden-match
+                correction. They must share a region (Karen LOW-7): with the
+                count announced alone, a screen-reader user who searched a
+                resolved title heard "0 of 69 directives" — which AFFIRMS the
+                false "it doesn't exist" inference this signal exists to
+                correct. */}
+            <div
+              className="ml-auto flex flex-wrap items-center justify-end gap-x-2 text-xs font-medium text-[color:var(--f92-gray)]"
+              aria-live="polite"
+            >
+              <span>
+                {matrixRows.length === directives.length
+                  ? `${directives.length} directive${directives.length === 1 ? '' : 's'}`
+                  : `${matrixRows.length} of ${directives.length} directives`}
+              </span>
 
-            {/* Never let "I searched and found nothing" read as "it doesn't
-                exist" — the status filter may be hiding the match, and creating
-                a duplicate title is unguarded server-side (see
-                countHiddenByStatus). Only shown when rows ARE listed; the
-                zero-row case says the same thing in its empty state below. */}
-            {hiddenByStatus > 0 && matrixRows.length > 0 ? (
-              <p className="basis-full text-xs text-[color:var(--f92-gray)]">
-                {hiddenByStatus === 1
-                  ? '1 more directive matches but is hidden by the status filter.'
-                  : `${hiddenByStatus} more directives match but are hidden by the status filter.`}{' '}
-                <button
-                  type="button"
-                  onClick={() => setStatusFilter('all')}
-                  className="font-medium text-[color:var(--f92-orange)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)]"
-                >
-                  Show all statuses
-                </button>
-              </p>
-            ) : null}
+              {/* Never let "I searched and found nothing" read as "it doesn't
+                  exist" — the status filter may be hiding the match, and a
+                  duplicate title is unguarded server-side (see
+                  countHiddenByStatus).
+                  Gated on a NON-EMPTY search (Karen LOW-6): matchesSearch()
+                  matches everything on a blank query, so without this gate the
+                  line rendered permanently on NBLYCRO's default view ("19 more
+                  directives match…") — claiming a match when nothing was
+                  searched, and making the bar two rows tall by default. With no
+                  search there is no false negative to correct; the "N of M"
+                  count above already conveys that the filter is hiding rows.
+                  Rendered regardless of matrixRows.length so the zero-row case
+                  is announced here too, rather than only in the empty state. */}
+              {searchActive && hiddenByStatus > 0 ? (
+                <span className="font-normal">
+                  ·{' '}
+                  {hiddenByStatus === 1
+                    ? '1 directive matches your search but is hidden by the status filter.'
+                    : `${hiddenByStatus} directives match your search but are hidden by the status filter.`}{' '}
+                  <button
+                    type="button"
+                    onClick={() => setStatusFilter('all')}
+                    className="font-medium text-[color:var(--f92-orange)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)]"
+                  >
+                    Show all statuses
+                  </button>
+                </span>
+              ) : null}
+            </div>
           </div>
           ) : null}
 
@@ -686,15 +715,21 @@ export default function ClientLibraryPage() {
                excluded them all. Keep both reachable. */
             <div className="p-8 text-center text-sm text-[color:var(--f92-gray)]">
               No directives match these filters.{' '}
-              {hiddenByStatus > 0 ? (
-                /* The dangerous case: the search DID match, the status filter
-                   hid it. Say so and offer a reset that KEEPS the search, so
-                   the admin sees the match instead of concluding it doesn't
-                   exist and creating a duplicate (unguarded server-side). */
+              {hiddenByStatus > 0 && searchActive ? (
+                /* The dangerous case — the search DID match, the status filter
+                   hid it. The count + correction + "Show all statuses" (which
+                   KEEPS the search) live in the controls bar's persistent live
+                   region just above, so they are announced reliably; don't
+                   duplicate the button here. */
+                <span className="italic">See the note above the table.</span>
+              ) : hiddenByStatus > 0 ? (
+                /* No search, but the status filter emptied the view (e.g.
+                   Resolved on a project with nothing resolved). Search-neutral
+                   copy — nothing was searched, so don't claim a "match". */
                 <>
                   {hiddenByStatus === 1
-                    ? '1 directive matches your search but is hidden by the status filter.'
-                    : `${hiddenByStatus} directives match your search but are hidden by the status filter.`}{' '}
+                    ? '1 directive is hidden by the status filter.'
+                    : `${hiddenByStatus} directives are hidden by the status filter.`}{' '}
                   <button
                     type="button"
                     onClick={() => setStatusFilter('all')}

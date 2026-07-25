@@ -3072,14 +3072,59 @@ widening the interface, not a physical impossibility).
   recommended result-count pattern and coalesces correctly;
   `pulse-client-nav.tsx` diff is **0 lines**.
 
-**Gates (re-run AFTER the fold, not inherited):** `tsc --noEmit` exit 0 · ESLint
-zero findings on all three files · **87/87 tests** (67 pre-existing + 20 this
-batch) · `npm run build` exit 0 with `/dashboard/pulse` still `○`, the brand page
-`ƒ`, and **no new route entries**. Guard + tie-break mutations re-verified as
-caught after the fold. No Jenny (confirmed — no migration/route/schema/mutation
-surface). **The real bar is Lacey clicking through** (spec §7 click list, items
-8–13 added from the Karen findings). Three commits: docs → code → fold.
-**DO NOT PUSH** — Lacey clicks through, then pushes.
+**Karen re-confirm on the fold — CONFIRMED, fold sound, no regressions** (all four
+prior claims re-verified against post-fold source; guard mutation → 7 failures,
+tie-break → 1, both re-run independently). It surfaced **2 new LOW, both FOLDED in
+commit 4**, plus one accepted pre-existing LOW:
+- **LOW-6 FOLDED — a self-inflicted regression from the MEDIUM-1 fix.** Because
+  `matchesSearch` matches everything on a blank query, `hiddenByStatus` was 19 on
+  NBLYCRO's default view, so the hint rendered on **every page load** — "19 more
+  directives match but are hidden…", claiming a match when nothing was searched,
+  and making the controls bar two rows tall by default. The search-worded hint is
+  now gated on a non-empty search; the zero-row empty state gained **search-neutral**
+  copy for the no-search case so that path stays actionable without inventing a
+  search. `countHiddenByStatus` deliberately still counts on a blank query (the
+  empty state needs that number) — presentation is gated in the UI so the count
+  keeps ONE honest meaning, pinned by a test comment.
+- **LOW-7 FOLDED — the correction was never announced, and the count alone
+  *confirmed* the wrong inference.** With `aria-live` on the count only, a
+  screen-reader user searching a resolved title heard "0 of 69 directives" — which
+  affirms "it doesn't exist". Count + correction now share ONE polite region that
+  is persistent in the DOM (the condition that actually makes a live region
+  announce; a newly-mounted region may not). It renders regardless of row count, so
+  the zero-row case is announced there and the empty state points at it instead of
+  duplicating the button. Also removed the now-superfluous `sr-only` Label on the
+  status select (the trigger's "Status: Open" content IS the accessible name); the
+  search input + sort trigger keep theirs.
+- **LOW-8 accepted as-is — an ARCHIVED directive is invisible to search and counts
+  0 toward `hiddenByStatus`,** so an exists-but-archived title still reads as
+  "found nothing". Karen verified rather than assumed that this is **unreachable
+  today**: `grep -rn archived app/api/` returns nothing — there is no archive
+  writer at all, create never sets `status` (relies on migration 024's
+  `DEFAULT 'active'`), and directive edit/archive UI is still an open TODO.
+  Pre-existing, not a fold regression (the matrix never showed archived rows).
+  **Whoever builds the archive UI owes this surface a signal** — recorded in spec
+  §11.
+- **Worth keeping from the re-review:** the `all` short-circuit in
+  `countHiddenByStatus` is *provably redundant rather than a special case*
+  (deleting it entirely still passes 20/20; changing it to `return 1` fails 2), so
+  it cannot diverge from the loop. And **the §2.1 guard now has a LIVE FUNCTIONAL
+  CONSUMER**: MEDIUM-2's reset-to-`open` is airtight for every fan-out outcome
+  ONLY because unstarted is visible under `open` (all-paused → all-`n_a`;
+  zero-active-brand → zero cells; `resolved` is unreachable at fan-out since
+  `initialCellStatus` is typed `Extract<CellStatus, 'todo' | 'n_a'>`). Weakening
+  the guard would now silently break create-then-see-your-row for those projects —
+  a stronger argument than "prod has 0 unstarted today", and it finally gives the
+  guard a **click-verifiable** proxy (click item 17). Recorded in the guard comment.
+
+**Gates (re-run after EVERY fold, never inherited):** `tsc --noEmit` exit 0 ·
+ESLint zero findings on all three files · **87/87 tests** (67 pre-existing + 20
+this batch) · `npm run build` exit 0 with `/dashboard/pulse` still `○`, the brand
+page `ƒ`, and **no new route entries**. No Jenny (confirmed — no
+migration/route/schema/mutation surface). **The real bar is Lacey clicking
+through** (spec §7 items 8–13 + §11 items 14–17; item 14 specifically checks that
+the LOW-6 always-on hint is gone). Four commits: docs → code → fold → re-confirm
+fold. **DO NOT PUSH** — Lacey clicks through, then pushes.
 
 ---
 

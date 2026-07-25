@@ -356,3 +356,103 @@ zero findings on all three files · **87/87 tests** (67 pre-existing + 20 in thi
 batch) · `npm run build` exit 0 with `/dashboard/pulse` still `○`, the brand page
 `ƒ`, and no new route entries. Guard + tie-break mutations re-verified as caught
 after the fold.
+
+---
+
+## 11. Karen re-confirm on the fold — CONFIRMED (2026-07-25)
+
+Reviewed commit `221c954` against the two prior commits. **Verdict: CONFIRMED —
+fold is sound, no regressions.** All four previously-confirmed claims re-verified
+against post-fold source (Outstanding still a single computation; `MatrixCellLike`
+untouched so Claim 4's structural barrier is intact and `countHiddenByStatus` did
+not widen it; guard mutation → 7 failures, tie-break mutation → 1 failure, both
+re-run independently). Gates re-run: tsc 0 · ESLint 0 · 87/87 · build 0, route
+table unchanged. §13 r34/r23 satisfied — the doc updates landed *in* the fold
+commit, not after it.
+
+Three things Karen established that are worth keeping:
+
+- **`countHiddenByStatus`'s `all` short-circuit is provably redundant, not a
+  special case.** Deleting it entirely still passes 20/20 (because
+  `matchesStatusFilter(_, 'all')` is unconditionally true, so the loop also
+  returns 0), while changing it to `return 1` fails 2 tests. It is a pure
+  optimization that cannot diverge from the loop — the strongest form of correct.
+- **The partition invariant is the right invariant.** For a fixed search,
+  `buildMatrixRows` keeps the status-passing matches and `countHiddenByStatus`
+  counts the status-failing ones — a genuine two-way partition of the same set,
+  which is precisely what makes the hint's arithmetic trustworthy. Verified to
+  hold for `unstarted` too.
+- **§2.1's guard now has a LIVE FUNCTIONAL CONSUMER, not just a defensive one.**
+  MEDIUM-2's reset-to-`open` is airtight for *every* fan-out outcome only because
+  unstarted is visible under `open`: an all-paused project fans out to all-`n_a`
+  and a zero-active-brand project fans out to zero cells — both `unstarted`.
+  (`resolved` is unreachable at fan-out: it needs `done ≥ 1`, and
+  `initialCellStatus` is typed `Extract<CellStatus, 'todo' | 'n_a'>`.) So
+  weakening the guard would now *silently break create-then-see-your-row* for
+  those projects — a stronger argument than "prod has 0 unstarted today", and it
+  gives the guard its first **click-verifiable** proxy (click item 17). Recorded
+  in the guard comment itself.
+
+### FOLDED in commit 4
+
+- **LOW-6 — the hint line was permanently on, with misleading copy.** `matchesSearch`
+  matches everything on a blank query, so with no search and the default `Open`
+  filter prod computed `hiddenByStatus = 19` and the hint rendered on *every* page
+  load — "19 more directives match but are hidden…" — claiming a match when nothing
+  was searched, and making the controls bar two rows tall by default. This was a
+  self-inflicted regression from the MEDIUM-1 fix, not pre-existing. Fixed by gating
+  the search-worded hint on a non-empty search (`searchActive`): with no search
+  there is no false negative to correct, and the `N of M` count already conveys
+  that rows are hidden. The zero-row empty state gained **search-neutral** copy for
+  the no-search case ("N directives are hidden by the status filter"), so that path
+  is still actionable without claiming a search happened. `countHiddenByStatus`
+  itself was deliberately **left** counting on a blank query — the empty state needs
+  that number; presentation is gated in the UI so the count keeps one honest meaning
+  (pinned by a test comment).
+- **LOW-7 — the correction was never announced; the count alone confirmed the wrong
+  inference.** `aria-live="polite"` sat on the count `<span>` only, so a
+  screen-reader user searching a resolved title heard **"0 of 69 directives"** —
+  which *affirms* "it doesn't exist". Count and correction now share **one** polite
+  region in the controls bar, which is persistent in the DOM (the condition that
+  actually makes a live region announce reliably — a newly-mounted region may not).
+  Because that region renders regardless of `matrixRows.length`, the zero-row case
+  is announced there too; the empty state therefore points at it rather than
+  duplicating the button.
+- **Karen's a11y note** — the now-superfluous `sr-only` Label on the status select
+  was removed (the trigger's own "Status: Open" content IS the accessible name;
+  the Label only added verbosity). The search input and sort trigger **keep**
+  theirs: a placeholder is not a label, and "Title (A–Z)" alone doesn't say "sort".
+
+### NEW LOW, accepted as-is (pre-existing, unreachable today)
+
+- **LOW-8 — an ARCHIVED directive is invisible to the search and counts 0 toward
+  `hiddenByStatus`,** so a title that exists-but-archived still lands in the
+  "found nothing" reading MEDIUM-1 exists to prevent. `loadProject` only ever
+  loads `status = 'active'` directives. Karen verified rather than assumed that
+  this is currently **unreachable**: `grep -rn archived app/api/` returns nothing —
+  there is **no archive writer anywhere**, the create route never sets `status`
+  (relying on migration 024's `DEFAULT 'active'`), and directive edit/archive UI is
+  still an open TODO. So archiving is direct-SQL-only today and prod almost
+  certainly has zero. **Pre-existing, not a fold regression** — the matrix never
+  showed archived rows. Structurally the same shape as the §2.1 guard: defensive
+  now, load-bearing the day Phase C/E adds archiving. **Whoever builds the archive
+  UI owes this surface a signal** (either include archived titles in the
+  duplicate-risk count, or add the route-level duplicate check that is the durable
+  fix for MEDIUM-1).
+- **Note (not a finding):** the status trigger carries a `Status:` prefix while the
+  sort trigger doesn't — justified (sort values are self-describing) but visually
+  asymmetric. Worth a glance, not a change.
+
+### Click list — items 14-17 (on top of 8-13)
+
+14. **Land on NBLYCRO with no search** — the hint line must be **absent** and the
+    controls bar **one row** tall; the count should read `50 of 69 directives`.
+    (LOW-6 — this is the regression the fold removed.)
+15. **Search a title you know is resolved** — expect the count *plus* the
+    search-preserving "Show all statuses"; click it and confirm you land on the
+    match, not on all 69. (MEDIUM-1)
+16. **Create a directive with search text in the box** — the search must clear and
+    the new row must appear. (MEDIUM-2)
+17. **If a project with all brands paused is available, create a directive there** —
+    the row must still appear under `Open`. This is the first real click-path that
+    exercises the §2.1 verbatim guard. (Q3)

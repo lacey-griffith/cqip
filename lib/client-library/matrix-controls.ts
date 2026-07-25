@@ -84,6 +84,14 @@ export const MATRIX_STATUS_FILTER_LABEL: Record<MatrixStatusFilter, string> = {
 // unstarted directives (50 active / 19 resolved / 0 unstarted), so the two forms
 // look identical when clicked through today. They are not: the first all-n_a or
 // cell-less directive would vanish from the default view.
+//
+// This guard also has a LIVE FUNCTIONAL CONSUMER, not just a defensive one: the
+// matrix page resets the filter to `open` after a directive is created, so the
+// new row is guaranteed visible. That holds for every fan-out outcome ONLY
+// because unstarted is visible here — a project whose every active brand is
+// paused fans out to all-n_a, and a project with zero active brands fans out to
+// zero cells; both classify `unstarted`. Weakening this predicate would silently
+// break create-then-see-your-row for those projects.
 export function matchesStatusFilter(
   state: DirectiveResolveState,
   filter: MatrixStatusFilter,

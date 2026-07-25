@@ -305,7 +305,13 @@ test('countHiddenByStatus: 0 under "all", and 0 when nothing matches the search'
   );
   // A search matching nothing has nothing to hide — the hint must not fire.
   assert.equal(countHiddenByStatus(DIRECTIVES, CELLS, controls({ search: 'zzzz' })), 0);
-  // No search: the 2 resolved directives are hidden by the default filter.
+
+  // BLANK search counts every status-excluded directive (a blank query matches
+  // all — see matchesSearch). That is DELIBERATE and must not be "fixed" to 0:
+  // the zero-row empty state uses this to say "N are hidden by the status
+  // filter" when no search is active. The search-worded HINT is gated in the UI
+  // on a non-empty search instead (Karen LOW-6) — presentation is gated there,
+  // not here, so the count stays a single honest number with one meaning.
   assert.equal(countHiddenByStatus(DIRECTIVES, CELLS, controls()), 2);
 });
 
