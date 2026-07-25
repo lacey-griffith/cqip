@@ -1,0 +1,275 @@
+brand,convert_name,convert_id,type
+MRA,Submits LF Lead,10048405,visits_page
+MRA,[DNU] Form Submission Modal | Step Reached - Locator,100452294,code_trigger
+MRA,[DNU] Form Submission Modal | Step Reached - Service Information,100452295,code_trigger
+MRA,[DNU] Form Submission Modal | Step Reached - Scheduler,100452296,code_trigger
+MRA,[DNU] Form Submission Modal | Step Reached - Contact Info,100452297,code_trigger
+MRA,[DNU] Form Submission Modal | Step Reached - Service Details (Hidden),100452298,code_trigger
+MRA,YAI Chat Lead,100454421,code_trigger
+MRA,Adminify Chat - Chat Started,100471726,code_trigger
+MRA,Adminify Chat - Submit Contact Info,100471727,code_trigger
+MRA,Adminify Chat - Book Appointment,100471728,code_trigger
+MRA,Clicks Special Offers Link in Nav,1004105944,clicks_element
+MRA,Clicks Hero Scheduler CTA - Service Pages,1004110696,clicks_element
+MRA,[GTM] Form Lead Submitted - Combined,1004120267,code_trigger
+MRA,Chat Interaction to Lead Submitted,1004120799,code_trigger
+MRA,[Upsell] Selects Cross Offer,1004122931,code_trigger
+ASV,Modal Initiated,100421628,clicks_element
+ASV,Local Hero Appointment CTA Clicks,100460236,clicks_element
+ASV,Clicks on Hero CTA,100471742,clicks_element
+ASV,Clicks on Services Section CTA,100472963,clicks_element
+ASV,Views Expert Service Professionals,100473613,visits_page
+ASV,Clicks on Video CTA,100473614,clicks_element
+ASV,Visits Upfront Pricing,100473616,visits_page
+ASV,Visits Neighborly Done Right Promise,100473617,visits_page
+ASV,Visits Inflation Reduction Act,100473618,visits_page
+ASV,Views Heating and AC Maintenance Plans,100473619,visits_page
+ASV,Clicks Nav Links in Sticky Header,100498915,clicks_element
+ASV,Clicks Offer Banner,1004100581,clicks_element
+ASV,Submits LF Lead,1004102006,visits_page
+ASV,Clicks Pop-Up CTA [ASV 30],1004108534,clicks_element
+ASV,Add to Calendar Button Engagement [ASV 38],1004112205,clicks_element
+ASV,Views on Advantage Plan page,1004114920,visits_page
+ASV,Views Meet The Team Page,1004120137,visits_page
+ASV,Clicks Hero Build A Quote CTA,1004120138,clicks_element
+ASV,Views Build A Quote Page,1004120139,visits_page
+ASV,[GTM] Form Lead Submitted - Combined,1004120259,code_trigger
+MDG,Submits LF Lead,100462014,visits_page
+MDG,Views Why GlassDoctor,100475382,visits_page
+MDG,Views Home Glass,100475384,visits_page
+MDG,Views Auto Glass,100475385,visits_page
+MDG,Views Business Glass,100475386,visits_page
+MDG,FLF: Views Step #2 (Auto) | Vehicle Info,1004101470,code_trigger
+MDG,FLF: Views Step #2 | Vehicle/Service Combined,1004101471,code_trigger
+MDG,FLF: Views Step #4 (Auto) | Insurance Prompt,1004115390,code_trigger
+MDG,[Rev] Time Spent On Step 2 (Auto): Vehicle Info,1004115394,revenue
+MDG,[Rev] Time Spent On Step 4 (Auto): Insurance Prompt,1004115395,revenue
+MDG,Step 2 (Auto) | Vehicle Info | Validation Error Exposure,1004115397,code_trigger
+MDG,Step 4 (Auto) | Insurance Prompt | Validation Error Exposure,1004115400,code_trigger
+MDG,Upsell Selection,1004115401,code_trigger
+MDG,Clicks on new number [MDG 45],1004115878,clicks_element
+MDG,[GTM] Form Lead Submitted - Combined,1004120264,code_trigger
+MDG,Auto Lead Submitted,1004120790,code_trigger
+MDG,Home Lead Submitted,1004120791,code_trigger
+MDG,Business Lead Submitted,1004120792,code_trigger
+MDG,Hero - VIN Interaction,1004120793,code_trigger
+MDG,Lead Flow - VIN Interaction,1004120794,code_trigger
+MDG,Clicks Reasons Section CTA,1004121266,clicks_element
+MDG,Hero - License Plate Interaction,1004121357,code_trigger
+MDG,Lead Flow - License Plate Interaction,1004121358,code_trigger
+PDS,Views Request Appointment,100492048,visits_page
+PDS,Clicks View All Testimonials [PDS 08],1004108369,clicks_element
+PDS,Clicks on Added C2C Tile,1004109509,clicks_element
+PDS,Clicks Special Offers CTA - Pop-up [PDS 20],1004112146,clicks_element
+PDS,Upsell Section,1004118950,code_trigger
+PDS,Submits LF Lead,1004118955,visits_page
+PDS,[GTM] Form Lead Submitted - Combined,1004120272,code_trigger
+PDS,Views Warranty Page,1004120881,visits_page
+PDS,FAQ Page Views,1004120947,visits_page
+PDS,[PDS 15.1] Clicks Banner CTA,1004122686,clicks_element
+RBW,Clicks Learn More on Tiles [Local Homepage],1004117342,clicks_element
+RBW,Clicks Learn More on Tiles [National Homepage],1004117343,clicks_element
+RBW,Upsell Selection,1004117406,code_trigger
+RBW,[GTM] Submits Lead Form - Combined,1004117409,code_trigger
+RBW,[GTM] Step #2 Reached,1004117410,code_trigger
+RBW,Submits LF Lead,1004117411,visits_page
+MLY,Submits LF Lead,100421622,visits_page
+MLY,National + Local Homepages: All Link Clicks,100424933,code_trigger
+MLY,Click - Local Pages - About Us Link,100424950,code_trigger
+MLY,Visits One Time Clean Service Page,100437662,visits_page
+MLY,Visits Gift Cert Page,100443271,visits_page
+MLY,Views Blog,100443272,visits_page
+MLY,Visits Ms Molly Foundation Page,100443273,visits_page
+MLY,Clicks on Services Section CTA,100472969,clicks_element
+MLY,Clicks Learn More CTA on Customer Served Banner (CF 75),100487370,clicks_element
+MLY,Clicks Not Finding Date Input (MLY 16),100495429,clicks_element
+MLY,Clicks Merchandising Tile Link (MLY 07),100496239,clicks_element
+MLY,Clicks on Find Your Local CTA,1004103480,clicks_element
+MLY,Clicks One Time Cleaning Input,1004106956,clicks_element
+MLY,Clicks Input Nested Under One Time Clean,1004106961,clicks_element
+MLY,Clicks One Time Clean (LF Lead Flow),1004109970,clicks_element
+MLY,Clicks on Recurring Clean (LF Lead Flow),1004109971,clicks_element
+MLY,Views Request Appointment,1004111106,visits_page
+MLY,Views on Pricing Page,1004112781,visits_page
+MLY,Clicks on Pricing CTA/Link,1004112782,clicks_element
+MLY,[Rev] Time Spent on Pricing (15 sec),1004113318,revenue
+MLY,[GTM] Form Lead Submitted - Combined,1004117132,code_trigger
+MLY,[GTM] Step #1 Reached,1004117133,code_trigger
+MLY,[GTM] Step #2 Reached,1004117134,code_trigger
+MLY,[MLY44.1] Clicks Nav Cleaning Tips/ Pricing,1004118879,clicks_element
+FSP,Submits LF Lead,100498655,visits_page
+FSP,[GTM] Form Lead Submitted - Combined,1004120261,code_trigger
+FSP,Upsell Selection,1004121659,code_trigger
+GUY,Submits LF Lead,1004113728,visits_page
+GUY,[GTM] Form Lead Submitted - Combined,1004120262,code_trigger
+GUY,Views on Team Page,1004122388,visits_page
+JUK,Submits LF Lead,1004108650,visits_page
+JUK,Clicks Promo Banner CTA [JUK 32],1004117201,clicks_element
+JUK,Views on Team Page,1004117297,visits_page
+JUK,Clicks on added CTAs [JUK 31],1004117298,clicks_element
+JUK,Views Recycling Page,1004117893,visits_page
+JUK,Clicks Pop-Up CTA [JUK 33],1004117999,clicks_element
+JUK,Closes Pop-Up [JUK 33],1004118000,clicks_element
+JUK,Views NDRP,1004118276,visits_page
+JUK,[GTM] Form Lead Submitted - Combined,1004120263,code_trigger
+MOJ,Submits LF Lead,100481919,visits_page
+MOJ,Views Schedule Appointment,100482923,visits_page
+MOJ,Views NDRP,100486877,visits_page
+MOJ,Submits SF Lead - Hero [Booking API],100486884,code_trigger
+MOJ,Submits SF Lead - Footer [Contact API],100486885,code_trigger
+MOJ,Submits SF Lead - All [Booking API],100486887,code_trigger
+MOJ,Submits SF Lead - All [Contact API],100486888,code_trigger
+MOJ,Submits SF Lead - Footer [Booking API],100486890,code_trigger
+MOJ,Submits SF Lead - Footer [Contact API],100486891,code_trigger
+MOJ,Clicks Claim Offer (MOJ 06/10),100488752,clicks_element
+MOJ,Clicks Scheduler CTA in Promotions Section (MOJ 10),100488753,clicks_element
+MOJ,[FLF] Click to Call,100497395,clicks_element
+MOJ,Clicks Video in Why Choose (National Homepage),100497885,clicks_element
+MOJ,Clicks Video Call MOJ For Service Section (Local Homepage),100499107,clicks_element
+MOJ,Interacts with Testimonial Slides or Controls,1004101795,clicks_element
+MOJ,[GTM] Form Lead Submitted - Combined,1004120266,code_trigger
+MOJ,Clicks Hero Scheduler CTA - Service Pages,1004122676,clicks_element
+MRH,Views Why Hire Us,100477373,visits_page
+MRH,Views About Us,100477374,visits_page
+MRH,Views Tips & Ideas,100477375,visits_page
+MRH,Views Gift Cert Description Page,100477376,visits_page
+MRH,Views Gift Cert Purchase Page,100485828,visits_page
+MRH,Clicks Call Tile,1004108930,clicks_element
+MRH,[MRH 17.1] Clicks Pencil Banner CTA,1004113034,clicks_element
+MRH,Clicks Standard Tiles,1004114419,clicks_element
+MRH,Clicks Service Tiles,1004114420,clicks_element
+MRH,Submits LF Lead,1004114701,visits_page
+MRH,[GTM] Form Lead Submitted - Combined,1004120269,code_trigger
+MRR,Submits LF Lead,100421617,visits_page
+MRR,Modal Initiated,100421619,clicks_element
+MRR,Views Request Job Estimate Page,100487055,visits_page
+MRR,Clicks Header CTA,100492234,clicks_element
+MRR,Clicks Financing Banner CTA,100493917,clicks_element
+MRR,Clicks Drain Service Promo In Nav Drop,100495562,clicks_element
+MRR,Views Plumber Repair Financing,100496914,visits_page
+MRR,Clicks Nav Links,100498451,clicks_element
+MRR,Clicks on Call CTA in Nav,100498453,clicks_element
+MRR,Clicks Financing Link in Nav,1004105027,clicks_element
+MRR,Clicks on Offer CTAs [CF 59],1004109523,clicks_element
+MRR,Thank You Page (Form Submit),1004109524,advanced
+MRR,Clicks on Offer CTAs [MRR 47],1004109625,clicks_element
+MRR,Offer Take Rate (Confirmation Page),1004109661,advanced
+MRR,Clicks Special Offers Link In Nav,1004109969,clicks_element
+MRR,Clicks Customer Banner CTA [MRR 52],1004111987,clicks_element
+MRR,Clicks Service Dropdown,1004112411,clicks_element
+MRR,Submits SF Lead - Aux Hero,1004114888,code_trigger
+MRR,Clicks Why Us + Why Us Links,1004117146,clicks_element
+MRR,Clicks About Us + About Us Links,1004117147,clicks_element
+MRR,Clicks Customer Banner CTA [MRR 53],1004118901,clicks_element
+MRR,Clicks on carousel arrows [MRR 59],1004119132,clicks_element
+MRR,Clicks on new offer component CTAs [MRR 59],1004119133,clicks_element
+MRR,[GTM] Form Lead Submitted - Combined,1004120270,code_trigger
+MRR,Clicks Hero CTA,1004120950,clicks_element
+MRR,[MRR 07.1] Clicks Merchandising Link,1004122656,clicks_element
+MRR-CA,Call Clicks,100499526,clicks_element
+MRR-CA,Clicks Testimonial CTA,100499532,clicks_element
+MRR-CA,Clicks Testimonial Scheduler CTA,100499533,clicks_element
+MRR-CA,Views Testimonials Page,100499534,visits_page
+MRR-CA,Clicks Learn More on Tiles,100499537,clicks_element
+MRR-CA,Views Service Pages,100499538,visits_page
+MRR-CA,Submits LF Lead + Contact Us,100499539,visits_page
+MRR-CA,Submits LF Lead,100499540,visits_page
+MRR-CA,Views Special Offers,100499541,visits_page
+MRR-CA,Clicks Nav Scheduler CTA,100499542,clicks_element
+MRR-CA,Clicks Any Scheduler CTA,100499543,clicks_element
+MRR-CA,FLF: Views Step #1 | Contact Info,1004100258,code_trigger
+MRR-CA,FLF: Views Step #2 | Service Details,1004100259,code_trigger
+MRR-CA,FLF: Views Step #3 | Calendar,1004100260,code_trigger
+MRR-CA,Submits SF Lead - All,1004100261,code_trigger
+MRR-CA,Submits Form Lead - Combined,1004100262,code_trigger
+MRR-CA,Submits SF Lead - Hero,1004100263,code_trigger
+MRR-CA,Submits SF Lead - Footer,1004100266,code_trigger
+MRR-CA,[GTM] Form Lead Submitted - Combined,1004120271,code_trigger
+MRE,Submits LF Lead,100451245,visits_page
+MRE,[FLF Entry] FLF | Step Reached - Contact Info,100455735,code_trigger
+MRE,[FLF Entry] FLF | Step Reached - Service Details,100455736,code_trigger
+MRE,[FLF Entry] FLF | Step Reached - Calendar/Apt Details,100455737,code_trigger
+MRE,Interacts with Hero SF Input,100461133,code_trigger
+MRE,"Confirmation Page Goal Helper [Do add, but this will not track]",100461232,advanced
+MRE,Submits LF Lead [Hero SF Entry],100461233,code_trigger
+MRE,[Hero SF Entry] FLF | Step Reached - Calendar/Apt Details [Hero SF Entry],100461238,code_trigger
+MRE,[Hero SF Entry] FLF | Step Reached - Service Details,100461239,code_trigger
+MRE,[Hero SF Entry] FLF | Step Reached - Contact Info,100461241,code_trigger
+MRE,Thank You Page (Form Submit) [Only Works If No Submit & Continue],100461734,advanced
+MRE,[Primary CTA Entry] Submits LF Lead,100464806,code_trigger
+MRE,Clicks on Tiles,100472640,clicks_element
+MRE,Clicks Service You Can Trust Banner Scheduler CTA,100472978,clicks_element
+MRE,Clicks on Nav Elements,100474322,clicks_element
+MRE,Interacts with Footer SF Inputs,100474739,code_trigger
+MRE,Clicks 24/7 Service Banner Scheduler CTA,100475719,clicks_element
+MRE,LF Entry to FLF Via Hero SF,100484194,advanced
+MRE,LF Entry to FLF Via Footer SF,100484196,advanced
+MRE,[Footer SF Entry] FLF | Step Reached - Contact Info,100484581,code_trigger
+MRE,[Footer SF Entry] FLF | Step Reached - Service Details,100484582,code_trigger
+MRE,[Footer SF Entry] FLF | Step Reached - Calendar,100484583,code_trigger
+MRE,Submits LF Lead [Footer SF Entry],100484592,code_trigger
+MRE,"Short Form Interaction Helper [Do add, but this will not track]",100484824,advanced
+MRE,Interacts with Map Element,100486871,advanced
+MRE,[MRE CF 28] Special Offers Pop-Up Shown,100487391,code_trigger
+MRE,Clicks PopUp CTA (CF 28),100487893,clicks_element
+MRE,Clicks Electrical Promo CTA,100496728,clicks_element
+MRE,Clicks Offers Link in Nav,100498489,clicks_element
+MRE,Clicks Why Us in Header,1004100114,clicks_element
+MRE,Views Why Mr. Electric,1004100115,visits_page
+MRE,Clicks About Us in Header,1004100116,clicks_element
+MRE,Views About Us,1004100117,visits_page
+MRE,Promo Banner Clicks [MRE 26],1004105160,clicks_element
+MRE,Clicks Customer Banner CTA [MRE 30],1004106972,clicks_element
+MRE,Clicks PopUp (MRE 32),1004109203,clicks_element
+MRE,Clicks Hero Scheduler CTA - National Financing,1004110751,clicks_element
+MRE,Clicks Hero Financing CTA - Localized,1004110757,clicks_element
+MRE,Scrolled 25% - Sitewide,1004111152,scroll_percentage
+MRE,Scrolled 50% - Sitewide,1004111153,scroll_percentage
+MRE,Scrolled 75% - Sitewide,1004111154,scroll_percentage
+MRE,Scrolled 100% - Sitewide,1004111155,scroll_percentage
+MRE,Clicks View All Blogs [MRE 41],1004111492,clicks_element
+MRE,[GTM] Form Lead Submitted - Combined,1004120268,code_trigger
+SHG,Call Clicks,1004102121,clicks_element
+SHG,Clicks Testimonial CTA,1004102132,clicks_element
+SHG,Clicks Learn More on Tiles,1004102133,clicks_element
+SHG,Clicks Nav Scheduler CTA,1004102136,clicks_element
+SHG,Clicks Any Scheduler CTA,1004102137,clicks_element
+SHG,FLF: Views Step #1 | Contact Info,1004102138,code_trigger
+SHG,FLF: Views Step #2 | Service Details,1004102139,code_trigger
+SHG,FLF: Views Step #3 | Calendar,1004102140,code_trigger
+SHG,Submits Form Lead - Combined,1004102141,code_trigger
+SHG,Submits SF Lead - All,1004102142,code_trigger
+SHG,Submits SF Lead - Footer,1004102143,code_trigger
+SHG,Submits SF Lead - Hero,1004102144,code_trigger
+SHG,Submits LF Lead + Contact Us,1004102148,visits_page
+SHG,Views Special Offers,1004102149,visits_page
+SHG,Submits LF Lead,1004102150,visits_page
+SHG,Views Testimonials Page,1004102151,visits_page
+SHG,Views Any Service Page,1004102152,visits_page
+SHG,Views Kitchen Services,1004102153,visits_page
+SHG,Views Pantry Services,1004102154,visits_page
+SHG,Views Bathroom Services,1004102155,visits_page
+SHG,Views Creative Spaces Services,1004102156,visits_page
+SHG,Views Closet Services,1004102157,visits_page
+SHG,[GTM] Form Lead Submitted - Combined,1004120273,code_trigger
+WDG,Call Clicks,100454082,clicks_element
+WDG,Submits LF Lead,100454093,visits_page
+WDG,Visit Special Offers Page,100458085,visits_page
+WDG,Submits SF Lead - All,100472876,code_trigger
+WDG,Clicks on Tiles CTA,100472983,clicks_element
+WDG,Views Service Pages,100472985,advanced
+WDG,Clicks on Testimonials CTA,100472986,clicks_element
+WDG,Views Testimonials Page,100472987,visits_page
+WDG,Clicks on Testimonial Scheduler CTA,100476856,clicks_element
+WDG,Clicks Learn More on Tiles,1004100595,clicks_element
+WDG,Clicks Nav Scheduler CTA,1004100597,clicks_element
+WDG,Clicks Any Scheduler CTA,1004100598,clicks_element
+WDG,Submits LF Lead + Contact Us,1004100599,visits_page
+WDG,FLF: Views Step #1 | Contact Info,1004100602,code_trigger
+WDG,FLF: Views Step #2 | Service Details,1004100603,code_trigger
+WDG,Submits Form Lead - Combined,1004100606,code_trigger
+WDG,Submits SF Lead - Hero,1004100607,code_trigger
+WDG,Submits SF Lead - Footer,1004100608,code_trigger
+WDG,Clicks Promo Banner [WDG 06],1004105159,clicks_element
+WDG,Visits Annual Wellness Plan Page,1004116773,visits_page
+WDG,[GTM] Form Lead Submitted - Combined,1004120274,code_trigger

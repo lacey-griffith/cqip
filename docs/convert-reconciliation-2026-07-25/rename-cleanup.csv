@@ -1,0 +1,111 @@
+brand,convert_name,title,convert_id
+MRA,[Rev] Time Spent on Step 0: Zipcode (15s),[Rev] Time Spent On Step 0: Zipcode (MRA),1004122582
+MRA,[Rev] Time Spent on Step 1: Contact Info (15s),[Rev] Time Spent On Step 1: Contact Info,1004122584
+MRA,[Rev] Time Spent on Step 2: Service Details (15s),[Rev] Time Spent On Step 2: Service Details,1004122586
+MRA,[Rev] Time Spent on Step 3: Calendar (15s),[Rev] Time Spent On Step 3: Calendar,1004122588
+MRA,Call Clicks From Navigation,Call Clicks from Navigation,1004122603
+MRA,Click Testimonial CTA,Clicks Testimonial CTA,100472976
+MRA,FLF: Views Step #0 | Zip Code,FLF: Views Step 0 | Zip Code,1004103124
+MRA,FLF: Views Step #3 | Contact,FLF: Views Step #1 | Contact Info,1004103125
+MRA,FLF: Views Step #1 | Service Info,FLF: Views Step #2 | Service Details,1004103126
+MRA,FLF: Views Step #2 | Calendar,FLF: Views Step #3 | Calendar,1004103127
+MRA,Step 0 | Zipcode | Validation Error Exposure,Step 0 | Zipcode | Validation Error Exposure (MRA),1004122590
+MRA,[Upsell] Selects MRA Offer,[Upsell] Selects Offer 1  (MRA),1004122602
+MRA,Views Special Offers Page,Views Special Offers,100472855
+MRA,Views Services Page,Views Service Pages,100472975
+MRA,Viewed Residential Service Pages,Views Residential Service Pages,100431285
+MRA,Viewed Commercial Service Pages,Views Commercial Service Pages,100431286
+MRA,Views Testimonials Page,Views Testimonials,100472977
+MRA,Starts Chat,Chat Started,1004119053
+MRA,Submits Chat Lead,Chat Lead Submitted,1004119055
+MRA,Starts Chat,[GTM] Starts Chat,1004119053
+MRA,Chat Appointment Made,[GTM] Chat Appointment Made,1004119054
+MRA,Submits Chat Lead,[GTM] Submits Chat Lead,1004119055
+ASV,[Rev] Time Spent on Site (15 sec),[Rev] Time Spent on Site (15s),1004111156
+ASV,[Rev] Time Spent on Step 1: Contact Info,[Rev] Time Spent On Step 1: Contact Info,1004119962
+ASV,[Rev] Time Spent on Step 2: Service Details,[Rev] Time Spent On Step 2: Service Details,1004119963
+ASV,[Rev] Time Spent on Step 3: Calendar,[Rev] Time Spent On Step 3: Calendar,1004119964
+ASV,[Rev] Time Spent on Financing (15 sec),[Rev] Time Spent on Financing (15s),1004119965
+ASV,Clicks on Testimonial CTA,Clicks Testimonial CTA,100472965
+ASV,Clicks Scheduler CTA in Warranty Section,Clicks Warranty CTA,1004112122
+ASV,[Upsell] Present To User,[Upsell] Presented (impressions),1004122561
+ASV,[Upsell] Selects Advantage Plan,[Upsell] Selects Advantage Plan (ASV),1004122559
+ASV,[Upsell] Selects MDG Cross Sell,[Upsell] Selects MDG Cross Sell (ASV),1004122558
+ASV,Views Special Offers Page,Views Special Offers,100473610
+ASV,Views Services Page,Views Service Pages,100472964
+ASV,Views Testimonials Page,Views Testimonials,100472966
+ASV,User Localized,Localized User,1004122181
+ASV,Chat Booked Appointment,Chat Appointment Made,100467147
+ASV,Chat Start,Chat Started,1004120153
+ASV,Chat Lead,Chat Lead Submitted,100467146
+MDG,Views Special Offers Page,Views Special Offers,1004101061
+MDG,Views Testimonials Page,Views Testimonials,1004101047
+MDG,Chat Appointment Made,[GTM] Chat Appointment Made,1004120506
+PDS,FLF | Step Reached - Contact Us,FLF: Views Step #1 | Contact Info,100494462
+PDS,FLF | Step Reached - Service Details,FLF: Views Step #2 | Service Details,100494463
+PDS,FLF | Step Reached - Calendar,FLF: Views Step #3 | Calendar,1004118940
+PDS,Views Testimonials Page,Views Testimonials,1004107108
+RBW,[Rev] Time Spent on Step 1: Contact Info (15s),[Rev] Time Spent On Step 1: Contact Info,1004117370
+RBW,[Rev] Time Spent on Step 2: Service Details (15s),[Rev] Time Spent On Step 2: Service Details,1004117371
+RBW,[Rev] Time Spent on Step 3: Calendar (15s),[Rev] Time Spent On Step 3: Calendar,1004117372
+RBW,Views Service Page,Views Service Pages,1004117349
+RBW,Views Testimonial Page,Views Testimonials,1004117350
+MLY,[Rev] Time Spent on Site (15 sec),[Rev] Time Spent on Site (15s),1004113319
+MLY,Clicks on Tiles Learn More Link,Clicks Learn More on Tiles,100472968
+MLY,Clicks on Testimonials CTA [Read More Reviews],Clicks Testimonial CTA,100472971
+MLY,Clicks Testimonials Scheduler CTA,Clicks Testimonial Scheduler CTA,100494670
+MLY,FLF: Step #1 Reached - Contact Info & Service Details,FLF: Views Step #1 | Contact Info,100480830
+MLY,FLF: Step #1 Reached - Contact Info & Service Details,FLF: Views Step #2 | Service Details,100480830
+MLY,FLF: Step #2 Reached - Calendar/Apt Details,FLF: Views Step #3 | Calendar,100480832
+MLY,Submits LF Lead + Estimates + Contact Us,Submits LF Lead + Contact Us,100424923
+MLY,Submits SF Lead,Submits SF Lead - All,100476990
+MLY,Views Services Page,Views Service Pages,100472970
+MLY,Visits Residential Services Page,Views Residential Service Pages,100443270
+MLY,Views Testimonials Page,Views Testimonials,100472972
+MLY,Starts Chat,Chat Started,1004111180
+MLY,Submits Chat Lead,Chat Lead Submitted,1004111178
+MLY,Submits Chat Lead,[GTM] Submits Chat Lead,1004111178
+MLY,Chat Appointment Made,[GTM] Chat Appointment Made,1004111179
+MLY,Starts Chat,[GTM] Starts Chat,1004111180
+FSP,[Rev] Time Spent On Site (15s),[Rev] Time Spent on Site (15s),1004114699
+FSP,Call Clicks From Navigation,Call Clicks from Navigation,1004121651
+FSP,Clicks Navigation Link,Clicks Link in Navigation,1004121652
+FSP,FLF: Views Step #1 | Contact,FLF: Views Step #1 | Contact Info,100469142
+FSP,Submits LF Lead + Estimates + Contact Us,Submits LF Lead + Contact Us,100425378
+FSP,Views Special Offers Page,Views Special Offers,100493723
+FSP,Views Testimonials Page,Views Testimonials,1004108494
+GUY,[Rev] Time Spent on Site (15 sec),[Rev] Time Spent on Site (15s),1004113863
+GUY,Submit Form Lead - Combined,Submits Form Lead - Combined,1004113650
+GUY,Views Testimonials Page,Views Testimonials,100473463
+JUK,Clicks Link/Button in Nav,Clicks Link in Navigation,1004120564
+JUK,Clicks on Offer Section Scheduler CTA,Clicks Offer Section Scheduler CTA,1004110534
+JUK,Clicks Offer CTA - Claim Offer,Clicks Claim Offer CTA,1004122672
+JUK,Views Special Offers Page,Views Special Offers,1004108649
+JUK,Views Testimonials Page,Views Testimonials,1004108652
+MOJ,Clicks Nav Scheduler,Clicks Nav Scheduler CTA,1004100861
+MOJ,Clicks Testimonials CTA,Clicks Testimonial CTA,100497881
+MOJ,Clicks CTA in Warranty/NDRP,Clicks Warranty CTA,100486874
+MOJ,[Full Lead Flow] Step Reached | Contact Info,FLF: Views Step #1 | Contact Info,100486879
+MOJ,[Full Lead Flow] Step Reached | How Can We Help,FLF: Views Step #2 | Service Details,100486880
+MOJ,[Full Lead Flow] Step Reached | Calendar,FLF: Views Step #3 | Calendar,100497349
+MOJ,Views Testimonials Page,Views Testimonials,100497882
+MRH,Clicks Learn More On Tiles,Clicks Learn More on Tiles,100491422
+MRH,Clicks Nav Item,Clicks Link in Navigation,100477365
+MRH,Views Local Special Offers Page,Views Special Offers,100477377
+MRH,Views on financing page,Views Financing,1004121158
+MRH,Views Service Page,Views Service Pages,100477372
+MRH,Views Testimonials Page,Views Testimonials,100491399
+MRR,Clicks Testimonials View All CTA,Clicks Testimonial CTA,1004100328
+MRR,Chat Appointment Made,[GTM] Chat Appointment Made,1004120862
+MRE,[Rev] Time Spent on Site (15 sec),[Rev] Time Spent on Site (15s),1004110775
+MRE,[Rev] Time Spent on Financing (15 sec),[Rev] Time Spent on Financing (15s),1004110826
+MRE,Click Hero Form Submit CTA,Clicks Hero SF Submit CTA,100451732
+MRE,Clicks on Offer Section Scheduler CTA,Clicks Offer Section Scheduler CTA,100473802
+MRE,[MRE 65] Clicks Hero Reviews,Clicks Hero Reviews,1004115149
+MRE,Submits SF Lead - All [if no CF 07.2],Submits SF Lead - All,1004100097
+MRE,Submits SF Lead - Footer [if no CF 07.2],Submits SF Lead - Footer,1004100099
+MRE,Submits SF Lead - Hero [if no CF 07.2],Submits SF Lead - Hero,1004100098
+MRE,Visits Special Offers Page,Views Special Offers,100472821
+MRE,Views Services Page,Views Service Pages,100472979
+MRE,Views Testimonials Page,Views Testimonials,100472981
+MRE,Chat Appointment Made,[GTM] Chat Appointment Made,1004120804
