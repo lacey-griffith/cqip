@@ -115,26 +115,35 @@ const STATUS_LABEL_MAP: Record<string, CellStatus> = {
 // -------------------------------------------------------------------------
 // Env / args
 // -------------------------------------------------------------------------
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-  console.error(
-    'Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY. ' +
-      'Invoke with `npx tsx --env-file=.env.local scripts/backfill-convert-reconciliation.ts`.',
-  );
-  process.exit(1);
-}
-
 const ARGS = process.argv.slice(2);
 const DRY_RUN = ARGS.includes('--dry-run');
 const SKIP_CONFIRM = ARGS.includes('--yes');
 const ALLOW_DRIFT = ARGS.includes('--allow-drift');
 const CSV_PATH = ARGS.filter((a) => !a.startsWith('--')).at(-1) ?? DEFAULT_CSV;
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-  auth: { autoRefreshToken: false, persistSession: false },
-});
+// Env is validated and the client built inside main(), not at module scope, so
+// tests/convert-reconciliation.test.ts can import the pure helpers below
+// without needing service-role credentials (or triggering a run).
+function buildClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !serviceRoleKey) {
+    console.error(
+      'Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY. ' +
+        'Invoke with `npx tsx --env-file=.env.local scripts/backfill-convert-reconciliation.ts`.',
+    );
+    process.exit(1);
+  }
+  return createClient(url, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+}
+
+// Module-system-agnostic "am I the entry point" check (no import.meta, so this
+// works whether tsx loads the file as ESM or CJS).
+const INVOKED_DIRECTLY =
+  !!process.argv[1] &&
+  path.basename(process.argv[1]).startsWith('backfill-convert-reconciliation');
 
 // -------------------------------------------------------------------------
 // Types
@@ -239,7 +248,8 @@ function label(status: string): string {
 }
 
 /**
- * The audit note for a changed cell.
+ * The audit note for a changed cell. Both strings are the spec §2 formats
+ * verbatim; only the choice between them is ours.
  *
  * Keyed on whether the row carries real Convert coordinates, NOT on the
  * direction of the flip — a deliberate refinement of the spec's "downgrades get
@@ -247,10 +257,15 @@ function label(status: string): string {
  * Convert goal that is archived (MRA "Submits Form Lead - Combined" id
  * 1004101324, MDG "Step 1 | Contact Info | Validation Error Exposure" id
  * 1004117395); writing "no real Convert goal" over those would discard the
- * archived goal's id from the only forensic trail we keep. Both of the spec's
- * note formats are produced verbatim — the branch just picks the truthful one.
+ * archived goal's id from the only forensic trail we keep.
+ *
+ * Exported for tests: a wrong note here is silent and permanent.
  */
-function auditNote(row: CsvRow): string {
+export function auditNote(row: {
+  convertName: string;
+  convertId: string;
+  convertStatus: string;
+}): string {
   const prefix = `Convert reconciliation ${RECONCILED_ON} — `;
   if (row.convertId) {
     return (
@@ -258,13 +273,36 @@ function auditNote(row: CsvRow): string {
       `${row.convertName} (id ${row.convertId}, Convert status: ${row.convertStatus || 'unknown'})`
     );
   }
-  return prefix + 'no real Convert goal (placeholder/absent/archived)';
+  // Verbatim spec §2 wording. Deliberately does NOT say "archived": every
+  // archived goal carries an id and takes the branch above, so this string is
+  // only ever reached by a genuinely absent/placeholder goal.
+  return prefix + 'no real Convert goal — placeholder/absent';
+}
+
+/**
+ * Classify one resolved row against its live DB status.
+ *   'skip'  — already at target: idempotent no-op (no write, no audit row)
+ *   'apply' — live status matches what the CSV expected: clean flip
+ *   'drift' — live is a third value: edited after the reconciliation pass
+ *
+ * Exported for tests: this is the other place a mistake is silent — a
+ * misclassification either skips a needed flip or clobbers a hand-edit.
+ */
+export function classifyRow(args: {
+  liveStatus: string;
+  ourStatus: CellStatus;
+  suggestedStatus: CellStatus;
+}): 'skip' | 'apply' | 'drift' {
+  if (args.liveStatus === args.suggestedStatus) return 'skip';
+  if (args.liveStatus === args.ourStatus) return 'apply';
+  return 'drift';
 }
 
 // -------------------------------------------------------------------------
 // Main
 // -------------------------------------------------------------------------
 async function main() {
+  const supabase = buildClient();
   console.log(
     `\n=== backfill-convert-reconciliation ${
       DRY_RUN ? '(DRY RUN — writes nothing)' : '(EXECUTE — prompts unless --yes)'
@@ -365,6 +403,24 @@ async function main() {
   const upgrades = rows.filter((r) => !r.isDowngrade);
   const downgrades = rows.filter((r) => r.isDowngrade);
   const shapeErrors: string[] = [];
+  // Pin the DIRECTION of every row, not just the counts (Karen L1). The
+  // EXPECTED_* totals alone would happily pass a regenerated CSV containing
+  // e.g. `todo → blocked`, which the per-brand report and the confirm prompt
+  // would then mislabel to the operator as "↑ to Done" at the one human gate.
+  const badTransitions = rows.filter(
+    (r) =>
+      !(r.ourStatus === 'todo' && r.suggestedStatus === 'done') &&
+      !(r.ourStatus === 'done' && r.suggestedStatus === 'todo'),
+  );
+  if (badTransitions.length) {
+    shapeErrors.push(
+      `${badTransitions.length} row(s) are neither To do→Done nor Done→To do: ` +
+        badTransitions
+          .slice(0, 5)
+          .map((r) => `row ${r.line} (${r.brandCode} ${label(r.ourStatus)}→${label(r.suggestedStatus)})`)
+          .join(', '),
+    );
+  }
   if (rows.length !== EXPECTED_TOTAL) {
     shapeErrors.push(`expected ${EXPECTED_TOTAL} rows, found ${rows.length}`);
   }
@@ -409,28 +465,48 @@ async function main() {
   }
 
   // ---- load prod state -------------------------------------------------
-  const { data: brandData, error: brandErr } = await supabase
-    .from('brands')
-    .select('id, brand_code, is_active, is_paused')
-    .eq('project_key', PROJECT_KEY);
-  if (brandErr) {
-    console.error('Failed to load brands:', brandErr.message);
-    process.exit(1);
-  }
-  const brands = (brandData ?? []) as BrandRow[];
+  const brands = await fetchAllPaged<BrandRow>('brands', (from, to) =>
+    supabase
+      .from('brands')
+      .select('id, brand_code, is_active, is_paused')
+      .eq('project_key', PROJECT_KEY)
+      .order('id')
+      .range(from, to),
+  );
   const brandByCode = new Map(brands.map((b) => [b.brand_code.toUpperCase(), b]));
 
-  const directives = await fetchAllPaged<{ id: string; title: string }>(
+  const directives = await fetchAllPaged<{ id: string; title: string; status: string }>(
     'directives',
     (from, to) =>
       supabase
         .from('directives')
-        .select('id, title')
+        .select('id, title, status')
         .eq('project_key', PROJECT_KEY)
         .order('id')
         .range(from, to),
   );
+
+  // `directives(project_key, title)` has NO unique constraint (migration 024
+  // has only plain indexes) and POST /api/admin/directives does no duplicate
+  // check — so the live inline-create strip can mint a second directive with
+  // the same title. A title→id Map would silently keep the LAST one, flip the
+  // wrong cell, and still pass post-verify (which re-reads the id we chose).
+  // Refuse instead (Karen M3).
+  const titleCounts = new Map<string, number>();
+  for (const d of directives) titleCounts.set(d.title, (titleCounts.get(d.title) ?? 0) + 1);
+  const duplicateTitles = [...titleCounts.entries()].filter(([, n]) => n > 1);
+  if (duplicateTitles.length) {
+    console.error(
+      `❌ ${duplicateTitles.length} duplicate directive title(s) in ${PROJECT_KEY} — a title ` +
+        `cannot be resolved to one directive, so the wrong cell could be flipped. Nothing written:`,
+    );
+    duplicateTitles.forEach(([t, n]) => console.error(`   "${t}" ×${n}`));
+    console.error('   Merge or archive the duplicates in the matrix, then re-run.');
+    process.exit(1);
+  }
+
   const dirIdByTitle = new Map(directives.map((d) => [d.title, d.id]));
+  const dirStatusById = new Map(directives.map((d) => [d.id, d.status]));
 
   // Cells for this project's directives, keyed by `directive_id||brand_id`.
   // MUST be paged: 65 directives × 16 brands already exceeds PostgREST's silent
@@ -454,10 +530,37 @@ async function main() {
       `${cellByPair.size} existing cells.`,
   );
 
+  // ---- brand-state guard (spec §4: paused brands must NOT be written) ---
+  // The precedent loader hard-fails on inactive brands; this pass additionally
+  // refuses PAUSED ones, because the pause rule forces n_a and the spec is
+  // explicit that MRR-CA / SHG / WDG are out of scope. Latent with today's CSV
+  // (all 13 rows are active, unpaused) — this exists so a REGENERATED CSV that
+  // sweeps the paused brands in can't quietly flip them to done (Karen M2).
+  const referencedCodes = [...new Set(rows.map((r) => r.brandCode))];
+  const inactiveRefs = referencedCodes.filter((c) => brandByCode.get(c)?.is_active === false);
+  const pausedRefs = referencedCodes.filter((c) => brandByCode.get(c)?.is_paused === true);
+  if (inactiveRefs.length || pausedRefs.length) {
+    console.error(
+      `\n❌ The CSV references brand(s) this pass must not write. Nothing written:`,
+    );
+    if (inactiveRefs.length) {
+      console.error(`   is_active = FALSE (${inactiveRefs.length}): ${inactiveRefs.join(', ')}`);
+    }
+    if (pausedRefs.length) {
+      console.error(
+        `   is_paused = TRUE (${pausedRefs.length}): ${pausedRefs.join(', ')}\n` +
+          `   Paused brands are out of scope per the spec — the pause rule forces n_a and\n` +
+          `   they aren't live. Drop them from the CSV (see paused-brands-readiness.csv).`,
+      );
+    }
+    process.exit(1);
+  }
+
   // ---- resolve every CSV row to a live cell (HARD FAIL on any miss) ----
   const unknownBrand: CsvRow[] = [];
   const unknownTitle: CsvRow[] = [];
   const missingCell: CsvRow[] = [];
+  const archivedDirective: CsvRow[] = [];
   const resolved: ResolvedRow[] = [];
 
   for (const r of rows) {
@@ -471,6 +574,12 @@ async function main() {
       unknownTitle.push(r);
       continue;
     }
+    // An archived directive doesn't render in the matrix, so flipping its cell
+    // would be an invisible write (Karen L3).
+    if (dirStatusById.get(directiveId) !== 'active') {
+      archivedDirective.push(r);
+      continue;
+    }
     const cell = cellByPair.get(`${directiveId}||${brand.id}`);
     if (!cell) {
       missingCell.push(r);
@@ -479,12 +588,19 @@ async function main() {
     resolved.push({ ...r, cellId: cell.id, liveStatus: cell.status });
   }
 
-  if (unknownBrand.length || unknownTitle.length || missingCell.length) {
+  if (unknownBrand.length || unknownTitle.length || missingCell.length || archivedDirective.length) {
     console.error(
-      `\n❌ ${unknownBrand.length + unknownTitle.length + missingCell.length} row(s) do not ` +
-        `resolve to an existing matrix cell. This is an UPDATE pass — an unresolved row ` +
-        `means the input is stale, not something to skip. Nothing written:`,
+      `\n❌ ${
+        unknownBrand.length + unknownTitle.length + missingCell.length + archivedDirective.length
+      } row(s) do not resolve to a live matrix cell. This is an UPDATE pass — an unresolved ` +
+        `row means the input is stale, not something to skip. Nothing written:`,
     );
+    if (archivedDirective.length) {
+      console.error(`\n   Directive is ARCHIVED, so the cell is invisible (${archivedDirective.length}):`);
+      archivedDirective.forEach((r) =>
+        console.error(`     row ${r.line}: ${r.brandCode} — ${r.title}`),
+      );
+    }
     if (unknownBrand.length) {
       console.error(`\n   Unknown brand_code in ${PROJECT_KEY} (${unknownBrand.length}):`);
       unknownBrand.forEach((r) => console.error(`     row ${r.line}: ${r.brandCode} — ${r.title}`));
@@ -515,12 +631,15 @@ async function main() {
   const drift: ResolvedRow[] = [];
 
   for (const r of resolved) {
-    if (r.liveStatus === r.suggestedStatus) {
-      alreadyDone.push(r); // idempotent no-op — log, don't write, don't count
-    } else if (r.liveStatus === r.ourStatus) {
-      toApply.push(r); // clean: live state matches what the CSV expected
-    } else {
-      drift.push(r); // live state is a third value — someone edited since 07-25
+    switch (classifyRow({ ...r, liveStatus: String(r.liveStatus) })) {
+      case 'skip':
+        alreadyDone.push(r); // idempotent no-op — log, don't write, don't count
+        break;
+      case 'apply':
+        toApply.push(r); // clean: live state matches what the CSV expected
+        break;
+      default:
+        drift.push(r); // live state is a third value — someone edited since 07-25
     }
   }
 
@@ -534,7 +653,10 @@ async function main() {
   console.log(`\n--- PLAN ---`);
   console.log(`CSV rows:            ${rows.length}  (${upgrades.length} upgrades, ${downgrades.length} downgrades)`);
   console.log(`Resolved to cells:   ${resolved.length}`);
-  console.log(`To change:           ${toApply.length}`);
+  console.log(
+    `To change:           ${writeSet.length}` +
+      (ALLOW_DRIFT && drift.length ? `  (${toApply.length} clean + ${drift.length} drifted)` : ''),
+  );
   console.log(`Already at target:   ${alreadyDone.length}  (skipped — idempotent no-op)`);
   console.log(`Drifted:             ${drift.length}${drift.length ? (ALLOW_DRIFT ? '  (INCLUDED — --allow-drift)' : '  (BLOCKING — see below)') : ''}`);
 
@@ -658,6 +780,7 @@ async function main() {
   }
 
   let cellsWritten = 0;
+  const flipped: ResolvedRow[] = []; // exactly what landed, for L4 recovery output
   for (const [status, group] of byTarget) {
     for (const batch of chunk(group, 200)) {
       const { error } = await supabase
@@ -676,15 +799,45 @@ async function main() {
           error.message,
         );
         console.error(
-          `\n⚠ PARTIAL — ${cellsWritten} cell(s) updated and audited? NO: audit rows are\n` +
-            `   written after all updates, so the ${cellsWritten} already-flipped cells have\n` +
-            `   NO audit row yet. Re-running is safe for the cells (idempotent skip) but the\n` +
-            `   audit trail for those ${cellsWritten} would be lost — re-run, then confirm the\n` +
-            `   audit_log count for changed_by='${CHANGED_BY}' matches the flipped total.`,
+          `\n⚠ PARTIAL STATE — exactly what is true right now:\n` +
+            `   • ${cellsWritten} cell(s) HAVE been flipped in directive_brand_status.\n` +
+            `   • 0 audit_log rows were written — audit runs only after ALL updates\n` +
+            `     succeed, so those ${cellsWritten} flips currently have NO audit trail.\n` +
+            `   • ${writeSet.length - cellsWritten} cell(s) were not reached.\n\n` +
+            `   Re-running is SAFE for the cells (already-flipped ones are skipped as\n` +
+            `   idempotent no-ops), but a plain re-run will NOT backfill the missing audit\n` +
+            `   rows for those ${cellsWritten} — a skipped cell writes no audit row. Since the\n` +
+            `   audit row is the only record of WHEN a cell resolved, either:\n` +
+            `     (a) accept the gap, re-run to finish the remainder, and note it; or\n` +
+            `     (b) revert the ${cellsWritten} flipped cells to their prior status and re-run\n` +
+            `         clean, so cells and audit rows land together.\n` +
+            `   Either way, afterwards confirm:\n` +
+            `     SELECT count(*) FROM audit_log WHERE changed_by = '${CHANGED_BY}';`,
         );
+        // L4: option (b) is only actionable if the operator knows exactly which
+        // cells moved and what they held before. Dump it.
+        if (flipped.length) {
+          console.error(`\n   Cells already flipped (cell_id, prior → new):`);
+          flipped.forEach((r) =>
+            console.error(`     ${r.cellId}  ${r.liveStatus} → ${r.suggestedStatus}   (${r.brandCode} ${r.title})`),
+          );
+          console.error(
+            `\n   Revert SQL for option (b) — one statement per prior status:\n` +
+              [...new Set(flipped.map((r) => String(r.liveStatus)))]
+                .map(
+                  (prior) =>
+                    `     UPDATE directive_brand_status SET status = '${prior}' WHERE id IN (\n       '${flipped
+                      .filter((r) => String(r.liveStatus) === prior)
+                      .map((r) => r.cellId)
+                      .join("',\n       '")}'\n     );`,
+                )
+                .join('\n'),
+          );
+        }
         process.exit(1);
       }
       cellsWritten += batch.length;
+      flipped.push(...batch);
     }
   }
   console.log(`\n✓ Updated ${cellsWritten} cells.`);
@@ -716,10 +869,21 @@ async function main() {
   }
   console.log(`✓ Wrote ${auditWritten} audit_log rows.`);
   if (auditWritten !== auditRows.length) {
+    // Karen H1: this used to fall through to post-verify, which only checks
+    // cell statuses — so a run that flipped 209 cells and wrote ZERO audit rows
+    // printed "✓ Post-verify ... Done." and exited 0. The cells are correct, so
+    // the honest signal is "data landed, trail didn't" — which must be non-zero.
     console.error(
-      `⚠ AUDIT GAP — expected ${auditRows.length} audit rows, wrote ${auditWritten}. ` +
-        `The cell flips landed but their resolve-timestamp trail is incomplete.`,
+      `\n❌ AUDIT GAP — expected ${auditRows.length} audit rows, wrote ${auditWritten}.\n` +
+        `   The cell flips LANDED and are correct, but their resolve-timestamp trail is\n` +
+        `   incomplete. Until the Convert/Jira date sync exists, this trail is the only\n` +
+        `   record of WHEN a cell resolved, so this is a real failure, not a warning.\n` +
+        `   Re-running will NOT backfill it (flipped cells are skipped as no-ops).\n` +
+        `   Reconcile manually, then confirm:\n` +
+        `     SELECT count(*) FROM audit_log WHERE changed_by = '${CHANGED_BY}'\n` +
+        `       AND field_name = 'status';`,
     );
+    process.exit(1);
   }
 
   // ---- post-verify (assert the DB matches the plan) --------------------
@@ -757,18 +921,47 @@ async function main() {
   }
   console.log(`✓ Post-verify: all ${writeSet.length} cells hold their expected status.`);
 
-  const { count: auditCount } = await supabase
-    .from('audit_log')
-    .select('id', { count: 'exact', head: true })
-    .eq('changed_by', CHANGED_BY);
+  // Karen M1: assert the AUDIT side too, not just the cells. Scoped to THIS
+  // run's cell ids + field_name, so it's a real equality check rather than a
+  // cumulative count that can never be compared to an expected value.
+  let auditVerified = 0;
+  for (const batch of chunk(writeSet.map((r) => r.cellId), 200)) {
+    const { count, error } = await supabase
+      .from('audit_log')
+      .select('id', { count: 'exact', head: true })
+      .eq('changed_by', CHANGED_BY)
+      .eq('field_name', 'status')
+      .in('target_id', batch);
+    if (error) {
+      console.error(`⚠ Audit post-verify read failed: ${error.message} — VERIFY MANUALLY.`);
+      process.exit(1);
+    }
+    auditVerified += count ?? 0;
+  }
+  if (auditVerified < writeSet.length) {
+    console.error(
+      `\n❌ AUDIT POST-VERIFY FAILED — expected at least ${writeSet.length} audit row(s) for ` +
+        `this run's cells, found ${auditVerified}. The flips landed; the trail did not.`,
+    );
+    process.exit(1);
+  }
+  console.log(
+    `✓ Post-verify: ${auditVerified} audit row(s) present for the ${writeSet.length} changed cell(s)` +
+      `${auditVerified > writeSet.length ? ' (includes rows from earlier runs on the same cells)' : ''}.`,
+  );
+
   console.log(
     `\nDone. ${writeSet.length} cell(s) reconciled` +
-      `${alreadyDone.length ? `, ${alreadyDone.length} already correct` : ''}. ` +
-      `audit_log now holds ${auditCount ?? '?'} row(s) for '${CHANGED_BY}'.`,
+      `${alreadyDone.length ? `, ${alreadyDone.length} already correct` : ''}` +
+      ` — ${writeSet.length + alreadyDone.length}/${rows.length} CSV rows accounted for.`,
   );
 }
 
-main().catch((err) => {
-  console.error('Unhandled error:', err);
-  process.exit(1);
-});
+// Only run when executed directly, so the exported pure helpers above can be
+// imported by tests/convert-reconciliation.test.ts without starting a run.
+if (INVOKED_DIRECTLY) {
+  main().catch((err) => {
+    console.error('Unhandled error:', err);
+    process.exit(1);
+  });
+}
