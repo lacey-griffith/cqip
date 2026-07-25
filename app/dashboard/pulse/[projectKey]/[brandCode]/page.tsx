@@ -17,7 +17,7 @@
 // the read-only directive rows for expandable comment/timeline rows — the
 // CellEditStrip container is the same seam E3 enriches.
 
-import { use, useCallback, useEffect, useMemo, useState } from 'react';
+import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase/client';
 import { Card } from '@/components/ui/card';
@@ -98,11 +98,32 @@ export default function PulseBrandPage({
   // On brand→brand navigation the component instance is reused (same route
   // segment), so without this the prior brand's content would flash until the
   // new fetch resolves. Rendering gates on `loadedFor === currentKey`, which is
-  // a render-time comparison — no synchronous setState-in-effect. Set in every
-  // terminal branch of load() (all after an await, so the lint rule stays quiet).
+  // a render-time comparison — no synchronous setState-in-effect.
+  //
+  // INVARIANT: every terminal branch of load() must call setLoadedFor(key) —
+  // all four error/empty exits as well as the success tail (all after an await,
+  // so the lint rule stays quiet). This is load-bearing, not bookkeeping: a
+  // branch that returns without it leaves `ready` false forever, so the page
+  // sits on "Loading…" and even the loadError card never renders. The cell-error
+  // branch was missing it until 2026-07-25 (Karen MEDIUM-2) and did exactly that.
   const [loadedFor, setLoadedFor] = useState<string | null>(null);
   const currentKey = `${projectKey}/${brandCode}`;
   const ready = !loading && loadedFor === currentKey;
+
+  // Mirror of currentKey that async callbacks can read at RESOLUTION time.
+  // refetchCells (below) needs it because its closure captured the old brand and
+  // therefore cannot tell on its own that it resolved after a nav. Written in the
+  // load effect (refs must not be touched during render — react-hooks/refs).
+  //
+  // The effect-vs-render write leaves a tiny window — new brand committed, effect
+  // not yet run — where this still holds the OLD key, so a stale reconcile would
+  // pass the guard. That window is harmless: `ready` gates on
+  // loadedFor === currentKey, so nothing renders but "Loading…" throughout it,
+  // and the new brand's load() calls setCells again with the correct rows right
+  // after. The damaging case Karen described needs the stale write to land AFTER
+  // the new brand finished loading, and by then this ref is definitively the new
+  // key — it is set before that load's first await could possibly resolve.
+  const liveKeyRef = useRef(currentKey);
 
   // Return-context ride-along (Karen E1 observation B): broadcast this brand's
   // project onto the shared channel so "← Pulse" opens the matrix on the
@@ -141,6 +162,10 @@ export default function PulseBrandPage({
   // there's no synchronous loading flip in the body.
   useEffect(() => {
     let cancelled = false;
+    // Publish the live key for refetchCells' staleness guard (Karen MEDIUM-1),
+    // synchronously on every brand change — before load()'s first await, so a
+    // reconcile issued for the previous brand can never see this as current.
+    liveKeyRef.current = `${projectKey}/${brandCode}`;
     async function load() {
       const key = `${projectKey}/${brandCode}`;
       // Brand + project resolve first — the brand id gates the cell filter.
@@ -214,6 +239,10 @@ export default function PulseBrandPage({
         if (cancelled) return;
         if (cellErr) {
           setLoadError(cellErr.message);
+          // setLoadedFor is required here too (Karen MEDIUM-2): `ready` gates on
+          // loadedFor === currentKey, so omitting it left the page on a
+          // permanent "Loading…" with the loadError card unreachable.
+          setLoadedFor(key);
           setLoading(false);
           return;
         }
@@ -236,13 +265,26 @@ export default function PulseBrandPage({
 
   // Reconcile helper for the shared save handler's error path — re-fetch just
   // this brand's cells (cheaper than the full load()).
+  //
+  // Staleness-guarded (Karen MEDIUM-1). This runs from a save callback, NOT from
+  // the load effect, so the effect's `cancelled` flag does not cover it: a save
+  // that fails on brand A and reconciles after the user has navigated to brand B
+  // would land setCells(A's cells) on top of B. brandDirectiveView filters on
+  // c.brand_id === brand.id, so nothing would match and EVERY directive on B
+  // would render hollow n_a and non-interactive — indistinguishable from "no
+  // cells exist", recoverable only by reload. Same shape as the load effect's
+  // guard, just anchored on a ref because the closure captures the old brand:
+  // compare the key this invocation was issued for against the live key at
+  // resolution time, and drop the result if the page has moved on.
   const refetchCells = useCallback(async () => {
     if (!brand || directives.length === 0) return;
+    const issuedFor = `${brand.project_key}/${brand.brand_code}`;
     const { data, error } = await supabase
       .from('directive_brand_status')
       .select('directive_id, brand_id, status, note')
       .in('directive_id', directives.map((d) => d.id))
       .eq('brand_id', brand.id);
+    if (issuedFor !== liveKeyRef.current) return;
     if (!error) setCells((data ?? []) as BrandCell[]);
   }, [brand, directives]);
 
