@@ -45,10 +45,19 @@ import { useToast } from '@/components/layout/toaster';
 import { CellEditStrip } from '@/components/client-library/cell-edit-strip';
 import {
   DIRECTIVE_TYPES,
-  outstandingCount,
   type CellStatus,
   type DirectiveType,
 } from '@/lib/client-library/directives';
+import {
+  buildMatrixRows,
+  visibleMatrixBrands,
+  MATRIX_SORT_KEYS,
+  MATRIX_SORT_LABEL,
+  MATRIX_STATUS_FILTERS,
+  MATRIX_STATUS_FILTER_LABEL,
+  type MatrixSortKey,
+  type MatrixStatusFilter,
+} from '@/lib/client-library/matrix-controls';
 import { saveDirectiveCell } from '@/lib/client-library/directive-cell-save';
 import {
   compareForPanel,
@@ -202,6 +211,16 @@ export default function ClientLibraryPage() {
     directiveId: string;
     brandId: string;
   } | null>(null);
+
+  // Matrix controls (search · status filter · sort · hide paused). All four are
+  // client-side over data already loaded — no refetch on change. Session-only
+  // React state by design (spec §6): no sessionStorage / localStorage / URL
+  // params, so a reload resets them. These are transient find-and-scan controls,
+  // unlike ProjectBrandFilter's persisted page scope.
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<MatrixStatusFilter>('open');
+  const [sortKey, setSortKey] = useState<MatrixSortKey>('title');
+  const [hidePaused, setHidePaused] = useState(false);
 
   // Fetch brands + directives + cells for a project. RLS allows authenticated
   // SELECT on both new tables, so direct client queries are fine (spec §4).
@@ -363,19 +382,27 @@ export default function ClientLibraryPage() {
     return map;
   }, [cells]);
 
-  const outstandingByDirective = useMemo(() => {
-    const byDirective = new Map<string, CellRow[]>();
-    for (const cell of cells) {
-      const list = byDirective.get(cell.directive_id) ?? [];
-      list.push(cell);
-      byDirective.set(cell.directive_id, list);
-    }
-    const result = new Map<string, number>();
-    for (const [directiveId, list] of byDirective) {
-      result.set(directiveId, outstandingCount(list));
-    }
-    return result;
-  }, [cells]);
+  // The rendered row set: group cells per directive → classify (active /
+  // resolved / unstarted) → filter (search AND status) → sort. Each row carries
+  // its own `outstanding`, so the pill renders off the row and there is no
+  // second, divergent Outstanding computation on this page.
+  //
+  // NOTE (spec §3.1): this reads the FULL `cells` array and takes no
+  // hidePaused argument. That is deliberate and load-bearing — hiding paused
+  // COLUMNS must never change an Outstanding count. Do not pass a
+  // visible-brand-scoped cell subset in here.
+  const matrixRows = useMemo(
+    () => buildMatrixRows(directives, cells, { search, statusFilter, sortKey }),
+    [directives, cells, search, statusFilter, sortKey],
+  );
+
+  // The rendered brand axis. Orthogonal to matrixRows above: this is the only
+  // thing the hide-paused toggle touches.
+  const visibleBrands = useMemo(
+    () => visibleMatrixBrands(brands, hidePaused),
+    [brands, hidePaused],
+  );
+  const pausedBrandCount = useMemo(() => brands.filter((b) => b.is_paused).length, [brands]);
 
   // "Needs action" panel (spec §4). Assigned findings are scoped to the
   // selected project via the embedded brand.project_key; null-brand findings
@@ -504,6 +531,92 @@ export default function ClientLibraryPage() {
         </Card>
       ) : (
         <Card className="overflow-hidden p-0" style={{ boxShadow: 'var(--shadow-sm)' }}>
+          {/* Matrix controls — pinned above the horizontal-scroll region so they
+              never scroll out of view on a ≥16-brand project. All client-side
+              over already-loaded data; nothing here refetches. Suppressed when
+              the project has no directives (nothing to search/filter/sort) —
+              that case only reaches here with the create strip open. */}
+          {directives.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-3 border-b border-[color:var(--f92-border)] p-3">
+            <div className="relative min-w-[15rem] flex-1">
+              <Label htmlFor="matrixSearch" className="sr-only">Search directives by title</Label>
+              {/* type="text", not "search": webkit's native cancel button would
+                  render on top of the explicit Clear button below. */}
+              <Input
+                id="matrixSearch"
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search directives…"
+                className="h-9 pr-14 text-sm"
+              />
+              {search ? (
+                <button
+                  type="button"
+                  onClick={() => setSearch('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-1.5 py-0.5 text-xs font-medium text-[color:var(--f92-gray)] hover:text-[color:var(--f92-orange)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)]"
+                  aria-label="Clear search"
+                >
+                  Clear
+                </button>
+              ) : null}
+            </div>
+
+            <div>
+              <Label htmlFor="matrixStatus" className="sr-only">Filter by resolve status</Label>
+              <Select
+                value={statusFilter}
+                onValueChange={(v) => setStatusFilter(v as MatrixStatusFilter)}
+              >
+                <SelectTrigger id="matrixStatus" className="h-9 w-36 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MATRIX_STATUS_FILTERS.map((f) => (
+                    <SelectItem key={f} value={f}>{MATRIX_STATUS_FILTER_LABEL[f]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="matrixSort" className="sr-only">Sort directives</Label>
+              <Select value={sortKey} onValueChange={(v) => setSortKey(v as MatrixSortKey)}>
+                <SelectTrigger id="matrixSort" className="h-9 w-52 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MATRIX_SORT_KEYS.map((k) => (
+                    <SelectItem key={k} value={k}>{MATRIX_SORT_LABEL[k]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Hides paused brand COLUMNS only. Default off = shown (today's
+                behavior). Outstanding counts are unaffected — they read every
+                cell regardless of which columns render (spec §3.1). Hidden
+                entirely when the project has no paused brands. */}
+            {pausedBrandCount > 0 ? (
+              <label className="flex h-9 items-center gap-2 text-sm text-[color:var(--f92-dark)]">
+                <input
+                  type="checkbox"
+                  checked={hidePaused}
+                  onChange={(e) => setHidePaused(e.target.checked)}
+                  className="h-4 w-4 rounded border-[color:var(--f92-border)] text-[color:var(--f92-orange)] focus:ring-[color:var(--f92-orange)]"
+                />
+                Hide paused brands ({pausedBrandCount})
+              </label>
+            ) : null}
+
+            <span className="ml-auto text-xs font-medium text-[color:var(--f92-gray)]" aria-live="polite">
+              {matrixRows.length === directives.length
+                ? `${directives.length} directive${directives.length === 1 ? '' : 's'}`
+                : `${matrixRows.length} of ${directives.length} directives`}
+            </span>
+          </div>
+          ) : null}
+
           {/* Inline create (admin) — a pinned strip at the top of the matrix
               Card, above the horizontal-scroll region so it never scrolls out
               of view. Replaces the old create modal; expands in place, no
@@ -525,6 +638,23 @@ export default function ClientLibraryPage() {
               No active directives for {projectLabel} yet.{' '}
               {isAdmin ? 'Add one above.' : 'An admin can add one.'}
             </div>
+          ) : matrixRows.length === 0 ? (
+            /* Filters hid everything. Distinct from the "project has none"
+               state above — the project HAS directives, this view just
+               excluded them all. Keep both reachable. */
+            <div className="p-8 text-center text-sm text-[color:var(--f92-gray)]">
+              No directives match these filters.{' '}
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch('');
+                  setStatusFilter('all');
+                }}
+                className="font-medium text-[color:var(--f92-orange)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)]"
+              >
+                Show all {directives.length}
+              </button>
+            </div>
           ) : (
             /* Horizontal scroll keeps ≥16-brand projects usable (spec §4). */
             <div className="overflow-x-auto">
@@ -534,7 +664,7 @@ export default function ClientLibraryPage() {
                     <th className="sticky left-0 z-10 bg-[color:var(--f92-surface)] px-4 py-3 text-left text-[10px] font-semibold uppercase text-[color:var(--f92-gray)]" style={{ letterSpacing: 'var(--tracking-wide)' }}>
                       Directive
                     </th>
-                    {brands.map((brand) => (
+                    {visibleBrands.map((brand) => (
                       <th
                         key={brand.id}
                         className="px-3 py-3 text-center text-[10px] font-semibold uppercase"
@@ -554,12 +684,14 @@ export default function ClientLibraryPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {directives.map((directive) => {
-                    const outstanding = outstandingByDirective.get(directive.id) ?? 0;
+                  {matrixRows.map(({ directive, outstanding }) => {
                     // The one open cell-editor strip, if it belongs to this row.
+                    // Looked up in visibleBrands, not brands, so hiding paused
+                    // columns also closes an editor opened on one of them —
+                    // an editor for an invisible column would be incoherent.
                     const editorBrand =
                       expandedCell?.directiveId === directive.id
-                        ? brands.find((b) => b.id === expandedCell.brandId)
+                        ? visibleBrands.find((b) => b.id === expandedCell.brandId)
                         : undefined;
                     const editorCell = editorBrand
                       ? cellByKey.get(`${directive.id}:${editorBrand.id}`)
@@ -585,7 +717,7 @@ export default function ClientLibraryPage() {
                               ) : null}
                             </div>
                           </td>
-                          {brands.map((brand) => {
+                          {visibleBrands.map((brand) => {
                             const cell = cellByKey.get(`${directive.id}:${brand.id}`);
                             // A brand added AFTER this directive was created has
                             // no cell yet (Phase A has no backfill). Render it as
@@ -660,7 +792,7 @@ export default function ClientLibraryPage() {
                             dates — extend it, don't rebuild. */}
                         {editorBrand && editorCell ? (
                           <tr className="border-b border-[color:var(--f92-border)] bg-[color:var(--f92-tint)]">
-                            <td colSpan={brands.length + 2} className="p-0">
+                            <td colSpan={visibleBrands.length + 2} className="p-0">
                               {/* sticky-left so the editor stays visible when a
                                   ≥16-brand row is scrolled horizontally. */}
                               <div className="sticky left-0 w-[min(48rem,100%)] p-2">
