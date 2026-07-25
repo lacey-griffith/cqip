@@ -1,8 +1,8 @@
 # HANDOFF — Convert reconciliation backfill (Pulse / Batch 012)
 
 **For:** Lacey (review) → Claudette (build loader) → Karen → Lacey approve + run
-**Source:** `scripts/data/convert-reconciliation-backfill.csv` (**213 rows** as
-regenerated 2026-07-25; originally 215 — see addendum 6) from the
+**Source:** `scripts/data/convert-reconciliation-backfill.csv` (**212 rows** as
+corrected 2026-07-25; originally 215 — see addenda 6 + 7) from the
 Convert goal reconciliation pass, 2026-07-25 (all 13 active NBLY brands, manually
 cross-referenced against real Convert exports — not fuzzy-matched).
 **Status:** Loader BUILT (`scripts/backfill-convert-reconciliation.ts`, 2026-07-25),
@@ -10,7 +10,7 @@ dry-run verified against prod, Jenny gate-confirmed, Karen-reviewed. Backfill
 deliberately NOT run yet — Lacey approves + runs.
 
 > **Addenda applied 2026-07-25 at build time.** The sections below are the
-> as-written spec; these six points supersede them where they conflict:
+> as-written spec; these seven points supersede them where they conflict:
 >
 > 1. **Input filename** is `scripts/data/convert-reconciliation-backfill.csv`
 >    (§2 named it `proposed_backfill.csv`). The reference-only siblings live in
@@ -30,20 +30,22 @@ deliberately NOT run yet — Lacey approves + runs.
 >    `target_id` is the `directive_brand_status.id` (the CELL id), matching
 >    `app/api/admin/directives/status/route.ts`.
 > 4. **The downgrade audit note branches on data presence, not flip direction**
->    (§2 assigned the placeholder note to all 8 downgrades). Two downgrades
->    reference a REAL but ARCHIVED Convert goal — MRA `Submits Form Lead -
->    Combined` (id 1004101324) and MDG `Step 1 | Contact Info | Validation Error
->    Exposure` (id 1004117395) — so writing "no real Convert goal" over those
+>    (§2 assigned the placeholder note to all downgrades). **One** downgrade
+>    references a REAL but ARCHIVED Convert goal — MRA `Submits Form Lead -
+>    Combined` (id 1004101324) — so writing "no real Convert goal" over it
 >    would discard the archived id from the only forensic trail we keep. Both of
 >    §2's note formats are still produced verbatim; the branch picks the truthful
->    one per row.
+>    one per row. (This addendum originally cited a second such row, MDG
+>    `Step 1 | Contact Info | Validation Error Exposure` id 1004117395 — that row
+>    was a resolver bug and has since been REMOVED entirely; see addendum 7. The
+>    branch is still required for the MRA row, so nothing about the logic changes.)
 > 5. **§5's verification arithmetic** ("215 cells updated" AND "`audit_log` == 215")
 >    contradicts §2's own idempotency guarantee. The correct invariant is
 >    `changed + already_at_target == <CSV row count>`, and `audit_log` rows ==
->    `changed`. Against prod on 2026-07-25, post-regeneration, that is
->    **207 changed + 6 already correct = 213** (the 6 are `[Rev] Time Spent on
+>    `changed`. Against prod on 2026-07-25, after both corrections, that is
+>    **206 changed + 6 already correct = 212** (the 6 are `[Rev] Time Spent on
 >    Site (15s)` ×5 and `[Rev] Time Spent on Financing (15s)` ×1, already `Done`
->    in prod). Do NOT read 207 as a shortfall against 213.
+>    in prod). Do NOT read 206 as a shortfall against 212.
 > 6. **Two MLY rows REMOVED — CSV regenerated to 213 rows / 205 upgrades / 8
 >    downgrades** (was 215 / 207 / 8; commit `ec0438c`). Both removed rows were
 >    upgrades: `MLY — FLF: Views Step #1 | Contact Info` and
@@ -62,17 +64,37 @@ deliberately NOT run yet — Lacey approves + runs.
 >    remaining row cites goal `100480830`, and **no brand has two directives
 >    sharing one `convert_id`** — MLY was the only shared-goal collision in the
 >    pass. The loader's `EXPECTED_TOTAL` / `EXPECTED_UPGRADES` /
->    `EXPECTED_DOWNGRADES` were updated to 213 / 205 / 8 in the same change, per
->    the shape-check's own instruction to move CSV, spec, and constants together.
+>    `EXPECTED_DOWNGRADES` were updated in the same change, per the shape-check's
+>    own instruction to move CSV, spec, and constants together.
+> 7. **MDG `Step 1 | Contact Info | Validation Error Exposure` REMOVED — a
+>    RESOLVER BUG, not a judgement call. CSV now 212 rows / 205 upgrades / 7
+>    downgrades** (was 213 / 205 / 8). **This supersedes §3's MDG
+>    validation-error entry entirely — that row is gone, not re-reasoned.**
 >
-> One §3 entry needs two corrections. The MDG row's title is abbreviated —
-> it reads `Step 1 Validation Error Exposure` there, but the CSV and the live
-> directive are `Step 1 | Contact Info | Validation Error Exposure` (the CSV
-> spelling is authoritative; titles must be byte-exact to resolve). Its stated
-> reason, "goal doesn't exist", is also superseded: the CSV shows the goal DOES
-> exist but is **archived** in Convert (id `1004117395`), same shape as the MRA
-> `Submits Form Lead - Combined` row. The flip to To do is correct either way —
-> only the reasoning changes.
+>    Root cause: MDG's Convert export contains **two goals with the
+>    byte-identical name** `Step 1 | Contact Info | Validation Error Exposure` —
+>    one **ACTIVE** (id `1004115396`) and one **ARCHIVED** (id `1004117395`). The
+>    reconciliation tool's exact-match resolver keyed a plain dict by goal name,
+>    so on a name collision the later array entry silently overwrote the earlier.
+>    The archived duplicate won, and the pass concluded "archived → flip to
+>    To do". **MDG's directive is genuinely Done via the real active goal;** the
+>    archived twin is noise Convert never cleaned up.
+>
+>    So this is a **corrected non-entry**, categorically unlike the 7 intentional
+>    downgrades: the cell needs NO change. It is absent from the CSV entirely —
+>    neither an upgrade nor a downgrade — and its `DOWNGRADE_REASONS` key was
+>    deleted in the same change rather than left to drift (a stale key would fire
+>    the loader's `staleReasons` notice on every run, training the operator to
+>    ignore the very signal that catches a genuinely-dropped downgrade).
+>
+>    Note the arithmetic: a DOWNGRADE was removed, so **upgrades stay 205** and
+>    only the total and downgrade counts move (205 + 7 = 212).
+>
+>    A repo-wide scan for the same duplicate-goal-name collision found exactly
+>    **one** other case — MOJ `Submits SF Lead - Footer [Contact API]` ×2 — but
+>    **both copies are active**, so either resolution yields the same answer. No
+>    data impact; deliberately untouched. Verified in the CSV: no
+>    `brand + convert_name` pair maps to more than one `convert_id`.
 >
 > **Karen post-flight (2026-07-25) folded into the loader.** One HIGH: an
 > `audit_log` insert failure printed a warning and then **exited 0**, so a run
@@ -137,12 +159,16 @@ for the 8 downgrade rows).
 (the existing PATCH route already reports `changed: 0` in that case; a direct
 write should check current value first and skip/log rather than blindly write).
 
-## 3. The 8 downgrades — know these before running
+## 3. The downgrades — know these before running
+
+**7 downgrades, not the 8 listed below.** The MDG validation-error entry is
+SUPERSEDED and REMOVED — see addendum 7 (resolver bug: it matched an archived
+duplicate goal; the directive is genuinely Done and needs no change).
 
 ```
 MRA  Submits Form Lead - Combined       -> goal exists but is ARCHIVED in Convert
 MRA  Submits LF Lead + Contact Us       -> no combined variant exists for MRA
-MDG  Step 1 Validation Error Exposure  -> goal doesn't exist
+MDG  Step 1 Validation Error Exposure  -> REMOVED, NOT A DOWNGRADE (addendum 7)
 MDG  [Upsell] Clicks Submit CTA         -> V1 placeholder goal, not real (confirmed)
 PDS  [Upsell] Clicks Submit CTA         -> same placeholder pattern
 RBW  Clicks Learn More on Tiles        -> Local/National split pending rollout
@@ -173,14 +199,14 @@ To do is a correction, not a regression -- flag to whoever smoke-tests that a
 
 ## 5. Verification
 
-- Row count check: `changed + already_at_target` == the CSV row count (**213**
-  post-regeneration), per addendum 5 — NOT "213 cells updated". Against prod on
-  2026-07-25 the expected split is **207 changed + 6 already correct**. A plan
-  reporting 207 is CORRECT, not a shortfall.
-- Spot-check a sample of both upgrades and all 8 downgrades against the live
+- Row count check: `changed + already_at_target` == the CSV row count (**212**
+  after both corrections), per addendum 5 — NOT "212 cells updated". Against prod
+  on 2026-07-25 the expected split is **206 changed + 6 already correct**. A plan
+  reporting 206 is CORRECT, not a shortfall.
+- Spot-check a sample of both upgrades and all 7 downgrades against the live
   matrix UI post-run.
 - `audit_log` row count == `changed` (one per CHANGED cell — skipped
-  already-at-target cells write none), so **207** on a clean first run, scoped to
+  already-at-target cells write none), so **206** on a clean first run, scoped to
   `changed_by = 'system:convert-reconciliation'`.
 - Same post-run self-verify pattern as the original loader (assert actual DB
   state matches expected, loud failure on mismatch -- don't trust build-green).

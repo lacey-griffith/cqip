@@ -66,34 +66,61 @@ const DEFAULT_CSV = path.join(process.cwd(), 'scripts/data/convert-reconciliatio
 // Expected totals from the spec. Asserted against the parsed file so a swapped
 // or truncated CSV fails loudly instead of half-applying.
 //
-// 213/205/8 as of the 2026-07-25 CSV regeneration (was 215/207/8). Two MLY
-// upgrade rows were intentionally removed — "FLF: Views Step #1 | Contact Info"
-// and "FLF: Views Step #2 | Service Details" both mapped to the SAME Convert
-// goal id 100480830, because MLY genuinely tracks Contact Info + Service Details
-// as one combined event. Neither directive can be flipped independently without
-// asserting something the data does not measure. MLY needs a second, separate
-// Convert goal built before per-step tracking is possible — a real open item,
-// tracked in the spec, deliberately NOT part of this backfill. Downgrades are
-// unchanged at 8: both removed rows were upgrades, and MLY never appeared in
-// DOWNGRADE_REASONS (verified, not assumed).
-const EXPECTED_TOTAL = 213;
+// 212/205/7 after two CSV corrections on 2026-07-25 (originally 215/207/8):
+//
+//   215/207/8 → 213/205/8  Two MLY UPGRADE rows removed (a design decision, not
+//     a bug): "FLF: Views Step #1 | Contact Info" and "FLF: Views Step #2 |
+//     Service Details" both mapped to the SAME Convert goal id 100480830,
+//     because MLY genuinely tracks Contact Info + Service Details as one
+//     combined event. Neither directive can be flipped independently without
+//     asserting something the data does not measure. OPEN ITEM: MLY needs a
+//     second, separate Convert goal before per-step tracking is possible.
+//     Downgrades unaffected — both removed rows were upgrades, and MLY never
+//     appeared in DOWNGRADE_REASONS (verified, not assumed).
+//
+//   213/205/8 → 212/205/7  One MDG DOWNGRADE row removed — a genuine BUG in the
+//     reconciliation tool, not a judgement call. MDG's Convert export contains
+//     TWO goals with the byte-identical name "Step 1 | Contact Info | Validation
+//     Error Exposure": one ACTIVE (id 1004115396) and one ARCHIVED (id
+//     1004117395). The tool's exact-match resolver keyed a plain dict by name,
+//     so on a collision the later array entry silently overwrote the earlier —
+//     the archived duplicate won, and the pass concluded "archived, so flip to
+//     To do". MDG's directive is genuinely Done via the real ACTIVE goal; the
+//     archived twin is noise Convert never cleaned up. So this is a CORRECTED
+//     NON-ENTRY, categorically unlike the 7 intentional downgrades: the cell
+//     needs no change at all. Its DOWNGRADE_REASONS entry was removed in the
+//     same change rather than left to drift.
+//     Note UPGRADES stay 205 — a downgrade was removed, so only the total and
+//     the downgrade count move (205 + 7 = 212).
+//
+// A repo-wide scan for the same duplicate-name collision found exactly one other
+// case — MOJ "Submits SF Lead - Footer [Contact API]" ×2 — but BOTH copies are
+// active, so either resolution yields the same answer. No data impact; untouched.
+const EXPECTED_TOTAL = 212;
 const EXPECTED_UPGRADES = 205;
-const EXPECTED_DOWNGRADES = 8;
+const EXPECTED_DOWNGRADES = 7;
 
-// The 8 downgrades, verbatim from the spec's "know these before running"
+// The 7 downgrades, verbatim from the spec's "know these before running"
 // section, keyed by `BRAND||title` using the CSV's exact title spelling.
 //
 // This is a REVIEW GATE, not decoration: a downgrade row whose (brand, title)
 // is absent here hard-fails the run. A Done → To do flip destroys a "resolved"
 // signal, so every one of them must be a documented, reviewed decision — a new
 // downgrade appearing in a regenerated CSV must go back through the spec first.
+//
+// Was 8. The MDG "Step 1 | Contact Info | Validation Error Exposure" entry was
+// REMOVED on 2026-07-25 along with its CSV row — a resolver bug had matched the
+// archived duplicate goal (id 1004117395) instead of the real active one (id
+// 1004115396), inventing a downgrade for a directive that is genuinely Done. It
+// is deleted here deliberately rather than left in place: a stale key would make
+// the `staleReasons` notice fire on every run, training the operator to ignore
+// exactly the signal that catches a genuinely-dropped downgrade. See the
+// EXPECTED_* block above for the full root cause.
 const DOWNGRADE_REASONS: Record<string, string> = {
   'MRA||Submits Form Lead - Combined':
     'goal exists but is ARCHIVED in Convert',
   'MRA||Submits LF Lead + Contact Us':
     'no combined variant exists for MRA',
-  'MDG||Step 1 | Contact Info | Validation Error Exposure':
-    "goal doesn't exist as a live goal (archived in Convert)",
   'MDG||[Upsell] Clicks Submit CTA':
     'V1 placeholder goal, not real (confirmed)',
   'PDS||[Upsell] Clicks Submit CTA':
