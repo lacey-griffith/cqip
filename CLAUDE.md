@@ -2958,9 +2958,72 @@ phase/status, open questions, and a pointer to the spec. Lifecycle:
 appears in exactly one of §15.5 / §16 — on ship, the entry here is
 deleted in the same commit that writes the §16 shipped entry.
 
-**Currently empty** — the brand-page inline-editing batch moved to §16 on
-2026-07-25. (The Convert reconciliation backfill also lives in §16: it is
-BUILT and reviewed, awaiting only Lacey's run, so it is not in-flight work.)
+(The Convert reconciliation backfill is NOT here — it lives in §16: it is BUILT
+and reviewed, awaiting only Lacey's run, so it is not in-flight work.)
+
+### Batch 012 — Pulse: directive matrix controls (search · status filter · sort · hide paused)
+
+**Status:** IN FLIGHT (started 2026-07-25). Spec:
+`docs/batch-012-pulse-matrix-controls-spec.md`. Sequenced on the pushed
+brand-page inline-editing batch (`28f2faf`, an ancestor of current `main`) —
+same file, so it builds on current `main` (a superset: the brand-page MEDIUM
+folds + the §15.5→§16 reconcile + three data-only CSV commits, none of which
+touch the matrix render path).
+
+**Why:** NBLYCRO now holds 69 active directives × 16 brands = **1,104 cells**
+(verified against prod 2026-07-25, zero gaps) and is post-backfill. The matrix
+needs find/filter/sort to stay usable, plus a way to drop paused-brand columns.
+
+**Locked decisions (do not relitigate mid-build):**
+- **All client-side over already-loaded data.** No migration, no route, no
+  schema, no new fetch, no new mutation surface → **no Jenny** (E-track render
+  profile), **no version bump** (§13 r23).
+- **Four composing controls:** search (title, live, case-insensitive, clearable)
+  · status filter · hide-paused-brands toggle · sort.
+- **Resolve state is DERIVED from live cells, never a stored flag:**
+  `Outstanding > 0 → active`; `Outstanding == 0 && Done >= 1 → resolved`;
+  `Outstanding == 0 && Done == 0 → unstarted`. Outstanding reuses the existing
+  shared `outstandingCount()` — not forked.
+- **THE VERBATIM GUARD:** the status filter's `Open` option (the DEFAULT) means
+  **NOT-resolved**, implemented as `state !== 'resolved'` — **never**
+  `state === 'active'`. `unstarted` directives (a `[GTM]`-style placeholder, an
+  all-`n_a` directive, or one with no cells) **MUST stay visible under `Open`**.
+  Options: `Open` (default) / `Resolved` / `All`.
+- **Hide paused brands:** default OFF (= shown, today's behavior). When ON,
+  paused brand COLUMNS are removed entirely. `is_paused` read live from the
+  loaded brand rows — brand codes NEVER hardcoded (today's paused set is
+  MRR-CA / SHG / WDG, but that's data).
+- **Outstanding is structurally independent of the column toggle** — the count
+  reads the full `cells` array; hide-paused is not an input to it. Confirmed
+  against prod, not assumed: all **207** paused-brand cells are `n_a` and
+  **zero** hold an owed status, so the toggle changes no number on screen. It is
+  purely visual column reduction, not a data change.
+- **Sort:** Title A–Z (default) / Outstanding high→low, **ties break by title**
+  in both (deterministic without relying on sort stability).
+- **Controls are session-only React state** — no sessionStorage/localStorage/URL
+  params; reset on reload is fine (deliberate divergence from
+  `ProjectBrandFilter`'s persistence — these are transient scan controls).
+- **Pure logic + tests** in `lib/client-library/matrix-controls.ts` +
+  `tests/matrix-controls.test.ts`; rows carry `outstanding` + `resolveState` so
+  the page can't compute Outstanding a second, divergent way.
+
+**Explicitly NOT in scope:** the left-nav client list
+(`components/layout/pulse-client-nav.tsx`) is **untouched** — whether paused
+*clients* should be hidden from the nav is a separate, undecided question
+(Lacey 2026-07-25: "open to consider"). Also out: persisted/URL-shareable
+filters, brand-axis sorting, any change to what Outstanding counts, server-side
+search.
+
+**Known verification gap (stated, not papered over):** prod currently has **0
+unstarted** directives (50 active / 19 resolved / 0 unstarted, measured
+2026-07-25), so the verbatim guard is **defensive and cannot be observed by
+clicking today** — it's pinned by test instead. Do NOT "simplify"
+`!== 'resolved'` to `=== 'active'` on the grounds that it makes no visible
+difference; it will, the first time an all-`n_a` or cell-less directive exists.
+
+**Gates:** no Jenny (confirmed above); tsc/build/tests/ESLint clean; **the real
+bar is Lacey clicking through**. Two commits, docs-then-code. **Karen
+post-flight. DO NOT PUSH** — Lacey clicks through, then pushes.
 
 ---
 
