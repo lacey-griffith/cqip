@@ -3170,7 +3170,7 @@ directive, a failing insert) — reviewed, not runtime-exercised.
    `EXPECTED_*` constants in the script — the shape assertion will tell you).
 
 **Explicitly out of scope** (per spec §4, unchanged): Convert-side rename cleanup
-(executed in Convert, not code — and `rename-cleanup.csv` is not in the repo);
+(`rename-cleanup.csv`, 110 rows — executed in Convert itself, not code);
 `unmapped-active.csv` (real Convert goals with no directive yet → future batch, not
 a backfill); `paused-brands-readiness.csv` (MRR-CA/SHG/WDG dormant, do not write);
 new directive creation; the matrix "hide paused" filter.

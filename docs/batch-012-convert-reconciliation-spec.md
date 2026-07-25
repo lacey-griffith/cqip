@@ -13,9 +13,9 @@ deliberately NOT run yet — Lacey approves + runs.
 >
 > 1. **Input filename** is `scripts/data/convert-reconciliation-backfill.csv`
 >    (§2 named it `proposed_backfill.csv`). The reference-only siblings live in
->    `docs/convert-reconciliation-2026-07-25/`. Note `rename-cleanup.csv` (§4)
->    is NOT in the repo — it was never committed, which is consistent with it
->    being Convert-side work rather than a CQIP artifact.
+>    `docs/convert-reconciliation-2026-07-25/` — `rename-cleanup.csv`,
+>    `unmapped-active.csv`, `paused-brands-readiness.csv`, all reference-only
+>    (committed in `83b876f`). None of the three is read by the loader.
 > 2. **Write path is the DIRECT service-role write, not the PATCH route** (§1
 >    left this open). The route requires a cookie-bound admin session and derives
 >    `changed_by` via `getChangedBy()`, so a script cannot use it without
