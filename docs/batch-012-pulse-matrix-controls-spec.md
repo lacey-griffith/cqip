@@ -93,14 +93,62 @@ Implement the predicate as `state !== 'resolved'` — **not** `state === 'active
 That is the guard: the negative form cannot silently drop a third state, and a
 future fourth state would default to visible rather than hidden.
 
-**Provenance note (honest):** the batch directive cites
-`docs/HANDOFF-goal-directives-load.md §7` for these semantics. **That file does
-not exist in this repo and never has** (`git log --all --diff-filter=A` on the
-path returns nothing); `docs/batch-012-convert-reconciliation-spec.md` §1 cites
-the same handoff's §5 for the audit-trail requirement, so the document is real
-but external / uncommitted. The semantics above are therefore transcribed from
-the batch directive verbatim rather than quoted from a repo artifact. If the
-handoff is ever committed, re-check this section against it.
+**Provenance — RESOLVED 2026-07-25 (supersedes the note this section carried at
+build time).** At build time the cited source was missing: the batch directive
+pointed at `docs/HANDOFF-goal-directives-load.md §7`, but that path had never
+been committed (`git log --all --diff-filter=A` on it was empty), so the
+semantics above were transcribed from the directive rather than quoted from a
+repo artifact, and this section said so and asked to be re-checked if the
+handoff ever landed. **It has now landed** — committed verbatim (prepared
+2026-07-21 by DC; the copy in `docs/` is the 2026-07-25 revision, distinct from
+an earlier 5,587-byte draft). Re-checked, as that note required:
+
+**§7 "Resolve semantics + resolved-date" matches the implementation exactly:**
+
+```
+Outstanding > 0                 → active (show)
+Outstanding == 0 AND Done >= 1  → resolved (hide; toggle to view)
+Outstanding == 0 AND Done == 0  → empty/unstarted (stays visible — GTM case)
+```
+
+§7 heads that block **"Guard (do not skip)"** and names the concrete hazard:
+zero-outstanding *alone* falsely catches all-N/A placeholders such as the
+`[GTM] Submits Lead Combined` directive (§3 records it as a real, deliberately
+all-N/A row). That is precisely the guard §2.1 encodes as `state !== 'resolved'`
+— so the guard is not an invention of this batch, it is the source's own
+stated requirement, and the `[GTM]` example in §2.1 is the source's example.
+
+**Two deltas between §7 and what shipped, both deliberate:**
+
+1. §7 specifies "Table default HIDES resolved; a *Show resolved* toggle brings
+   them back." Shipped is a three-option control (`Open` default / `Resolved` /
+   `All`) — a **superset**: the default still hides resolved, and both `Resolved`
+   and `All` bring them back. §7's "retrievable always — nothing is moved or
+   archived" holds (no archiving; resolved rows stay in the same table and
+   regress automatically, which the derived state gives for free).
+2. §7's closing gate line says the declutter filter "queues behind the
+   inline-edit push, **do not stack on unpushed code**." The inline-edit work
+   **is** pushed (`28f2faf` … `1724f6b` are in `origin/main`), so the intent is
+   met — but stated plainly rather than glossed: this batch does sit on three
+   *unpushed* commits, the data-only Convert-reconciliation CSV fixes
+   (`ec0438c`, `53b25b7`, `2308d95`). They touch no matrix render path, so the
+   instability §7 guards against doesn't arise, and Lacey's push carries them
+   together.
+
+**One thing §7's neighbours make clear that is NOT this batch's problem but is
+worth knowing:** §5 #3 marks "an `audit_log` row on every status change" a **HARD
+REQUIREMENT**, because §7 deliberately ships **no `resolved_at` column** — so the
+audit trail is the *only* store of *when* a goal resolved until the Convert/Jira
+date sync (E2/E3) lands and backfills historical dates by reconstructing from
+`audit_log`. This batch is read-only and writes nothing, so it neither satisfies
+nor threatens that requirement; the obligation sits on the loader and the
+inline-edit path (both already audit-writing).
+
+**Caveat on reading §2:** its volumes (65 directives / 1,040 cells) are the
+2026-07-21 *plan*. Prod is now **69 directives / 1,104 cells** (verified
+2026-07-25) after the goal load plus later additions. The handoff is a planning
+and decision record, not a current-state record — treat §1/§7 decisions as
+authoritative and §2 counts as historical.
 
 ## 3. Hide paused brands (new — Lacey 2026-07-25)
 

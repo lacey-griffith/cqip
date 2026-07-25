@@ -144,6 +144,10 @@ original 65-directive bulk load: this is a targeted UPDATE pass, not a CREATE pa
   call, but **either way must emit an `audit_log` row per changed cell** (per the
   hard requirement locked in the original goal-load handoff §5 — the resolve
   timestamp for the eventual E3 lifecycle work depends on this trail existing).
+  That handoff was uncommitted when this spec was written; it now lives at
+  `docs/HANDOFF-goal-directives-load.md` (the requirement is **§5 item 3**, and
+  §7 is why it is load-bearing: no `resolved_at` column ships, so `audit_log` is
+  the only record of *when* a cell resolved).
 
 ## 2. Input file
 
