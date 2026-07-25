@@ -2974,14 +2974,37 @@ read-only view UNCHANGED (server enforces admin regardless of what renders).
 - E3 seam preserved: the strip is the container E3 later enriches
   (comments / timeline / lifecycle dates).
 
-**Explicitly NOT in scope (needs Lacey's input first):** the handful of
-pre-existing NBLYCRO directives with zero `directive_brand_status` cells
-(at least: Chat Appointment Made, Chat Started, Chat Lead Submitted, [GTM]
-Submits Lead Combined [intentional placeholder], [Rev] Time Spent on Pricing
-(15s)) — they predate the goal-directive bulk load and were correctly SKIPPED
-by its idempotency guard, so they render all-hollow/non-editable. This is a
-DATA GAP (separate targeted backfill, pending Lacey's source values), NOT a UI
-bug.
+**~~Explicitly NOT in scope: a zero-cell DATA GAP~~ — RETRACTED 2026-07-25, the
+gap does not exist.** This entry previously claimed a handful of pre-existing
+NBLYCRO directives (Chat Appointment Made, Chat Started, Chat Lead Submitted,
+[GTM] Submits Lead Combined, [Rev] Time Spent on Pricing (15s)) had zero
+`directive_brand_status` cells — skipped by the goal-load idempotency guard,
+rendering all-hollow/non-editable — and that a targeted backfill was pending
+Lacey's source values. **Verified against prod 2026-07-25: false.** All 69
+NBLYCRO directives have exactly 16 cells (69 × 16 = 1,104, no gaps); the
+cells-per-directive distribution is uniform. The five named:
+
+```
+Chat Appointment Made              done 1 · todo 12 · n_a 3    normal, editable
+Chat Started                       done 1 · todo 12 · n_a 3    normal, editable
+Chat Lead Submitted                done 1 · todo 12 · n_a 3    normal, editable
+[Rev] Time Spent on Pricing (15s)           todo 13 · n_a 3    normal, editable
+[GTM] Submits Lead Combined                        n_a 16      all-hollow — BY DESIGN
+```
+
+The `n_a 3` on every directive (bulk-loaded ones included) is just the three
+paused brands MRR-CA / SHG / WDG landing `n_a` per the Phase A fan-out rule —
+designed behavior, not a gap. Only `[GTM] Submits Lead Combined` is genuinely
+all-hollow, and this entry already called it an intentional placeholder, so
+that is correct too. Skipping at load time did not leave these cell-less
+because Phase A fan-out creates cells at directive-CREATE time, independent of
+any later load.
+
+**Consequences:** no backfill is pending, nothing is owed from Lacey, and
+`Explicitly NOT in scope` is empty for this batch. The real Phase A cell-gap
+risk is unchanged and still open — a brand added AFTER a directive was created
+gets no cell (§15 backlog "cell-backfill / brand-target picker"); it just is
+not what these five directives were showing.
 
 **Spec:** the DC handoff ticket (2026-07-21). **Gates:** tsc clean, build
 green, existing tests pass + a new `tests/directive-cell-save.test.ts`, ESLint
