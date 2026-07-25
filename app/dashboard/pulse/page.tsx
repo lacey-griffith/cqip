@@ -50,6 +50,7 @@ import {
 } from '@/lib/client-library/directives';
 import {
   buildMatrixRows,
+  countHiddenByStatus,
   visibleMatrixBrands,
   MATRIX_SORT_KEYS,
   MATRIX_SORT_LABEL,
@@ -404,6 +405,14 @@ export default function ClientLibraryPage() {
   );
   const pausedBrandCount = useMemo(() => brands.filter((b) => b.is_paused).length, [brands]);
 
+  // Directives matching the search but excluded by the status filter. Surfaced
+  // so "search found nothing" can never be read as "it doesn't exist" — see
+  // countHiddenByStatus for why that false negative is dangerous here.
+  const hiddenByStatus = useMemo(
+    () => countHiddenByStatus(directives, cells, { search, statusFilter, sortKey }),
+    [directives, cells, search, statusFilter, sortKey],
+  );
+
   // "Needs action" panel (spec §4). Assigned findings are scoped to the
   // selected project via the embedded brand.project_key; null-brand findings
   // surface under "Unassigned" regardless of project. Both sorted by severity
@@ -568,7 +577,11 @@ export default function ClientLibraryPage() {
                 value={statusFilter}
                 onValueChange={(v) => setStatusFilter(v as MatrixStatusFilter)}
               >
-                <SelectTrigger id="matrixStatus" className="h-9 w-36 text-sm">
+                {/* "Status:" prefix in the trigger — a bare "Open" is ambiguous
+                    on a page that also renders the open-findings "Needs action"
+                    panel (Karen LOW-1). */}
+                <SelectTrigger id="matrixStatus" className="h-9 w-44 text-sm">
+                  <span className="shrink-0 text-[color:var(--f92-gray)]">Status:&nbsp;</span>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -614,6 +627,26 @@ export default function ClientLibraryPage() {
                 ? `${directives.length} directive${directives.length === 1 ? '' : 's'}`
                 : `${matrixRows.length} of ${directives.length} directives`}
             </span>
+
+            {/* Never let "I searched and found nothing" read as "it doesn't
+                exist" — the status filter may be hiding the match, and creating
+                a duplicate title is unguarded server-side (see
+                countHiddenByStatus). Only shown when rows ARE listed; the
+                zero-row case says the same thing in its empty state below. */}
+            {hiddenByStatus > 0 && matrixRows.length > 0 ? (
+              <p className="basis-full text-xs text-[color:var(--f92-gray)]">
+                {hiddenByStatus === 1
+                  ? '1 more directive matches but is hidden by the status filter.'
+                  : `${hiddenByStatus} more directives match but are hidden by the status filter.`}{' '}
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('all')}
+                  className="font-medium text-[color:var(--f92-orange)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)]"
+                >
+                  Show all statuses
+                </button>
+              </p>
+            ) : null}
           </div>
           ) : null}
 
@@ -627,6 +660,15 @@ export default function ClientLibraryPage() {
               projectLabel={projectLabel}
               onCreated={() => {
                 setCreateOpen(false);
+                // Clear the row filters so the directive that was just created
+                // is GUARANTEED visible (Karen MEDIUM-2). Without this, an
+                // admin who created while a search was active — the very flow
+                // the search box invites — got a "✅ created" toast and no new
+                // row, whose natural reading is "it failed, try again" → a
+                // duplicate title. A new directive fans out to todo/n_a, so it
+                // is always `active` and always shown under `open`.
+                setSearch('');
+                setStatusFilter('open');
                 void loadProject(projectKey);
               }}
               onCancel={() => setCreateOpen(false)}
@@ -644,16 +686,35 @@ export default function ClientLibraryPage() {
                excluded them all. Keep both reachable. */
             <div className="p-8 text-center text-sm text-[color:var(--f92-gray)]">
               No directives match these filters.{' '}
-              <button
-                type="button"
-                onClick={() => {
-                  setSearch('');
-                  setStatusFilter('all');
-                }}
-                className="font-medium text-[color:var(--f92-orange)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)]"
-              >
-                Show all {directives.length}
-              </button>
+              {hiddenByStatus > 0 ? (
+                /* The dangerous case: the search DID match, the status filter
+                   hid it. Say so and offer a reset that KEEPS the search, so
+                   the admin sees the match instead of concluding it doesn't
+                   exist and creating a duplicate (unguarded server-side). */
+                <>
+                  {hiddenByStatus === 1
+                    ? '1 directive matches your search but is hidden by the status filter.'
+                    : `${hiddenByStatus} directives match your search but are hidden by the status filter.`}{' '}
+                  <button
+                    type="button"
+                    onClick={() => setStatusFilter('all')}
+                    className="font-medium text-[color:var(--f92-orange)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)]"
+                  >
+                    Show all statuses
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch('');
+                    setStatusFilter('all');
+                  }}
+                  className="font-medium text-[color:var(--f92-orange)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)]"
+                >
+                  Show all {directives.length}
+                </button>
+              )}
             </div>
           ) : (
             /* Horizontal scroll keeps ≥16-brand projects usable (spec §4). */

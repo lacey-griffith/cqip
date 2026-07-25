@@ -3021,9 +3021,65 @@ clicking today** — it's pinned by test instead. Do NOT "simplify"
 `!== 'resolved'` to `=== 'active'` on the grounds that it makes no visible
 difference; it will, the first time an all-`n_a` or cell-less directive exists.
 
-**Gates:** no Jenny (confirmed above); tsc/build/tests/ESLint clean; **the real
-bar is Lacey clicking through**. Two commits, docs-then-code. **Karen
-post-flight. DO NOT PUSH** — Lacey clicks through, then pushes.
+**Karen post-flight — PASS-WITH-FINDINGS, no HIGH: 2 MEDIUM + 2 LOW FOLDED
+(commit 3), 3 LOW accepted as-is.** Karen re-ran every gate independently and
+confirmed all seven claims, two of them **stronger** than claimed: the verbatim
+guard is pinned by *mutation* (rewriting it `=== 'active'` fails 7 tests), and
+hide-paused cannot touch Outstanding for a tighter reason than argued —
+`MatrixCellLike` carries only `directive_id` + `status`, **no brand identity at
+all**, so `buildMatrixRows` cannot scope to a brand subset even in principle
+(honest caveat: the runtime objects are `CellRow` and *do* carry `brand_id` via
+structural typing, so it's a type-level barrier a future dev could dismantle by
+widening the interface, not a physical impossibility).
+- **MEDIUM-1 FOLDED — the default `Open` filter made the new search box a
+  false-negative machine.** "Search a title to see if it exists → nothing →
+  create it" silently missed **resolved** directives — landing on a hazard this
+  repo has already been bitten by: `POST /api/admin/directives` has **no
+  duplicate-title check** and migration 024 has **no unique constraint** on
+  `(project_key, title)`, so a duplicate title makes a title→id resolver pick the
+  wrong directive (the shape §16 records as a folded finding on the
+  Convert-reconciliation batch). Fixed with a new pure `countHiddenByStatus()`:
+  the UI now states how many matches the status filter hid and offers "Show all
+  statuses" (**keeping** the search), in both the rows-listed and zero-rows
+  shapes. The durable fix is a route-level duplicate check — a mutation-surface
+  change, deliberately out of this batch's profile.
+- **MEDIUM-2 FOLDED — a directive created while a filter was active never
+  appeared, and the toast said it succeeded.** Creating with search text in the
+  box (the *same* flow as MEDIUM-1) gave `✅ Directive created — 16 brand cells`
+  and no visible row, whose natural reading is "it failed, try again" → closing
+  MEDIUM-1's duplicate loop. `onCreated` now clears the search + resets the
+  filter to `open`, where a freshly fanned-out (`todo`/`n_a` → `active`)
+  directive is always visible.
+- **LOW-1 FOLDED** — `Status:` prefix on the collapsed trigger (a bare "Open" was
+  ambiguous beside the "Needs action" open-findings panel). **LOW-4 FOLDED** —
+  `localeCompare(b, 'en')`, pinning collation of the bracket-prefixed titles so
+  neither the ordering nor the test asserting it is host-dependent.
+- **Accepted as-is, not defects:** LOW-2 (when filters coincidentally match
+  everything the count doesn't advertise them — cosmetic; the controls show their
+  own state). LOW-3, the judgment call flagged FOR scrutiny — looking the open
+  editor up in `visibleBrands` discards an unsaved note when paused columns are
+  hidden and makes the editor reappear on un-hide; Karen verified there is **no
+  lock-up** (stale `expandedCell` is inert, another dot re-targets cleanly) and
+  endorsed keeping it, since the alternative renders an editor for an off-screen
+  column. Karen also corrected the framing: this is the **brand** axis, which
+  spec §6 never covered, so it's an un-spec'd addition rather than a deviation.
+  LOW-5 (saving the last owed cell ejects the row under `Open`) is correct and
+  matches the `/dashboard/logs` needs-review precedent — on the click list so it
+  isn't mistaken for a bug.
+- Also confirmed: exactly one Outstanding computation left on the page; §13
+  r34/r23 satisfied; **no React anti-patterns** (the diff adds only
+  `useState`/`useMemo` — no new effect, no ref); the `aria-live` count is the
+  recommended result-count pattern and coalesces correctly;
+  `pulse-client-nav.tsx` diff is **0 lines**.
+
+**Gates (re-run AFTER the fold, not inherited):** `tsc --noEmit` exit 0 · ESLint
+zero findings on all three files · **87/87 tests** (67 pre-existing + 20 this
+batch) · `npm run build` exit 0 with `/dashboard/pulse` still `○`, the brand page
+`ƒ`, and **no new route entries**. Guard + tie-break mutations re-verified as
+caught after the fold. No Jenny (confirmed — no migration/route/schema/mutation
+surface). **The real bar is Lacey clicking through** (spec §7 click list, items
+8–13 added from the Karen findings). Three commits: docs → code → fold.
+**DO NOT PUSH** — Lacey clicks through, then pushes.
 
 ---
 

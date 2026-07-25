@@ -139,7 +139,10 @@ not a data change.**
 
 ## 4. Sort
 
-- **Title (A–Z)** — default, `localeCompare`.
+- **Title (A–Z)** — default, `localeCompare(b, 'en')` (locale pinned explicitly —
+  Karen LOW-4: collation of the bracket-prefixed titles is the most
+  locale-variable part of the ICU table, so the host default would make both the
+  ordering and the test asserting it environment-dependent).
 - **Outstanding (high→low)** — descending numeric.
 - **Ties break by title (A–Z)** in both modes, so ordering is fully
   deterministic and does not depend on `Array.prototype.sort` stability or on
@@ -199,6 +202,11 @@ page/tests import it). Exports:
 - `buildMatrixRows(directives, cells, controls)` → §5 compose; each row carries
   `{ directive, outstanding, resolveState }` so the page renders the pill from
   the row and **cannot** compute Outstanding a second, divergent way.
+- `countHiddenByStatus(directives, cells, controls)` → **added in the Karen fold
+  (§10, MEDIUM-1)**: how many directives match the search but were excluded by the
+  status filter, so "search found nothing" can never be read as "it doesn't
+  exist". Returns 0 under `all`. Tested for the partition invariant
+  (`shown + hidden === total search matches`) across every filter value.
 
 `tests/matrix-controls.test.ts` covers, at minimum:
 
@@ -222,6 +230,25 @@ clear it; flip to `Resolved` (expect ~19 of 69 on NBLYCRO today) and back to
 no Outstanding number changes**; sort by Outstanding; combine search + hide-paused
 + sort; open the cell editor and confirm it still spans the table correctly with
 paused columns hidden; confirm inline create still works.
+
+Added after Karen post-flight (§10):
+
+8. **With search text in the box, create a directive** — the new row must appear
+   (the filters reset on create; MEDIUM-2).
+9. **Set the filter to `Resolved`, then create a directive** — same.
+10. **Search a title you know is resolved, under the default `Open`** — the view
+    must SAY that N matches are hidden by the status filter and offer "Show all
+    statuses" (keeping the search), rather than reading as "doesn't exist"
+    (MEDIUM-1).
+11. **Mark a directive's last owed cell `done` under `Open`** — the row leaves
+    the list immediately. That is correct (same "the edit IS the decision"
+    behavior as the `/dashboard/logs` needs-review worklist), not a bug (LOW-5).
+12. **Open an editor on a paused brand's cell, type a note, tick hide-paused** —
+    the editor closes and the unsaved note is lost; un-tick and it returns empty
+    (LOW-3, accepted).
+13. Read the collapsed status dropdown cold — it should say `Status: Open`, not a
+    bare "Open" that could be mistaken for a "Needs action" findings filter
+    (LOW-1).
 
 > **Known latency in click-verification:** prod currently has **0 unstarted**
 > directives (50 active / 19 resolved / 0 unstarted, measured 2026-07-25), so
@@ -249,3 +276,83 @@ paused columns hidden; confirm inline create still works.
   zero findings on every changed/new file.
 - Two commits, **docs-then-code**. Atomic CLAUDE.md §15.5 in-flight entry.
 - **Karen post-flight.** **DO NOT PUSH** — Lacey clicks through, then pushes.
+
+---
+
+## 10. Karen post-flight — PASS-WITH-FINDINGS (2026-07-25)
+
+Reviewed both commits (`67d3bb1` docs + `b73fb51` code). **No HIGH. 2 MEDIUM
+(both FOLDED) + 5 LOW (2 folded, 3 accepted as-is with reasons).** Karen re-ran
+every gate independently and confirmed all seven claims, two of them stronger
+than claimed:
+
+- **The verbatim guard is genuinely pinned, verified by mutation** — rewriting the
+  predicate as `state === 'active'` fails 7 tests (re-confirmed after the fold).
+  It is a tested rule, not a comment claiming to be one.
+- **Hide-paused cannot touch Outstanding for a stronger reason than argued:**
+  `MatrixCellLike` carries only `directive_id` + `status` — **no brand identity at
+  all** — so `buildMatrixRows` cannot scope to a brand subset even in principle.
+  Honest caveat Karen added: at runtime the objects passed are `CellRow` and *do*
+  carry `brand_id` (structural typing), so this is a type-level barrier a future
+  dev could dismantle by widening the interface, not a physical impossibility.
+  The signature + the §3.1 test are the right level of protection.
+- Sort tie-break also mutation-verified. Exactly one Outstanding computation
+  remains on the page. §13 r34 / r23 satisfied. No React anti-patterns (the diff
+  adds only `useState`/`useMemo` — no new effect, no ref). The `aria-live` count
+  is the recommended pattern for a result count and coalesces correctly.
+
+### FOLDED
+
+- **MEDIUM-1 — the default `Open` filter made the new search box a false-negative
+  machine.** The natural admin flow is now "search a title to see if it exists →
+  nothing → create it". If the directive exists but is **resolved**, search
+  returned nothing. That lands on a hazard this repo has already been bitten by:
+  `POST /api/admin/directives` performs **no duplicate-title check** and migration
+  024 puts **no unique constraint** on `(project_key, title)`, so a duplicate title
+  makes a title→id resolver silently pick the wrong directive — the exact shape
+  §16 records as a folded finding on the Convert-reconciliation batch. **Fix:** new
+  pure `countHiddenByStatus()`; when a search matches directives the status filter
+  excluded, the UI now says so and offers "Show all statuses" (which **keeps** the
+  search). Both shapes covered — the rows-listed case gets a hint line, the
+  zero-rows empty state states the count instead of an unqualified "no match". The
+  durable fix is a duplicate check in the route; that is a mutation-surface change
+  and stays out of this batch's profile.
+- **MEDIUM-2 — a directive created while a filter was active did not appear, and
+  the toast said it succeeded.** `onCreated` reset nothing, so creating with search
+  text in the box (the *same* flow as MEDIUM-1) produced `✅ Directive created —
+  16 brand cells` and no visible row; the only counter-signal was a gray count
+  ticking `50 of 69` → `50 of 70`. The natural reading is "it failed, try again" —
+  which closes MEDIUM-1's duplicate loop. **Fix:** `onCreated` clears the search
+  and resets the status filter to `open`; a new directive fans out to `todo`/`n_a`
+  so it is always `active` and always visible there.
+- **LOW-1 — `Status:` prefix** on the collapsed status trigger; a bare "Open" was
+  ambiguous next to the "Needs action" open-findings panel.
+- **LOW-4 — `localeCompare(b, 'en')`.** Collation of the bracket-prefixed titles
+  (`[GTM]`, `[Upsell]`, `[Rev]`) is the most locale-variable part of the ICU table;
+  pinning the locale makes ordering — and the test that asserts it — host-independent.
+
+### ACCEPTED AS-IS (not defects)
+
+- **LOW-2** — when filters coincidentally match everything, the count renders the
+  bare "N directives" form and doesn't advertise that filters are active. Cosmetic;
+  the controls themselves still show their state.
+- **LOW-3 (the judgment call flagged for scrutiny)** — looking the open editor up
+  in `visibleBrands` means hiding paused columns closes an editor opened on one,
+  discarding an unsaved note, and un-hiding makes it reappear. Karen verified there
+  is **no lock-up** (the stale `expandedCell` is inert and clicking another dot
+  re-targets cleanly) and endorsed keeping it: the alternative renders an editor for
+  a column that isn't on screen, which is worse. The discard is the same class as
+  the collapse-on-failure discard §16 already accepted on the brand-page batch, and
+  here it is *user-initiated*, so more predictable. Karen also corrected the framing:
+  this is not a §6 deviation — §6 covers the **directive** axis, this is the **brand**
+  axis, which §6 never addressed.
+- **LOW-5** — saving the last owed cell `done` under `Open` ejects the row
+  immediately. Correct, and matches the `/dashboard/logs` needs-review worklist
+  precedent ("the edit IS the review decision"). On the click list so it isn't
+  mistaken for a bug.
+
+**Gates re-run after the fold (not inherited):** `tsc --noEmit` exit 0 · ESLint
+zero findings on all three files · **87/87 tests** (67 pre-existing + 20 in this
+batch) · `npm run build` exit 0 with `/dashboard/pulse` still `○`, the brand page
+`ƒ`, and no new route entries. Guard + tie-break mutations re-verified as caught
+after the fold.

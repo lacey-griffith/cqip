@@ -159,7 +159,11 @@ export function compareMatrixRows<D extends MatrixDirectiveLike>(
     const byOutstanding = b.outstanding - a.outstanding; // high → low
     if (byOutstanding !== 0) return byOutstanding;
   }
-  return a.directive.title.localeCompare(b.directive.title);
+  // Explicit 'en' locale: collation of the bracket-prefixed titles ([GTM],
+  // [Upsell], [Rev]) is the most locale-variable part of the ICU table, and
+  // leaving it to the host default would make the ordering (and the test that
+  // pins it) depend on where the code runs.
+  return a.directive.title.localeCompare(b.directive.title, 'en');
 }
 
 export interface MatrixControls {
@@ -179,17 +183,24 @@ export interface MatrixControls {
 // -------------------------------------------------------------------------
 const NO_CELLS: ReadonlyArray<MatrixCellLike> = [];
 
-export function buildMatrixRows<D extends MatrixDirectiveLike>(
-  directives: ReadonlyArray<D>,
+function groupCellsByDirective(
   cells: ReadonlyArray<MatrixCellLike>,
-  controls: MatrixControls,
-): MatrixRow<D>[] {
+): Map<string, MatrixCellLike[]> {
   const byDirective = new Map<string, MatrixCellLike[]>();
   for (const cell of cells) {
     const list = byDirective.get(cell.directive_id);
     if (list) list.push(cell);
     else byDirective.set(cell.directive_id, [cell]);
   }
+  return byDirective;
+}
+
+export function buildMatrixRows<D extends MatrixDirectiveLike>(
+  directives: ReadonlyArray<D>,
+  cells: ReadonlyArray<MatrixCellLike>,
+  controls: MatrixControls,
+): MatrixRow<D>[] {
+  const byDirective = groupCellsByDirective(cells);
 
   const rows: MatrixRow<D>[] = [];
   for (const directive of directives) {
@@ -202,4 +213,34 @@ export function buildMatrixRows<D extends MatrixDirectiveLike>(
 
   rows.sort((a, b) => compareMatrixRows(a, b, controls.sortKey));
   return rows;
+}
+
+// How many directives match the SEARCH but were excluded by the STATUS filter.
+//
+// Why this exists (Karen MEDIUM-1): the default `open` filter hides resolved
+// directives, which turns the new search box into a false-negative machine for
+// the most natural admin flow — "search for a title to see if it exists → find
+// nothing → create it". That is dangerous here specifically because
+// `POST /api/admin/directives` performs NO duplicate-title check and migration
+// 024 puts NO unique constraint on (project_key, title), so a duplicate title
+// silently makes a title→id resolver pick the wrong directive (the exact shape
+// §16 records as a folded finding on the Convert-reconciliation batch).
+//
+// Surfacing this count lets the UI say "N match under other statuses" instead
+// of an unqualified "nothing found". Fixing the route would be the durable
+// answer, but that is a mutation-surface change and out of this batch's profile.
+export function countHiddenByStatus<D extends MatrixDirectiveLike>(
+  directives: ReadonlyArray<D>,
+  cells: ReadonlyArray<MatrixCellLike>,
+  controls: MatrixControls,
+): number {
+  if (controls.statusFilter === 'all') return 0;
+  const byDirective = groupCellsByDirective(cells);
+  let hidden = 0;
+  for (const directive of directives) {
+    if (!matchesSearch(directive.title, controls.search)) continue;
+    const { resolveState } = summarizeDirectiveCells(byDirective.get(directive.id) ?? NO_CELLS);
+    if (!matchesStatusFilter(resolveState, controls.statusFilter)) hidden += 1;
+  }
+  return hidden;
 }

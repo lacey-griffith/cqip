@@ -5,6 +5,7 @@ import {
   buildMatrixRows,
   classifyDirectiveCells,
   compareMatrixRows,
+  countHiddenByStatus,
   DIRECTIVE_RESOLVE_STATES,
   matchesSearch,
   matchesStatusFilter,
@@ -270,6 +271,58 @@ test('buildMatrixRows: no match → empty array (the "no directives match" state
 test('buildMatrixRows on empty inputs returns []', () => {
   assert.deepEqual(buildMatrixRows([], [], controls()), []);
   assert.deepEqual(buildMatrixRows([], CELLS, controls()), []);
+});
+
+// -------------------------------------------------------------------------
+// Karen MEDIUM-1 — countHiddenByStatus. Guards the "searched, found nothing,
+// created a duplicate" false negative: the route has no duplicate-title check
+// and (project_key, title) has no unique constraint, so a silent miss is
+// expensive.
+// -------------------------------------------------------------------------
+test('countHiddenByStatus: counts search matches the status filter excluded', () => {
+  // "submits" matches d1 (active), d4 (unstarted), d5 (resolved). Under the
+  // default `open` filter only d5 is hidden → 1.
+  assert.equal(countHiddenByStatus(DIRECTIVES, CELLS, controls({ search: 'submits' })), 1);
+
+  // The load-bearing case: a search that shows ZERO rows while a resolved
+  // directive matches. Without this signal the admin concludes it doesn't exist.
+  assert.equal(buildMatrixRows(DIRECTIVES, CELLS, controls({ search: 'Quote' })).length, 0);
+  assert.equal(countHiddenByStatus(DIRECTIVES, CELLS, controls({ search: 'Quote' })), 1);
+
+  // Under `resolved`, the active/unstarted matches are the hidden ones.
+  assert.equal(
+    countHiddenByStatus(DIRECTIVES, CELLS, controls({ search: 'submits', statusFilter: 'resolved' })),
+    2, // d1 active + d4 unstarted
+  );
+});
+
+test('countHiddenByStatus: 0 under "all", and 0 when nothing matches the search', () => {
+  // `all` hides nothing by status, by definition.
+  assert.equal(countHiddenByStatus(DIRECTIVES, CELLS, controls({ statusFilter: 'all' })), 0);
+  assert.equal(
+    countHiddenByStatus(DIRECTIVES, CELLS, controls({ search: 'submits', statusFilter: 'all' })),
+    0,
+  );
+  // A search matching nothing has nothing to hide — the hint must not fire.
+  assert.equal(countHiddenByStatus(DIRECTIVES, CELLS, controls({ search: 'zzzz' })), 0);
+  // No search: the 2 resolved directives are hidden by the default filter.
+  assert.equal(countHiddenByStatus(DIRECTIVES, CELLS, controls()), 2);
+});
+
+test('countHiddenByStatus + buildMatrixRows partition the search matches', () => {
+  // Invariant: shown + hidden === total search matches, for every filter.
+  const search = 'submit'; // singular → matches d1, d2, d4, d5
+  const totalMatches = buildMatrixRows(
+    DIRECTIVES,
+    CELLS,
+    controls({ search, statusFilter: 'all' }),
+  ).length;
+  assert.equal(totalMatches, 4);
+  for (const statusFilter of MATRIX_STATUS_FILTERS) {
+    const shown = buildMatrixRows(DIRECTIVES, CELLS, controls({ search, statusFilter })).length;
+    const hidden = countHiddenByStatus(DIRECTIVES, CELLS, controls({ search, statusFilter }));
+    assert.equal(shown + hidden, totalMatches, `partition broken for ${statusFilter}`);
+  }
 });
 
 // -------------------------------------------------------------------------
