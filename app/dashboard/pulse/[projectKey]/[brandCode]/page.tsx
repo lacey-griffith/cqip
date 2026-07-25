@@ -117,12 +117,22 @@ export default function PulseBrandPage({
   //
   // The effect-vs-render write leaves a tiny window — new brand committed, effect
   // not yet run — where this still holds the OLD key, so a stale reconcile would
-  // pass the guard. That window is harmless: `ready` gates on
-  // loadedFor === currentKey, so nothing renders but "Loading…" throughout it,
-  // and the new brand's load() calls setCells again with the correct rows right
-  // after. The damaging case Karen described needs the stale write to land AFTER
-  // the new brand finished loading, and by then this ref is definitively the new
-  // key — it is set before that load's first await could possibly resolve.
+  // pass the guard and setCells(previous brand). Two independent things make that
+  // unobservable, and BOTH are load-bearing:
+  //   1. Window interior: `ready` gates on loadedFor === currentKey, and `!ready`
+  //      is the FIRST render branch, so only "Loading…" paints throughout.
+  //   2. Window exit — this depends on the render branch ORDER
+  //      (!ready → notFound → loadError → rows). The new brand's load() either
+  //      hits its success tail, which calls setCells + setLoadedFor in one
+  //      synchronous continuation (auto-batched, so nothing paints with
+  //      ready === true beside stale cells), or takes an error exit, which sets
+  //      loadedFor without touching cells and short-circuits into
+  //      notFound/loadError, never reaching the rows render.
+  // So DO NOT hoist the rows render above notFound/loadError: that would expose
+  // stale cells on the error paths, and no test covers it (Karen, re-confirm pass).
+  // The damaging case Karen originally described needs the stale write to land
+  // AFTER the new brand finished loading, and by then this ref is definitively the
+  // new key — it is set before that load's first await could possibly resolve.
   const liveKeyRef = useRef(currentKey);
 
   // Return-context ride-along (Karen E1 observation B): broadcast this brand's
