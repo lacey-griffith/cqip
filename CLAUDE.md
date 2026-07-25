@@ -3008,7 +3008,69 @@ not what these five directives were showing.
 
 **Spec:** the DC handoff ticket (2026-07-21). **Gates:** tsc clean, build
 green, existing tests pass + a new `tests/directive-cell-save.test.ts`, ESLint
-zero new findings. Two commits (docs-then-code). DO NOT PUSH — Report → Karen.
+zero new findings. Two commits (docs-then-code). DO NOT PUSH.
+
+**Karen post-flight (2026-07-25) — PASS-WITH-FINDINGS. No HIGH; 2 MEDIUM, 3
+LOW. NOT yet folded.** Run fresh on `c58364c` because no recorded verdict for
+that commit existed anywhere — no commit references it, its own message never
+mentions Karen, this entry had no verdict, §16 had no entry, and the only
+candidate spec (`docs/batch-012-pulse-inline-edit-spec.md`) is scoped to the
+earlier MATRIX batch and never mentions `brandCode`. A believed-existing
+earlier review could not be substantiated, so it was not assumed (§13 r32 /
+R21 — re-verify, don't inherit).
+
+Gates re-measured independently: `tsc` exit 0 · 67/67 tests (7/7
+directive-cell-save) · ESLint zero on all 5 files · build green with **no new
+route entries** · `git diff c58364c HEAD` empty for all 5 files.
+
+Every locked decision above was verified MET in code, not merely claimed: the
+matrix's 99-line local `CellEditStrip` and inline `handleCellSave` PATCH body
+are deleted and replaced by imports (exactly two consumers each, no residual
+duplication); the non-admin path renders a plain `<span>`, not a disabled
+button, so no interactive control leaks, with the route's admin gate AND the
+`directive_brand_status_admin_write` RLS policy both still enforcing;
+`editable = isAdmin && !!cell` mirrors the matrix's `clickable` (disabled-state
+NOT loosened); `editingId` reset holds. Noted as safe: the matrix's optimistic
+key moved from `c.id` to the `(directive_id, brand_id)` pair — sound, migration
+024 declares that pair UNIQUE and the route resolves by it.
+
+- **MEDIUM-1 (real defect, this batch) — stale `reconcile` can blank the NEW
+  brand after navigation.** `refetchCells` closes over `brand`/`directives`
+  with no staleness guard, and is invoked from a save callback so the load
+  effect's `cancelled` flag does not cover it. Admin on brand A saves → PATCH
+  fails → they click brand B → B finishes loading → A's in-flight `reconcile`
+  lands and `setCells(A)`; `brandDirectiveView` filters `c.brand_id ===
+  brand.id`, matches nothing, and **every directive on B renders hollow `n_a`
+  and non-interactive** — indistinguishable from "no cells exist", recoverable
+  only by reload. Narrow (failed save + fast nav) but it manufactures exactly
+  the misleading all-hollow state the retraction above just corrected. Fix ≈3
+  lines (compare `brand.id` / the `projectKey/brandCode` key before
+  `setCells`). The matrix carries the same shape (captured key, no cancel
+  guard) so the pattern is inherited, but the consequence is sharper here.
+- **MEDIUM-2 (pre-existing E1 defect, in a file this commit rewrote) —
+  `load()`'s cell-error branch omits `setLoadedFor(key)`,** so `ready` stays
+  false forever: the page shows `Loading…` indefinitely and the `loadError`
+  card is **unreachable**. Verified present in `c58364c^` → NOT a regression.
+  But the comment block this commit preserved and extended asserts
+  "Set in every terminal branch of `load()`", which is now a false claim in a
+  touched file, and that same table is what the new reconcile path re-queries.
+  Fix = one line.
+- **LOW-1 (as-scoped)** client admin gate selects only `role`, omitting
+  `is_active`; a deactivated admin with a live session sees the affordance and
+  gets a 403 toast. Cosmetic — server + RLS both check it, and it matches the
+  matrix's gate.
+- **LOW-2 (as-scoped, now a second surface)** a failed save silently discards
+  the typed edit — `applyOptimistic` collapses the strip before the PATCH
+  resolves and `reconcile` doesn't reopen it. §16 already flagged this
+  collapse-on-failure UX for Lacey's click-through on the matrix batch.
+- **LOW-3 (click-through, not a defect)** the brand-page trigger is a text
+  button styled like the read-only span — hover color only, no persistent
+  affordance; the matrix dot at least reads as interactive.
+
+Karen's recommendation: nothing ship-blocking, but fold MEDIUM-1 + MEDIUM-2
+before pushing rather than carry them (MEDIUM-2 also repairs the now-false
+comment). **Decision pending with Lacey** — fold-then-push vs. push as-is.
+On ship this entry moves to §16 per §13 r34, carrying this verdict.
 
 ---
 
