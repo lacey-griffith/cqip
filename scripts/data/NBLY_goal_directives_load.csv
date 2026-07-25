@@ -1,0 +1,1041 @@
+directive_title,directive_type,brand_code,status
+[Rev] Time Spent on Site (15s),goal,MRA,Done
+[Rev] Time Spent on Site (15s),goal,ASV,Done
+[Rev] Time Spent on Site (15s),goal,MDG,Done
+[Rev] Time Spent on Site (15s),goal,PDS,Done
+[Rev] Time Spent on Site (15s),goal,RBW,Done
+[Rev] Time Spent on Site (15s),goal,MLY,To do
+[Rev] Time Spent on Site (15s),goal,FSP,Done
+[Rev] Time Spent on Site (15s),goal,GUY,To do
+[Rev] Time Spent on Site (15s),goal,JUK,To do
+[Rev] Time Spent on Site (15s),goal,MOJ,To do
+[Rev] Time Spent on Site (15s),goal,MRH,To do
+[Rev] Time Spent on Site (15s),goal,MRR,To do
+[Rev] Time Spent on Site (15s),goal,MRR-CA,N/A
+[Rev] Time Spent on Site (15s),goal,MRE,To do
+[Rev] Time Spent on Site (15s),goal,SHG,N/A
+[Rev] Time Spent on Site (15s),goal,WDG,N/A
+[Rev] Time Spent On Step 0: Zipcode (MRA),goal,MRA,Done
+[Rev] Time Spent On Step 0: Zipcode (MRA),goal,ASV,N/A
+[Rev] Time Spent On Step 0: Zipcode (MRA),goal,MDG,N/A
+[Rev] Time Spent On Step 0: Zipcode (MRA),goal,PDS,N/A
+[Rev] Time Spent On Step 0: Zipcode (MRA),goal,RBW,N/A
+[Rev] Time Spent On Step 0: Zipcode (MRA),goal,MLY,N/A
+[Rev] Time Spent On Step 0: Zipcode (MRA),goal,FSP,N/A
+[Rev] Time Spent On Step 0: Zipcode (MRA),goal,GUY,N/A
+[Rev] Time Spent On Step 0: Zipcode (MRA),goal,JUK,N/A
+[Rev] Time Spent On Step 0: Zipcode (MRA),goal,MOJ,N/A
+[Rev] Time Spent On Step 0: Zipcode (MRA),goal,MRH,N/A
+[Rev] Time Spent On Step 0: Zipcode (MRA),goal,MRR,N/A
+[Rev] Time Spent On Step 0: Zipcode (MRA),goal,MRR-CA,N/A
+[Rev] Time Spent On Step 0: Zipcode (MRA),goal,MRE,N/A
+[Rev] Time Spent On Step 0: Zipcode (MRA),goal,SHG,N/A
+[Rev] Time Spent On Step 0: Zipcode (MRA),goal,WDG,N/A
+[Rev] Time Spent On Step 1: Contact Info,goal,MRA,Done
+[Rev] Time Spent On Step 1: Contact Info,goal,ASV,Done
+[Rev] Time Spent On Step 1: Contact Info,goal,MDG,Done
+[Rev] Time Spent On Step 1: Contact Info,goal,PDS,Done
+[Rev] Time Spent On Step 1: Contact Info,goal,RBW,Done
+[Rev] Time Spent On Step 1: Contact Info,goal,MLY,To do
+[Rev] Time Spent On Step 1: Contact Info,goal,FSP,Done
+[Rev] Time Spent On Step 1: Contact Info,goal,GUY,To do
+[Rev] Time Spent On Step 1: Contact Info,goal,JUK,To do
+[Rev] Time Spent On Step 1: Contact Info,goal,MOJ,To do
+[Rev] Time Spent On Step 1: Contact Info,goal,MRH,To do
+[Rev] Time Spent On Step 1: Contact Info,goal,MRR,To do
+[Rev] Time Spent On Step 1: Contact Info,goal,MRR-CA,N/A
+[Rev] Time Spent On Step 1: Contact Info,goal,MRE,To do
+[Rev] Time Spent On Step 1: Contact Info,goal,SHG,N/A
+[Rev] Time Spent On Step 1: Contact Info,goal,WDG,N/A
+[Rev] Time Spent On Step 2: Service Details,goal,MRA,Done
+[Rev] Time Spent On Step 2: Service Details,goal,ASV,Done
+[Rev] Time Spent On Step 2: Service Details,goal,MDG,Done
+[Rev] Time Spent On Step 2: Service Details,goal,PDS,Done
+[Rev] Time Spent On Step 2: Service Details,goal,RBW,Done
+[Rev] Time Spent On Step 2: Service Details,goal,MLY,To do
+[Rev] Time Spent On Step 2: Service Details,goal,FSP,Done
+[Rev] Time Spent On Step 2: Service Details,goal,GUY,To do
+[Rev] Time Spent On Step 2: Service Details,goal,JUK,To do
+[Rev] Time Spent On Step 2: Service Details,goal,MOJ,To do
+[Rev] Time Spent On Step 2: Service Details,goal,MRH,To do
+[Rev] Time Spent On Step 2: Service Details,goal,MRR,To do
+[Rev] Time Spent On Step 2: Service Details,goal,MRR-CA,N/A
+[Rev] Time Spent On Step 2: Service Details,goal,MRE,To do
+[Rev] Time Spent On Step 2: Service Details,goal,SHG,N/A
+[Rev] Time Spent On Step 2: Service Details,goal,WDG,N/A
+[Rev] Time Spent On Step 3: Calendar,goal,MRA,Done
+[Rev] Time Spent On Step 3: Calendar,goal,ASV,Done
+[Rev] Time Spent On Step 3: Calendar,goal,MDG,Done
+[Rev] Time Spent On Step 3: Calendar,goal,PDS,Done
+[Rev] Time Spent On Step 3: Calendar,goal,RBW,Done
+[Rev] Time Spent On Step 3: Calendar,goal,MLY,To do
+[Rev] Time Spent On Step 3: Calendar,goal,FSP,Done
+[Rev] Time Spent On Step 3: Calendar,goal,GUY,To do
+[Rev] Time Spent On Step 3: Calendar,goal,JUK,To do
+[Rev] Time Spent On Step 3: Calendar,goal,MOJ,To do
+[Rev] Time Spent On Step 3: Calendar,goal,MRH,To do
+[Rev] Time Spent On Step 3: Calendar,goal,MRR,To do
+[Rev] Time Spent On Step 3: Calendar,goal,MRR-CA,N/A
+[Rev] Time Spent On Step 3: Calendar,goal,MRE,To do
+[Rev] Time Spent On Step 3: Calendar,goal,SHG,N/A
+[Rev] Time Spent On Step 3: Calendar,goal,WDG,N/A
+[Rev] Time Spent on Financing (15s),goal,MRA,N/A
+[Rev] Time Spent on Financing (15s),goal,ASV,Done
+[Rev] Time Spent on Financing (15s),goal,MDG,To do
+[Rev] Time Spent on Financing (15s),goal,PDS,To do
+[Rev] Time Spent on Financing (15s),goal,RBW,To do
+[Rev] Time Spent on Financing (15s),goal,MLY,To do
+[Rev] Time Spent on Financing (15s),goal,FSP,To do
+[Rev] Time Spent on Financing (15s),goal,GUY,To do
+[Rev] Time Spent on Financing (15s),goal,JUK,To do
+[Rev] Time Spent on Financing (15s),goal,MOJ,To do
+[Rev] Time Spent on Financing (15s),goal,MRH,To do
+[Rev] Time Spent on Financing (15s),goal,MRR,To do
+[Rev] Time Spent on Financing (15s),goal,MRR-CA,N/A
+[Rev] Time Spent on Financing (15s),goal,MRE,To do
+[Rev] Time Spent on Financing (15s),goal,SHG,N/A
+[Rev] Time Spent on Financing (15s),goal,WDG,N/A
+[Rev] Total Page Views,goal,MRA,Done
+[Rev] Total Page Views,goal,ASV,To do
+[Rev] Total Page Views,goal,MDG,To do
+[Rev] Total Page Views,goal,PDS,To do
+[Rev] Total Page Views,goal,RBW,To do
+[Rev] Total Page Views,goal,MLY,To do
+[Rev] Total Page Views,goal,FSP,To do
+[Rev] Total Page Views,goal,GUY,To do
+[Rev] Total Page Views,goal,JUK,To do
+[Rev] Total Page Views,goal,MOJ,To do
+[Rev] Total Page Views,goal,MRH,To do
+[Rev] Total Page Views,goal,MRR,To do
+[Rev] Total Page Views,goal,MRR-CA,N/A
+[Rev] Total Page Views,goal,MRE,To do
+[Rev] Total Page Views,goal,SHG,N/A
+[Rev] Total Page Views,goal,WDG,N/A
+Call Clicks,goal,MRA,Done
+Call Clicks,goal,ASV,Done
+Call Clicks,goal,MDG,Done
+Call Clicks,goal,PDS,Done
+Call Clicks,goal,RBW,Done
+Call Clicks,goal,MLY,To do
+Call Clicks,goal,FSP,Done
+Call Clicks,goal,GUY,To do
+Call Clicks,goal,JUK,To do
+Call Clicks,goal,MOJ,To do
+Call Clicks,goal,MRH,To do
+Call Clicks,goal,MRR,To do
+Call Clicks,goal,MRR-CA,N/A
+Call Clicks,goal,MRE,To do
+Call Clicks,goal,SHG,N/A
+Call Clicks,goal,WDG,N/A
+Call Clicks from Navigation,goal,MRA,Done
+Call Clicks from Navigation,goal,ASV,To do
+Call Clicks from Navigation,goal,MDG,Done
+Call Clicks from Navigation,goal,PDS,To do
+Call Clicks from Navigation,goal,RBW,Done
+Call Clicks from Navigation,goal,MLY,To do
+Call Clicks from Navigation,goal,FSP,Done
+Call Clicks from Navigation,goal,GUY,To do
+Call Clicks from Navigation,goal,JUK,To do
+Call Clicks from Navigation,goal,MOJ,To do
+Call Clicks from Navigation,goal,MRH,To do
+Call Clicks from Navigation,goal,MRR,To do
+Call Clicks from Navigation,goal,MRR-CA,N/A
+Call Clicks from Navigation,goal,MRE,To do
+Call Clicks from Navigation,goal,SHG,N/A
+Call Clicks from Navigation,goal,WDG,N/A
+Clicks Any Scheduler CTA,goal,MRA,Done
+Clicks Any Scheduler CTA,goal,ASV,Done
+Clicks Any Scheduler CTA,goal,MDG,Done
+Clicks Any Scheduler CTA,goal,PDS,Done
+Clicks Any Scheduler CTA,goal,RBW,Done
+Clicks Any Scheduler CTA,goal,MLY,To do
+Clicks Any Scheduler CTA,goal,FSP,Done
+Clicks Any Scheduler CTA,goal,GUY,To do
+Clicks Any Scheduler CTA,goal,JUK,To do
+Clicks Any Scheduler CTA,goal,MOJ,To do
+Clicks Any Scheduler CTA,goal,MRH,To do
+Clicks Any Scheduler CTA,goal,MRR,To do
+Clicks Any Scheduler CTA,goal,MRR-CA,N/A
+Clicks Any Scheduler CTA,goal,MRE,To do
+Clicks Any Scheduler CTA,goal,SHG,N/A
+Clicks Any Scheduler CTA,goal,WDG,N/A
+Clicks Hero Scheduler CTA,goal,MRA,Done
+Clicks Hero Scheduler CTA,goal,ASV,To do
+Clicks Hero Scheduler CTA,goal,MDG,To do
+Clicks Hero Scheduler CTA,goal,PDS,To do
+Clicks Hero Scheduler CTA,goal,RBW,To do
+Clicks Hero Scheduler CTA,goal,MLY,To do
+Clicks Hero Scheduler CTA,goal,FSP,Done
+Clicks Hero Scheduler CTA,goal,GUY,To do
+Clicks Hero Scheduler CTA,goal,JUK,To do
+Clicks Hero Scheduler CTA,goal,MOJ,To do
+Clicks Hero Scheduler CTA,goal,MRH,To do
+Clicks Hero Scheduler CTA,goal,MRR,To do
+Clicks Hero Scheduler CTA,goal,MRR-CA,N/A
+Clicks Hero Scheduler CTA,goal,MRE,To do
+Clicks Hero Scheduler CTA,goal,SHG,N/A
+Clicks Hero Scheduler CTA,goal,WDG,N/A
+Clicks Footer SF Submit CTA,goal,MRA,To do
+Clicks Footer SF Submit CTA,goal,ASV,To do
+Clicks Footer SF Submit CTA,goal,MDG,Done
+Clicks Footer SF Submit CTA,goal,PDS,To do
+Clicks Footer SF Submit CTA,goal,RBW,To do
+Clicks Footer SF Submit CTA,goal,MLY,To do
+Clicks Footer SF Submit CTA,goal,FSP,To do
+Clicks Footer SF Submit CTA,goal,GUY,To do
+Clicks Footer SF Submit CTA,goal,JUK,To do
+Clicks Footer SF Submit CTA,goal,MOJ,To do
+Clicks Footer SF Submit CTA,goal,MRH,To do
+Clicks Footer SF Submit CTA,goal,MRR,To do
+Clicks Footer SF Submit CTA,goal,MRR-CA,N/A
+Clicks Footer SF Submit CTA,goal,MRE,To do
+Clicks Footer SF Submit CTA,goal,SHG,N/A
+Clicks Footer SF Submit CTA,goal,WDG,N/A
+Clicks Hero SF Submit CTA,goal,MRA,To do
+Clicks Hero SF Submit CTA,goal,ASV,To do
+Clicks Hero SF Submit CTA,goal,MDG,Done
+Clicks Hero SF Submit CTA,goal,PDS,To do
+Clicks Hero SF Submit CTA,goal,RBW,To do
+Clicks Hero SF Submit CTA,goal,MLY,To do
+Clicks Hero SF Submit CTA,goal,FSP,To do
+Clicks Hero SF Submit CTA,goal,GUY,To do
+Clicks Hero SF Submit CTA,goal,JUK,To do
+Clicks Hero SF Submit CTA,goal,MOJ,To do
+Clicks Hero SF Submit CTA,goal,MRH,To do
+Clicks Hero SF Submit CTA,goal,MRR,To do
+Clicks Hero SF Submit CTA,goal,MRR-CA,N/A
+Clicks Hero SF Submit CTA,goal,MRE,To do
+Clicks Hero SF Submit CTA,goal,SHG,N/A
+Clicks Hero SF Submit CTA,goal,WDG,N/A
+Clicks Learn More on Tiles,goal,MRA,Done
+Clicks Learn More on Tiles,goal,ASV,Done
+Clicks Learn More on Tiles,goal,MDG,Done
+Clicks Learn More on Tiles,goal,PDS,Done
+Clicks Learn More on Tiles,goal,RBW,Done
+Clicks Learn More on Tiles,goal,MLY,To do
+Clicks Learn More on Tiles,goal,FSP,Done
+Clicks Learn More on Tiles,goal,GUY,To do
+Clicks Learn More on Tiles,goal,JUK,To do
+Clicks Learn More on Tiles,goal,MOJ,To do
+Clicks Learn More on Tiles,goal,MRH,To do
+Clicks Learn More on Tiles,goal,MRR,To do
+Clicks Learn More on Tiles,goal,MRR-CA,N/A
+Clicks Learn More on Tiles,goal,MRE,To do
+Clicks Learn More on Tiles,goal,SHG,N/A
+Clicks Learn More on Tiles,goal,WDG,N/A
+Clicks Link in Navigation,goal,MRA,Done
+Clicks Link in Navigation,goal,ASV,To do
+Clicks Link in Navigation,goal,MDG,Done
+Clicks Link in Navigation,goal,PDS,To do
+Clicks Link in Navigation,goal,RBW,Done
+Clicks Link in Navigation,goal,MLY,To do
+Clicks Link in Navigation,goal,FSP,Done
+Clicks Link in Navigation,goal,GUY,To do
+Clicks Link in Navigation,goal,JUK,To do
+Clicks Link in Navigation,goal,MOJ,To do
+Clicks Link in Navigation,goal,MRH,To do
+Clicks Link in Navigation,goal,MRR,To do
+Clicks Link in Navigation,goal,MRR-CA,N/A
+Clicks Link in Navigation,goal,MRE,To do
+Clicks Link in Navigation,goal,SHG,N/A
+Clicks Link in Navigation,goal,WDG,N/A
+Clicks Nav Scheduler CTA,goal,MRA,Done
+Clicks Nav Scheduler CTA,goal,ASV,Done
+Clicks Nav Scheduler CTA,goal,MDG,Done
+Clicks Nav Scheduler CTA,goal,PDS,Done
+Clicks Nav Scheduler CTA,goal,RBW,Done
+Clicks Nav Scheduler CTA,goal,MLY,To do
+Clicks Nav Scheduler CTA,goal,FSP,Done
+Clicks Nav Scheduler CTA,goal,GUY,To do
+Clicks Nav Scheduler CTA,goal,JUK,To do
+Clicks Nav Scheduler CTA,goal,MOJ,To do
+Clicks Nav Scheduler CTA,goal,MRH,To do
+Clicks Nav Scheduler CTA,goal,MRR,To do
+Clicks Nav Scheduler CTA,goal,MRR-CA,N/A
+Clicks Nav Scheduler CTA,goal,MRE,To do
+Clicks Nav Scheduler CTA,goal,SHG,N/A
+Clicks Nav Scheduler CTA,goal,WDG,N/A
+Clicks Offer Section Scheduler CTA,goal,MRA,Done
+Clicks Offer Section Scheduler CTA,goal,ASV,Done
+Clicks Offer Section Scheduler CTA,goal,MDG,Done
+Clicks Offer Section Scheduler CTA,goal,PDS,Done
+Clicks Offer Section Scheduler CTA,goal,RBW,To do
+Clicks Offer Section Scheduler CTA,goal,MLY,To do
+Clicks Offer Section Scheduler CTA,goal,FSP,Done
+Clicks Offer Section Scheduler CTA,goal,GUY,To do
+Clicks Offer Section Scheduler CTA,goal,JUK,To do
+Clicks Offer Section Scheduler CTA,goal,MOJ,To do
+Clicks Offer Section Scheduler CTA,goal,MRH,To do
+Clicks Offer Section Scheduler CTA,goal,MRR,To do
+Clicks Offer Section Scheduler CTA,goal,MRR-CA,N/A
+Clicks Offer Section Scheduler CTA,goal,MRE,To do
+Clicks Offer Section Scheduler CTA,goal,SHG,N/A
+Clicks Offer Section Scheduler CTA,goal,WDG,N/A
+Clicks Print Offer,goal,MRA,To do
+Clicks Print Offer,goal,ASV,To do
+Clicks Print Offer,goal,MDG,To do
+Clicks Print Offer,goal,PDS,Done
+Clicks Print Offer,goal,RBW,To do
+Clicks Print Offer,goal,MLY,To do
+Clicks Print Offer,goal,FSP,To do
+Clicks Print Offer,goal,GUY,To do
+Clicks Print Offer,goal,JUK,To do
+Clicks Print Offer,goal,MOJ,To do
+Clicks Print Offer,goal,MRH,To do
+Clicks Print Offer,goal,MRR,To do
+Clicks Print Offer,goal,MRR-CA,N/A
+Clicks Print Offer,goal,MRE,To do
+Clicks Print Offer,goal,SHG,N/A
+Clicks Print Offer,goal,WDG,N/A
+Clicks Claim Offer CTA,goal,MRA,Done
+Clicks Claim Offer CTA,goal,ASV,To do
+Clicks Claim Offer CTA,goal,MDG,To do
+Clicks Claim Offer CTA,goal,PDS,To do
+Clicks Claim Offer CTA,goal,RBW,Done
+Clicks Claim Offer CTA,goal,MLY,To do
+Clicks Claim Offer CTA,goal,FSP,To do
+Clicks Claim Offer CTA,goal,GUY,To do
+Clicks Claim Offer CTA,goal,JUK,To do
+Clicks Claim Offer CTA,goal,MOJ,To do
+Clicks Claim Offer CTA,goal,MRH,To do
+Clicks Claim Offer CTA,goal,MRR,To do
+Clicks Claim Offer CTA,goal,MRR-CA,N/A
+Clicks Claim Offer CTA,goal,MRE,To do
+Clicks Claim Offer CTA,goal,SHG,N/A
+Clicks Claim Offer CTA,goal,WDG,N/A
+Clicks Hero Reviews,goal,MRA,Done
+Clicks Hero Reviews,goal,ASV,Done
+Clicks Hero Reviews,goal,MDG,Done
+Clicks Hero Reviews,goal,PDS,Done
+Clicks Hero Reviews,goal,RBW,To do
+Clicks Hero Reviews,goal,MLY,To do
+Clicks Hero Reviews,goal,FSP,To do
+Clicks Hero Reviews,goal,GUY,To do
+Clicks Hero Reviews,goal,JUK,To do
+Clicks Hero Reviews,goal,MOJ,To do
+Clicks Hero Reviews,goal,MRH,To do
+Clicks Hero Reviews,goal,MRR,To do
+Clicks Hero Reviews,goal,MRR-CA,N/A
+Clicks Hero Reviews,goal,MRE,To do
+Clicks Hero Reviews,goal,SHG,N/A
+Clicks Hero Reviews,goal,WDG,N/A
+Clicks Testimonial CTA,goal,MRA,Done
+Clicks Testimonial CTA,goal,ASV,Done
+Clicks Testimonial CTA,goal,MDG,Done
+Clicks Testimonial CTA,goal,PDS,Done
+Clicks Testimonial CTA,goal,RBW,Done
+Clicks Testimonial CTA,goal,MLY,To do
+Clicks Testimonial CTA,goal,FSP,Done
+Clicks Testimonial CTA,goal,GUY,To do
+Clicks Testimonial CTA,goal,JUK,To do
+Clicks Testimonial CTA,goal,MOJ,To do
+Clicks Testimonial CTA,goal,MRH,To do
+Clicks Testimonial CTA,goal,MRR,To do
+Clicks Testimonial CTA,goal,MRR-CA,N/A
+Clicks Testimonial CTA,goal,MRE,To do
+Clicks Testimonial CTA,goal,SHG,N/A
+Clicks Testimonial CTA,goal,WDG,N/A
+Clicks Testimonial Scheduler CTA,goal,MRA,Done
+Clicks Testimonial Scheduler CTA,goal,ASV,Done
+Clicks Testimonial Scheduler CTA,goal,MDG,Done
+Clicks Testimonial Scheduler CTA,goal,PDS,Done
+Clicks Testimonial Scheduler CTA,goal,RBW,To do
+Clicks Testimonial Scheduler CTA,goal,MLY,To do
+Clicks Testimonial Scheduler CTA,goal,FSP,Done
+Clicks Testimonial Scheduler CTA,goal,GUY,To do
+Clicks Testimonial Scheduler CTA,goal,JUK,To do
+Clicks Testimonial Scheduler CTA,goal,MOJ,To do
+Clicks Testimonial Scheduler CTA,goal,MRH,To do
+Clicks Testimonial Scheduler CTA,goal,MRR,To do
+Clicks Testimonial Scheduler CTA,goal,MRR-CA,N/A
+Clicks Testimonial Scheduler CTA,goal,MRE,To do
+Clicks Testimonial Scheduler CTA,goal,SHG,N/A
+Clicks Testimonial Scheduler CTA,goal,WDG,N/A
+Clicks Warranty CTA,goal,MRA,Done
+Clicks Warranty CTA,goal,ASV,Done
+Clicks Warranty CTA,goal,MDG,To do
+Clicks Warranty CTA,goal,PDS,Done
+Clicks Warranty CTA,goal,RBW,To do
+Clicks Warranty CTA,goal,MLY,To do
+Clicks Warranty CTA,goal,FSP,To do
+Clicks Warranty CTA,goal,GUY,To do
+Clicks Warranty CTA,goal,JUK,To do
+Clicks Warranty CTA,goal,MOJ,To do
+Clicks Warranty CTA,goal,MRH,To do
+Clicks Warranty CTA,goal,MRR,To do
+Clicks Warranty CTA,goal,MRR-CA,N/A
+Clicks Warranty CTA,goal,MRE,To do
+Clicks Warranty CTA,goal,SHG,N/A
+Clicks Warranty CTA,goal,WDG,N/A
+Clicks View Special Offers CTA,goal,MRA,Done
+Clicks View Special Offers CTA,goal,ASV,To do
+Clicks View Special Offers CTA,goal,MDG,To do
+Clicks View Special Offers CTA,goal,PDS,To do
+Clicks View Special Offers CTA,goal,RBW,Done
+Clicks View Special Offers CTA,goal,MLY,To do
+Clicks View Special Offers CTA,goal,FSP,To do
+Clicks View Special Offers CTA,goal,GUY,To do
+Clicks View Special Offers CTA,goal,JUK,To do
+Clicks View Special Offers CTA,goal,MOJ,To do
+Clicks View Special Offers CTA,goal,MRH,To do
+Clicks View Special Offers CTA,goal,MRR,To do
+Clicks View Special Offers CTA,goal,MRR-CA,N/A
+Clicks View Special Offers CTA,goal,MRE,To do
+Clicks View Special Offers CTA,goal,SHG,N/A
+Clicks View Special Offers CTA,goal,WDG,N/A
+FLF: Views Step 0 | Zip Code,goal,MRA,Done
+FLF: Views Step 0 | Zip Code,goal,ASV,N/A
+FLF: Views Step 0 | Zip Code,goal,MDG,N/A
+FLF: Views Step 0 | Zip Code,goal,PDS,N/A
+FLF: Views Step 0 | Zip Code,goal,RBW,N/A
+FLF: Views Step 0 | Zip Code,goal,MLY,N/A
+FLF: Views Step 0 | Zip Code,goal,FSP,N/A
+FLF: Views Step 0 | Zip Code,goal,GUY,N/A
+FLF: Views Step 0 | Zip Code,goal,JUK,N/A
+FLF: Views Step 0 | Zip Code,goal,MOJ,N/A
+FLF: Views Step 0 | Zip Code,goal,MRH,N/A
+FLF: Views Step 0 | Zip Code,goal,MRR,N/A
+FLF: Views Step 0 | Zip Code,goal,MRR-CA,N/A
+FLF: Views Step 0 | Zip Code,goal,MRE,N/A
+FLF: Views Step 0 | Zip Code,goal,SHG,N/A
+FLF: Views Step 0 | Zip Code,goal,WDG,N/A
+FLF: Views Step #1 | Contact Info,goal,MRA,Done
+FLF: Views Step #1 | Contact Info,goal,ASV,Done
+FLF: Views Step #1 | Contact Info,goal,MDG,Done
+FLF: Views Step #1 | Contact Info,goal,PDS,Done
+FLF: Views Step #1 | Contact Info,goal,RBW,Done
+FLF: Views Step #1 | Contact Info,goal,MLY,To do
+FLF: Views Step #1 | Contact Info,goal,FSP,Done
+FLF: Views Step #1 | Contact Info,goal,GUY,To do
+FLF: Views Step #1 | Contact Info,goal,JUK,To do
+FLF: Views Step #1 | Contact Info,goal,MOJ,To do
+FLF: Views Step #1 | Contact Info,goal,MRH,To do
+FLF: Views Step #1 | Contact Info,goal,MRR,To do
+FLF: Views Step #1 | Contact Info,goal,MRR-CA,N/A
+FLF: Views Step #1 | Contact Info,goal,MRE,To do
+FLF: Views Step #1 | Contact Info,goal,SHG,N/A
+FLF: Views Step #1 | Contact Info,goal,WDG,N/A
+FLF: Views Step #2 | Service Details,goal,MRA,Done
+FLF: Views Step #2 | Service Details,goal,ASV,Done
+FLF: Views Step #2 | Service Details,goal,MDG,Done
+FLF: Views Step #2 | Service Details,goal,PDS,Done
+FLF: Views Step #2 | Service Details,goal,RBW,Done
+FLF: Views Step #2 | Service Details,goal,MLY,To do
+FLF: Views Step #2 | Service Details,goal,FSP,Done
+FLF: Views Step #2 | Service Details,goal,GUY,To do
+FLF: Views Step #2 | Service Details,goal,JUK,To do
+FLF: Views Step #2 | Service Details,goal,MOJ,To do
+FLF: Views Step #2 | Service Details,goal,MRH,To do
+FLF: Views Step #2 | Service Details,goal,MRR,To do
+FLF: Views Step #2 | Service Details,goal,MRR-CA,N/A
+FLF: Views Step #2 | Service Details,goal,MRE,To do
+FLF: Views Step #2 | Service Details,goal,SHG,N/A
+FLF: Views Step #2 | Service Details,goal,WDG,N/A
+FLF: Views Step #3 | Calendar,goal,MRA,Done
+FLF: Views Step #3 | Calendar,goal,ASV,Done
+FLF: Views Step #3 | Calendar,goal,MDG,Done
+FLF: Views Step #3 | Calendar,goal,PDS,Done
+FLF: Views Step #3 | Calendar,goal,RBW,Done
+FLF: Views Step #3 | Calendar,goal,MLY,To do
+FLF: Views Step #3 | Calendar,goal,FSP,Done
+FLF: Views Step #3 | Calendar,goal,GUY,To do
+FLF: Views Step #3 | Calendar,goal,JUK,To do
+FLF: Views Step #3 | Calendar,goal,MOJ,To do
+FLF: Views Step #3 | Calendar,goal,MRH,To do
+FLF: Views Step #3 | Calendar,goal,MRR,To do
+FLF: Views Step #3 | Calendar,goal,MRR-CA,N/A
+FLF: Views Step #3 | Calendar,goal,MRE,To do
+FLF: Views Step #3 | Calendar,goal,SHG,N/A
+FLF: Views Step #3 | Calendar,goal,WDG,N/A
+Scrolled 100% - Natl. Homepage,goal,MRA,Done
+Scrolled 100% - Natl. Homepage,goal,ASV,Done
+Scrolled 100% - Natl. Homepage,goal,MDG,Done
+Scrolled 100% - Natl. Homepage,goal,PDS,Done
+Scrolled 100% - Natl. Homepage,goal,RBW,Done
+Scrolled 100% - Natl. Homepage,goal,MLY,To do
+Scrolled 100% - Natl. Homepage,goal,FSP,Done
+Scrolled 100% - Natl. Homepage,goal,GUY,To do
+Scrolled 100% - Natl. Homepage,goal,JUK,To do
+Scrolled 100% - Natl. Homepage,goal,MOJ,To do
+Scrolled 100% - Natl. Homepage,goal,MRH,To do
+Scrolled 100% - Natl. Homepage,goal,MRR,To do
+Scrolled 100% - Natl. Homepage,goal,MRR-CA,N/A
+Scrolled 100% - Natl. Homepage,goal,MRE,To do
+Scrolled 100% - Natl. Homepage,goal,SHG,N/A
+Scrolled 100% - Natl. Homepage,goal,WDG,N/A
+Scrolled 75% - Natl. Homepage,goal,MRA,Done
+Scrolled 75% - Natl. Homepage,goal,ASV,Done
+Scrolled 75% - Natl. Homepage,goal,MDG,Done
+Scrolled 75% - Natl. Homepage,goal,PDS,Done
+Scrolled 75% - Natl. Homepage,goal,RBW,Done
+Scrolled 75% - Natl. Homepage,goal,MLY,To do
+Scrolled 75% - Natl. Homepage,goal,FSP,Done
+Scrolled 75% - Natl. Homepage,goal,GUY,To do
+Scrolled 75% - Natl. Homepage,goal,JUK,To do
+Scrolled 75% - Natl. Homepage,goal,MOJ,To do
+Scrolled 75% - Natl. Homepage,goal,MRH,To do
+Scrolled 75% - Natl. Homepage,goal,MRR,To do
+Scrolled 75% - Natl. Homepage,goal,MRR-CA,N/A
+Scrolled 75% - Natl. Homepage,goal,MRE,To do
+Scrolled 75% - Natl. Homepage,goal,SHG,N/A
+Scrolled 75% - Natl. Homepage,goal,WDG,N/A
+Scrolled 50% - Natl. Homepage,goal,MRA,Done
+Scrolled 50% - Natl. Homepage,goal,ASV,Done
+Scrolled 50% - Natl. Homepage,goal,MDG,Done
+Scrolled 50% - Natl. Homepage,goal,PDS,Done
+Scrolled 50% - Natl. Homepage,goal,RBW,Done
+Scrolled 50% - Natl. Homepage,goal,MLY,To do
+Scrolled 50% - Natl. Homepage,goal,FSP,Done
+Scrolled 50% - Natl. Homepage,goal,GUY,To do
+Scrolled 50% - Natl. Homepage,goal,JUK,To do
+Scrolled 50% - Natl. Homepage,goal,MOJ,To do
+Scrolled 50% - Natl. Homepage,goal,MRH,To do
+Scrolled 50% - Natl. Homepage,goal,MRR,To do
+Scrolled 50% - Natl. Homepage,goal,MRR-CA,N/A
+Scrolled 50% - Natl. Homepage,goal,MRE,To do
+Scrolled 50% - Natl. Homepage,goal,SHG,N/A
+Scrolled 50% - Natl. Homepage,goal,WDG,N/A
+Scrolled 25% - Natl. Homepage,goal,MRA,Done
+Scrolled 25% - Natl. Homepage,goal,ASV,Done
+Scrolled 25% - Natl. Homepage,goal,MDG,Done
+Scrolled 25% - Natl. Homepage,goal,PDS,Done
+Scrolled 25% - Natl. Homepage,goal,RBW,Done
+Scrolled 25% - Natl. Homepage,goal,MLY,To do
+Scrolled 25% - Natl. Homepage,goal,FSP,Done
+Scrolled 25% - Natl. Homepage,goal,GUY,To do
+Scrolled 25% - Natl. Homepage,goal,JUK,To do
+Scrolled 25% - Natl. Homepage,goal,MOJ,To do
+Scrolled 25% - Natl. Homepage,goal,MRH,To do
+Scrolled 25% - Natl. Homepage,goal,MRR,To do
+Scrolled 25% - Natl. Homepage,goal,MRR-CA,N/A
+Scrolled 25% - Natl. Homepage,goal,MRE,To do
+Scrolled 25% - Natl. Homepage,goal,SHG,N/A
+Scrolled 25% - Natl. Homepage,goal,WDG,N/A
+Scrolled 100% - Local Homepage,goal,MRA,Done
+Scrolled 100% - Local Homepage,goal,ASV,Done
+Scrolled 100% - Local Homepage,goal,MDG,Done
+Scrolled 100% - Local Homepage,goal,PDS,Done
+Scrolled 100% - Local Homepage,goal,RBW,Done
+Scrolled 100% - Local Homepage,goal,MLY,To do
+Scrolled 100% - Local Homepage,goal,FSP,Done
+Scrolled 100% - Local Homepage,goal,GUY,To do
+Scrolled 100% - Local Homepage,goal,JUK,To do
+Scrolled 100% - Local Homepage,goal,MOJ,To do
+Scrolled 100% - Local Homepage,goal,MRH,To do
+Scrolled 100% - Local Homepage,goal,MRR,To do
+Scrolled 100% - Local Homepage,goal,MRR-CA,N/A
+Scrolled 100% - Local Homepage,goal,MRE,To do
+Scrolled 100% - Local Homepage,goal,SHG,N/A
+Scrolled 100% - Local Homepage,goal,WDG,N/A
+Scrolled 75% - Local Homepage,goal,MRA,Done
+Scrolled 75% - Local Homepage,goal,ASV,Done
+Scrolled 75% - Local Homepage,goal,MDG,Done
+Scrolled 75% - Local Homepage,goal,PDS,Done
+Scrolled 75% - Local Homepage,goal,RBW,Done
+Scrolled 75% - Local Homepage,goal,MLY,To do
+Scrolled 75% - Local Homepage,goal,FSP,Done
+Scrolled 75% - Local Homepage,goal,GUY,To do
+Scrolled 75% - Local Homepage,goal,JUK,To do
+Scrolled 75% - Local Homepage,goal,MOJ,To do
+Scrolled 75% - Local Homepage,goal,MRH,To do
+Scrolled 75% - Local Homepage,goal,MRR,To do
+Scrolled 75% - Local Homepage,goal,MRR-CA,N/A
+Scrolled 75% - Local Homepage,goal,MRE,To do
+Scrolled 75% - Local Homepage,goal,SHG,N/A
+Scrolled 75% - Local Homepage,goal,WDG,N/A
+Scrolled 50% - Local Homepage,goal,MRA,Done
+Scrolled 50% - Local Homepage,goal,ASV,Done
+Scrolled 50% - Local Homepage,goal,MDG,Done
+Scrolled 50% - Local Homepage,goal,PDS,Done
+Scrolled 50% - Local Homepage,goal,RBW,Done
+Scrolled 50% - Local Homepage,goal,MLY,To do
+Scrolled 50% - Local Homepage,goal,FSP,Done
+Scrolled 50% - Local Homepage,goal,GUY,To do
+Scrolled 50% - Local Homepage,goal,JUK,To do
+Scrolled 50% - Local Homepage,goal,MOJ,To do
+Scrolled 50% - Local Homepage,goal,MRH,To do
+Scrolled 50% - Local Homepage,goal,MRR,To do
+Scrolled 50% - Local Homepage,goal,MRR-CA,N/A
+Scrolled 50% - Local Homepage,goal,MRE,To do
+Scrolled 50% - Local Homepage,goal,SHG,N/A
+Scrolled 50% - Local Homepage,goal,WDG,N/A
+Scrolled 25% - Local Homepage,goal,MRA,Done
+Scrolled 25% - Local Homepage,goal,ASV,Done
+Scrolled 25% - Local Homepage,goal,MDG,Done
+Scrolled 25% - Local Homepage,goal,PDS,Done
+Scrolled 25% - Local Homepage,goal,RBW,Done
+Scrolled 25% - Local Homepage,goal,MLY,To do
+Scrolled 25% - Local Homepage,goal,FSP,Done
+Scrolled 25% - Local Homepage,goal,GUY,To do
+Scrolled 25% - Local Homepage,goal,JUK,To do
+Scrolled 25% - Local Homepage,goal,MOJ,To do
+Scrolled 25% - Local Homepage,goal,MRH,To do
+Scrolled 25% - Local Homepage,goal,MRR,To do
+Scrolled 25% - Local Homepage,goal,MRR-CA,N/A
+Scrolled 25% - Local Homepage,goal,MRE,To do
+Scrolled 25% - Local Homepage,goal,SHG,N/A
+Scrolled 25% - Local Homepage,goal,WDG,N/A
+Step 0 | Zipcode | Validation Error Exposure (MRA),goal,MRA,Done
+Step 0 | Zipcode | Validation Error Exposure (MRA),goal,ASV,N/A
+Step 0 | Zipcode | Validation Error Exposure (MRA),goal,MDG,N/A
+Step 0 | Zipcode | Validation Error Exposure (MRA),goal,PDS,N/A
+Step 0 | Zipcode | Validation Error Exposure (MRA),goal,RBW,N/A
+Step 0 | Zipcode | Validation Error Exposure (MRA),goal,MLY,N/A
+Step 0 | Zipcode | Validation Error Exposure (MRA),goal,FSP,N/A
+Step 0 | Zipcode | Validation Error Exposure (MRA),goal,GUY,N/A
+Step 0 | Zipcode | Validation Error Exposure (MRA),goal,JUK,N/A
+Step 0 | Zipcode | Validation Error Exposure (MRA),goal,MOJ,N/A
+Step 0 | Zipcode | Validation Error Exposure (MRA),goal,MRH,N/A
+Step 0 | Zipcode | Validation Error Exposure (MRA),goal,MRR,N/A
+Step 0 | Zipcode | Validation Error Exposure (MRA),goal,MRR-CA,N/A
+Step 0 | Zipcode | Validation Error Exposure (MRA),goal,MRE,N/A
+Step 0 | Zipcode | Validation Error Exposure (MRA),goal,SHG,N/A
+Step 0 | Zipcode | Validation Error Exposure (MRA),goal,WDG,N/A
+Step 1 | Contact Info | Validation Error Exposure,goal,MRA,Done
+Step 1 | Contact Info | Validation Error Exposure,goal,ASV,Done
+Step 1 | Contact Info | Validation Error Exposure,goal,MDG,Done
+Step 1 | Contact Info | Validation Error Exposure,goal,PDS,Done
+Step 1 | Contact Info | Validation Error Exposure,goal,RBW,Done
+Step 1 | Contact Info | Validation Error Exposure,goal,MLY,To do
+Step 1 | Contact Info | Validation Error Exposure,goal,FSP,Done
+Step 1 | Contact Info | Validation Error Exposure,goal,GUY,To do
+Step 1 | Contact Info | Validation Error Exposure,goal,JUK,To do
+Step 1 | Contact Info | Validation Error Exposure,goal,MOJ,To do
+Step 1 | Contact Info | Validation Error Exposure,goal,MRH,To do
+Step 1 | Contact Info | Validation Error Exposure,goal,MRR,To do
+Step 1 | Contact Info | Validation Error Exposure,goal,MRR-CA,N/A
+Step 1 | Contact Info | Validation Error Exposure,goal,MRE,To do
+Step 1 | Contact Info | Validation Error Exposure,goal,SHG,N/A
+Step 1 | Contact Info | Validation Error Exposure,goal,WDG,N/A
+Step 2 | Service Details | Validation Error Exposure,goal,MRA,Done
+Step 2 | Service Details | Validation Error Exposure,goal,ASV,Done
+Step 2 | Service Details | Validation Error Exposure,goal,MDG,Done
+Step 2 | Service Details | Validation Error Exposure,goal,PDS,Done
+Step 2 | Service Details | Validation Error Exposure,goal,RBW,Done
+Step 2 | Service Details | Validation Error Exposure,goal,MLY,To do
+Step 2 | Service Details | Validation Error Exposure,goal,FSP,Done
+Step 2 | Service Details | Validation Error Exposure,goal,GUY,To do
+Step 2 | Service Details | Validation Error Exposure,goal,JUK,To do
+Step 2 | Service Details | Validation Error Exposure,goal,MOJ,To do
+Step 2 | Service Details | Validation Error Exposure,goal,MRH,To do
+Step 2 | Service Details | Validation Error Exposure,goal,MRR,To do
+Step 2 | Service Details | Validation Error Exposure,goal,MRR-CA,N/A
+Step 2 | Service Details | Validation Error Exposure,goal,MRE,To do
+Step 2 | Service Details | Validation Error Exposure,goal,SHG,N/A
+Step 2 | Service Details | Validation Error Exposure,goal,WDG,N/A
+Step 3 | Calendar | Validation Error Exposure,goal,MRA,Done
+Step 3 | Calendar | Validation Error Exposure,goal,ASV,Done
+Step 3 | Calendar | Validation Error Exposure,goal,MDG,Done
+Step 3 | Calendar | Validation Error Exposure,goal,PDS,Done
+Step 3 | Calendar | Validation Error Exposure,goal,RBW,Done
+Step 3 | Calendar | Validation Error Exposure,goal,MLY,To do
+Step 3 | Calendar | Validation Error Exposure,goal,FSP,Done
+Step 3 | Calendar | Validation Error Exposure,goal,GUY,To do
+Step 3 | Calendar | Validation Error Exposure,goal,JUK,To do
+Step 3 | Calendar | Validation Error Exposure,goal,MOJ,To do
+Step 3 | Calendar | Validation Error Exposure,goal,MRH,To do
+Step 3 | Calendar | Validation Error Exposure,goal,MRR,To do
+Step 3 | Calendar | Validation Error Exposure,goal,MRR-CA,N/A
+Step 3 | Calendar | Validation Error Exposure,goal,MRE,To do
+Step 3 | Calendar | Validation Error Exposure,goal,SHG,N/A
+Step 3 | Calendar | Validation Error Exposure,goal,WDG,N/A
+Submits Form Lead - Combined,goal,MRA,Done
+Submits Form Lead - Combined,goal,ASV,Done
+Submits Form Lead - Combined,goal,MDG,Done
+Submits Form Lead - Combined,goal,PDS,Done
+Submits Form Lead - Combined,goal,RBW,Done
+Submits Form Lead - Combined,goal,MLY,To do
+Submits Form Lead - Combined,goal,FSP,Done
+Submits Form Lead - Combined,goal,GUY,To do
+Submits Form Lead - Combined,goal,JUK,To do
+Submits Form Lead - Combined,goal,MOJ,To do
+Submits Form Lead - Combined,goal,MRH,To do
+Submits Form Lead - Combined,goal,MRR,To do
+Submits Form Lead - Combined,goal,MRR-CA,N/A
+Submits Form Lead - Combined,goal,MRE,To do
+Submits Form Lead - Combined,goal,SHG,N/A
+Submits Form Lead - Combined,goal,WDG,N/A
+Submits LF Lead + Contact Us,goal,MRA,Done
+Submits LF Lead + Contact Us,goal,ASV,Done
+Submits LF Lead + Contact Us,goal,MDG,Done
+Submits LF Lead + Contact Us,goal,PDS,Done
+Submits LF Lead + Contact Us,goal,RBW,Done
+Submits LF Lead + Contact Us,goal,MLY,To do
+Submits LF Lead + Contact Us,goal,FSP,Done
+Submits LF Lead + Contact Us,goal,GUY,To do
+Submits LF Lead + Contact Us,goal,JUK,To do
+Submits LF Lead + Contact Us,goal,MOJ,To do
+Submits LF Lead + Contact Us,goal,MRH,To do
+Submits LF Lead + Contact Us,goal,MRR,To do
+Submits LF Lead + Contact Us,goal,MRR-CA,N/A
+Submits LF Lead + Contact Us,goal,MRE,To do
+Submits LF Lead + Contact Us,goal,SHG,N/A
+Submits LF Lead + Contact Us,goal,WDG,N/A
+Submits SF into S&C - All,goal,MRA,Done
+Submits SF into S&C - All,goal,ASV,Done
+Submits SF into S&C - All,goal,MDG,Done
+Submits SF into S&C - All,goal,PDS,Done
+Submits SF into S&C - All,goal,RBW,Done
+Submits SF into S&C - All,goal,MLY,To do
+Submits SF into S&C - All,goal,FSP,Done
+Submits SF into S&C - All,goal,GUY,To do
+Submits SF into S&C - All,goal,JUK,To do
+Submits SF into S&C - All,goal,MOJ,To do
+Submits SF into S&C - All,goal,MRH,To do
+Submits SF into S&C - All,goal,MRR,To do
+Submits SF into S&C - All,goal,MRR-CA,N/A
+Submits SF into S&C - All,goal,MRE,To do
+Submits SF into S&C - All,goal,SHG,N/A
+Submits SF into S&C - All,goal,WDG,N/A
+Submits SF into S&C - Footer,goal,MRA,Done
+Submits SF into S&C - Footer,goal,ASV,Done
+Submits SF into S&C - Footer,goal,MDG,Done
+Submits SF into S&C - Footer,goal,PDS,Done
+Submits SF into S&C - Footer,goal,RBW,Done
+Submits SF into S&C - Footer,goal,MLY,To do
+Submits SF into S&C - Footer,goal,FSP,Done
+Submits SF into S&C - Footer,goal,GUY,To do
+Submits SF into S&C - Footer,goal,JUK,To do
+Submits SF into S&C - Footer,goal,MOJ,To do
+Submits SF into S&C - Footer,goal,MRH,To do
+Submits SF into S&C - Footer,goal,MRR,To do
+Submits SF into S&C - Footer,goal,MRR-CA,N/A
+Submits SF into S&C - Footer,goal,MRE,To do
+Submits SF into S&C - Footer,goal,SHG,N/A
+Submits SF into S&C - Footer,goal,WDG,N/A
+Submits SF into S&C - Hero,goal,MRA,Done
+Submits SF into S&C - Hero,goal,ASV,Done
+Submits SF into S&C - Hero,goal,MDG,Done
+Submits SF into S&C - Hero,goal,PDS,Done
+Submits SF into S&C - Hero,goal,RBW,Done
+Submits SF into S&C - Hero,goal,MLY,To do
+Submits SF into S&C - Hero,goal,FSP,Done
+Submits SF into S&C - Hero,goal,GUY,To do
+Submits SF into S&C - Hero,goal,JUK,To do
+Submits SF into S&C - Hero,goal,MOJ,To do
+Submits SF into S&C - Hero,goal,MRH,To do
+Submits SF into S&C - Hero,goal,MRR,To do
+Submits SF into S&C - Hero,goal,MRR-CA,N/A
+Submits SF into S&C - Hero,goal,MRE,To do
+Submits SF into S&C - Hero,goal,SHG,N/A
+Submits SF into S&C - Hero,goal,WDG,N/A
+Submits SF Lead - All,goal,MRA,Done
+Submits SF Lead - All,goal,ASV,Done
+Submits SF Lead - All,goal,MDG,Done
+Submits SF Lead - All,goal,PDS,Done
+Submits SF Lead - All,goal,RBW,Done
+Submits SF Lead - All,goal,MLY,To do
+Submits SF Lead - All,goal,FSP,Done
+Submits SF Lead - All,goal,GUY,To do
+Submits SF Lead - All,goal,JUK,To do
+Submits SF Lead - All,goal,MOJ,To do
+Submits SF Lead - All,goal,MRH,To do
+Submits SF Lead - All,goal,MRR,To do
+Submits SF Lead - All,goal,MRR-CA,N/A
+Submits SF Lead - All,goal,MRE,To do
+Submits SF Lead - All,goal,SHG,N/A
+Submits SF Lead - All,goal,WDG,N/A
+Submits SF Lead - Footer,goal,MRA,Done
+Submits SF Lead - Footer,goal,ASV,Done
+Submits SF Lead - Footer,goal,MDG,Done
+Submits SF Lead - Footer,goal,PDS,Done
+Submits SF Lead - Footer,goal,RBW,Done
+Submits SF Lead - Footer,goal,MLY,To do
+Submits SF Lead - Footer,goal,FSP,Done
+Submits SF Lead - Footer,goal,GUY,To do
+Submits SF Lead - Footer,goal,JUK,To do
+Submits SF Lead - Footer,goal,MOJ,To do
+Submits SF Lead - Footer,goal,MRH,To do
+Submits SF Lead - Footer,goal,MRR,To do
+Submits SF Lead - Footer,goal,MRR-CA,N/A
+Submits SF Lead - Footer,goal,MRE,To do
+Submits SF Lead - Footer,goal,SHG,N/A
+Submits SF Lead - Footer,goal,WDG,N/A
+Submits SF Lead - Hero,goal,MRA,Done
+Submits SF Lead - Hero,goal,ASV,Done
+Submits SF Lead - Hero,goal,MDG,Done
+Submits SF Lead - Hero,goal,PDS,Done
+Submits SF Lead - Hero,goal,RBW,Done
+Submits SF Lead - Hero,goal,MLY,To do
+Submits SF Lead - Hero,goal,FSP,Done
+Submits SF Lead - Hero,goal,GUY,To do
+Submits SF Lead - Hero,goal,JUK,To do
+Submits SF Lead - Hero,goal,MOJ,To do
+Submits SF Lead - Hero,goal,MRH,To do
+Submits SF Lead - Hero,goal,MRR,To do
+Submits SF Lead - Hero,goal,MRR-CA,N/A
+Submits SF Lead - Hero,goal,MRE,To do
+Submits SF Lead - Hero,goal,SHG,N/A
+Submits SF Lead - Hero,goal,WDG,N/A
+[Upsell] Clicks Submit CTA,goal,MRA,Done
+[Upsell] Clicks Submit CTA,goal,ASV,Done
+[Upsell] Clicks Submit CTA,goal,MDG,Done
+[Upsell] Clicks Submit CTA,goal,PDS,Done
+[Upsell] Clicks Submit CTA,goal,RBW,Done
+[Upsell] Clicks Submit CTA,goal,MLY,To do
+[Upsell] Clicks Submit CTA,goal,FSP,Done
+[Upsell] Clicks Submit CTA,goal,GUY,To do
+[Upsell] Clicks Submit CTA,goal,JUK,To do
+[Upsell] Clicks Submit CTA,goal,MOJ,To do
+[Upsell] Clicks Submit CTA,goal,MRH,To do
+[Upsell] Clicks Submit CTA,goal,MRR,To do
+[Upsell] Clicks Submit CTA,goal,MRR-CA,N/A
+[Upsell] Clicks Submit CTA,goal,MRE,To do
+[Upsell] Clicks Submit CTA,goal,SHG,N/A
+[Upsell] Clicks Submit CTA,goal,WDG,N/A
+[Upsell] Presented (impressions),goal,MRA,Done
+[Upsell] Presented (impressions),goal,ASV,Done
+[Upsell] Presented (impressions),goal,MDG,To do
+[Upsell] Presented (impressions),goal,PDS,To do
+[Upsell] Presented (impressions),goal,RBW,To do
+[Upsell] Presented (impressions),goal,MLY,To do
+[Upsell] Presented (impressions),goal,FSP,To do
+[Upsell] Presented (impressions),goal,GUY,To do
+[Upsell] Presented (impressions),goal,JUK,To do
+[Upsell] Presented (impressions),goal,MOJ,To do
+[Upsell] Presented (impressions),goal,MRH,To do
+[Upsell] Presented (impressions),goal,MRR,To do
+[Upsell] Presented (impressions),goal,MRR-CA,N/A
+[Upsell] Presented (impressions),goal,MRE,To do
+[Upsell] Presented (impressions),goal,SHG,N/A
+[Upsell] Presented (impressions),goal,WDG,N/A
+[Upsell] Selects Any,goal,MRA,Done
+[Upsell] Selects Any,goal,ASV,Done
+[Upsell] Selects Any,goal,MDG,To do
+[Upsell] Selects Any,goal,PDS,To do
+[Upsell] Selects Any,goal,RBW,To do
+[Upsell] Selects Any,goal,MLY,To do
+[Upsell] Selects Any,goal,FSP,To do
+[Upsell] Selects Any,goal,GUY,To do
+[Upsell] Selects Any,goal,JUK,To do
+[Upsell] Selects Any,goal,MOJ,To do
+[Upsell] Selects Any,goal,MRH,To do
+[Upsell] Selects Any,goal,MRR,To do
+[Upsell] Selects Any,goal,MRR-CA,N/A
+[Upsell] Selects Any,goal,MRE,To do
+[Upsell] Selects Any,goal,SHG,N/A
+[Upsell] Selects Any,goal,WDG,N/A
+[Upsell] Selects Offer 1  (MRA),goal,MRA,Done
+[Upsell] Selects Offer 1  (MRA),goal,ASV,N/A
+[Upsell] Selects Offer 1  (MRA),goal,MDG,N/A
+[Upsell] Selects Offer 1  (MRA),goal,PDS,N/A
+[Upsell] Selects Offer 1  (MRA),goal,RBW,N/A
+[Upsell] Selects Offer 1  (MRA),goal,MLY,N/A
+[Upsell] Selects Offer 1  (MRA),goal,FSP,N/A
+[Upsell] Selects Offer 1  (MRA),goal,GUY,N/A
+[Upsell] Selects Offer 1  (MRA),goal,JUK,N/A
+[Upsell] Selects Offer 1  (MRA),goal,MOJ,N/A
+[Upsell] Selects Offer 1  (MRA),goal,MRH,N/A
+[Upsell] Selects Offer 1  (MRA),goal,MRR,N/A
+[Upsell] Selects Offer 1  (MRA),goal,MRR-CA,N/A
+[Upsell] Selects Offer 1  (MRA),goal,MRE,N/A
+[Upsell] Selects Offer 1  (MRA),goal,SHG,N/A
+[Upsell] Selects Offer 1  (MRA),goal,WDG,N/A
+[Upsell] Selects Advantage Plan (ASV),goal,MRA,N/A
+[Upsell] Selects Advantage Plan (ASV),goal,ASV,Done
+[Upsell] Selects Advantage Plan (ASV),goal,MDG,N/A
+[Upsell] Selects Advantage Plan (ASV),goal,PDS,N/A
+[Upsell] Selects Advantage Plan (ASV),goal,RBW,N/A
+[Upsell] Selects Advantage Plan (ASV),goal,MLY,N/A
+[Upsell] Selects Advantage Plan (ASV),goal,FSP,N/A
+[Upsell] Selects Advantage Plan (ASV),goal,GUY,N/A
+[Upsell] Selects Advantage Plan (ASV),goal,JUK,N/A
+[Upsell] Selects Advantage Plan (ASV),goal,MOJ,N/A
+[Upsell] Selects Advantage Plan (ASV),goal,MRH,N/A
+[Upsell] Selects Advantage Plan (ASV),goal,MRR,N/A
+[Upsell] Selects Advantage Plan (ASV),goal,MRR-CA,N/A
+[Upsell] Selects Advantage Plan (ASV),goal,MRE,N/A
+[Upsell] Selects Advantage Plan (ASV),goal,SHG,N/A
+[Upsell] Selects Advantage Plan (ASV),goal,WDG,N/A
+[Upsell] Selects MDG Cross Sell (ASV),goal,MRA,N/A
+[Upsell] Selects MDG Cross Sell (ASV),goal,ASV,Done
+[Upsell] Selects MDG Cross Sell (ASV),goal,MDG,N/A
+[Upsell] Selects MDG Cross Sell (ASV),goal,PDS,N/A
+[Upsell] Selects MDG Cross Sell (ASV),goal,RBW,N/A
+[Upsell] Selects MDG Cross Sell (ASV),goal,MLY,N/A
+[Upsell] Selects MDG Cross Sell (ASV),goal,FSP,N/A
+[Upsell] Selects MDG Cross Sell (ASV),goal,GUY,N/A
+[Upsell] Selects MDG Cross Sell (ASV),goal,JUK,N/A
+[Upsell] Selects MDG Cross Sell (ASV),goal,MOJ,N/A
+[Upsell] Selects MDG Cross Sell (ASV),goal,MRH,N/A
+[Upsell] Selects MDG Cross Sell (ASV),goal,MRR,N/A
+[Upsell] Selects MDG Cross Sell (ASV),goal,MRR-CA,N/A
+[Upsell] Selects MDG Cross Sell (ASV),goal,MRE,N/A
+[Upsell] Selects MDG Cross Sell (ASV),goal,SHG,N/A
+[Upsell] Selects MDG Cross Sell (ASV),goal,WDG,N/A
+Views Special Offers,goal,MRA,Done
+Views Special Offers,goal,ASV,Done
+Views Special Offers,goal,MDG,Done
+Views Special Offers,goal,PDS,To do
+Views Special Offers,goal,RBW,Done
+Views Special Offers,goal,MLY,To do
+Views Special Offers,goal,FSP,Done
+Views Special Offers,goal,GUY,To do
+Views Special Offers,goal,JUK,To do
+Views Special Offers,goal,MOJ,To do
+Views Special Offers,goal,MRH,To do
+Views Special Offers,goal,MRR,To do
+Views Special Offers,goal,MRR-CA,N/A
+Views Special Offers,goal,MRE,To do
+Views Special Offers,goal,SHG,N/A
+Views Special Offers,goal,WDG,N/A
+Views Financing,goal,MRA,N/A
+Views Financing,goal,ASV,Done
+Views Financing,goal,MDG,To do
+Views Financing,goal,PDS,To do
+Views Financing,goal,RBW,To do
+Views Financing,goal,MLY,To do
+Views Financing,goal,FSP,To do
+Views Financing,goal,GUY,To do
+Views Financing,goal,JUK,To do
+Views Financing,goal,MOJ,To do
+Views Financing,goal,MRH,To do
+Views Financing,goal,MRR,To do
+Views Financing,goal,MRR-CA,N/A
+Views Financing,goal,MRE,To do
+Views Financing,goal,SHG,N/A
+Views Financing,goal,WDG,N/A
+Views Service Pages,goal,MRA,Done
+Views Service Pages,goal,ASV,Done
+Views Service Pages,goal,MDG,Done
+Views Service Pages,goal,PDS,Done
+Views Service Pages,goal,RBW,Done
+Views Service Pages,goal,MLY,To do
+Views Service Pages,goal,FSP,Done
+Views Service Pages,goal,GUY,To do
+Views Service Pages,goal,JUK,To do
+Views Service Pages,goal,MOJ,To do
+Views Service Pages,goal,MRH,To do
+Views Service Pages,goal,MRR,To do
+Views Service Pages,goal,MRR-CA,N/A
+Views Service Pages,goal,MRE,To do
+Views Service Pages,goal,SHG,N/A
+Views Service Pages,goal,WDG,N/A
+Views Residential Service Pages,goal,MRA,Done
+Views Residential Service Pages,goal,ASV,To do
+Views Residential Service Pages,goal,MDG,To do
+Views Residential Service Pages,goal,PDS,To do
+Views Residential Service Pages,goal,RBW,To do
+Views Residential Service Pages,goal,MLY,To do
+Views Residential Service Pages,goal,FSP,To do
+Views Residential Service Pages,goal,GUY,To do
+Views Residential Service Pages,goal,JUK,To do
+Views Residential Service Pages,goal,MOJ,To do
+Views Residential Service Pages,goal,MRH,To do
+Views Residential Service Pages,goal,MRR,To do
+Views Residential Service Pages,goal,MRR-CA,N/A
+Views Residential Service Pages,goal,MRE,To do
+Views Residential Service Pages,goal,SHG,N/A
+Views Residential Service Pages,goal,WDG,N/A
+Views Commercial Service Pages,goal,MRA,Done
+Views Commercial Service Pages,goal,ASV,To do
+Views Commercial Service Pages,goal,MDG,To do
+Views Commercial Service Pages,goal,PDS,To do
+Views Commercial Service Pages,goal,RBW,To do
+Views Commercial Service Pages,goal,MLY,To do
+Views Commercial Service Pages,goal,FSP,To do
+Views Commercial Service Pages,goal,GUY,To do
+Views Commercial Service Pages,goal,JUK,To do
+Views Commercial Service Pages,goal,MOJ,To do
+Views Commercial Service Pages,goal,MRH,To do
+Views Commercial Service Pages,goal,MRR,To do
+Views Commercial Service Pages,goal,MRR-CA,N/A
+Views Commercial Service Pages,goal,MRE,To do
+Views Commercial Service Pages,goal,SHG,N/A
+Views Commercial Service Pages,goal,WDG,N/A
+Views Testimonials,goal,MRA,Done
+Views Testimonials,goal,ASV,Done
+Views Testimonials,goal,MDG,Done
+Views Testimonials,goal,PDS,Done
+Views Testimonials,goal,RBW,Done
+Views Testimonials,goal,MLY,To do
+Views Testimonials,goal,FSP,Done
+Views Testimonials,goal,GUY,To do
+Views Testimonials,goal,JUK,To do
+Views Testimonials,goal,MOJ,To do
+Views Testimonials,goal,MRH,To do
+Views Testimonials,goal,MRR,To do
+Views Testimonials,goal,MRR-CA,N/A
+Views Testimonials,goal,MRE,To do
+Views Testimonials,goal,SHG,N/A
+Views Testimonials,goal,WDG,N/A
+Localized User,goal,MRA,To do
+Localized User,goal,ASV,Done
+Localized User,goal,MDG,To do
+Localized User,goal,PDS,To do
+Localized User,goal,RBW,To do
+Localized User,goal,MLY,To do
+Localized User,goal,FSP,To do
+Localized User,goal,GUY,To do
+Localized User,goal,JUK,To do
+Localized User,goal,MOJ,To do
+Localized User,goal,MRH,To do
+Localized User,goal,MRR,To do
+Localized User,goal,MRR-CA,N/A
+Localized User,goal,MRE,To do
+Localized User,goal,SHG,N/A
+Localized User,goal,WDG,N/A
+Chat Appointment Made,goal,MRA,Done
+Chat Appointment Made,goal,ASV,To do
+Chat Appointment Made,goal,MDG,To do
+Chat Appointment Made,goal,PDS,To do
+Chat Appointment Made,goal,RBW,To do
+Chat Appointment Made,goal,MLY,To do
+Chat Appointment Made,goal,FSP,To do
+Chat Appointment Made,goal,GUY,To do
+Chat Appointment Made,goal,JUK,To do
+Chat Appointment Made,goal,MOJ,To do
+Chat Appointment Made,goal,MRH,To do
+Chat Appointment Made,goal,MRR,To do
+Chat Appointment Made,goal,MRR-CA,N/A
+Chat Appointment Made,goal,MRE,To do
+Chat Appointment Made,goal,SHG,N/A
+Chat Appointment Made,goal,WDG,N/A
+Chat Started,goal,MRA,Done
+Chat Started,goal,ASV,To do
+Chat Started,goal,MDG,To do
+Chat Started,goal,PDS,To do
+Chat Started,goal,RBW,To do
+Chat Started,goal,MLY,To do
+Chat Started,goal,FSP,To do
+Chat Started,goal,GUY,To do
+Chat Started,goal,JUK,To do
+Chat Started,goal,MOJ,To do
+Chat Started,goal,MRH,To do
+Chat Started,goal,MRR,To do
+Chat Started,goal,MRR-CA,N/A
+Chat Started,goal,MRE,To do
+Chat Started,goal,SHG,N/A
+Chat Started,goal,WDG,N/A
+Chat Lead Submitted,goal,MRA,Done
+Chat Lead Submitted,goal,ASV,To do
+Chat Lead Submitted,goal,MDG,To do
+Chat Lead Submitted,goal,PDS,To do
+Chat Lead Submitted,goal,RBW,To do
+Chat Lead Submitted,goal,MLY,To do
+Chat Lead Submitted,goal,FSP,To do
+Chat Lead Submitted,goal,GUY,To do
+Chat Lead Submitted,goal,JUK,To do
+Chat Lead Submitted,goal,MOJ,To do
+Chat Lead Submitted,goal,MRH,To do
+Chat Lead Submitted,goal,MRR,To do
+Chat Lead Submitted,goal,MRR-CA,N/A
+Chat Lead Submitted,goal,MRE,To do
+Chat Lead Submitted,goal,SHG,N/A
+Chat Lead Submitted,goal,WDG,N/A
+GTM Submits Lead Combined,goal,MRA,N/A
+GTM Submits Lead Combined,goal,ASV,N/A
+GTM Submits Lead Combined,goal,MDG,N/A
+GTM Submits Lead Combined,goal,PDS,N/A
+GTM Submits Lead Combined,goal,RBW,N/A
+GTM Submits Lead Combined,goal,MLY,N/A
+GTM Submits Lead Combined,goal,FSP,N/A
+GTM Submits Lead Combined,goal,GUY,N/A
+GTM Submits Lead Combined,goal,JUK,N/A
+GTM Submits Lead Combined,goal,MOJ,N/A
+GTM Submits Lead Combined,goal,MRH,N/A
+GTM Submits Lead Combined,goal,MRR,N/A
+GTM Submits Lead Combined,goal,MRR-CA,N/A
+GTM Submits Lead Combined,goal,MRE,N/A
+GTM Submits Lead Combined,goal,SHG,N/A
+GTM Submits Lead Combined,goal,WDG,N/A
