@@ -1,7 +1,8 @@
 # HANDOFF — Convert reconciliation backfill (Pulse / Batch 012)
 
 **For:** Lacey (review) → Claudette (build loader) → Karen → Lacey approve + run
-**Source:** `scripts/data/convert-reconciliation-backfill.csv` (215 rows) from the
+**Source:** `scripts/data/convert-reconciliation-backfill.csv` (**213 rows** as
+regenerated 2026-07-25; originally 215 — see addendum 6) from the
 Convert goal reconciliation pass, 2026-07-25 (all 13 active NBLY brands, manually
 cross-referenced against real Convert exports — not fuzzy-matched).
 **Status:** Loader BUILT (`scripts/backfill-convert-reconciliation.ts`, 2026-07-25),
@@ -9,7 +10,7 @@ dry-run verified against prod, Jenny gate-confirmed, Karen-reviewed. Backfill
 deliberately NOT run yet — Lacey approves + runs.
 
 > **Addenda applied 2026-07-25 at build time.** The sections below are the
-> as-written spec; these five points supersede them where they conflict:
+> as-written spec; these six points supersede them where they conflict:
 >
 > 1. **Input filename** is `scripts/data/convert-reconciliation-backfill.csv`
 >    (§2 named it `proposed_backfill.csv`). The reference-only siblings live in
@@ -19,7 +20,7 @@ deliberately NOT run yet — Lacey approves + runs.
 > 2. **Write path is the DIRECT service-role write, not the PATCH route** (§1
 >    left this open). The route requires a cookie-bound admin session and derives
 >    `changed_by` via `getChangedBy()`, so a script cannot use it without
->    attributing 215 rows to a human email instead of the §13 r20 system string.
+>    attributing every row to a human email instead of the §13 r20 system string.
 > 3. **`old_value` is read from the live DB, not from the CSV's `our_status`**
 >    (§2 said `our_status`). The inline cell editor has been live since
 >    2026-07-21, so a cell can have moved since the 07-25 pass; recording the
@@ -38,10 +39,31 @@ deliberately NOT run yet — Lacey approves + runs.
 >    one per row.
 > 5. **§5's verification arithmetic** ("215 cells updated" AND "`audit_log` == 215")
 >    contradicts §2's own idempotency guarantee. The correct invariant is
->    `changed + already_at_target == 215`, and `audit_log` rows == `changed`.
->    Against prod on 2026-07-25 that is **209 changed + 6 already correct = 215**
->    (the 6 are `[Rev] Time Spent on Site (15s)` ×5 and `[Rev] Time Spent on
->    Financing (15s)` ×1, already `Done` in prod).
+>    `changed + already_at_target == <CSV row count>`, and `audit_log` rows ==
+>    `changed`. Against prod on 2026-07-25, post-regeneration, that is
+>    **207 changed + 6 already correct = 213** (the 6 are `[Rev] Time Spent on
+>    Site (15s)` ×5 and `[Rev] Time Spent on Financing (15s)` ×1, already `Done`
+>    in prod). Do NOT read 207 as a shortfall against 213.
+> 6. **Two MLY rows REMOVED — CSV regenerated to 213 rows / 205 upgrades / 8
+>    downgrades** (was 215 / 207 / 8; commit `ec0438c`). Both removed rows were
+>    upgrades: `MLY — FLF: Views Step #1 | Contact Info` and
+>    `MLY — FLF: Views Step #2 | Service Details`. They mapped to the **same**
+>    Convert goal, id `100480830` (`FLF: Step #1 Reached - Contact Info & Service
+>    Details`), because **MLY genuinely tracks Contact Info + Service Details as
+>    one combined event.** Neither directive can be flipped independently without
+>    asserting something the underlying data does not measure — flipping both to
+>    Done on one shared goal would claim per-step coverage MLY does not have.
+>    **OPEN ITEM: MLY needs a second, separate Convert goal built before per-step
+>    tracking is possible.** Until then these two cells stay as they are and are
+>    deliberately out of this backfill's scope. Downgrades are unchanged at 8 —
+>    MLY never appeared in the §3 downgrade list or in the loader's
+>    `DOWNGRADE_REASONS` (verified explicitly, not assumed). MLY still
+>    participates otherwise: 27 MLY rows remain. Verified after regeneration: no
+>    remaining row cites goal `100480830`, and **no brand has two directives
+>    sharing one `convert_id`** — MLY was the only shared-goal collision in the
+>    pass. The loader's `EXPECTED_TOTAL` / `EXPECTED_UPGRADES` /
+>    `EXPECTED_DOWNGRADES` were updated to 213 / 205 / 8 in the same change, per
+>    the shape-check's own instruction to move CSV, spec, and constants together.
 >
 > One §3 entry needs two corrections. The MDG row's title is abbreviated —
 > it reads `Step 1 Validation Error Exposure` there, but the CSV and the live
@@ -81,8 +103,9 @@ deliberately NOT run yet — Lacey approves + runs.
 ## 0. One-line
 
 Update existing `directive_brand_status` cells for 13 active brands where Convert's
-real state disagrees with what's currently loaded — 207 upgrades (To do → Done,
-confirmed live in Convert) and 8 downgrades (Done → To do, false positives: dead
+real state disagrees with what's currently loaded — **205** upgrades (To do → Done,
+confirmed live in Convert; was 207 before the addendum-6 MLY removal) and 8
+downgrades (Done → To do, false positives: dead
 placeholder goals, an archived goal, and one pending design decision). **Status
 flips only — no new directives, no new brands, no schema.** Lighter than the
 original 65-directive bulk load: this is a targeted UPDATE pass, not a CREATE pass.
@@ -150,10 +173,15 @@ To do is a correction, not a regression -- flag to whoever smoke-tests that a
 
 ## 5. Verification
 
-- Row count check: 215 cells updated, matching `proposed_backfill.csv` exactly.
+- Row count check: `changed + already_at_target` == the CSV row count (**213**
+  post-regeneration), per addendum 5 — NOT "213 cells updated". Against prod on
+  2026-07-25 the expected split is **207 changed + 6 already correct**. A plan
+  reporting 207 is CORRECT, not a shortfall.
 - Spot-check a sample of both upgrades and all 8 downgrades against the live
   matrix UI post-run.
-- `audit_log` row count == 215 (one per changed cell).
+- `audit_log` row count == `changed` (one per CHANGED cell — skipped
+  already-at-target cells write none), so **207** on a clean first run, scoped to
+  `changed_by = 'system:convert-reconciliation'`.
 - Same post-run self-verify pattern as the original loader (assert actual DB
   state matches expected, loud failure on mismatch -- don't trust build-green).
 

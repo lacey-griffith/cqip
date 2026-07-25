@@ -65,8 +65,19 @@ const DEFAULT_CSV = path.join(process.cwd(), 'scripts/data/convert-reconciliatio
 
 // Expected totals from the spec. Asserted against the parsed file so a swapped
 // or truncated CSV fails loudly instead of half-applying.
-const EXPECTED_TOTAL = 215;
-const EXPECTED_UPGRADES = 207;
+//
+// 213/205/8 as of the 2026-07-25 CSV regeneration (was 215/207/8). Two MLY
+// upgrade rows were intentionally removed — "FLF: Views Step #1 | Contact Info"
+// and "FLF: Views Step #2 | Service Details" both mapped to the SAME Convert
+// goal id 100480830, because MLY genuinely tracks Contact Info + Service Details
+// as one combined event. Neither directive can be flipped independently without
+// asserting something the data does not measure. MLY needs a second, separate
+// Convert goal built before per-step tracking is possible — a real open item,
+// tracked in the spec, deliberately NOT part of this backfill. Downgrades are
+// unchanged at 8: both removed rows were upgrades, and MLY never appeared in
+// DOWNGRADE_REASONS (verified, not assumed).
+const EXPECTED_TOTAL = 213;
+const EXPECTED_UPGRADES = 205;
 const EXPECTED_DOWNGRADES = 8;
 
 // The 8 downgrades, verbatim from the spec's "know these before running"
