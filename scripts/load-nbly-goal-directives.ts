@@ -219,7 +219,7 @@ async function main() {
   const seen = new Set<string>();
   const dupes: string[] = [];
   for (const r of rows) {
-    const key = `${r.title} ${r.brandCode}`;
+    const key = `${r.title}|${r.brandCode}`;
     if (seen.has(key)) dupes.push(`${r.title} × ${r.brandCode}`);
     seen.add(key);
   }
