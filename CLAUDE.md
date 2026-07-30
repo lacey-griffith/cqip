@@ -2664,6 +2664,69 @@ reviews. Effort: LG (multi-phase).
   that UI is built it **owes this surface a signal** (include archived titles in
   the duplicate-risk count, or land the route check above first).
 
+**V2.1 trigger backport — 8 items, HAND-ENTERED via the UI (loader ABANDONED
+2026-07-30):**
+- **The work:** 8 outstanding items from Lacey's 2026-07-30 list, entered through
+  the Pulse **inline-create strip**. **This is NOT a scripted load, now or later.**
+  No loader exists for it, none is parked on a branch, and no corrected mapping is
+  to be attempted — the decision is that directive entry moves to the UI.
+- **Why the loader was abandoned.** A loader was built (spec + script + 20 tests,
+  Karen-reviewed, never run) against an earlier brief that Lacey's 7/30 list
+  **superseded**. Reconciliation against the new list found the mapping was wrong
+  in four independent ways: **3 items had no directive**, **1 directive was an
+  orphan**, **4 were mismapped**, and — the killer — **the polarity was INVERTED**:
+  the loader's `DONE_DIRECTIVES` encoded *completed* work while the 7/30 list is
+  *outstanding* work. Its `EXPECTED` totals (112 / 18·61·33) are **void**. Prod was
+  never touched: it holds no `[Trigger]` directives and 0 rows under
+  `system:v21-trigger-backport`.
+- **⚠ THE DURABLE LESSON — worth more than the code that was dropped.**
+  **`EXPECTED`-totals assertions verify ENCODING FIDELITY, not mapping
+  CORRECTNESS.** They prove the rules were transcribed as written; they cannot
+  prove the rules were right. Every one of the wrong mappings above still summed to
+  exactly 112 / 18·61·33, so **no guard in the script could ever have caught it** —
+  and a green dry-run that matched the spec "brand-by-brand" gave real, misplaced
+  confidence. Karen named this boundary at review time and it should have been
+  read as a stop sign rather than a footnote: she verified **script ↔ spec §2**,
+  never **script ↔ Lacey's brief**, *because the brief was not in the repo*. When
+  the authority for a mapping lives outside the repo, no amount of in-repo
+  verification reaches it.
+  **This is the THIRD defect of the same shape in this one batch** — a check
+  comparing a number against something that could not disagree with it:
+  (1) the `EXPECTED` totals were **permutation-invariant**, so reordering the
+  directive list changed *which* were Done while the totals held (Karen MEDIUM-1);
+  (2) the audit post-verify compared a possibly-short count **against itself**
+  (Karen MEDIUM-3); (3) this one. **Rule of thumb going forward: if a check can
+  only be satisfied by the same artifact that produced the value, it is not a
+  check.** Anchor mapping assertions to the external source of truth, or state
+  plainly that they are unanchored.
+- **Entry gotcha for the hand-entry (do NOT skip):** the create form defaults to
+  `directive_type: 'goal'` (`app/dashboard/pulse/page.tsx:977`,
+  `useState<DirectiveType>('goal')`). **All eight of these are `[Trigger]`
+  directives**, so every single hand-entry must change the type picker or it ships
+  a **"Goal"** badge against a `[Trigger] …` title — precisely the user-visible
+  mismatch the abandoned batch's MEDIUM-4 was about. **Worth considering whether
+  that default should be unset/required rather than `'goal'`** — deliberately NOT
+  changed as part of the abandonment; it needs its own decision.
+
+**Convert historical-data remediation — 5 misnamed goals (from the 7/30 list,
+item 2):** historical data on these five Convert goals is **misnamed**:
+`ASV 100496074` · `RBW 1004117356` · `MDG 1004101060` · `FSP 100425378` ·
+`PDS 1004118956`. This is a **Convert-side data problem, NOT a matrix cell** —
+recorded as its own backlog item precisely so it does not vanish along with the
+abandoned loader it arrived beside. Needs a decision on whether the rename happens
+in Convert (like the Batch 012 `rename-cleanup.csv` pass, executed in Convert
+itself) and whether anything in CQIP references the old names.
+
+**Prod directive-count drift (recorded 2026-07-29, independent of the above):**
+NBLYCRO went **69 → 75** directives when Lacey created six goals through the matrix
+UI on 2026-07-29 (4 scroll-depth + 2 MRE upsell). Unrelated to any batch; noted
+because the count is a **moving target**, not a constant to re-baseline — anything
+reading it should re-probe rather than trust a figure written into a doc. Side
+observation from that pass: one of those titles is **`Srolled 100% - Sitewide`**,
+missing the `c` its three siblings (`Scrolled 25/50/75% - Sitewide`) have — a typo
+in a live title, same class as the handoff §3 typo resolutions. Not corrected here;
+Lacey's data, Lacey's call.
+
 ### Batch 006 (post-demo) — Teams dispatch (EXPANDED)
 Wires `alert_events` rows to actually fire Teams notifications.
 Until this batch ships, alerts accumulate silently in the database.
