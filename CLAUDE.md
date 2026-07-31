@@ -2711,8 +2711,7 @@ reviews. Effort: LG (multi-phase).
   this entry exists to record.) When the authority for a mapping lives outside the
   repo, no amount of in-repo verification reaches it — and no reviewer's scope note
   substitutes for checking it.
-  **This is the THIRD defect of the same shape across this run of loader
-  work** — the reference value and the value under test share a common ancestor, so
+  **This is now the FOURTH defect of the same shape across this run of work** — the reference value and the value under test share a common ancestor, so
   agreement is guaranteed regardless of correctness (the oracle is not
   independent). Described inline rather than by finding-number, because bare
   "MEDIUM-n" citations are dead links here: those reviews were of code now dropped
@@ -2725,7 +2724,15 @@ reviews. Effort: LG (multi-phase).
      batch (2026-07-25, see §16), where the check printed a cumulative audit count
      that could not be compared against any expected value, and a later variant
      compared a possibly-short count against itself.
-  3. **This one** — the totals matched a spec that was itself wrong.
+  3. **The abandoned loader** — the totals matched a spec that was itself wrong.
+  4. **The Pulse cell truncation (2026-07-31)** — the 07-29 batch verified
+     "1,104 cells, zero gaps" against prod and reported it as evidence the matrix
+     was sound. That check ran through a **SCRIPT**, which pages correctly, while
+     the **PAGE** it was vouching for was already truncating. The verification
+     passed *because it used a different client than the thing under test*.
+     **Verifying a page's data through a different client than the page uses is
+     not verifying the page.** Check through the same path the user's code takes,
+     or state plainly which path you actually exercised.
   **Note the layer difference:** (1) and (2) are defects *in a script's guards*,
   fixed by writing a better assertion. (3) is a gap in the *verification process*
   and **cannot be fixed by any assertion at all** — do not go hunting for a code
@@ -2741,6 +2748,33 @@ reviews. Effort: LG (multi-phase).
   mismatch the abandoned batch's MEDIUM-4 was about. **Worth considering whether
   that default should be unset/required rather than `'goal'`** — deliberately NOT
   changed as part of the abandonment; it needs its own decision.
+
+**Unranged-select audit (2026-07-31, from the Pulse cell-truncation hotfix) —
+row counts measured against prod, NOT fixed in the hotfix (kept narrow):**
+PostgREST caps an unranged select at 1,000 and returns the short result with **no
+error**, so every fetch-all that can cross 1,000 is a silent-truncation risk.
+Measured today:
+- **`audit_log` — 1,336 rows total, ALREADY OVER THE CAP.** Two consumers:
+  - **`/dashboard/logs` sendback-count badge** (`app/dashboard/logs/page.tsx:161`,
+    `.in('log_entry_id', ids)`, unranged) reads the quality-log-scoped subset =
+    **730 rows, ~270 of headroom**. **This is the nearest thing to firing** — same
+    bug class as the hotfix, and when it crosses 1,000 the per-log audit counts
+    start silently under-reporting with no error. Fix with the same
+    `fetchAllPaged()`.
+  - `/dashboard/settings/audit` uses `.limit(500)` on 1,336 rows. Deliberate
+    (newest-first event view), but **silent**: an admin searching for an older
+    event gets "not found" rather than "truncated". Different class — a UX/signal
+    gap, not a data bug — but worth a "showing most recent 500" note.
+  - `/dashboard/logs/[id]` is `.eq('log_entry_id', id)`-scoped → safe.
+- **`test_milestones` — 357 non-deleted.** Fetched whole then filtered client-side
+  by BOTH `/dashboard/coverage` and the Brand Wellness report. That
+  fetch-all-then-filter shape is by design and fine at this size (~640 headroom),
+  but it is the next one to cross.
+- **`sync_runs` 358** (already ranged), **`quality_logs` 120**,
+  **`quality_log_taxonomy` 78**, **`directives` 77**, everything else ≤ 38 — large
+  headroom, no action.
+Everything above is read-path; none indicates wrong data in the DB. Fix the
+`audit_log` badge query first; the rest is monitoring.
 
 **Convert historical-data remediation — 5 misnamed goals (from the 7/30 list,
 item 2):** historical data on these five Convert goals is **misnamed**:
@@ -3089,10 +3123,55 @@ phase/status, open questions, and a pointer to the spec. Lifecycle:
 appears in exactly one of §15.5 / §16 — on ship, the entry here is
 deleted in the same commit that writes the §16 shipped entry.
 
-**Currently empty** — the matrix-controls batch moved to §16 on 2026-07-29 when it
-pushed + deployed. (The Convert reconciliation backfill is NOT here either — it
-lives in §16: it is BUILT and reviewed, awaiting only Lacey's run, so it is not
-in-flight work.)
+(The Convert reconciliation backfill is NOT here — it lives in §16: it is BUILT
+and reviewed, awaiting only Lacey's run, so it is not in-flight work.)
+
+### HOTFIX — paginate the Pulse cell reads (PostgREST 1,000-row cap)
+
+**Status:** IN FLIGHT (2026-07-31). **Production correctness bug, live now.**
+Read-path only — **no data in the DB is wrong**.
+
+**The bug, reproduced against prod before any change was made:**
+`directive_brand_status` holds **1,217** rows for NBLYCRO (76 active directives ×
+16 brands). PostgREST caps an **unranged** select at **1,000** and returns the
+short result **with NO error**. The matrix page's cell read had no `.range()`, so
+it silently received 1,000 of 1,217 — **216 rows missing**. Consequences, all one
+cause: cells past the cap render **hollow**, Outstanding is **silently
+under-counted**, and `editable = isAdmin && !!cell` is false so those cells
+**cannot be clicked**.
+
+**The blast radius is worse than "the newest directives":** PostgREST returns the
+first 1,000 rows in scan order, **not grouped by directive**, so the truncation
+cuts *across* directives. Measured: **46 of 76 directives** are short — including
+ORIGINAL goal-load ones (`[Rev] Total Page Views` 13/16, `Call Clicks` 15/16,
+`Clicks Any Scheduler CTA` 11/16). One directive
+(`4a195bce` `SF Listener - Early Return Fix`) holds 16 cells in the DB (13 todo +
+3 n_a) and the page sees **0**. So "everything before directive 63 is fine" is
+**not** true and should not be used to triage.
+
+**Fix:** one shared `fetchAllPaged()` in `lib/client-library/paged-fetch.ts`,
+lifted from the pager `scripts/backfill-convert-reconciliation.ts` already had —
+adapted to RETURN its error instead of `process.exit(1)`, since a page must
+surface it, not kill the process. It pages in explicit `.range()` windows until a
+short page returns, and hard-fails loudly at a `MAX_PAGES` backstop rather than
+spinning or handing back a capped read as if complete. **Three** call sites now
+use it: the matrix load, the brand-page load, and the brand page's
+`refetchCells` reconcile.
+
+**The brand page was NOT broken** — its reads are `.eq('brand_id', …)`-scoped, so
+they return at most one row per directive (77 today), under the cap. Paged anyway:
+it is only safe *by accident of the directive count* and scales exactly as the
+matrix does. Both of its reads were paged so the two paths on one page cannot
+diverge.
+
+**Gates:** tsc 0 · ESLint 0 on all four touched files · **98/98** (87 + 11 new) ·
+build 0 with `/dashboard/pulse` still `○` and the brand page `ƒ`. Tests cover the
+boundary deliberately — 1,000 exact, 1,001, the real 1,216, and multi-page — because
+**a test using only small inputs passes on the broken version.** Verified: the
+1,216 and 1,001 cases fail against an unpaged implementation.
+
+**No Jenny** — read-path only, no migration, no mutation surface, no new route.
+**Karen post-flight. DO NOT PUSH.**
 
 ---
 
