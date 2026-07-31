@@ -3154,6 +3154,114 @@ deleted in the same commit that writes the §16 shipped entry.
 (The Convert reconciliation backfill is NOT here — it lives in §16: it is BUILT
 and reviewed, awaiting only Lacey's run, so it is not in-flight work.)
 
+### Batch 012 — Pulse: brand-page parity + matrix paused default
+
+**Status:** IN FLIGHT (2026-07-31). Render/interaction only over already-loaded
+data. **NO migration · NO schema change · NO new route · NO new mutation surface ·
+NO new fetch · NO new dep → no Jenny (E-track profile), no version bump.** Spec:
+`docs/batch-012-pulse-brand-parity-spec.md`. **Karen post-flight. DO NOT PUSH.**
+
+**No hardcoded counts anywhere in this batch** — prod moved 76 → 82 active
+directives during the V2.1 backport window and will move again, so every count
+renders from live data.
+
+**Change 1 — brand-page edit trigger. The ask's premise was wrong, recorded
+rather than absorbed.** The kickoff said "today the whole row is the click
+target"; it is not, and was not at HEAD. `c58364c` (2026-07-25) already made the
+status pill the only interactive element — the `<Card>` has no `onClick`, title /
+type badge / description are already inert, `editable = isAdmin && !!cell` and the
+non-admin plain `<span>` were already there. What was actually outstanding is the
+**third, unfolded Karen LOW** from that batch — *edit-affordance discoverability:
+"a text button styled like the read-only span"* — so that is what shipped: a
+visible chip affordance (`--pill-filter-bg` fill + `--f92-border`, orange on
+hover/focus/open, tokens only per §13 r25) plus an aria-label that **leads with
+the action and names the directive** (`Edit status for {title}: {status}` —
+"To do" repeated down 82 rows tells a screen-reader user nothing). Non-admins
+keep the plain `<span>`, never a disabled button, so no interactive control leaks;
+consequence worth naming: the chip treatment is therefore itself the "this row is
+editable" signal. Cell-must-exist NOT loosened; the MEDIUM-1 `liveKeyRef` guard
+and the `52dc69d` render-branch order untouched. The page copy already read
+"Click a status to edit it for this brand." — now discoverable as well as true.
+
+**Change 2 — brand-page status filter** (`Open` default · To do · In progress ·
+Done · Blocked · N/A · All), client-side over the loaded cells.
+**Deliberately NOT the matrix's filter and not unified with it:** the matrix
+classifies a DERIVED RESOLVE STATE across every brand of a directive; here each
+directive has exactly ONE cell, so that classifier collapses to the cell's own
+status. Matrix `Open` = "not finished ANYWHERE"; brand-page `Open` = "THIS brand
+still owes it". **`Open` is an EXCLUSION of the terminal statuses** (`done`,
+`n_a`) written `!TERMINAL.has(status)`, never a whitelist of the owed three — so
+a sixth status defaults to VISIBLE. `TERMINAL_CELL_STATUSES` is declared
+independently of `OWED_CELL_STATUSES` (not as its complement) because the two
+encode opposite fail-safes: OWED must not over-COUNT, this must not over-HIDE.
+Pure logic + 10 tests in `lib/client-library/pulse.ts` (a projection of
+`brandDirectiveView` directly above it, so no sibling `brand-controls.ts`).
+`effectiveCellStatus` is ONE definition read by the row render, the filter, and
+the count. **Accepted consequence:** a cell-less directive reads `n_a` and is
+hidden under the default — non-interactive anyway, and included in the hidden
+count so it's never silent. **The readouts are load-bearing, not decoration:**
+the default hides rows the user never asked to hide, so `N of M directives` (M
+derived) plus `N directives hidden by this filter · Show all` share ONE polite
+live region (matrix LOW-7: a bare announced count lets "0 directives" AFFIRM a
+false "nothing here" reading), and unlike the matrix the correction is NOT gated
+behind a search — there is no search box, and the copy is search-neutral.
+Filter change closes an open edit strip; the filter does NOT reset on brand→brand
+nav (mirrors the matrix); saving to Done/N-A under the default EJECTS the row
+(matches the matrix's accepted LOW-5 + the `/dashboard/logs` needs-review
+precedent) and the toast still lands because `saveDirectiveCell` emits it
+independent of render. **Judgment call submitted FOR scrutiny:** ONE *Show all*
+button, in the live region, present in BOTH shapes — the zero-row card points at
+it rather than duplicating it, per the matrix's LOW-7 "don't duplicate the button
+here". The alternative (a second button in the empty card) is closer to the
+letter of the ask; flagged, trivially changed.
+
+**Change 3 — matrix *Hide paused brands* defaults to CHECKED.** Initial state
+only; the logic is untouched (still hides COLUMNS; `buildMatrixRows` still takes
+no `hidePaused`). **Precondition RE-MEASURED against prod 2026-07-31, not
+inherited** — the 2026-07-29 batch's numbers are void (76 → 82 directives since):
+NBLYCRO has **3 paused active brands (SHG, MRR-CA, WDG)** holding **246 cells**
+across active directives, **ALL 246 `n_a`, 0 non-`n_a`, 0 owed** → **count-neutral**,
+no Outstanding number on screen changes. (82 × 16 = 1,312 expected; the table holds
+1,313, the extra being SPLCRO's single directive. SPLCRO has no paused brands, so
+the toggle isn't rendered there.) Had any paused cell been owed the correct action
+was to STOP AND REPORT — hiding owed work and moving a visible count is outside a
+render-only profile. NOT persisted (no sessionStorage, no channel). **Consequence
+named, not fixed:** the accepted LOW-3 behaviour (editor lookup goes through
+`visibleBrands`, so a paused brand's cells can't be opened and toggling discards
+an unsaved note in one) is now the DEFAULT path rather than opt-in. Karen verified
+no lock-up and endorsed it on the brand axis; unchecking restores access.
+
+**Ride-along — one `CELL_STATUS_LABEL`.** The status→label map existed as THREE
+identical private copies (matrix page, brand page, `CellEditStrip`). The brand
+page now renders a status filter and an editor dropdown side by side, and two
+spellings of one status on one page is a defect, so the guarantee is now
+structural (`CELL_STATUS_LABEL` in `directives.ts`, the canonical status module)
+rather than conventional. Pure const move, no behaviour change; a test pins
+`BRAND_STATUS_FILTER_LABEL[status] === CELL_STATUS_LABEL[status]`.
+
+**Gates:** `tsc --noEmit` 0 · ESLint **zero** findings on all six touched files ·
+**108/108** tests (98 + 10 new) · `npm run build` 0 with `/dashboard/pulse` still
+`○`, the brand page `ƒ`, no new route entries. **Mutation-verified** (a test that
+passes on the broken version is not a test): `open`-as-whitelist → 1 failure (the
+fail-safe test, and only it); cell-less reading `todo` → 4 failures.
+**HONEST LIMIT, and the reason this is written down:** rewriting
+`TERMINAL_CELL_STATUSES` as the complement of `OWED` → **0 failures**. No test can
+catch that refactor — the complement form keeps the suite green including the
+fail-safe test, because an unknown status is absent from the derived list too; the
+forms diverge only once a sixth status joins `CELL_STATUSES`, which a compile-time
+const makes unconstructable in a test. So it is a **review-level invariant** and
+the comment on `TERMINAL_CELL_STATUSES` is its only enforcement — stated in both
+the lib and the test file. An earlier draft of that test comment claimed the
+fail-safe test DID catch it; mutation run 3 disproved it and the claim was
+corrected rather than left standing. Same shape as the §15 lesson: *if a check can
+only be satisfied by the same artifact that produced the value, it is not a check.*
+
+**Out of scope, not snuck in:** search/sort on the brand page · KPI strip ·
+hover-inspect · Change Log widget · family/grouping · hiding paused CLIENTS from
+the Pulse nav (`pulse-client-nav.tsx` diff is **0 lines**) · the rest of the
+restyle handoff. The restyle is the NEXT batch and touches these same files — the
+diffs are kept separable.
+
 ### HOTFIX — paginate the Pulse cell reads (PostgREST 1,000-row cap)
 
 **Status:** IN FLIGHT (2026-07-31). **Production correctness bug, live now.**
