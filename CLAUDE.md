@@ -2725,14 +2725,25 @@ reviews. Effort: LG (multi-phase).
      that could not be compared against any expected value, and a later variant
      compared a possibly-short count against itself.
   3. **The abandoned loader** — the totals matched a spec that was itself wrong.
-  4. **The Pulse cell truncation (2026-07-31)** — the 07-29 batch verified
-     "1,104 cells, zero gaps" against prod and reported it as evidence the matrix
-     was sound. That check ran through a **SCRIPT**, which pages correctly, while
-     the **PAGE** it was vouching for was already truncating. The verification
-     passed *because it used a different client than the thing under test*.
-     **Verifying a page's data through a different client than the page uses is
-     not verifying the page.** Check through the same path the user's code takes,
-     or state plainly which path you actually exercised.
+  4. **The Pulse cell truncation (live 2026-07-22, found 07-31)** — the worst of
+     the four, because here the bad verification **actively suppressed a correct
+     bug report**, and it is the reason this one ran for nine days.
+     A §15.5 note had observed that `Chat Appointment Made` / `Chat Started` /
+     `Chat Lead Submitted` showed **zero cells**. On 2026-07-25 that was
+     **retracted** as stale, citing a prod check: *"69 directives × 16 brands =
+     1,104 cells with zero gaps (verified 2026-07-25)"*.
+     **1,104 > 1,000 — the page was already truncating when that retraction was
+     written.** The check ran through a **SCRIPT**, which pages correctly; the
+     **PAGE** it vouched for did not. Those three directives today read 13/16,
+     12/16 and 13/16 — and directive #63, the one that crossed the cap on 07-22,
+     **is `Chat Started` itself.** The original sighting was almost certainly true
+     and was dismissed with a check that could not see the failure.
+     **The rule, sharper than "use the same client":** a DB-level check must never
+     be used to OVERTURN a symptom reported at the render layer. The check answers
+     *"do the rows exist"*; the report asked *"does the page show them"*. Those two
+     diverged for nine days while the check kept answering yes. When a render-layer
+     symptom conflicts with a data-layer check, the check has not disproved the
+     symptom — it has only proved the data exists.
   **Note the layer difference:** (1) and (2) are defects *in a script's guards*,
   fixed by writing a better assertion. (3) is a gap in the *verification process*
   and **cannot be fixed by any assertion at all** — do not go hunting for a code
@@ -2754,22 +2765,39 @@ row counts measured against prod, NOT fixed in the hotfix (kept narrow):**
 PostgREST caps an unranged select at 1,000 and returns the short result with **no
 error**, so every fetch-all that can cross 1,000 is a silent-truncation risk.
 Measured today:
-- **`audit_log` — 1,336 rows total, ALREADY OVER THE CAP.** Two consumers:
+- **`audit_log` — 1,336 rows total, ALREADY OVER THE CAP.** Three consumers:
   - **`/dashboard/logs` sendback-count badge** (`app/dashboard/logs/page.tsx:161`,
-    `.in('log_entry_id', ids)`, unranged) reads the quality-log-scoped subset =
-    **730 rows, ~270 of headroom**. **This is the nearest thing to firing** — same
-    bug class as the hotfix, and when it crosses 1,000 the per-log audit counts
-    start silently under-reporting with no error. Fix with the same
-    `fetchAllPaged()`.
+    `.in('log_entry_id', ids)`, unranged) reads the audit rows for the **89
+    non-deleted** quality logs = **646 rows, ~354 of headroom** (an earlier draft
+    said 730/~270 — that was `log_entry_id IS NOT NULL`, which includes rows for
+    soft-deleted logs the page never asks about, and overstated the urgency).
+    **Still the nearest thing to firing by row count** — same bug class as the
+    hotfix, and when it crosses 1,000 the per-log audit counts silently
+    under-report with no error. Fix with the same `fetchAllPaged()`.
   - `/dashboard/settings/audit` uses `.limit(500)` on 1,336 rows. Deliberate
     (newest-first event view), but **silent**: an admin searching for an older
     event gets "not found" rather than "truncated". Different class — a UX/signal
     gap, not a data bug — but worth a "showing most recent 500" note.
   - `/dashboard/logs/[id]` is `.eq('log_entry_id', id)`-scoped → safe.
-- **`test_milestones` — 357 non-deleted.** Fetched whole then filtered client-side
-  by BOTH `/dashboard/coverage` and the Brand Wellness report. That
-  fetch-all-then-filter shape is by design and fine at this size (~640 headroom),
-  but it is the next one to cross.
+- **`test_milestones` — 357 non-deleted, and FOUR unranged consumers** (an earlier
+  draft named only the first two; someone working this list would have paged half
+  of them and believed they were done — the exact error this section exists to
+  prevent):
+  `app/dashboard/coverage/page.tsx:105` · `components/reports/brand-wellness-report.tsx:101`
+  · `app/dashboard/page.tsx:356` (tests-this-week KPI) ·
+  `components/coverage/manage-milestones-dialog.tsx:102`.
+  All fetch-all-then-filter by design; fine at this size (~640 headroom), but this
+  is the next table to cross and it must be fixed at all four sites.
+- **`monitoring_findings` — 0 rows today, and the ONE to watch.** Unranged at
+  `app/dashboard/pulse/page.tsx:250` (`.eq('status','new')`) — the same
+  `loadProject` as the cell read this hotfix paged, twelve lines above it; it was
+  missed in the first sweep. Row count says "no risk", **growth shape says
+  otherwise**: this is the only table in the app fed **in bulk by an external
+  machine caller** — `POST /api/monitoring/findings` accepts `MAX_BATCH=500` per
+  request — so it can go 0 → over-cap in **two API calls**, on the day Batch 008
+  starts posting. Every other table here grows at human or webhook pace. **Rank by
+  time-to-fire, not current rows:** `audit_log` is nearest by count,
+  `monitoring_findings` is nearest by step-function growth.
 - **`sync_runs` 358** (already ranged), **`quality_logs` 120**,
   **`quality_log_taxonomy` 78**, **`directives` 77**, everything else ≤ 38 — large
   headroom, no action.
@@ -3131,23 +3159,39 @@ and reviewed, awaiting only Lacey's run, so it is not in-flight work.)
 **Status:** IN FLIGHT (2026-07-31). **Production correctness bug, live now.**
 Read-path only — **no data in the DB is wrong**.
 
-**The bug, reproduced against prod before any change was made:**
-`directive_brand_status` holds **1,217** rows for NBLYCRO (76 active directives ×
-16 brands). PostgREST caps an **unranged** select at **1,000** and returns the
-short result **with NO error**. The matrix page's cell read had no `.range()`, so
-it silently received 1,000 of 1,217 — **216 rows missing**. Consequences, all one
-cause: cells past the cap render **hollow**, Outstanding is **silently
-under-counted**, and `editable = isAdmin && !!cell` is false so those cells
-**cannot be clicked**.
+**⚠ LIVE SINCE 2026-07-22 — NINE DAYS, not one.** NBLYCRO crossed the cap when
+the 07-22 goal load created directive **#63** (63 × 16 = **1,008** > 1,000). #63
+is `Chat Started`. 2026-07-31 is only when it was *diagnosed*. Use 07-22 for any
+"how long did users see wrong numbers" question.
 
-**The blast radius is worse than "the newest directives":** PostgREST returns the
-first 1,000 rows in scan order, **not grouped by directive**, so the truncation
-cuts *across* directives. Measured: **46 of 76 directives** are short — including
-ORIGINAL goal-load ones (`[Rev] Total Page Views` 13/16, `Call Clicks` 15/16,
-`Clicks Any Scheduler CTA` 11/16). One directive
-(`4a195bce` `SF Listener - Early Return Fix`) holds 16 cells in the DB (13 todo +
-3 n_a) and the page sees **0**. So "everything before directive 63 is fine" is
-**not** true and should not be used to triage.
+**The bug, reproduced against prod before any change was made:** NBLYCRO has
+76 active directives × 16 brands = **1,216** cells (the table holds 1,217 — one
+row belongs to a directive outside this project). PostgREST caps an **unranged**
+select at **1,000** and returns the short result **with NO error**. The matrix
+page's cell read had no `.range()`, so it silently received 1,000 of 1,216 —
+**216 rows missing**. Consequences, all one cause: cells past the cap render
+**hollow**, Outstanding is **silently under-counted**, and
+`editable = isAdmin && !!cell` is false so those cells **cannot be clicked**.
+
+**Blast radius — and the mechanism, which matters for triage.** "Everything
+before directive 63 is fine" is **false**; so is "scan order" as a full
+explanation. There is no `ORDER BY`, so rows return in **physical heap order**,
+and Postgres MVCC writes an `UPDATE`d row's new version to the **heap tail** —
+therefore **the rows past the cap are the RECENTLY EDITED ones.** Measured: 100%
+of the 216 missing rows were updated on 07-25 (105) / 07-29 (95) / 07-31 (16);
+**zero** came from the untouched older population.
+- **46 of 76 directives** are short, including ORIGINAL goal-load ones
+  (`[Rev] Total Page Views` 13/16, `Call Clicks` 15/16,
+  `Clicks Any Scheduler CTA` 11/16).
+- **SIX directives render ZERO cells** while holding 16 each in the DB:
+  `Scrolled 75% / 50% / 25% - Sitewide`,
+  `[Upsell] Selects Affordable Payment Plan (MRE)`,
+  `[Upsell] Selects MRR Cross Sell (MRE)`, `SF Listener - Early Return Fix`.
+- **105 of the 209 cells flipped by the 07-25 Convert reconciliation backfill do
+  not render** — half that batch's work is invisible on the page.
+- **The hidden set is UNSTABLE and biased toward the freshest work.** It shifts
+  every time anyone saves a cell, so a list of "which cells are hollow" is stale
+  the moment someone edits. Do not hand anyone a static damage list.
 
 **Fix:** one shared `fetchAllPaged()` in `lib/client-library/paged-fetch.ts`,
 lifted from the pager `scripts/backfill-convert-reconciliation.ts` already had —
@@ -3163,6 +3207,16 @@ they return at most one row per directive (77 today), under the cap. Paged anywa
 it is only safe *by accident of the directive count* and scales exactly as the
 matrix does. Both of its reads were paged so the two paths on one page cannot
 diverge.
+
+**Honest limit of the fix (Karen):** the brand page early-returns on a cell
+error, and `refetchCells` only sets state when there is none — but the **matrix
+page assigns the rows regardless** and renders `loadError` as a *banner above the
+matrix*, not an early return. So if the pager ever trips `MAX_PAGES` or errors
+mid-page, the matrix shows the same hollow cells and under-counted Outstanding as
+the bug, **plus** a red banner. That is a strict improvement over silent
+truncation and matches how this page already handles `brands`/`directives`/
+`findings` failures, so it was left consistent rather than special-cased — but do
+not read "it's paged now" as "it can never render partial cells".
 
 **Gates:** tsc 0 · ESLint 0 on all four touched files · **98/98** (87 + 11 new) ·
 build 0 with `/dashboard/pulse` still `○` and the brand page `ƒ`. Tests cover the

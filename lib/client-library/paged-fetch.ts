@@ -11,10 +11,21 @@
 //   - scripts/backfill-convert-reconciliation.ts hit the cap for real: its cell
 //     read came back truncated, so its "cell does not exist" hard-fail fired on
 //     20 rows whose cells were present. It gained a local fetchAllPaged().
-// The Pulse PAGES never got it, and on 2026-07-31 NBLYCRO crossed the cap
-// (76 directives × 16 brands = 1,216 cells): the matrix read 1,000 of 1,216, so
-// 46 directives rendered some cells hollow, under-counted Outstanding, and made
-// those cells non-editable (`editable = isAdmin && !!cell`).
+// The Pulse PAGES never got it. NBLYCRO crossed the cap on **2026-07-22**, when
+// the goal load created directive #63 (63 × 16 = 1,008 cells > 1,000) — NOT on
+// 2026-07-31, which is merely when it was diagnosed. The bug was live for nine
+// days. By then 76 directives × 16 brands = 1,216 cells: the matrix read 1,000,
+// so 46 directives rendered some cells hollow, under-counted Outstanding, and
+// made those cells non-editable (`editable = isAdmin && !!cell`); six rendered
+// ZERO cells despite holding 16 each.
+//
+// WHICH rows go missing is not "the newest directives" — there is no ORDER BY, so
+// rows come back in physical HEAP order, and Postgres MVCC writes an UPDATEd row's
+// new version to the heap tail. So the rows past the cap are the RECENTLY EDITED
+// ones: 100% of the 216 missing rows had been updated on 07-25/29/31, and none
+// came from the untouched older population. Two consequences worth knowing before
+// anyone tries to enumerate the damage: the hidden set is UNSTABLE (it shifts
+// every time someone saves a cell), and it is biased toward the freshest work.
 //
 // So the pager lives HERE, once, and callers share it. A local copy per caller
 // is how this drifted apart the first two times.
@@ -78,6 +89,14 @@ export async function fetchAllPaged<T>(
     if (error) {
       return { data: out, error: `${describe}: ${error.message}` };
     }
+    // KNOWN RESIDUAL (Karen, LOW): a page returning { data: null, error: null }
+    // becomes [] here, reads as "short page", and stops with error: null — a
+    // silent short read, the exact shape this helper exists to prevent. Not
+    // reachable through real PostgREST (a non-error response always carries an
+    // array), and it is the same `?? []` assumption the pre-fix callers made, so
+    // it is not a regression. Recorded rather than papered over, because the
+    // helper's premise is "this cannot hand you a silent short read" and there
+    // is precisely one way it can.
     const batch = data ?? [];
     out.push(...batch);
     if (batch.length < pageSize) return { data: out, error: null };
