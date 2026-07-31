@@ -23,15 +23,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { CELL_STATUSES, type CellStatus } from '@/lib/client-library/directives';
-
-const STATUS_LABEL: Record<CellStatus, string> = {
-  todo: 'To do',
-  in_progress: 'In progress',
-  done: 'Done',
-  blocked: 'Blocked',
-  n_a: 'N/A',
-};
+import {
+  CELL_STATUSES,
+  CELL_STATUS_LABEL,
+  type CellStatus,
+} from '@/lib/client-library/directives';
 
 export function CellEditStrip({
   brandLabel,
@@ -100,7 +96,7 @@ export function CellEditStrip({
         </SelectTrigger>
         <SelectContent>
           {CELL_STATUSES.map((s) => (
-            <SelectItem key={s} value={s}>{STATUS_LABEL[s]}</SelectItem>
+            <SelectItem key={s} value={s}>{CELL_STATUS_LABEL[s]}</SelectItem>
           ))}
         </SelectContent>
       </Select>

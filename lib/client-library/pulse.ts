@@ -4,7 +4,7 @@
 // of real logic (the brand-directive filter + the client-nav list rule).
 // Mirrors the lib/client-library/{directives,monitoring}.ts split.
 
-import type { CellStatus } from './directives';
+import { CELL_STATUS_LABEL, type CellStatus } from './directives';
 
 // -------------------------------------------------------------------------
 // Cross-project client nav (Pulse E1 follow-on). Groups ALL active brands by
@@ -141,4 +141,92 @@ export function brandDirectiveView<D extends DirectiveLike>(
     directive,
     cell: byDirective.get(directive.id) ?? null,
   }));
+}
+
+// -------------------------------------------------------------------------
+// Brand-page status filter. Client-side over the rows brandDirectiveView has
+// already produced — no fetch, no new query.
+//
+// THIS IS NOT THE MATRIX'S FILTER, and the two must not be unified.
+// matrix-controls.ts filters on a DERIVED RESOLVE STATE computed across every
+// brand of a directive (active / resolved / unstarted). Here each directive has
+// exactly ONE cell, so that classifier collapses to the cell's own status and
+// carries no information the status itself doesn't. Different question, different
+// function. Neither control should be relabelled to match the other either:
+// "Open" on the matrix means "this directive is not finished ANYWHERE", while
+// "Open" here means "this brand still owes this directive".
+//
+// It lives in pulse.ts rather than a sibling brand-controls.ts because it is a
+// projection of brandDirectiveView's output, directly above — one module for the
+// brand page's pure logic, tested by tests/pulse-shell.test.ts.
+// -------------------------------------------------------------------------
+
+// The statuses that owe nothing further on this brand. `open` is defined as the
+// EXCLUSION of this set, never as a whitelist of {todo, in_progress, blocked} —
+// the fail-safe direction matters: a sixth cell status added later defaults to
+// VISIBLE under the default filter rather than silently disappearing from it.
+//
+// Deliberately NOT derived as the complement of OWED_CELL_STATUSES, even though
+// the two sets partition today's five statuses exactly. A complement-of-whitelist
+// would invert the fail-safe: a status added to CELL_STATUSES but not to OWED
+// would be auto-classified terminal and vanish from the default view. The sets
+// encode opposite intents (OWED decides what counts toward Outstanding and must
+// not over-count; this decides what to hide and must not over-hide), so they are
+// declared independently on purpose.
+//
+// DO NOT "simplify" this into that complement. No test can stop you — verified
+// by mutation 2026-07-31: the complement form keeps the whole suite green,
+// because the two forms only diverge once a sixth status exists, which a
+// compile-time const makes unconstructable in a test. This comment is the only
+// enforcement there is.
+export const TERMINAL_CELL_STATUSES: readonly CellStatus[] = ['done', 'n_a'];
+const TERMINAL = new Set<CellStatus>(TERMINAL_CELL_STATUSES);
+
+export const BRAND_STATUS_FILTERS = [
+  'open',
+  'todo',
+  'in_progress',
+  'done',
+  'blocked',
+  'n_a',
+  'all',
+] as const;
+export type BrandStatusFilter = (typeof BRAND_STATUS_FILTERS)[number];
+
+// Per-status labels come from CELL_STATUS_LABEL so this control and the editor
+// dropdown beside it cannot spell a status two ways.
+export const BRAND_STATUS_FILTER_LABEL: Record<BrandStatusFilter, string> = {
+  open: 'Open',
+  todo: CELL_STATUS_LABEL.todo,
+  in_progress: CELL_STATUS_LABEL.in_progress,
+  done: CELL_STATUS_LABEL.done,
+  blocked: CELL_STATUS_LABEL.blocked,
+  n_a: CELL_STATUS_LABEL.n_a,
+  all: 'All',
+};
+
+// The status a row RENDERS as. A directive with no cell for this brand (a brand
+// added after the directive was created — Phase A has no backfill) reads n_a.
+// One definition consumed by the row render, the filter, and the count, so the
+// three cannot disagree about what a cell-less row is.
+//
+// Consequence, accepted: a cell-less row is hidden under the default `open`
+// filter. Nothing actionable is lost — such a row is non-interactive anyway
+// (editable = isAdmin && !!cell) — and it is included in the hidden count the
+// page surfaces, so its existence is never silent.
+export function effectiveCellStatus(cell: { status: CellStatus } | null | undefined): CellStatus {
+  return cell?.status ?? 'n_a';
+}
+
+export function matchesBrandStatusFilter(status: CellStatus, filter: BrandStatusFilter): boolean {
+  if (filter === 'all') return true;
+  if (filter === 'open') return !TERMINAL.has(status);
+  return status === filter;
+}
+
+export function filterBrandDirectiveRows<D extends DirectiveLike>(
+  rows: ReadonlyArray<BrandDirectiveRow<D>>,
+  filter: BrandStatusFilter,
+): BrandDirectiveRow<D>[] {
+  return rows.filter((row) => matchesBrandStatusFilter(effectiveCellStatus(row.cell), filter));
 }

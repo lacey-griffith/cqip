@@ -16,6 +16,21 @@ export type DirectiveStatus = (typeof DIRECTIVE_STATUSES)[number];
 export const CELL_STATUSES = ['todo', 'in_progress', 'done', 'blocked', 'n_a'] as const;
 export type CellStatus = (typeof CELL_STATUSES)[number];
 
+// Human labels for the cell statuses. ONE definition, deliberately: the matrix
+// dot's aria-label, the brand page's status pill, the shared CellEditStrip's
+// dropdown, and the brand page's status filter all read from here. Those four
+// surfaces previously carried three identical private copies — the brand page
+// now renders an editor dropdown and a status filter side by side, and two
+// spellings of one status on a single page is a defect, so the guarantee is
+// structural rather than conventional.
+export const CELL_STATUS_LABEL: Record<CellStatus, string> = {
+  todo: 'To do',
+  in_progress: 'In progress',
+  done: 'Done',
+  blocked: 'Blocked',
+  n_a: 'N/A',
+};
+
 // Which cell statuses "owe" work. Spec §2: done + n_a do not owe; the other
 // three do. The outstanding count is the number of owing cells per directive.
 export const OWED_CELL_STATUSES: readonly CellStatus[] = ['todo', 'in_progress', 'blocked'];

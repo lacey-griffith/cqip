@@ -44,6 +44,7 @@ import {
 import { useToast } from '@/components/layout/toaster';
 import { CellEditStrip } from '@/components/client-library/cell-edit-strip';
 import {
+  CELL_STATUS_LABEL,
   DIRECTIVE_TYPES,
   type CellStatus,
   type DirectiveType,
@@ -123,14 +124,6 @@ const TYPE_LABEL: Record<DirectiveType, string> = {
   trigger: 'Trigger',
   site_area: 'Site area',
   audience: 'Audience',
-};
-
-const STATUS_LABEL: Record<CellStatus, string> = {
-  todo: 'To do',
-  in_progress: 'In progress',
-  done: 'Done',
-  blocked: 'Blocked',
-  n_a: 'N/A',
 };
 
 // Cell status → token color (§13 r25 — reference tokens, no inline hex).
@@ -222,7 +215,21 @@ export default function ClientLibraryPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<MatrixStatusFilter>('open');
   const [sortKey, setSortKey] = useState<MatrixSortKey>('title');
-  const [hidePaused, setHidePaused] = useState(false);
+  // Defaults to CHECKED (2026-07-31): a paused brand's column is dead width on
+  // a ≥16-brand matrix. Safe to hide by default ONLY because it is
+  // count-neutral, which was RE-MEASURED against prod rather than inherited from
+  // the 2026-07-29 batch (whose numbers are void — the project has since grown
+  // 76 → 82 active directives): NBLYCRO's 3 paused active brands (SHG, MRR-CA,
+  // WDG) hold 246 cells across active directives, ALL 246 `n_a`, zero owed. So
+  // no Outstanding number on screen changes when the columns go away. SPLCRO has
+  // no paused brands, so the toggle isn't rendered there at all.
+  //
+  // Re-measure before assuming this still holds. If a paused brand ever holds an
+  // owed cell, a checked-by-default toggle hides real work.
+  //
+  // NOT persisted (no sessionStorage, no channel) — a reload shows every column
+  // again, same as the other three controls.
+  const [hidePaused, setHidePaused] = useState(true);
 
   // Fetch brands + directives + cells for a project. RLS allows authenticated
   // SELECT on both new tables, so direct client queries are fine (spec §4).
@@ -629,10 +636,18 @@ export default function ClientLibraryPage() {
               </Select>
             </div>
 
-            {/* Hides paused brand COLUMNS only. Default off = shown (today's
-                behavior). Outstanding counts are unaffected — they read every
-                cell regardless of which columns render (spec §3.1). Hidden
-                entirely when the project has no paused brands. */}
+            {/* Hides paused brand COLUMNS only. Default ON as of 2026-07-31
+                (see the hidePaused state above for the prod evidence that this
+                is count-neutral). Outstanding counts are unaffected either way —
+                they read every cell regardless of which columns render (spec
+                §3.1). Hidden entirely when the project has no paused brands.
+                Because this is now the DEFAULT, the accepted LOW-3 behavior —
+                the editor lookup goes through visibleBrands, so a paused brand's
+                cells can't be opened, and toggling discards an unsaved note in
+                one — is reached without the user opting in. Karen verified no
+                lock-up (a stale expandedCell is inert; another dot re-targets
+                cleanly) and endorsed keeping it; unchecking this box restores
+                access to those columns. */}
             {pausedBrandCount > 0 ? (
               <label className="flex h-9 items-center gap-2 text-sm text-[color:var(--f92-dark)]">
                 <input
@@ -857,8 +872,8 @@ export default function ClientLibraryPage() {
                                         : { directiveId: directive.id, brandId: brand.id },
                                     )
                                   }
-                                  aria-label={`${directive.title} — ${brand.display_name}: ${STATUS_LABEL[status]}${clickable ? (isExpanded ? ' (editing — activate to close)' : ' (edit)') : ''}`}
-                                  title={`${STATUS_LABEL[status]}${cell?.note ? ` — ${cell.note}` : ''}`}
+                                  aria-label={`${directive.title} — ${brand.display_name}: ${CELL_STATUS_LABEL[status]}${clickable ? (isExpanded ? ' (editing — activate to close)' : ' (edit)') : ''}`}
+                                  title={`${CELL_STATUS_LABEL[status]}${cell?.note ? ` — ${cell.note}` : ''}`}
                                   className={
                                     'mx-auto flex h-6 w-6 items-center justify-center rounded-full transition ' +
                                     (clickable

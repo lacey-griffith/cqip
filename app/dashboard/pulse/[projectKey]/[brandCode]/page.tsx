@@ -10,7 +10,12 @@
 //   - Convert config: a framed placeholder — E2 fills it.
 //
 // Admins edit a directive's status/note for THIS brand inline (same PATCH
-// route the matrix uses, via the shared saveDirectiveCell + CellEditStrip).
+// route the matrix uses, via the shared saveDirectiveCell + CellEditStrip) by
+// clicking the row's STATUS PILL — the only interactive element in the row.
+// A client-side status filter scopes the list (default `Open` = not Done and
+// not N/A); see lib/client-library/pulse.ts for why that is a different
+// function from the matrix's derived-resolve filter and must not be unified
+// with it.
 // Non-admins see the read-only view UNCHANGED — the route enforces admin
 // server-side regardless of what renders. A cell must EXIST to be editable
 // (Phase A design: hollow n_a "no cell" rows stay non-interactive). E3 swaps
@@ -21,17 +26,33 @@ import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase/client';
 import { Card } from '@/components/ui/card';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useToast } from '@/components/layout/toaster';
 import { CellEditStrip } from '@/components/client-library/cell-edit-strip';
 import {
   brandDirectiveView,
+  effectiveCellStatus,
+  filterBrandDirectiveRows,
+  BRAND_STATUS_FILTERS,
+  BRAND_STATUS_FILTER_LABEL,
   type BrandCell,
   type BrandDirectiveRow,
+  type BrandStatusFilter,
 } from '@/lib/client-library/pulse';
 import { broadcastPulseProject } from '@/lib/client-library/pulse-project-channel';
 import { fetchAllPaged } from '@/lib/client-library/paged-fetch';
 import { saveDirectiveCell } from '@/lib/client-library/directive-cell-save';
-import type { CellStatus, DirectiveType } from '@/lib/client-library/directives';
+import {
+  CELL_STATUS_LABEL,
+  type CellStatus,
+  type DirectiveType,
+} from '@/lib/client-library/directives';
 
 interface BrandRow {
   id: string;
@@ -55,14 +76,6 @@ const TYPE_LABEL: Record<DirectiveType, string> = {
   trigger: 'Trigger',
   site_area: 'Site area',
   audience: 'Audience',
-};
-
-const STATUS_LABEL: Record<CellStatus, string> = {
-  todo: 'To do',
-  in_progress: 'In progress',
-  done: 'Done',
-  blocked: 'Blocked',
-  n_a: 'N/A',
 };
 
 // Cell status → token color (§13 r25 — tokens, no inline hex). Matches the
@@ -92,6 +105,14 @@ export default function PulseBrandPage({
   // keyed by directive id — the brand is fixed (this page), so a directive id
   // uniquely identifies the cell.
   const [editingId, setEditingId] = useState<string | null>(null);
+  // Status filter over the already-loaded cells (no refetch). `open` is the
+  // DEFAULT, so the first paint hides Done/N-A rows — which is exactly why the
+  // count + hidden-count readout below is load-bearing rather than decoration.
+  //
+  // Session-only React state, and deliberately NOT reset on brand→brand nav:
+  // this mirrors the matrix, whose search/status/sort survive a project switch,
+  // and it makes "walk the brands looking at everything Blocked" work.
+  const [statusFilter, setStatusFilter] = useState<BrandStatusFilter>('open');
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -286,6 +307,28 @@ export default function PulseBrandPage({
     [brand, directives, cells],
   );
 
+  // What the list actually renders. Kept separate from `rows` so every count
+  // below derives from live data — never a literal (prod went 76 → 82 active
+  // directives inside a week).
+  const visibleRows = useMemo(
+    () => filterBrandDirectiveRows(rows, statusFilter),
+    [rows, statusFilter],
+  );
+
+  // Rows the filter is holding back. Deliberately a subtraction and NOT a lib
+  // helper: unlike the matrix — where countHiddenByStatus is load-bearing
+  // because SEARCH filters first, so hidden ≠ total − shown — this page has no
+  // search axis, so the two are provably equal and a helper would only be a
+  // second way to compute one number.
+  const hiddenByFilter = rows.length - visibleRows.length;
+
+  // Changing the filter can remove the row whose editor is open; don't leave a
+  // strip mounted for a row that just left the DOM.
+  const handleStatusFilterChange = useCallback((next: BrandStatusFilter) => {
+    setStatusFilter(next);
+    setEditingId(null);
+  }, []);
+
   // Reconcile helper for the shared save handler's error path — re-fetch just
   // this brand's cells (cheaper than the full load()).
   //
@@ -422,14 +465,96 @@ export default function PulseBrandPage({
                 </>
               )}
             </p>
+            {/* Status filter + count. Same control treatment as the matrix's
+                bar (h-9 controls, "Status:" prefix in the trigger, count
+                right-aligned in a polite live region), adapted to sit above a
+                stack of Cards rather than inside one. Client-side over the
+                already-loaded cells — nothing here refetches. Suppressed when
+                the brand has no directives at all (nothing to filter). */}
+            {rows.length > 0 ? (
+              <div className="mb-3 flex flex-wrap items-center gap-3">
+                {/* No sr-only Label: the trigger's own content is
+                    "Status: Open", which IS the accessible name (same reasoning
+                    as the matrix's status control). */}
+                <Select
+                  value={statusFilter}
+                  onValueChange={(v) => handleStatusFilterChange(v as BrandStatusFilter)}
+                >
+                  <SelectTrigger id="brandStatusFilter" className="h-9 w-44 text-sm">
+                    <span className="shrink-0 text-[color:var(--f92-gray)]">Status:&nbsp;</span>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {BRAND_STATUS_FILTERS.map((f) => (
+                      <SelectItem key={f} value={f}>{BRAND_STATUS_FILTER_LABEL[f]}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {/* ONE polite live region holding the count AND the hidden-row
+                    correction, per the matrix's LOW-7 lesson: announcing a bare
+                    count lets "0 directives" affirm a false "there's nothing
+                    here" reading. Both shapes (rows listed / zero rows) are
+                    announced from this same region, and it holds the only
+                    "Show all" — the empty state points at it rather than
+                    rendering a duplicate button.
+                    Unlike the matrix, this correction is NOT gated behind a
+                    search: there is no search box here, and the DEFAULT filter
+                    hides rows the user never asked to hide, so on first paint
+                    they must be able to see that Done/N-A rows exist. */}
+                <div
+                  className="ml-auto flex flex-wrap items-center justify-end gap-x-2 text-xs font-medium text-[color:var(--f92-gray)]"
+                  aria-live="polite"
+                >
+                  <span>
+                    {visibleRows.length === rows.length
+                      ? `${rows.length} directive${rows.length === 1 ? '' : 's'}`
+                      : `${visibleRows.length} of ${rows.length} directives`}
+                  </span>
+                  {hiddenByFilter > 0 ? (
+                    <span className="font-normal">
+                      ·{' '}
+                      {hiddenByFilter === 1
+                        ? '1 directive hidden by this filter.'
+                        : `${hiddenByFilter} directives hidden by this filter.`}{' '}
+                      <button
+                        type="button"
+                        onClick={() => handleStatusFilterChange('all')}
+                        className="font-medium text-[color:var(--f92-orange)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)]"
+                      >
+                        Show all
+                      </button>
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+
             {rows.length === 0 ? (
               <Card className="p-6 text-center text-sm text-[color:var(--f92-gray)]">
                 No directives yet for this brand.
               </Card>
+            ) : visibleRows.length === 0 ? (
+              /* The filter emptied the view. Distinct from "this brand has no
+                 directives" above — keep both reachable, or a filtered-out view
+                 reads as a data-loading bug on a brand with dozens of rows.
+                 The reset lives in the live region just above (see LOW-7), and
+                 pointing at it is safe by arithmetic rather than by luck:
+                 hiddenByFilter is rows.length - 0 here, and this branch requires
+                 rows.length > 0, so the "Show all" button is ALWAYS rendered
+                 whenever this copy shows. */
+              <Card className="p-6 text-center text-sm text-[color:var(--f92-gray)]">
+                No directives are{' '}
+                <span className="font-medium text-[color:var(--f92-dark)]">
+                  {BRAND_STATUS_FILTER_LABEL[statusFilter]}
+                </span>{' '}
+                for this brand. Use <span className="italic">Show all</span> above to see every
+                directive.
+              </Card>
             ) : (
               <div className="space-y-2">
-                {rows.map(({ directive, cell }) => {
-                  const status = cell?.status ?? 'n_a';
+                {visibleRows.map(({ directive, cell }) => {
+                  const status = effectiveCellStatus(cell);
                   // A cell must EXIST to be editable (Phase A design): a
                   // directive with no directive_brand_status row for this brand
                   // renders hollow n_a and stays non-interactive.
@@ -479,6 +604,19 @@ export default function PulseBrandPage({
                             </p>
                           ) : null}
                         </div>
+                        {/* The status pill is the ONLY interactive element in
+                            the row — title / type badge / description are inert
+                            text, matching the matrix, where the cell dot is the
+                            target and not the directive title.
+                            It now carries a visible chip affordance (fill +
+                            border) so it reads as a control rather than as the
+                            read-only span it used to be indistinguishable from
+                            — the third, previously-unfolded Karen LOW from the
+                            brand-page inline-edit batch. Non-admins still get a
+                            plain <span>, never a disabled button, so no
+                            interactive control leaks to a read-only user; that
+                            also means the chip treatment is itself the signal
+                            that this row is editable. */}
                         {editable ? (
                           <button
                             type="button"
@@ -486,18 +624,29 @@ export default function PulseBrandPage({
                             onClick={() =>
                               setEditingId((cur) => (cur === directive.id ? null : directive.id))
                             }
-                            aria-label={`${directive.title}: ${STATUS_LABEL[status]}${isEditing ? ' (editing — activate to close)' : ' (edit)'}`}
+                            // Leads with the ACTION and names the directive:
+                            // "To do" repeated down 82 rows tells a screen-reader
+                            // user nothing about which row they are on.
+                            aria-label={`Edit status for ${directive.title}: ${CELL_STATUS_LABEL[status]}${isEditing ? ' (editing — activate to close)' : ''}`}
                             className={
-                              'shrink-0 rounded-full px-2 py-0.5 text-xs font-medium text-[color:var(--f92-gray)] transition ' +
-                              'cursor-pointer hover:text-[color:var(--f92-orange)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)] ' +
+                              'shrink-0 cursor-pointer rounded-full border px-2.5 py-0.5 text-xs font-medium transition ' +
+                              'hover:border-[color:var(--f92-orange)] hover:text-[color:var(--f92-orange)] ' +
+                              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)] ' +
                               (isEditing ? 'ring-2 ring-[color:var(--f92-orange)]' : '')
                             }
+                            style={{
+                              background: 'var(--pill-filter-bg)',
+                              borderColor: isEditing
+                                ? 'var(--f92-orange)'
+                                : 'var(--f92-border)',
+                              color: 'var(--f92-navy)',
+                            }}
                           >
-                            {STATUS_LABEL[status]}
+                            {CELL_STATUS_LABEL[status]}
                           </button>
                         ) : (
                           <span className="shrink-0 text-xs font-medium text-[color:var(--f92-gray)]">
-                            {STATUS_LABEL[status]}
+                            {CELL_STATUS_LABEL[status]}
                           </span>
                         )}
                       </div>
