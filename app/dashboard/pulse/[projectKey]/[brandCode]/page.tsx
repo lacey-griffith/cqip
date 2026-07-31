@@ -29,6 +29,7 @@ import {
   type BrandDirectiveRow,
 } from '@/lib/client-library/pulse';
 import { broadcastPulseProject } from '@/lib/client-library/pulse-project-channel';
+import { fetchAllPaged } from '@/lib/client-library/paged-fetch';
 import { saveDirectiveCell } from '@/lib/client-library/directive-cell-save';
 import type { CellStatus, DirectiveType } from '@/lib/client-library/directives';
 
@@ -241,14 +242,26 @@ export default function PulseBrandPage({
 
       let cellRows: BrandCell[] = [];
       if (directiveRows.length > 0) {
-        const { data: cellData, error: cellErr } = await supabase
-          .from('directive_brand_status')
-          .select('directive_id, brand_id, status, note')
-          .in('directive_id', directiveRows.map((d) => d.id))
-          .eq('brand_id', brandRow.id);
+        // PAGED defensively. This read is scoped to ONE brand, so it returns at
+        // most one row per directive (76 today) and is under PostgREST's
+        // 1,000-row cap — but only by accident of the directive count, and it
+        // scales with directives exactly as the matrix does. The matrix read
+        // crossed the cap on 2026-07-31 and silently truncated; this one is
+        // paged now so it can never repeat that at ~1,000 directives.
+        const ids = directiveRows.map((d) => d.id);
+        const { data: cellData, error: cellErr } = await fetchAllPaged<BrandCell>(
+          'cells',
+          (from, to) =>
+            supabase
+              .from('directive_brand_status')
+              .select('directive_id, brand_id, status, note')
+              .in('directive_id', ids)
+              .eq('brand_id', brandRow.id)
+              .range(from, to),
+        );
         if (cancelled) return;
         if (cellErr) {
-          setLoadError(cellErr.message);
+          setLoadError(cellErr);
           // setLoadedFor is required here too (Karen MEDIUM-2): `ready` gates on
           // loadedFor === currentKey, so omitting it left the page on a
           // permanent "Loading…" with the loadError card unreachable.
@@ -256,7 +269,7 @@ export default function PulseBrandPage({
           setLoading(false);
           return;
         }
-        cellRows = (cellData ?? []) as BrandCell[];
+        cellRows = cellData;
       }
       setCells(cellRows);
       setLoadedFor(key);
@@ -289,13 +302,20 @@ export default function PulseBrandPage({
   const refetchCells = useCallback(async () => {
     if (!brand || directives.length === 0) return;
     const issuedFor = `${brand.project_key}/${brand.brand_code}`;
-    const { data, error } = await supabase
-      .from('directive_brand_status')
-      .select('directive_id, brand_id, status, note')
-      .in('directive_id', directives.map((d) => d.id))
-      .eq('brand_id', brand.id);
+    // Paged for the same reason as the load path above — and so the page's two
+    // reads of this table cannot behave differently. An unpaged reconcile would
+    // silently re-truncate whatever the load path correctly fetched.
+    const ids = directives.map((d) => d.id);
+    const { data, error } = await fetchAllPaged<BrandCell>('cells', (from, to) =>
+      supabase
+        .from('directive_brand_status')
+        .select('directive_id, brand_id, status, note')
+        .in('directive_id', ids)
+        .eq('brand_id', brand.id)
+        .range(from, to),
+    );
     if (issuedFor !== liveKeyRef.current) return;
-    if (!error) setCells((data ?? []) as BrandCell[]);
+    if (!error) setCells(data);
   }, [brand, directives]);
 
   // Inline cell save (admin), via the shared saveDirectiveCell — same

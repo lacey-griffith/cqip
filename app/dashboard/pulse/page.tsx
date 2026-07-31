@@ -71,6 +71,7 @@ import {
   readStoredPulseProject,
   PULSE_PROJECT_EVENT,
 } from '@/lib/client-library/pulse-project-channel';
+import { fetchAllPaged } from '@/lib/client-library/paged-fetch';
 
 interface ProjectRow {
   jira_project_key: string;
@@ -262,12 +263,25 @@ export default function ClientLibraryPage() {
     const directiveRows = (directivesRes.data ?? []) as DirectiveRow[];
     let cellRows: CellRow[] = [];
     if (directiveRows.length > 0) {
-      const { data: cellData, error: cellErr } = await supabase
-        .from('directive_brand_status')
-        .select('id, directive_id, brand_id, status, note')
-        .in('directive_id', directiveRows.map((d) => d.id));
-      if (cellErr) failures.push(`cells: ${cellErr.message}`);
-      cellRows = (cellData ?? []) as CellRow[];
+      // PAGED — directives × brands exceeds PostgREST's 1,000-row cap, and an
+      // unranged select returns the short result with NO error. Before this,
+      // NBLYCRO's 1,216 cells came back as 1,000: 46 directives rendered some
+      // cells hollow, under-counted Outstanding, and left those cells
+      // non-editable. See lib/client-library/paged-fetch.ts.
+      const ids = directiveRows.map((d) => d.id);
+      const { data: cellData, error: cellErr } = await fetchAllPaged<CellRow>(
+        'cells',
+        (from, to) =>
+          supabase
+            .from('directive_brand_status')
+            .select('id, directive_id, brand_id, status, note')
+            .in('directive_id', ids)
+            .range(from, to),
+      );
+      // Surface the error BEFORE using the rows: a partial read must never be
+      // rendered as if complete — that is the bug this replaced.
+      if (cellErr) failures.push(cellErr);
+      cellRows = cellData;
     }
 
     // supabase-js returns a to-one embed (brand_id → brands.id) as a single
