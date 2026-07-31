@@ -502,9 +502,23 @@ export default function PulseBrandPage({
                     search: there is no search box here, and the DEFAULT filter
                     hides rows the user never asked to hide, so on first paint
                     they must be able to see that Done/N-A rows exist. */}
+                {/* aria-atomic so the count and the correction are announced as
+                    ONE sentence rather than as two separately-changed nodes —
+                    they always change together (Karen LOW-2). Known limit,
+                    recorded rather than papered over: this region is mounted
+                    with its initial content, and content present at region
+                    creation is generally NOT announced, so the FIRST paint —
+                    the moment the default filter hides rows nobody asked to
+                    hide — is silent to a screen reader. Every later filter
+                    change announces correctly, and the text is visible in
+                    reading order. Fixing it properly would mean hoisting the
+                    region above the `!ready` gate, which collides with the
+                    DO-NOT-hoist render-branch order documented at the top of
+                    this file; not worth that trade. */}
                 <div
                   className="ml-auto flex flex-wrap items-center justify-end gap-x-2 text-xs font-medium text-[color:var(--f92-gray)]"
                   aria-live="polite"
+                  aria-atomic="true"
                 >
                   <span>
                     {visibleRows.length === rows.length
@@ -628,19 +642,46 @@ export default function PulseBrandPage({
                             // "To do" repeated down 82 rows tells a screen-reader
                             // user nothing about which row they are on.
                             aria-label={`Edit status for ${directive.title}: ${CELL_STATUS_LABEL[status]}${isEditing ? ' (editing — activate to close)' : ''}`}
+                            // ALL colors live in className, NOT in an inline
+                            // `style` (Karen MEDIUM-2). An inline declaration
+                            // beats an author stylesheet regardless of
+                            // specificity unless the stylesheet says
+                            // !important, and Tailwind's `hover:` variants are
+                            // author-stylesheet rules — so the first cut, which
+                            // set `color`/`borderColor` inline, silently killed
+                            // both hover rules while three documents claimed
+                            // "orange on hover". Verify any change here against
+                            // the COMPILED css, not against the class list.
+                            //
+                            // Text is --pill-filter-fg, the fill's matching
+                            // token (Karen MEDIUM-1): --f92-navy is #4A5AB9 in
+                            // dark mode, which lands at 2.42:1 on this fill —
+                            // an AA failure, and WORSE than the plain --f92-gray
+                            // span this replaced. --pill-filter-fg is 11.0:1
+                            // light / 9.6:1 dark.
+                            //
+                            // The BORDER is the discriminator (Karen MEDIUM-3):
+                            // the inert TYPE_LABEL badge two lines up wears this
+                            // same --pill-filter-bg fill, so fill alone cannot
+                            // say "control". --f92-gray is a deliberate step up
+                            // from the --f92-border used by the app's outline
+                            // Button (1.4:1) — it clears the 3:1 non-text
+                            // threshold in both themes (4.5:1 light / 5.9:1
+                            // dark) on the one control this change exists to
+                            // make discoverable.
+                            //
+                            // Idle and editing border classes are mutually
+                            // exclusive branches: emitting both would leave the
+                            // winner to CSS source order, not to this string.
                             className={
                               'shrink-0 cursor-pointer rounded-full border px-2.5 py-0.5 text-xs font-medium transition ' +
-                              'hover:border-[color:var(--f92-orange)] hover:text-[color:var(--f92-orange)] ' +
+                              'bg-[color:var(--pill-filter-bg)] text-[color:var(--pill-filter-fg)] ' +
+                              'hover:bg-[color:var(--pill-filter-bg-hover)] hover:text-[color:var(--f92-orange)] ' +
                               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)] ' +
-                              (isEditing ? 'ring-2 ring-[color:var(--f92-orange)]' : '')
+                              (isEditing
+                                ? 'border-[color:var(--f92-orange)] ring-2 ring-[color:var(--f92-orange)]'
+                                : 'border-[color:var(--f92-gray)] hover:border-[color:var(--f92-orange)]')
                             }
-                            style={{
-                              background: 'var(--pill-filter-bg)',
-                              borderColor: isEditing
-                                ? 'var(--f92-orange)'
-                                : 'var(--f92-border)',
-                              color: 'var(--f92-navy)',
-                            }}
                           >
                             {CELL_STATUS_LABEL[status]}
                           </button>

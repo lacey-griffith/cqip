@@ -3173,10 +3173,13 @@ type badge / description are already inert, `editable = isAdmin && !!cell` and t
 non-admin plain `<span>` were already there. What was actually outstanding is the
 **third, unfolded Karen LOW** from that batch — *edit-affordance discoverability:
 "a text button styled like the read-only span"* — so that is what shipped: a
-visible chip affordance (`--pill-filter-bg` fill + `--f92-border`, orange on
-hover/focus/open, tokens only per §13 r25) plus an aria-label that **leads with
-the action and names the directive** (`Edit status for {title}: {status}` —
-"To do" repeated down 82 rows tells a screen-reader user nothing). Non-admins
+visible chip affordance (`--pill-filter-bg` fill + `--f92-gray` border +
+`--pill-filter-fg` text; hover lifts the fill to `--pill-filter-bg-hover` and
+turns border + text orange; tokens only per §13 r25 and **no inline `style` for
+any color** — see the Karen fold below for why that matters) plus an aria-label
+that **leads with the action and names the directive** (`Edit status for {title}:
+{status}` — "To do" repeated down 82 rows tells a screen-reader user nothing about
+which row they are on). Non-admins
 keep the plain `<span>`, never a disabled button, so no interactive control leaks;
 consequence worth naming: the chip treatment is therefore itself the "this row is
 editable" signal. Cell-must-exist NOT loosened; the MEDIUM-1 `liveKeyRef` guard
@@ -3222,14 +3225,24 @@ inherited** — the 2026-07-29 batch's numbers are void (76 → 82 directives si
 NBLYCRO has **3 paused active brands (SHG, MRR-CA, WDG)** holding **246 cells**
 across active directives, **ALL 246 `n_a`, 0 non-`n_a`, 0 owed** → **count-neutral**,
 no Outstanding number on screen changes. (82 × 16 = 1,312 expected; the table holds
-1,313, the extra being SPLCRO's single directive. SPLCRO has no paused brands, so
-the toggle isn't rendered there.) Had any paused cell been owed the correct action
-was to STOP AND REPORT — hiding owed work and moving a visible count is outside a
-render-only profile. NOT persisted (no sessionStorage, no channel). **Consequence
-named, not fixed:** the accepted LOW-3 behaviour (editor lookup goes through
-`visibleBrands`, so a paused brand's cells can't be opened and toggling discards
-an unsaved note in one) is now the DEFAULT path rather than opt-in. Karen verified
-no lock-up and endorsed it on the brand axis; unchecking restores access.
+1,313, the extra being SPLCRO's single directive.) Had any paused cell been owed the
+correct action was to STOP AND REPORT — hiding owed work and moving a visible count
+is outside a render-only profile. NOT persisted (no sessionStorage, no channel).
+**AND the precondition is now checked at RUNTIME, not merely measured** (Karen
+MEDIUM-4, folded): the measurement is a snapshot and nothing enforced it —
+`PATCH /api/admin/directives/status` never consults `is_paused` and the brand page
+will set any status on a paused brand's cell, so ONE ordinary admin edit could make
+a row read `Outstanding 1` with no owed dot visible in it, unreachable from the
+matrix until someone thought to uncheck a box (before this batch the user at least
+had to opt into that state). New pure `countHiddenOwedCells(brands, cells,
+hidePaused)` in `matrix-controls.ts` — reusing `outstandingCount` so it cannot fork
+the owed set — drives an amber warning + **Show paused** when non-zero. Silent in
+normal operation, self-announcing the moment it drifts; 4 tests, all 3 mutations
+caught. **Consequence named, not fixed:** the accepted LOW-3 behaviour (editor
+lookup goes through `visibleBrands`, so a paused brand's cells can't be opened and
+toggling discards an unsaved note in one) is now the DEFAULT path rather than
+opt-in. Karen verified no lock-up and endorsed it on the brand axis; unchecking
+restores access.
 
 **Ride-along — one `CELL_STATUS_LABEL`.** The status→label map existed as THREE
 identical private copies (matrix page, brand page, `CellEditStrip`). The brand
@@ -3239,11 +3252,13 @@ structural (`CELL_STATUS_LABEL` in `directives.ts`, the canonical status module)
 rather than conventional. Pure const move, no behaviour change; a test pins
 `BRAND_STATUS_FILTER_LABEL[status] === CELL_STATUS_LABEL[status]`.
 
-**Gates:** `tsc --noEmit` 0 · ESLint **zero** findings on all six touched files ·
-**108/108** tests (98 + 10 new) · `npm run build` 0 with `/dashboard/pulse` still
-`○`, the brand page `ƒ`, no new route entries. **Mutation-verified** (a test that
-passes on the broken version is not a test): `open`-as-whitelist → 1 failure (the
-fail-safe test, and only it); cell-less reading `todo` → 4 failures.
+**Gates:** `tsc --noEmit` 0 · ESLint **zero** findings on all touched files ·
+**112/112** tests (98 + 10 filter + 4 guard) · `npm run build` 0 with
+`/dashboard/pulse` still `○`, the brand page `ƒ`, no new route entries.
+**Mutation-verified** (a test that passes on the broken version is not a test):
+`open`-as-whitelist → 1 failure (the fail-safe test, and only it); cell-less
+reading `todo` → 4 failures; and on the new guard — always-0 → 2, counting all
+paused cells instead of owed ones → 3, ignoring `hidePaused` → 1.
 **HONEST LIMIT, and the reason this is written down:** rewriting
 `TERMINAL_CELL_STATUSES` as the complement of `OWED` → **0 failures**. No test can
 catch that refactor — the complement form keeps the suite green including the
@@ -3255,6 +3270,60 @@ the lib and the test file. An earlier draft of that test comment claimed the
 fail-safe test DID catch it; mutation run 3 disproved it and the claim was
 corrected rather than left standing. Same shape as the §15 lesson: *if a check can
 only be satisfied by the same artifact that produced the value, it is not a check.*
+
+**Karen post-flight: PASS-WITH-FINDINGS.** She independently reproduced the
+Change-1 premise correction (the row was NOT the click target at `c58364c`), the
+prod count-neutrality probe to the row, and all three mutation results **including
+the zero** — so the documented honest limit is real. She also confirmed the
+"different function" claim is STRONGER than argued: reusing the matrix's
+`matchesStatusFilter` would be a *bug*, since a single `n_a` cell classifies
+`unstarted` → visible under `open`, the opposite of this page's intent. **Four
+MEDIUMs, all folded**, three of them in the same 12-line hunk and all pushing the
+same way — against the one control the batch exists to make discoverable:
+- **MEDIUM-2, the important one — both hover effects were DEAD, and three
+  documents claimed they worked.** The first cut set `color`/`borderColor` in an
+  inline `style`; an inline declaration beats an author-stylesheet rule regardless
+  of specificity absent `!important`, and Tailwind's `hover:` variants ARE
+  author-stylesheet rules. It was also a REGRESSION — pre-batch the pill had no
+  inline style, so its hover genuinely worked. All colors moved to `className`
+  (the pill's JSX now carries no inline `style` at all) and the fix was verified
+  in the **COMPILED** chunk, which is the only layer where this is visible — a
+  class-list review cannot see it. Idle vs editing border classes are mutually
+  exclusive branches so the winner isn't left to CSS source order.
+- **MEDIUM-1 — dark-mode AA failure, also a regression.** `--f92-navy` is
+  `#4A5AB9` in dark and lands at **2.42:1** on this fill — worse than the plain
+  `--f92-gray` span it replaced. Now `--pill-filter-fg`, the fill's matching
+  token (11.0:1 light / 9.6:1 dark), which is what §13 r25 intends and not just
+  its letter.
+- **MEDIUM-3 — the chip wore the SAME fill as the inert `TYPE_LABEL` badge in its
+  own row**, so fill alone could not say "control". The border is now the
+  discriminator: `--f92-gray`, a deliberate step up from the `--f92-border` used
+  by the app's own outline `Button` (1.4:1), clearing 3:1 in both themes (4.5:1 /
+  5.9:1).
+- **MEDIUM-4 → the runtime guard** described above.
+**LOW-1 folded, and worth keeping:** the spec's "Active projects: 2" was stale
+**when written** — `HDCRO` / *Heartland CRO* was created 2026-07-31T17:14:24Z, an
+hour after the probe and 45 min before the commit (verified independently; 0
+brands / 0 directives, so `pausedBrandCount === 0`, toggle not rendered, safety
+conclusion unaffected). A batch whose entire discipline is "the old numbers are
+void, re-measure" had a fact rot inside 45 minutes: **the shelf-life of a prod
+measurement is shorter than one work session.**
+**Accepted as-is (not defects):** LOW-2 the live region is silent on FIRST paint
+(content present at region creation isn't announced; later changes are, the text is
+visible in reading order, and a real fix means hoisting above the `!ready` gate
+against the `52dc69d` DO-NOT-hoist order — `aria-atomic` added instead) · LOW-3
+"Show all" destroys itself and drops focus to `<body>`, **identical to the
+matrix's own button**, so it's a shared pattern worth fixing once rather than
+inconsistently here · LOW-4 a cell-less row hidden by default (0 exist today; on a
+17th brand it'd show an empty list + `82 hidden` instead of 82 hollow rows —
+moves the anomaly from obvious-on-sight to one-click-away, making the §15
+cell-backfill item marginally more pressing) · aria-label convention now drifts
+(brand pill leads with the action, matrix dot kept its trailing ` (edit)`).
+Karen ruled the one-button judgment call (E) as **satisfying** the ask and the
+`CELL_STATUS_LABEL` ride-along as **justified, do not split out**, and found no
+regression in any protected surface (`liveKeyRef`, the setLoadedFor invariant, the
+render-branch order, cell-must-exist, the non-admin `<span>`, two consumers each
+for `saveDirectiveCell`/`CellEditStrip`, matrix inline editing).
 
 **Out of scope, not snuck in:** search/sort on the brand page · KPI strip ·
 hover-inspect · Change Log widget · family/grouping · hiding paused CLIENTS from

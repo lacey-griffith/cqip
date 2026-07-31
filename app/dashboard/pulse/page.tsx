@@ -52,6 +52,7 @@ import {
 import {
   buildMatrixRows,
   countHiddenByStatus,
+  countHiddenOwedCells,
   visibleMatrixBrands,
   MATRIX_SORT_KEYS,
   MATRIX_SORT_LABEL,
@@ -224,8 +225,10 @@ export default function ClientLibraryPage() {
   // no Outstanding number on screen changes when the columns go away. SPLCRO has
   // no paused brands, so the toggle isn't rendered there at all.
   //
-  // Re-measure before assuming this still holds. If a paused brand ever holds an
-  // owed cell, a checked-by-default toggle hides real work.
+  // That measurement is a snapshot, and nothing in the app enforces it — so it is
+  // ALSO checked at runtime now: countHiddenOwedCells drives a visible warning if
+  // a paused brand ever holds owed work (Karen MEDIUM-4). Re-measure before
+  // widening this, but the UI will no longer stay quiet if it drifts.
   //
   // NOT persisted (no sessionStorage, no channel) — a reload shows every column
   // again, same as the other three controls.
@@ -425,6 +428,14 @@ export default function ClientLibraryPage() {
     [brands, hidePaused],
   );
   const pausedBrandCount = useMemo(() => brands.filter((b) => b.is_paused).length, [brands]);
+
+  // Runtime check on the property that justified defaulting hide-paused to
+  // CHECKED (Karen MEDIUM-4) — see countHiddenOwedCells for why a prod
+  // measurement alone is not enough. Reads only already-loaded state, no query.
+  const hiddenOwedCount = useMemo(
+    () => countHiddenOwedCells(brands, cells, hidePaused),
+    [brands, cells, hidePaused],
+  );
 
   // Directives matching the search but excluded by the status filter. Surfaced
   // so "search found nothing" can never be read as "it doesn't exist" — see
@@ -658,6 +669,30 @@ export default function ClientLibraryPage() {
                 />
                 Hide paused brands ({pausedBrandCount})
               </label>
+            ) : null}
+
+            {/* The precondition behind the checked-by-default state, checked at
+                runtime instead of trusted (see hiddenOwedCount). If a paused
+                brand ever holds owed work, an Outstanding pill would count it
+                while no owed dot is visible in the row — so say so, and offer
+                the one click that reveals it. Renders only when the invariant is
+                actually violated, so it is silent in normal operation. */}
+            {hiddenOwedCount > 0 ? (
+              <span
+                className="flex h-9 items-center gap-2 text-xs font-medium"
+                style={{ color: 'var(--pill-amber-fg)' }}
+              >
+                ⚠ {hiddenOwedCount} outstanding{' '}
+                {hiddenOwedCount === 1 ? 'cell' : 'cells'} on paused{' '}
+                {hiddenOwedCount === 1 ? 'brand is' : 'brands are'} hidden but still counted.
+                <button
+                  type="button"
+                  onClick={() => setHidePaused(false)}
+                  className="font-semibold text-[color:var(--f92-orange)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)]"
+                >
+                  Show paused
+                </button>
+              </span>
             ) : null}
 
             {/* ONE polite live region holding the count AND the hidden-match

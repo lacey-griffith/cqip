@@ -6,6 +6,7 @@ import {
   classifyDirectiveCells,
   compareMatrixRows,
   countHiddenByStatus,
+  countHiddenOwedCells,
   DIRECTIVE_RESOLVE_STATES,
   matchesSearch,
   matchesStatusFilter,
@@ -17,7 +18,11 @@ import {
   type MatrixControls,
   type MatrixRow,
 } from '../lib/client-library/matrix-controls';
-import type { CellStatus } from '../lib/client-library/directives';
+import {
+  CELL_STATUSES,
+  outstandingCount,
+  type CellStatus,
+} from '../lib/client-library/directives';
 
 const cell = (directive_id: string, status: CellStatus): MatrixCellLike => ({ directive_id, status });
 
@@ -356,4 +361,67 @@ test('Outstanding counts a PAUSED brand cell and is unaffected by column filteri
   const afterHide = buildMatrixRows(directives, cells, controls());
   assert.equal(afterHide[0].outstanding, rows[0].outstanding);
   assert.equal(afterHide[0].resolveState, rows[0].resolveState);
+});
+
+// -------------------------------------------------------------------------
+// countHiddenOwedCells — the runtime guard behind hide-paused defaulting to
+// CHECKED (2026-07-31). Prod says 0 owed on paused brands today, but the status
+// PATCH route never consults is_paused, so an ordinary admin edit can break that.
+// These pin that the guard actually fires when it does.
+// -------------------------------------------------------------------------
+const GUARD_BRANDS = [
+  { id: 'bActive', is_paused: false },
+  { id: 'bPaused', is_paused: true },
+  { id: 'bPaused2', is_paused: true },
+];
+
+test('countHiddenOwedCells is 0 in the normal case: paused cells are all n_a', () => {
+  const cells = [
+    { brand_id: 'bPaused', status: 'n_a' as CellStatus },
+    { brand_id: 'bPaused2', status: 'n_a' as CellStatus },
+    { brand_id: 'bActive', status: 'todo' as CellStatus }, // owed, but VISIBLE
+  ];
+  assert.equal(countHiddenOwedCells(GUARD_BRANDS, cells, true), 0);
+});
+
+test('countHiddenOwedCells FIRES when a paused brand holds owed work', () => {
+  // The scenario the guard exists for: an admin sets a paused brand's cell to
+  // Blocked from the brand page (nothing rejects it), so Outstanding counts a
+  // cell whose column is hidden.
+  const cells = [
+    { brand_id: 'bPaused', status: 'blocked' as CellStatus },
+    { brand_id: 'bPaused', status: 'n_a' as CellStatus },
+    { brand_id: 'bPaused2', status: 'in_progress' as CellStatus },
+    { brand_id: 'bPaused2', status: 'done' as CellStatus }, // done does not owe
+    { brand_id: 'bActive', status: 'todo' as CellStatus }, // visible, not counted here
+  ];
+  assert.equal(countHiddenOwedCells(GUARD_BRANDS, cells, true), 2);
+});
+
+test('countHiddenOwedCells is 0 when nothing is hidden, or no brand is paused', () => {
+  const cells = [{ brand_id: 'bPaused', status: 'blocked' as CellStatus }];
+  // hidePaused off → the column is on screen, so there is nothing to warn about.
+  assert.equal(countHiddenOwedCells(GUARD_BRANDS, cells, false), 0);
+  // No paused brands at all (e.g. SPLCRO) → the toggle isn't even rendered.
+  assert.equal(
+    countHiddenOwedCells([{ id: 'bActive', is_paused: false }], cells, true),
+    0,
+  );
+  assert.equal(countHiddenOwedCells([], [], true), 0);
+});
+
+test('countHiddenOwedCells agrees with outstandingCount about what "owed" means', () => {
+  // It must not fork the owed set — todo/in_progress/blocked owe, done/n_a do not.
+  for (const status of CELL_STATUSES) {
+    const owes = countHiddenOwedCells(
+      [{ id: 'b', is_paused: true }],
+      [{ brand_id: 'b', status }],
+      true,
+    );
+    assert.equal(
+      owes,
+      outstandingCount([{ status }]),
+      `disagreement on ${status}`,
+    );
+  }
 });

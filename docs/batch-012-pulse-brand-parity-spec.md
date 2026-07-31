@@ -56,8 +56,19 @@ addresses.
 ### What ships
 
 - **Visible chip affordance** on the pill: `--pill-filter-bg` fill,
-  `--f92-border` border (orange on hover/focus/open), navy text. Tokens only
-  (§13 r25) — no inline hex.
+  `--f92-gray` border, `--pill-filter-fg` text; on hover the fill lifts to
+  `--pill-filter-bg-hover` and border + text go orange. Tokens only (§13 r25) —
+  no inline hex, **and no inline `style` for any color** (see §5, Karen
+  MEDIUM-1/2/3).
+  - The **border is the discriminator**: the inert `TYPE_LABEL` badge two lines
+    up wears the same `--pill-filter-bg` fill, so fill alone cannot say
+    "control". `--f92-gray` is a deliberate step up from the `--f92-border` the
+    app's outline `Button` uses (1.4:1) — it clears the 3:1 non-text threshold
+    in **both** themes (4.5:1 light / 5.9:1 dark).
+  - Text is `--pill-filter-fg`, the fill's **matching** token, not `--f92-navy`:
+    in dark mode `--f92-navy` is `#4A5AB9`, which lands at **2.42:1** on this
+    fill — an AA failure and *worse* than the plain `--f92-gray` span it
+    replaced. `--pill-filter-fg` is 11.0:1 light / 9.6:1 dark.
 - Non-admins keep the **plain `<span>`, never a disabled button**, so no
   interactive control leaks to a read-only user. A consequence worth stating:
   the chip treatment is therefore *itself* the "this row is editable" signal.
@@ -185,7 +196,7 @@ against prod **2026-07-31**:
 
 | | |
 |---|---|
-| Active projects | 2 — NBLYCRO, SPLCRO |
+| Active projects | **3** — NBLYCRO, SPLCRO, HDCRO |
 | NBLYCRO active brands | 16 |
 | NBLYCRO active directives | **82** → 1,312 expected cells (table holds 1,313; 1 is SPLCRO's) |
 | Paused **active** brands | **3** — SHG, MRR-CA, WDG |
@@ -195,11 +206,38 @@ against prod **2026-07-31**:
 | **Owed** (`todo`/`in_progress`/`blocked`) | **0** |
 
 **Verdict: count-neutral.** Hiding those columns changes no Outstanding number on
-screen. SPLCRO has 0 paused brands, so the toggle isn't rendered there at all.
+screen. SPLCRO and HDCRO have 0 paused brands, so the toggle isn't rendered there
+at all.
+
+> **The projects row was already stale when first written** (Karen LOW-1, folded).
+> The original probe ran 16:16Z and reported "2 — NBLYCRO, SPLCRO". `HDCRO` /
+> *Heartland CRO* (`multi_brand`) was created **17:14:24Z** — an hour after the
+> probe, 45 min before the commit. Re-verified: it has 0 brands and 0 directives,
+> so `pausedBrandCount === 0` and the toggle is not rendered for it; the safety
+> conclusion is unaffected. Recorded rather than quietly patched, because a batch
+> whose whole discipline is *"the 2026-07-29 numbers are void, re-measure"* had a
+> fact rot inside 45 minutes — the shelf-life of a prod measurement is shorter
+> than one work session.
 
 Had any paused cell been owed, the correct action was to **stop and report** — a
 checked-by-default toggle would hide real work, and changing a visible
 Outstanding count is outside a render-only profile.
+
+### The precondition is now checked at RUNTIME, not just measured (Karen MEDIUM-4)
+
+The measurement is a snapshot, and nothing in the app enforced it:
+`PATCH /api/admin/directives/status` never consults `is_paused`, and the brand
+page will set any status on a paused brand's cell. **One ordinary admin edit could
+invalidate it** — after which a row would read `Outstanding 1` with no owed dot
+visible anywhere in it, unreachable from the matrix until someone thought to
+uncheck a box. Before this batch the user had to opt into that state; the flip
+would have made it the landing state.
+
+So the matrix now derives `countHiddenOwedCells(brands, cells, hidePaused)`
+(`lib/client-library/matrix-controls.ts`, reusing `outstandingCount` so it cannot
+fork the owed set) from already-loaded data and renders an amber warning +
+**Show paused** when it is non-zero. Silent in normal operation; self-announcing
+the moment the invariant drifts. Four tests, all three mutations caught (§5).
 
 ### Not persisted
 
@@ -233,8 +271,8 @@ const move; no behaviour change. A test pins that
 
 ## 5. Verification
 
-`tsc --noEmit` 0 · ESLint **zero** findings on all six touched files ·
-**108/108** tests (98 pre-existing + 10 new) · `npm run build` exit 0 with
+`tsc --noEmit` 0 · ESLint **zero** findings on all touched files · **112/112**
+tests (98 pre-existing + 10 filter + 4 guard) · `npm run build` exit 0 with
 `/dashboard/pulse` `○`, `/dashboard/pulse/[projectKey]/[brandCode]` `ƒ`, **no new
 route entries**.
 
@@ -244,7 +282,35 @@ route entries**.
 |---|---|
 | `open` rewritten as a **whitelist** of the owed statuses | **1 failure** — the fail-safe test, and *only* that test |
 | `effectiveCellStatus` returns `todo` instead of `n_a` for a cell-less row | **4 failures** |
-| `TERMINAL_CELL_STATUSES` rewritten as the **complement of `OWED`** | **0 failures** |
+| `TERMINAL_CELL_STATUSES` rewritten as the **complement of `OWED`** | **0 failures** — see the honest limit below |
+| `countHiddenOwedCells` always returns 0 (never warns) | **2 failures** |
+| ...counts **all** paused cells, not just owed ones | **3 failures** |
+| ...ignores `hidePaused` (warns when columns are visible) | **1 failure** |
+
+### The CSS fixes were verified in the COMPILED stylesheet, not in the class list
+
+That distinction is the entire content of Karen MEDIUM-2: the first cut set
+`color` / `borderColor` in an inline `style`, and an inline declaration beats an
+author-stylesheet rule regardless of specificity unless the stylesheet says
+`!important`. Tailwind's `hover:` variants *are* author-stylesheet rules, so both
+advertised hover effects were dead — while the commit message, this spec, and
+CLAUDE.md all claimed "orange on hover." A class-list review cannot see that.
+
+All colors moved into `className`; the pill's JSX now contains **no inline
+`style`** at all. Extracted from the built chunk:
+
+```
+.hover\:bg-\[color\:var\(--pill-filter-bg-hover\)\]:hover { background-color:var(--pill-filter-bg-hover) }
+.hover\:border-\[color\:var\(--f92-orange\)\]:hover       { border-color:var(--f92-orange) }
+.hover\:text-\[color\:var\(--f92-orange\)\]:hover         { color:var(--f92-orange) }
+.text-\[color\:var\(--pill-filter-fg\)\]                  { color:var(--pill-filter-fg) }
+.border-\[color\:var\(--f92-gray\)\]                      { border-color:var(--f92-gray) }
+```
+
+Each `hover:` rule is `class + pseudo-class` (0,2,0) against the base utility's
+(0,1,0), so hover wins with nothing inline to beat it. The idle and editing
+border classes are **mutually exclusive branches** — emitting both would leave the
+winner to CSS source order rather than to the class string.
 
 ### The honest limit — recorded because the third row above matters
 
@@ -262,6 +328,35 @@ that is exactly the shape §15 records as *"if a check can only be satisfied by
 the same artifact that produced the value, it is not a check."* An earlier draft
 of the test comment asserted that the fail-safe test *did* catch it; mutation
 run 3 disproved that, and the claim was corrected rather than left standing.
+
+---
+
+### Accepted as-is from the Karen pass (not defects)
+
+- **LOW-2 — the live region is silent on FIRST paint.** Content present when a
+  live region is created is generally not announced, and this region mounts with
+  its content, so the one moment that matters most — the default filter hiding
+  rows nobody asked to hide — is not spoken. Every later filter change announces
+  correctly and the text is visible in reading order. `aria-atomic="true"` was
+  added so the count and correction read as one sentence. A real fix means
+  hoisting the region above the `!ready` gate, which collides with the
+  DO-NOT-hoist render-branch order from `52dc69d` — not worth that trade.
+- **LOW-3 — "Show all" destroys itself and drops focus** to `<body>`. Identical to
+  the matrix's own "Show all statuses" button, so this is a **shared pattern worth
+  fixing once across both surfaces**, not this batch's invention. Fixing it here
+  only would leave the two inconsistent.
+- **LOW-4 — a cell-less row hidden by default.** Zero such rows exist on NBLYCRO
+  today (verified). The case that can fire: add a 17th brand (Phase A has no cell
+  backfill — already a §15 item) and its Pulse page shows an empty list plus
+  `0 of 82 directives · 82 hidden`, where before it showed 82 visibly-hollow rows.
+  The anomaly moves from "obvious on sight" to "one click away"; the readout still
+  does its job. Makes the §15 cell-backfill / target-picker item marginally more
+  pressing.
+- **aria-label convention drift** — the brand pill leads with `Edit status for …`
+  while the matrix dot kept its trailing ` (edit)`. Both name the row and the
+  status; no information lost, two conventions now coexist.
+- `id="brandStatusFilter"` on the `SelectTrigger` references no label — dangling,
+  but exactly matches the matrix's `id="matrixStatus"`.
 
 ---
 
@@ -292,6 +387,12 @@ diffs are kept separable.
    still reachable (**judgment call in §2** — say if you want a button in the
    card instead).
 9. **Matrix:** *Hide paused brands (3)* is **checked** on load, 3 columns absent,
-   and **no Outstanding number differs** from unchecking it.
+   and **no Outstanding number differs** from unchecking it. No amber warning
+   should appear (it only shows if a paused brand holds owed work).
 10. Reload → still checked (default), not persisted state.
-11. SPLCRO → no hide-paused checkbox at all.
+11. SPLCRO / HDCRO → no hide-paused checkbox at all.
+12. **Dark mode** (Karen MEDIUM-1) — view the brand page with the dark theme on
+    and confirm the status pill's label is legible.
+13. **Hover a status pill in BOTH themes** (Karen MEDIUM-2) — fill should lift and
+    the border + text should go orange. This is the effect that was dead in the
+    first cut, so it is the single most important item on this list.

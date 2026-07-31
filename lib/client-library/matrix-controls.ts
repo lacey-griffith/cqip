@@ -126,6 +126,33 @@ export function visibleMatrixBrands<B extends { is_paused: boolean }>(
   return hidePaused ? brands.filter((b) => !b.is_paused) : brands.slice();
 }
 
+// Owed cells sitting on a brand whose column is hidden — work that Outstanding
+// COUNTS but that the user cannot see. Zero in normal operation.
+//
+// This is the runtime check on the property that justified defaulting hide-paused
+// to CHECKED (2026-07-31, Karen MEDIUM-4). Fan-out lands paused brands at `n_a`
+// so they start un-owed, and a prod measurement confirmed 0 owed across all 246
+// paused-brand cells — but nothing ENFORCES it: the status PATCH route never
+// consults `is_paused`, and the brand page will happily set a paused brand's cell
+// to Blocked. One such edit makes a row read "Outstanding 1" with no owed dot
+// visible anywhere in it. The page renders a warning when this is non-zero, so
+// the divergence announces itself rather than waiting to be tripped over.
+//
+// Deliberately returns 0 when hidePaused is false: nothing is hidden then, so
+// there is nothing to warn about — the caller does not have to re-check the flag.
+// Reuses outstandingCount() rather than re-deriving the owed set, so this and the
+// Outstanding pill cannot disagree about what "owed" means.
+export function countHiddenOwedCells<B extends { id: string; is_paused: boolean }>(
+  brands: ReadonlyArray<B>,
+  cells: ReadonlyArray<{ brand_id: string; status: CellStatus }>,
+  hidePaused: boolean,
+): number {
+  if (!hidePaused) return 0;
+  const pausedIds = new Set(brands.filter((b) => b.is_paused).map((b) => b.id));
+  if (pausedIds.size === 0) return 0;
+  return outstandingCount(cells.filter((c) => pausedIds.has(c.brand_id)));
+}
+
 // -------------------------------------------------------------------------
 // Sort (spec §4). Ties break by title in BOTH modes, so ordering is fully
 // deterministic and does not lean on Array.prototype.sort stability or on the
