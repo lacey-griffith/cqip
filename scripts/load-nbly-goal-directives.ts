@@ -216,6 +216,27 @@ async function main() {
   console.log(`Parsed ${rows.length} cell rows from ${path.basename(CSV_PATH)}.`);
 
   // ---- in-file duplicate (title, brand) guard --------------------------
+  // The '|' is the key delimiter (it replaced a literal NUL byte, which made the
+  // whole file read as charset=binary and silenced grep on it).
+  //
+  // Why '|' is safe here — stated carefully, because the obvious argument is
+  // WRONG: `r.brandCode` is raw CSV text at this point (set from rawBrand at
+  // line 205); the /^[A-Z0-9-]{1,32}$/ pattern in app/api/admin/brands/route.ts
+  // governs the brand-CREATE route only, and the brand↔table check does not run
+  // until ~line 255. So nothing has constrained brandCode's charset yet, and a
+  // pipe in it is not structurally impossible.
+  //
+  // It is safe anyway, for two reasons that do hold:
+  //   1. A pipe-bearing brandCode cannot reach a write: it would fail the
+  //      brandByCode lookup below and hard-fail the run before anything is
+  //      inserted.
+  //   2. Even a colliding key cannot let a real duplicate THROUGH. Two identical
+  //      (title, brand) pairs produce identical keys under any delimiter — or
+  //      none — so the guard can never miss a genuine dup. The only reachable
+  //      failure is the opposite: a false-positive abort on two DIFFERENT pairs.
+  //      That is a spurious stop, never silent bad data.
+  // If this spent one-off is ever genuinely reused, JSON.stringify([title, code])
+  // removes the argument entirely by being unambiguous for all inputs.
   const seen = new Set<string>();
   const dupes: string[] = [];
   for (const r of rows) {
