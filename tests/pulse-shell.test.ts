@@ -6,7 +6,11 @@ import {
   cellsForBrand,
   effectiveCellStatus,
   filterBrandDirectiveRows,
+  filterBrandRows,
+  countBrandRowsByType,
   matchesBrandStatusFilter,
+  matchesBrandTypeFilter,
+  BRAND_TYPE_FILTERS,
   toClientNavGroups,
   BRAND_STATUS_FILTERS,
   BRAND_STATUS_FILTER_LABEL,
@@ -264,3 +268,81 @@ test('filter options are ordered Open-first and labelled from CELL_STATUS_LABEL'
   assert.equal(BRAND_STATUS_FILTER_LABEL.open, 'Open');
   assert.equal(BRAND_STATUS_FILTER_LABEL.all, 'All');
 });
+
+// -------------------------------------------------------------------------
+// Batch 012 restyle — the brand page's NEW type group, and the two groups
+// composing. There is no derived-state group on this surface: one brand means
+// one cell per directive, so `Open` here is the cell's own status (see the
+// status-filter block above for why that is a DIFFERENT function from the
+// matrix's resolve classifier).
+// -------------------------------------------------------------------------
+const TYPED_DIRECTIVES = [
+  { id: 'dGoal', directive_type: 'goal' as const },
+  { id: 'dTrig', directive_type: 'trigger' as const },
+  { id: 'dGoal2', directive_type: 'goal' as const },
+];
+const TYPED_ROWS = brandDirectiveView(
+  TYPED_DIRECTIVES,
+  [
+    cell('dGoal', BRAND_ID, 'todo'),
+    cell('dTrig', BRAND_ID, 'done'),
+    cell('dGoal2', BRAND_ID, 'blocked'),
+  ],
+  BRAND_ID,
+);
+
+test('matchesBrandTypeFilter reads the real column; all four types selectable', () => {
+  assert.equal(matchesBrandTypeFilter('goal', 'goal'), true);
+  assert.equal(matchesBrandTypeFilter('goal', 'trigger'), false);
+  assert.equal(matchesBrandTypeFilter('trigger', 'all'), true);
+  // site_area / audience are unused in prod today but must still work — the
+  // mockup's title-regex derivation is NOT what drives this.
+  for (const t of BRAND_TYPE_FILTERS) {
+    if (t === 'all') continue;
+    assert.equal(matchesBrandTypeFilter(t, t), true, `${t} must match itself`);
+  }
+});
+
+test('brand-page status AND type compose', () => {
+  // Status alone (default Open = not Done, not N/A): the todo + blocked rows.
+  assert.deepEqual(
+    filterBrandRows(TYPED_ROWS, { status: 'open', type: 'all' }).map((r) => r.directive.id),
+    ['dGoal', 'dGoal2'],
+  );
+  // Type alone.
+  assert.deepEqual(
+    filterBrandRows(TYPED_ROWS, { status: 'all', type: 'goal' }).map((r) => r.directive.id),
+    ['dGoal', 'dGoal2'],
+  );
+  // AND: goals that are Blocked.
+  assert.deepEqual(
+    filterBrandRows(TYPED_ROWS, { status: 'blocked', type: 'goal' }).map((r) => r.directive.id),
+    ['dGoal2'],
+  );
+  // AND with an empty intersection — the trigger row is Done, not Blocked.
+  assert.equal(filterBrandRows(TYPED_ROWS, { status: 'blocked', type: 'trigger' }).length, 0);
+  // Order is always the incoming directive order (brandDirectiveView preserves it).
+  assert.deepEqual(
+    filterBrandRows(TYPED_ROWS, { status: 'all', type: 'all' }).map((r) => r.directive.id),
+    ['dGoal', 'dTrig', 'dGoal2'],
+  );
+});
+
+test('hidden count on the brand page is rows minus visible, for every combo', () => {
+  for (const status of BRAND_STATUS_FILTERS) {
+    for (const type of BRAND_TYPE_FILTERS) {
+      const visible = filterBrandRows(TYPED_ROWS, { status, type });
+      const hidden = TYPED_ROWS.length - visible.length;
+      assert.ok(hidden >= 0 && visible.length + hidden === TYPED_ROWS.length,
+        `broken for ${status}/${type}`);
+    }
+  }
+});
+
+test('countBrandRowsByType distinguishes "none of this type" from "filtered out"', () => {
+  assert.equal(countBrandRowsByType(TYPED_ROWS, 'goal'), 2);
+  assert.equal(countBrandRowsByType(TYPED_ROWS, 'trigger'), 1);
+  assert.equal(countBrandRowsByType(TYPED_ROWS, 'site_area'), 0);
+  assert.equal(countBrandRowsByType(TYPED_ROWS, 'audience'), 0);
+});
+

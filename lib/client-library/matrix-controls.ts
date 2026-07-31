@@ -8,7 +8,14 @@
 // Everything here operates on data the page has ALREADY loaded: no fetch, no
 // route, no schema. See docs/batch-012-pulse-matrix-controls-spec.md.
 
-import { outstandingCount, type CellStatus } from './directives';
+import {
+  CELL_STATUSES,
+  CELL_STATUS_LABEL,
+  DIRECTIVE_TYPES,
+  outstandingCount,
+  type CellStatus,
+  type DirectiveType,
+} from './directives';
 
 // -------------------------------------------------------------------------
 // Derived resolve state (spec §2). Computed from live cell data on every
@@ -169,6 +176,7 @@ export const MATRIX_SORT_LABEL: Record<MatrixSortKey, string> = {
 export interface MatrixDirectiveLike {
   id: string;
   title: string;
+  directive_type: DirectiveType;
 }
 
 export interface MatrixCellLike {
@@ -201,9 +209,77 @@ export function compareMatrixRows<D extends MatrixDirectiveLike>(
   return a.directive.title.localeCompare(b.directive.title, 'en');
 }
 
+// -------------------------------------------------------------------------
+// Cell-status group (Batch 012 restyle, group 2 of 3). LOCKED vocabulary.
+//
+// THIS IS NOT A RENAME OF THE STATE GROUP ABOVE, and the two must both exist:
+//   State  (group 1) = DERIVED across ALL brands of a directive — Open / Resolved.
+//   Status (group 2) = ONE CELL's own status — To do / In progress / Done /
+//                      Blocked / N/A.
+// The mockup's `Done` tab is this group, not a relabelled `Resolved`. ("Rolled
+// out" from the mockup is dead vocabulary and appears nowhere.)
+//
+// PREDICATE: a row matches when it has AT LEAST ONE cell in that status. A mixed
+// row therefore matches SEVERAL tabs at once. That is intended, and it has a
+// consequence the UI must respect: THESE TABS DO NOT PARTITION THE ROW SET, so
+// their counts do not sum to the total and no readout may imply they do.
+// -------------------------------------------------------------------------
+export const MATRIX_CELL_FILTERS = [...CELL_STATUSES, 'all'] as const;
+export type MatrixCellFilter = (typeof MATRIX_CELL_FILTERS)[number];
+
+export const MATRIX_CELL_FILTER_LABEL: Record<MatrixCellFilter, string> = {
+  ...CELL_STATUS_LABEL,
+  all: 'All',
+};
+
+export function matchesCellFilter(
+  cells: ReadonlyArray<{ status: CellStatus }>,
+  filter: MatrixCellFilter,
+): boolean {
+  if (filter === 'all') return true;
+  return cells.some((c) => c.status === filter);
+}
+
+// -------------------------------------------------------------------------
+// Type group (group 3 of 3). Reads the REAL `directive_type` column — migration
+// 024's enum, surfaced through DIRECTIVE_TYPES.
+//
+// The mockup derives GOAL/TRIGGER from a title regex (`GOALISH`). That is
+// scaffolding and is NOT ported: it looks like logic, which makes it the most
+// likely thing to slip through, and it would silently mislabel any directive
+// whose title doesn't match the pattern.
+//
+// All four options are ALWAYS rendered even though prod holds only goal +
+// trigger today — Lacey intends to use site_area and audience. An empty tab
+// therefore needs its own copy; the generic no-match state reads as a bug.
+// -------------------------------------------------------------------------
+export const MATRIX_TYPE_FILTERS = [...DIRECTIVE_TYPES, 'all'] as const;
+export type MatrixTypeFilter = (typeof MATRIX_TYPE_FILTERS)[number];
+
+export const MATRIX_TYPE_FILTER_LABEL: Record<MatrixTypeFilter, string> = {
+  goal: 'Goal',
+  trigger: 'Trigger',
+  site_area: 'Site area',
+  audience: 'Audience',
+  all: 'All',
+};
+
+export function matchesTypeFilter(
+  directiveType: DirectiveType,
+  filter: MatrixTypeFilter,
+): boolean {
+  return filter === 'all' || directiveType === filter;
+}
+
+// -------------------------------------------------------------------------
+// The three groups compose: SINGLE-CHOICE within each, AND across, and AND with
+// the search. `search` is the only non-group axis.
+// -------------------------------------------------------------------------
 export interface MatrixControls {
   search: string;
   statusFilter: MatrixStatusFilter;
+  cellFilter: MatrixCellFilter;
+  typeFilter: MatrixTypeFilter;
   sortKey: MatrixSortKey;
 }
 
@@ -240,7 +316,9 @@ export function buildMatrixRows<D extends MatrixDirectiveLike>(
   const rows: MatrixRow<D>[] = [];
   for (const directive of directives) {
     if (!matchesSearch(directive.title, controls.search)) continue;
+    if (!matchesTypeFilter(directive.directive_type, controls.typeFilter)) continue;
     const own = byDirective.get(directive.id) ?? NO_CELLS;
+    if (!matchesCellFilter(own, controls.cellFilter)) continue;
     const { outstanding, resolveState } = summarizeDirectiveCells(own);
     if (!matchesStatusFilter(resolveState, controls.statusFilter)) continue;
     rows.push({ directive, outstanding, resolveState });
@@ -250,32 +328,147 @@ export function buildMatrixRows<D extends MatrixDirectiveLike>(
   return rows;
 }
 
-// How many directives match the SEARCH but were excluded by the STATUS filter.
+// How many directives the SEARCH kept but the three filter GROUPS excluded.
 //
-// Why this exists (Karen MEDIUM-1): the default `open` filter hides resolved
-// directives, which turns the new search box into a false-negative machine for
-// the most natural admin flow — "search for a title to see if it exists → find
-// nothing → create it". That is dangerous here specifically because
-// `POST /api/admin/directives` performs NO duplicate-title check and migration
-// 024 puts NO unique constraint on (project_key, title), so a duplicate title
-// silently makes a title→id resolver pick the wrong directive (the exact shape
-// §16 records as a folded finding on the Convert-reconciliation batch).
+// Why this replaces the old status-only count (Karen MEDIUM-1, still live): the
+// guard exists because a filtered view made someone conclude a directive didn't
+// exist and create a duplicate — and `POST /api/admin/directives` STILL performs
+// no duplicate-title check, with no unique constraint on (project_key, title), so
+// that failure mode is not hypothetical.
 //
-// Surfacing this count lets the UI say "N match under other statuses" instead
-// of an unqualified "nothing found". Fixing the route would be the durable
-// answer, but that is a mutation-surface change and out of this batch's profile.
-export function countHiddenByStatus<D extends MatrixDirectiveLike>(
+// With three groups a hidden row can have three different causes, and this
+// deliberately does NOT attempt per-group attribution: a row can be excluded by
+// two groups at once, so any "hidden because of X" breakdown would either
+// double-count or arbitrarily pick a winner. One honest total, and a reset that
+// clears ALL THREE groups, is the correct contract — the UI says so plainly.
+export function countHiddenByFilters<D extends MatrixDirectiveLike>(
   directives: ReadonlyArray<D>,
   cells: ReadonlyArray<MatrixCellLike>,
   controls: MatrixControls,
 ): number {
-  if (controls.statusFilter === 'all') return 0;
   const byDirective = groupCellsByDirective(cells);
   let hidden = 0;
   for (const directive of directives) {
     if (!matchesSearch(directive.title, controls.search)) continue;
-    const { resolveState } = summarizeDirectiveCells(byDirective.get(directive.id) ?? NO_CELLS);
-    if (!matchesStatusFilter(resolveState, controls.statusFilter)) hidden += 1;
+    const own = byDirective.get(directive.id) ?? NO_CELLS;
+    const { resolveState } = summarizeDirectiveCells(own);
+    const kept =
+      matchesTypeFilter(directive.directive_type, controls.typeFilter) &&
+      matchesCellFilter(own, controls.cellFilter) &&
+      matchesStatusFilter(resolveState, controls.statusFilter);
+    if (!kept) hidden += 1;
   }
   return hidden;
 }
+
+// True when at least one of the three groups is narrowing the view. Drives
+// whether the reset affordance is offered at all — a reset that clears nothing
+// is noise, and this is the same "is the correction meaningful?" gate as the
+// LOW-6 search check, just for groups.
+export function hasActiveFilterGroup(controls: MatrixControls): boolean {
+  return (
+    controls.statusFilter !== 'all' ||
+    controls.cellFilter !== 'all' ||
+    controls.typeFilter !== 'all'
+  );
+}
+
+// How many directives carry a given type, for the empty-tab copy. An empty tab
+// must say "no <type> directives yet" rather than falling through to the generic
+// no-match state, which reads as a bug on a type Lacey has simply not used yet.
+export function countByType<D extends MatrixDirectiveLike>(
+  directives: ReadonlyArray<D>,
+  type: DirectiveType,
+): number {
+  let n = 0;
+  for (const d of directives) if (d.directive_type === type) n += 1;
+  return n;
+}
+
+// -------------------------------------------------------------------------
+// KPI strip (Batch 012 restyle). EVERY value is derived from loaded data — no
+// literal ever renders. That is not stylistic: prod went 76 → 82 active
+// directives inside one batch and a whole new project appeared mid-batch, so any
+// number written down is wrong by the next week.
+//
+// Reuses the existing classifier and outstandingCount rather than re-deriving:
+// the KPI strip and the per-row Outstanding pill must not be able to disagree.
+//
+// OUTSTANDING SEMANTICS ARE UNCHANGED AND MUST STAY SO: a cell is outstanding
+// when it is neither Done nor N/A, so In progress AND Blocked both count. This
+// was verified against prod (an MRH todo→in_progress flip left the count at 12).
+// It is `outstandingCount`'s OWED set, untouched here.
+// -------------------------------------------------------------------------
+export interface MatrixKpis {
+  /** Active directives loaded for this project. */
+  total: number;
+  /** Directives with ≥1 outstanding cell (i.e. resolveState === 'active'). */
+  openDirectives: number;
+  /** Directives fully rolled out: 0 outstanding AND ≥1 done → 'resolved'. */
+  resolved: number;
+  /** Directives with no cells owing and none done → 'unstarted'. */
+  unstarted: number;
+  /** Cells owing work across the project (the OWED set). */
+  outstandingCells: number;
+  /** Of those, the two sub-counts the strip surfaces separately. */
+  inProgressCells: number;
+  blockedCells: number;
+  /** Coverage = resolved ÷ total, 0 when there are no directives. */
+  coveragePct: number;
+  /** Brand axis, for the Brands card. */
+  brandsTotal: number;
+  brandsActive: number;
+  brandsPaused: number;
+}
+
+export function computeMatrixKpis<D extends MatrixDirectiveLike>(
+  directives: ReadonlyArray<D>,
+  cells: ReadonlyArray<MatrixCellLike>,
+  brands: ReadonlyArray<{ is_paused: boolean }>,
+): MatrixKpis {
+  const byDirective = groupCellsByDirective(cells);
+  let openDirectives = 0;
+  let resolved = 0;
+  let unstarted = 0;
+  for (const d of directives) {
+    const state = summarizeDirectiveCells(byDirective.get(d.id) ?? NO_CELLS).resolveState;
+    if (state === 'active') openDirectives += 1;
+    else if (state === 'resolved') resolved += 1;
+    else unstarted += 1;
+  }
+
+  // Cell-level counts. Scoped to the loaded directives so a stray cell belonging
+  // to another project's directive cannot inflate the strip.
+  const known = new Set(directives.map((d) => d.id));
+  const own = cells.filter((c) => known.has(c.directive_id));
+  const outstandingCells = outstandingCount(own);
+  let inProgressCells = 0;
+  let blockedCells = 0;
+  for (const c of own) {
+    if (c.status === 'in_progress') inProgressCells += 1;
+    else if (c.status === 'blocked') blockedCells += 1;
+  }
+
+  const brandsPaused = brands.filter((b) => b.is_paused).length;
+  return {
+    total: directives.length,
+    openDirectives,
+    resolved,
+    unstarted,
+    outstandingCells,
+    inProgressCells,
+    blockedCells,
+    coveragePct: directives.length === 0 ? 0 : Math.round((resolved / directives.length) * 100),
+    brandsTotal: brands.length,
+    brandsActive: brands.length - brandsPaused,
+    brandsPaused,
+  };
+}
+
+// NOTE: `countHiddenByStatus` (status-group-only) was REPLACED by
+// countHiddenByFilters above when the second and third filter groups landed.
+// Keeping both would have left two ways to compute nearly the same number —
+// exactly the divergence hazard this module exists to prevent — and the
+// status-only version would under-report the moment a Type or Status(cell) tab
+// was the thing hiding rows, which is the false-negative the guard exists to
+// stop. Its rationale is preserved verbatim on the replacement.

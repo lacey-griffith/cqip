@@ -28,25 +28,24 @@ import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase/client';
 import { Card } from '@/components/ui/card';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { useToast } from '@/components/layout/toaster';
 import { CellEditStrip } from '@/components/client-library/cell-edit-strip';
 import {
   brandDirectiveView,
+  countBrandRowsByType,
   effectiveCellStatus,
-  filterBrandDirectiveRows,
+  filterBrandRows,
   BRAND_STATUS_FILTERS,
   BRAND_STATUS_FILTER_LABEL,
+  BRAND_TYPE_FILTERS,
+  BRAND_TYPE_FILTER_LABEL,
   type BrandCell,
   type BrandDirectiveRow,
   type BrandStatusFilter,
+  type BrandTypeFilter,
 } from '@/lib/client-library/pulse';
+import { StatusCellBox, StatusLegend } from '@/components/client-library/status-cell';
+import { TabGroup } from '@/components/client-library/tab-group';
 import { broadcastPulseProject } from '@/lib/client-library/pulse-project-channel';
 import { fetchAllPaged } from '@/lib/client-library/paged-fetch';
 import { saveDirectiveCell } from '@/lib/client-library/directive-cell-save';
@@ -80,23 +79,11 @@ const TYPE_LABEL: Record<DirectiveType, string> = {
   audience: 'Audience',
 };
 
-// Cell status → dot appearance (§13 r25 — tokens, no inline hex). Same palette
-// as the matrix's dots; n_a renders hollow (not owed).
-//
-// These are CLASSES, not an inline style map, because the dot is now a button
-// carrying `hover:ring-*` / `focus-visible:ring-*`. Inline declarations beat
-// author-stylesheet rules absent !important, so keeping a `style` prop on this
-// element would be one refactor away from silently killing those rings — exactly
-// the 3363629 regression. No inline style on the element means the hazard cannot
-// reappear. (The matrix still uses an inline style for its dots; it is untouched
-// in this commit, and its dot has no color-carrying hover rule to break.)
-const STATUS_DOT_CLASS: Record<CellStatus, string> = {
-  todo: 'bg-[color:var(--f92-lgray)]',
-  in_progress: 'bg-[color:var(--status-in-progress)]',
-  done: 'bg-[color:var(--status-resolved)]',
-  blocked: 'bg-[color:var(--status-blocked)]',
-  n_a: 'border-[1.5px] border-dashed border-[color:var(--f92-lgray)]',
-};
+// NOTE: the local STATUS_DOT_CLASS map is gone — the cell visual moved to the
+// shared components/client-library/status-cell.tsx, so this page, the matrix, and
+// the new legend cannot describe a status three different ways. That component
+// also stopped borrowing the quality-log --status-* palette for cells: they use
+// the dedicated --cell-* tokens now (globals.css).
 
 export default function PulseBrandPage({
   params,
@@ -123,6 +110,9 @@ export default function PulseBrandPage({
   // this mirrors the matrix, whose search/status/sort survive a project switch,
   // and it makes "walk the brands looking at everything Blocked" work.
   const [statusFilter, setStatusFilter] = useState<BrandStatusFilter>('open');
+  // Type group — NEW this batch, mirroring the matrix's third group. Reads the
+  // real directive_type column; all four options always render.
+  const [typeFilter, setTypeFilter] = useState<BrandTypeFilter>('all');
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -320,9 +310,13 @@ export default function PulseBrandPage({
   // What the list actually renders. Kept separate from `rows` so every count
   // below derives from live data — never a literal (prod went 76 → 82 active
   // directives inside a week).
+  const brandControls = useMemo(
+    () => ({ status: statusFilter, type: typeFilter }),
+    [statusFilter, typeFilter],
+  );
   const visibleRows = useMemo(
-    () => filterBrandDirectiveRows(rows, statusFilter),
-    [rows, statusFilter],
+    () => filterBrandRows(rows, brandControls),
+    [rows, brandControls],
   );
 
   // Rows the filter is holding back. Deliberately a subtraction and NOT a lib
@@ -336,6 +330,18 @@ export default function PulseBrandPage({
   // strip mounted for a row that just left the DOM.
   const handleStatusFilterChange = useCallback((next: BrandStatusFilter) => {
     setStatusFilter(next);
+    setEditingId(null);
+  }, []);
+
+  const handleTypeFilterChange = useCallback((next: BrandTypeFilter) => {
+    setTypeFilter(next);
+    setEditingId(null); // same reason as the status group — the row may leave the DOM
+  }, []);
+
+  // Clears BOTH groups — what the hidden-count reset offers.
+  const clearBrandFilters = useCallback(() => {
+    setStatusFilter('all');
+    setTypeFilter('all');
     setEditingId(null);
   }, []);
 
@@ -475,81 +481,88 @@ export default function PulseBrandPage({
                 </>
               )}
             </p>
-            {/* Status filter + count. Same control treatment as the matrix's
-                bar (h-9 controls, "Status:" prefix in the trigger, count
-                right-aligned in a polite live region), adapted to sit above a
-                stack of Cards rather than inside one. Client-side over the
-                already-loaded cells — nothing here refetches. Suppressed when
-                the brand has no directives at all (nothing to filter). */}
+            {/* Filter groups + count. TWO groups here, not three: one brand
+                means one cell per directive, so there is no derived-state axis —
+                `Status` IS the cell's own status (see lib/client-library/pulse.ts
+                for why that is a DIFFERENT function from the matrix's resolve
+                classifier and must not be merged with it).
+                Same TabGroup component the matrix uses. Client-side over the
+                already-loaded cells — nothing here refetches. Suppressed when the
+                brand has no directives at all (nothing to filter). */}
             {rows.length > 0 ? (
-              <div className="mb-3 flex flex-wrap items-center gap-3">
-                {/* No sr-only Label: the trigger's own content is
-                    "Status: Open", which IS the accessible name (same reasoning
-                    as the matrix's status control). */}
-                <Select
-                  value={statusFilter}
-                  onValueChange={(v) => handleStatusFilterChange(v as BrandStatusFilter)}
-                >
-                  <SelectTrigger id="brandStatusFilter" className="h-9 w-44 text-sm">
-                    <span className="shrink-0 text-[color:var(--f92-gray)]">Status:&nbsp;</span>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {BRAND_STATUS_FILTERS.map((f) => (
-                      <SelectItem key={f} value={f}>{BRAND_STATUS_FILTER_LABEL[f]}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="mb-3">
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <TabGroup
+                    legend="Status"
+                    options={BRAND_STATUS_FILTERS}
+                    labels={BRAND_STATUS_FILTER_LABEL}
+                    value={statusFilter}
+                    onChange={handleStatusFilterChange}
+                  />
+                  {/* Type — NEW this batch. Reads the real directive_type column;
+                      all four render even though prod holds only goal + trigger. */}
+                  <TabGroup
+                    legend="Type"
+                    options={BRAND_TYPE_FILTERS}
+                    labels={BRAND_TYPE_FILTER_LABEL}
+                    value={typeFilter}
+                    onChange={handleTypeFilterChange}
+                  />
 
-                {/* ONE polite live region holding the count AND the hidden-row
-                    correction, per the matrix's LOW-7 lesson: announcing a bare
-                    count lets "0 directives" affirm a false "there's nothing
-                    here" reading. Both shapes (rows listed / zero rows) are
-                    announced from this same region, and it holds the only
-                    "Show all" — the empty state points at it rather than
-                    rendering a duplicate button.
-                    Unlike the matrix, this correction is NOT gated behind a
-                    search: there is no search box here, and the DEFAULT filter
-                    hides rows the user never asked to hide, so on first paint
-                    they must be able to see that Done/N-A rows exist. */}
-                {/* aria-atomic so the count and the correction are announced as
-                    ONE sentence rather than as two separately-changed nodes —
-                    they always change together (Karen LOW-2). Known limit,
-                    recorded rather than papered over: this region is mounted
-                    with its initial content, and content present at region
-                    creation is generally NOT announced, so the FIRST paint —
-                    the moment the default filter hides rows nobody asked to
-                    hide — is silent to a screen reader. Every later filter
-                    change announces correctly, and the text is visible in
-                    reading order. Fixing it properly would mean hoisting the
-                    region above the `!ready` gate, which collides with the
-                    DO-NOT-hoist render-branch order documented at the top of
-                    this file; not worth that trade. */}
-                <div
-                  className="ml-auto flex flex-wrap items-center justify-end gap-x-2 text-xs font-medium text-[color:var(--f92-gray)]"
-                  aria-live="polite"
-                  aria-atomic="true"
-                >
-                  <span>
-                    {visibleRows.length === rows.length
-                      ? `${rows.length} directive${rows.length === 1 ? '' : 's'}`
-                      : `${visibleRows.length} of ${rows.length} directives`}
-                  </span>
-                  {hiddenByFilter > 0 ? (
-                    <span className="font-normal">
-                      ·{' '}
-                      {hiddenByFilter === 1
-                        ? '1 directive hidden by this filter.'
-                        : `${hiddenByFilter} directives hidden by this filter.`}{' '}
-                      <button
-                        type="button"
-                        onClick={() => handleStatusFilterChange('all')}
-                        className="font-medium text-[color:var(--f92-orange)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)]"
-                      >
-                        Show all
-                      </button>
+                  {/* ONE polite live region holding the count AND the hidden-row
+                      correction, per the matrix's LOW-7 lesson: announcing a bare
+                      count lets "0 directives" affirm a false "there's nothing
+                      here" reading. Both shapes (rows listed / zero rows) are
+                      announced from this same region, and it holds the only reset
+                      — the empty state points at it rather than duplicating it.
+                      Unlike the matrix, the correction is NOT gated behind a
+                      search: there is no search box here, and the DEFAULT filter
+                      hides rows the user never asked to hide, so on first paint
+                      they must be able to see that Done/N-A rows exist.
+                      aria-atomic so the count and correction are announced as ONE
+                      sentence (Karen LOW-2). Known limit, recorded rather than
+                      papered over: the region mounts WITH its content, and content
+                      present at region creation is generally not announced, so the
+                      FIRST paint is silent to a screen reader; later changes
+                      announce correctly and the text is visible in reading order.
+                      A real fix means hoisting above the `!ready` gate, which
+                      collides with the DO-NOT-hoist render-branch order at the top
+                      of this file. */}
+                  <div
+                    className="ml-auto flex flex-wrap items-center justify-end gap-x-2 text-xs font-medium text-[color:var(--f92-gray)]"
+                    aria-live="polite"
+                    aria-atomic="true"
+                  >
+                    <span className="tabular-nums">
+                      {visibleRows.length === rows.length
+                        ? `${rows.length} directive${rows.length === 1 ? '' : 's'}`
+                        : `${visibleRows.length} of ${rows.length} directives`}
                     </span>
-                  ) : null}
+                    {hiddenByFilter > 0 ? (
+                      <span className="font-normal">
+                        ·{' '}
+                        {hiddenByFilter === 1
+                          ? '1 directive hidden by the current filters.'
+                          : `${hiddenByFilter} directives hidden by the current filters.`}{' '}
+                        {/* Clears BOTH groups and says so — with two groups a
+                            hidden row is ambiguous, so no per-group attribution
+                            is attempted. */}
+                        <button
+                          type="button"
+                          onClick={clearBrandFilters}
+                          className="font-medium text-[color:var(--f92-orange)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-focus-ring)]"
+                        >
+                          Clear all filters
+                        </button>
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+
+                {/* Legend — NEW this batch, from the same component the rows draw
+                    their status box with, so it cannot drift from them. */}
+                <div className="mt-2.5 border-t border-[color:var(--f92-border)] pt-2.5">
+                  <StatusLegend />
                 </div>
               </div>
             ) : null}
@@ -559,21 +572,35 @@ export default function PulseBrandPage({
                 No directives yet for this brand.
               </Card>
             ) : visibleRows.length === 0 ? (
-              /* The filter emptied the view. Distinct from "this brand has no
+              /* The filters emptied the view. Distinct from "this brand has no
                  directives" above — keep both reachable, or a filtered-out view
                  reads as a data-loading bug on a brand with dozens of rows.
-                 The reset lives in the live region just above (see LOW-7), and
-                 pointing at it is safe by arithmetic rather than by luck:
-                 hiddenByFilter is rows.length - 0 here, and this branch requires
-                 rows.length > 0, so the "Show all" button is ALWAYS rendered
-                 whenever this copy shows. */
+                 An unused TYPE gets its own copy: "no site area directives yet" is
+                 a fact about the data, while the generic no-match copy reads as a
+                 bug on a type nobody has started using.
+                 Otherwise the reset lives in the live region just above (LOW-7),
+                 and pointing at it is safe by arithmetic rather than luck:
+                 hiddenByFilter is rows.length - 0 here and this branch requires
+                 rows.length > 0, so the button is ALWAYS rendered when this shows. */
               <Card className="p-6 text-center text-sm text-[color:var(--f92-gray)]">
-                No directives are{' '}
-                <span className="font-medium text-[color:var(--f92-dark)]">
-                  {BRAND_STATUS_FILTER_LABEL[statusFilter]}
-                </span>{' '}
-                for this brand. Use <span className="italic">Show all</span> above to see every
-                directive.
+                {typeFilter !== 'all' && countBrandRowsByType(rows, typeFilter) === 0 ? (
+                  <>
+                    No {BRAND_TYPE_FILTER_LABEL[typeFilter].toLowerCase()} directives yet for this
+                    brand.{' '}
+                    <button
+                      type="button"
+                      onClick={() => handleTypeFilterChange('all')}
+                      className="font-medium text-[color:var(--f92-orange)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-focus-ring)]"
+                    >
+                      Show all types
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    No directives match the current filters for this brand. Use{' '}
+                    <span className="italic">Clear all filters</span> above to see every directive.
+                  </>
+                )}
               </Card>
             ) : (
               <div className="space-y-2">
@@ -622,15 +649,17 @@ export default function PulseBrandPage({
                             // entirely, and dropping it from this label costs a
                             // keyboard-only user the current value at the tab stop.
                             aria-label={`Edit status for ${directive.title}: ${CELL_STATUS_LABEL[status]}${isEditing ? ' (editing — activate to close)' : ''}`}
-                            // HIT AREA: the dot is 12px, but WCAG 2.5.8 wants a
-                            // ≥24×24 target. The `after:` pseudo-element expands
-                            // the CLICKABLE region to 24×24 (12 + 6 either side)
-                            // while contributing NOTHING to layout — so the dot
-                            // does not move, the row height is untouched, and the
-                            // dot is not scaled up to fake a bigger target. A
-                            // 24×24 button like the matrix's would have shifted
-                            // this row's text; the matrix can afford it because
-                            // its dot sits alone in a table cell.
+                            // HIT AREA: the status box is 19px, but WCAG 2.5.8
+                            // wants a ≥24×24 target. The `after:` pseudo-element
+                            // expands the CLICKABLE region while contributing
+                            // NOTHING to layout — so the box does not move, the
+                            // row height is untouched, and it is not scaled up to
+                            // fake a bigger target. `after:content-['']` is
+                            // REQUIRED: without it the pseudo-element never
+                            // renders and the hit area silently does not exist.
+                            // A wrapper button like the matrix's would have
+                            // shifted this row's text; the matrix can afford one
+                            // because its cell sits alone in a table cell.
                             //
                             // ALL colors via className, NEVER an inline style.
                             // That is not stylistic: 3363629 set color/borderColor
@@ -640,40 +669,42 @@ export default function PulseBrandPage({
                             // hover was dead code asserted in three documents.
                             // Verify any change here against the COMPILED CSS —
                             // a class-list review cannot see that bug.
+                            //
+                            // The BOX's own colours come from StatusCellBox (a
+                            // child), whose inline style is safe precisely because
+                            // it carries no hover rule of its own.
                             className={
-                              'relative mt-1.5 block h-3 w-3 shrink-0 cursor-pointer rounded-full transition ' +
-                              "after:absolute after:-inset-1.5 after:rounded-full after:content-[''] " +
-                              'hover:ring-2 hover:ring-[color:var(--f92-orange)] ' +
-                              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)] ' +
-                              // Mid-edit the dot takes the matrix's orange-ring
-                              // treatment, so the two surfaces read ANALOGOUSLY —
-                              // not identically: the matrix rings a 24px wrapper
-                              // with no offset (6px annulus), this rings a 12px
-                              // dot with ring-offset-2 (2px). Same treatment, not
-                              // the same pixels. A ring is a box-shadow, so it
-                              // costs no layout either.
+                              'relative mt-1 flex h-[19px] w-[19px] shrink-0 cursor-pointer items-center justify-center transition ' +
+                              "after:absolute after:-inset-[3px] after:rounded-md after:content-[''] " +
+                              'hover:ring-2 hover:ring-[color:var(--f92-focus-ring)] ' +
+                              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-focus-ring)] ' +
+                              // Mid-edit the box takes the matrix's ring treatment,
+                              // so the two surfaces read ANALOGOUSLY — not
+                              // identically: the matrix rings a 24px wrapper with
+                              // no offset, this rings the 19px box with
+                              // ring-offset-2. Same treatment, not the same pixels.
+                              // A ring is a box-shadow, so it costs no layout.
                               //
                               // NOTE: this hover/focus ring is the ONLY affordance
-                              // — at rest an editable dot is pixel-identical to a
+                              // — at rest an editable box is pixel-identical to a
                               // non-editable one, and on touch there is no hover
                               // at all. That is a DECIDED trade, not an oversight:
                               // Lacey accepted hover-only for matrix parity on
-                              // 2026-07-31 (the matrix's dot is hover-only too).
+                              // 2026-07-31 (the matrix's cell is hover-only too).
                               // Do not add a resting cue here without revisiting
                               // it — spec §0.5 has the full disclosure.
                               (isEditing
-                                ? 'ring-2 ring-offset-2 ring-[color:var(--f92-orange)] ring-offset-[color:var(--f92-surface)] '
-                                : '') +
-                              STATUS_DOT_CLASS[status]
+                                ? 'ring-2 ring-offset-2 ring-[color:var(--f92-focus-ring)] ring-offset-[color:var(--f92-surface)] '
+                                : '')
                             }
-                          />
+                            style={{ borderRadius: 'var(--radius-md)' }}
+                          >
+                            <StatusCellBox status={status} size={19} emphasis={isEditing} />
+                          </button>
                         ) : (
-                          <span
-                            className={
-                              'mt-1.5 block h-3 w-3 shrink-0 rounded-full ' + STATUS_DOT_CLASS[status]
-                            }
-                            aria-hidden="true"
-                          />
+                          <span className="mt-1 flex h-[19px] w-[19px] shrink-0 items-center justify-center">
+                            <StatusCellBox status={status} size={19} />
+                          </span>
                         )}
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
@@ -714,7 +745,22 @@ export default function PulseBrandPage({
                             users hear every row twice. Same flat span for admins
                             and read-only users; the row's editability is signalled
                             by the dot's hover/focus ring. */}
-                        <span className="shrink-0 text-xs font-medium text-[color:var(--f92-gray)]">
+                        <span
+                          className="shrink-0 px-2 py-0.5 text-[11px] font-medium"
+                          style={{
+                            // A pill VISUALLY, per the restyle — but deliberately
+                            // NOT the chip treatment 3363629 gave it: no border, no
+                            // hover, no ring, and it is a <span>. Border + hover are
+                            // what made the old chip read as clickable, which is the
+                            // exact confusion 5870dae fixed by moving the target to
+                            // the box. The status hue tints it so it still carries
+                            // meaning at a glance.
+                            borderRadius: 'var(--radius-full)',
+                            background: 'var(--f92-tint)',
+                            color: 'var(--f92-gray)',
+                            letterSpacing: 'var(--tracking-label)',
+                          }}
+                        >
                           {CELL_STATUS_LABEL[status]}
                         </span>
                       </div>

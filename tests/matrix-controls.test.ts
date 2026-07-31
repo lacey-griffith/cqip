@@ -5,8 +5,15 @@ import {
   buildMatrixRows,
   classifyDirectiveCells,
   compareMatrixRows,
-  countHiddenByStatus,
+  countByType,
+  countHiddenByFilters,
   countHiddenOwedCells,
+  computeMatrixKpis,
+  hasActiveFilterGroup,
+  matchesCellFilter,
+  matchesTypeFilter,
+  MATRIX_CELL_FILTERS,
+  MATRIX_TYPE_FILTERS,
   DIRECTIVE_RESOLVE_STATES,
   matchesSearch,
   matchesStatusFilter,
@@ -14,7 +21,9 @@ import {
   resolveStateFrom,
   summarizeDirectiveCells,
   visibleMatrixBrands,
+  type MatrixCellFilter,
   type MatrixCellLike,
+  type MatrixTypeFilter,
   type MatrixControls,
   type MatrixRow,
 } from '../lib/client-library/matrix-controls';
@@ -155,8 +164,12 @@ test('visibleMatrixBrands drops paused when ON, keeps all when OFF, never mutate
 // -------------------------------------------------------------------------
 // Spec §4 — sort, incl. the title tie-break in BOTH modes.
 // -------------------------------------------------------------------------
-const row = (id: string, title: string, outstanding: number): MatrixRow<{ id: string; title: string }> => ({
-  directive: { id, title },
+const row = (
+  id: string,
+  title: string,
+  outstanding: number,
+): MatrixRow<{ id: string; title: string; directive_type: 'goal' }> => ({
+  directive: { id, title, directive_type: 'goal' },
   outstanding,
   resolveState: outstanding > 0 ? 'active' : 'resolved',
 });
@@ -185,11 +198,14 @@ test('compareMatrixRows: title A–Z; outstanding high→low; ties break by titl
 // Spec §5 — compose: search AND status AND sort together.
 // -------------------------------------------------------------------------
 const DIRECTIVES = [
-  { id: 'd1', title: 'Submits Form Lead - Combined' }, // active, outstanding 2
-  { id: 'd2', title: '[Upsell] Clicks Submit CTA' },   // resolved
-  { id: 'd3', title: 'Chat Started' },                 // active, outstanding 5
-  { id: 'd4', title: '[GTM] Submits Lead Combined' },  // unstarted (all n_a)
-  { id: 'd5', title: 'Submits Quote Request' },        // resolved
+  // directive_type comes from the REAL column (migration 024), never from a
+  // title regex — the mockup's GOALISH heuristic is scaffolding and would
+  // mislabel several of these titles.
+  { id: 'd1', title: 'Submits Form Lead - Combined', directive_type: 'goal' as const },     // active, outstanding 2
+  { id: 'd2', title: '[Upsell] Clicks Submit CTA', directive_type: 'trigger' as const },    // resolved
+  { id: 'd3', title: 'Chat Started', directive_type: 'trigger' as const },                  // active, outstanding 5
+  { id: 'd4', title: '[GTM] Submits Lead Combined', directive_type: 'goal' as const },      // unstarted (all n_a)
+  { id: 'd5', title: 'Submits Quote Request', directive_type: 'goal' as const },            // resolved
 ];
 const CELLS: MatrixCellLike[] = [
   cell('d1', 'todo'), cell('d1', 'blocked'), cell('d1', 'done'),
@@ -199,6 +215,8 @@ const CELLS: MatrixCellLike[] = [
   cell('d5', 'done'),
 ];
 const controls = (over: Partial<MatrixControls> = {}): MatrixControls => ({
+  cellFilter: 'all',
+  typeFilter: 'all',
   search: '',
   statusFilter: 'open',
   sortKey: 'title',
@@ -267,7 +285,7 @@ test('buildMatrixRows: COMPOSE — search + status + sort apply together', () =>
 test('buildMatrixRows: no match → empty array (the "no directives match" state)', () => {
   assert.deepEqual(buildMatrixRows(DIRECTIVES, CELLS, controls({ search: 'zzzz' })), []);
   // Every directive resolved → `resolved` filter is populated, `open` is empty.
-  const allDone = [{ id: 'x', title: 'Only One' }];
+  const allDone = [{ id: 'x', title: 'Only One', directive_type: 'goal' as const }];
   const doneCells: MatrixCellLike[] = [cell('x', 'done')];
   assert.deepEqual(buildMatrixRows(allDone, doneCells, controls()), []);
   assert.equal(buildMatrixRows(allDone, doneCells, controls({ statusFilter: 'resolved' })).length, 1);
@@ -279,37 +297,37 @@ test('buildMatrixRows on empty inputs returns []', () => {
 });
 
 // -------------------------------------------------------------------------
-// Karen MEDIUM-1 — countHiddenByStatus. Guards the "searched, found nothing,
+// Karen MEDIUM-1 — countHiddenByFilters. Guards the "searched, found nothing,
 // created a duplicate" false negative: the route has no duplicate-title check
 // and (project_key, title) has no unique constraint, so a silent miss is
 // expensive.
 // -------------------------------------------------------------------------
-test('countHiddenByStatus: counts search matches the status filter excluded', () => {
+test('countHiddenByFilters: counts search matches the status filter excluded', () => {
   // "submits" matches d1 (active), d4 (unstarted), d5 (resolved). Under the
   // default `open` filter only d5 is hidden → 1.
-  assert.equal(countHiddenByStatus(DIRECTIVES, CELLS, controls({ search: 'submits' })), 1);
+  assert.equal(countHiddenByFilters(DIRECTIVES, CELLS, controls({ search: 'submits' })), 1);
 
   // The load-bearing case: a search that shows ZERO rows while a resolved
   // directive matches. Without this signal the admin concludes it doesn't exist.
   assert.equal(buildMatrixRows(DIRECTIVES, CELLS, controls({ search: 'Quote' })).length, 0);
-  assert.equal(countHiddenByStatus(DIRECTIVES, CELLS, controls({ search: 'Quote' })), 1);
+  assert.equal(countHiddenByFilters(DIRECTIVES, CELLS, controls({ search: 'Quote' })), 1);
 
   // Under `resolved`, the active/unstarted matches are the hidden ones.
   assert.equal(
-    countHiddenByStatus(DIRECTIVES, CELLS, controls({ search: 'submits', statusFilter: 'resolved' })),
+    countHiddenByFilters(DIRECTIVES, CELLS, controls({ search: 'submits', statusFilter: 'resolved' })),
     2, // d1 active + d4 unstarted
   );
 });
 
-test('countHiddenByStatus: 0 under "all", and 0 when nothing matches the search', () => {
+test('countHiddenByFilters: 0 under "all", and 0 when nothing matches the search', () => {
   // `all` hides nothing by status, by definition.
-  assert.equal(countHiddenByStatus(DIRECTIVES, CELLS, controls({ statusFilter: 'all' })), 0);
+  assert.equal(countHiddenByFilters(DIRECTIVES, CELLS, controls({ statusFilter: 'all' })), 0);
   assert.equal(
-    countHiddenByStatus(DIRECTIVES, CELLS, controls({ search: 'submits', statusFilter: 'all' })),
+    countHiddenByFilters(DIRECTIVES, CELLS, controls({ search: 'submits', statusFilter: 'all' })),
     0,
   );
   // A search matching nothing has nothing to hide — the hint must not fire.
-  assert.equal(countHiddenByStatus(DIRECTIVES, CELLS, controls({ search: 'zzzz' })), 0);
+  assert.equal(countHiddenByFilters(DIRECTIVES, CELLS, controls({ search: 'zzzz' })), 0);
 
   // BLANK search counts every status-excluded directive (a blank query matches
   // all — see matchesSearch). That is DELIBERATE and must not be "fixed" to 0:
@@ -317,10 +335,10 @@ test('countHiddenByStatus: 0 under "all", and 0 when nothing matches the search'
   // filter" when no search is active. The search-worded HINT is gated in the UI
   // on a non-empty search instead (Karen LOW-6) — presentation is gated there,
   // not here, so the count stays a single honest number with one meaning.
-  assert.equal(countHiddenByStatus(DIRECTIVES, CELLS, controls()), 2);
+  assert.equal(countHiddenByFilters(DIRECTIVES, CELLS, controls()), 2);
 });
 
-test('countHiddenByStatus + buildMatrixRows partition the search matches', () => {
+test('countHiddenByFilters + buildMatrixRows partition the search matches', () => {
   // Invariant: shown + hidden === total search matches, for every filter.
   const search = 'submit'; // singular → matches d1, d2, d4, d5
   const totalMatches = buildMatrixRows(
@@ -331,7 +349,7 @@ test('countHiddenByStatus + buildMatrixRows partition the search matches', () =>
   assert.equal(totalMatches, 4);
   for (const statusFilter of MATRIX_STATUS_FILTERS) {
     const shown = buildMatrixRows(DIRECTIVES, CELLS, controls({ search, statusFilter })).length;
-    const hidden = countHiddenByStatus(DIRECTIVES, CELLS, controls({ search, statusFilter }));
+    const hidden = countHiddenByFilters(DIRECTIVES, CELLS, controls({ search, statusFilter }));
     assert.equal(shown + hidden, totalMatches, `partition broken for ${statusFilter}`);
   }
 });
@@ -346,7 +364,7 @@ test('Outstanding counts a PAUSED brand cell and is unaffected by column filteri
     { id: 'bActive', brand_code: 'ASV', is_paused: false },
     { id: 'bPaused', brand_code: 'MRR-CA', is_paused: true },
   ];
-  const directives = [{ id: 'd1', title: 'Some directive' }];
+  const directives = [{ id: 'd1', title: 'Some directive', directive_type: 'goal' as const }];
   // A brand paused AFTER the directive was created can still hold an owed
   // status — the count includes it, by design (excluding it would change
   // reported data, which this render batch deliberately does not do).
@@ -424,4 +442,187 @@ test('countHiddenOwedCells agrees with outstandingCount about what "owed" means'
       `disagreement on ${status}`,
     );
   }
+});
+
+// -------------------------------------------------------------------------
+// Batch 012 restyle — the two NEW filter groups. Vocabulary is locked:
+//   State  (group 1) = derived across ALL brands: Open / Resolved
+//   Status (group 2) = ONE cell's own status: To do / In progress / Done / …
+// Both concepts exist; group 2 is NOT a rename of group 1.
+// -------------------------------------------------------------------------
+
+test('matchesCellFilter: a row matches when AT LEAST ONE cell holds that status', () => {
+  const mixed = [cell('d', 'todo'), cell('d', 'done'), cell('d', 'n_a')];
+  assert.equal(matchesCellFilter(mixed, 'todo'), true);
+  assert.equal(matchesCellFilter(mixed, 'done'), true);
+  assert.equal(matchesCellFilter(mixed, 'n_a'), true);
+  assert.equal(matchesCellFilter(mixed, 'blocked'), false);
+  assert.equal(matchesCellFilter(mixed, 'in_progress'), false);
+  assert.equal(matchesCellFilter(mixed, 'all'), true);
+  // A cell-less directive matches nothing except `all`.
+  assert.equal(matchesCellFilter([], 'todo'), false);
+  assert.equal(matchesCellFilter([], 'all'), true);
+});
+
+// THE NON-PARTITION PROPERTY. A mixed row matches SEVERAL status tabs at once,
+// so tab counts do NOT sum to the row total. The readout must never imply a
+// partition ("N of 82 directives" is fine; "N + M + … = 82" is a lie). Pinned
+// here because it is a property of the predicate, not of the UI copy — if
+// someone "fixes" matchesCellFilter to be exclusive, this fails.
+test('cell-status tabs deliberately OVERLAP — they do not partition the rows', () => {
+  const matched = MATRIX_CELL_FILTERS.filter(
+    (f) => f !== 'all' && matchesCellFilter([cell('d', 'todo'), cell('d', 'done')], f),
+  );
+  assert.deepEqual(matched, ['todo', 'done']); // one row, TWO tabs
+  assert.ok(matched.length > 1, 'a mixed row must match more than one tab');
+});
+
+test('matchesTypeFilter reads the real column and never a title heuristic', () => {
+  assert.equal(matchesTypeFilter('goal', 'goal'), true);
+  assert.equal(matchesTypeFilter('goal', 'trigger'), false);
+  assert.equal(matchesTypeFilter('site_area', 'site_area'), true);
+  assert.equal(matchesTypeFilter('audience', 'all'), true);
+  // Every declared type is selectable, incl. the two prod does not use yet —
+  // Lacey intends to, so an unused tab must still work rather than 404 silently.
+  for (const t of MATRIX_TYPE_FILTERS) {
+    if (t === 'all') continue;
+    assert.equal(matchesTypeFilter(t, t), true, `${t} must match itself`);
+  }
+});
+
+test('the three groups AND together, and AND with the search', () => {
+  // d1 goal/active/has todo · d2 trigger/resolved · d3 trigger/active/outstanding 5
+  // Type alone. Order is the default Title A-Z, under which the
+  // bracket-prefixed '[GTM]…' (d4) collates BEFORE 'Submits…' (d1) — the
+  // explicit 'en' locale in compareMatrixRows is what makes that deterministic.
+  assert.deepEqual(
+    buildMatrixRows(DIRECTIVES, CELLS, controls({ typeFilter: 'goal', statusFilter: 'all' })).map((r) => r.directive.id),
+    ['d4', 'd1', 'd5'],
+  );
+  // Type AND state: goals that are not resolved (d5 is resolved → out).
+  assert.deepEqual(
+    buildMatrixRows(DIRECTIVES, CELLS, controls({ typeFilter: 'goal' })).map((r) => r.directive.id),
+    ['d4', 'd1'],
+  );
+  // Type AND state AND cell-status: goals, not resolved, with a todo cell.
+  assert.deepEqual(
+    buildMatrixRows(DIRECTIVES, CELLS, controls({ typeFilter: 'goal', cellFilter: 'todo' })).map((r) => r.directive.id),
+    ['d1'],
+  );
+  // …AND the search, which narrows it to nothing.
+  assert.equal(
+    buildMatrixRows(DIRECTIVES, CELLS, controls({ typeFilter: 'goal', cellFilter: 'todo', search: 'chat' })).length,
+    0,
+  );
+});
+
+test('an unused type yields zero rows, and countByType can say so specifically', () => {
+  // prod holds only goal + trigger today; site_area/audience are empty.
+  assert.equal(buildMatrixRows(DIRECTIVES, CELLS, controls({ typeFilter: 'site_area', statusFilter: 'all' })).length, 0);
+  assert.equal(countByType(DIRECTIVES, 'site_area'), 0);
+  assert.equal(countByType(DIRECTIVES, 'audience'), 0);
+  // …vs the types that ARE in use, so the UI can tell "none yet" from "filtered out".
+  assert.equal(countByType(DIRECTIVES, 'goal'), 3);
+  assert.equal(countByType(DIRECTIVES, 'trigger'), 2);
+});
+
+test('countHiddenByFilters counts rows hidden by ANY group, not just status', () => {
+  // Search-all, default state=open: d2 + d5 are resolved → 2 hidden (unchanged
+  // from the status-only era, so the guard did not regress).
+  assert.equal(countHiddenByFilters(DIRECTIVES, CELLS, controls()), 2);
+  // Add a type filter: the 2 triggers also drop out. 4 hidden of 5.
+  assert.equal(
+    countHiddenByFilters(DIRECTIVES, CELLS, controls({ typeFilter: 'goal', statusFilter: 'all' })),
+    2,
+  );
+  // A row excluded by TWO groups at once is counted ONCE, never twice — this is
+  // why no per-group attribution is attempted.
+  const hidden = countHiddenByFilters(DIRECTIVES, CELLS, controls({ typeFilter: 'goal' }));
+  const shown = buildMatrixRows(DIRECTIVES, CELLS, controls({ typeFilter: 'goal' })).length;
+  assert.equal(hidden + shown, DIRECTIVES.length);
+});
+
+test('hidden + shown always equals the search-matched set, for every group combo', () => {
+  const combos: Array<Partial<MatrixControls>> = [];
+  for (const statusFilter of MATRIX_STATUS_FILTERS)
+    for (const cellFilter of MATRIX_CELL_FILTERS as readonly MatrixCellFilter[])
+      for (const typeFilter of MATRIX_TYPE_FILTERS as readonly MatrixTypeFilter[])
+        combos.push({ statusFilter, cellFilter, typeFilter });
+  for (const over of combos) {
+    for (const search of ['', 'submits']) {
+      const c = controls({ ...over, search });
+      const searched = DIRECTIVES.filter((d) => matchesSearch(d.title, search)).length;
+      const shown = buildMatrixRows(DIRECTIVES, CELLS, c).length;
+      const hidden = countHiddenByFilters(DIRECTIVES, CELLS, c);
+      assert.equal(shown + hidden, searched, `broken for ${JSON.stringify({ ...over, search })}`);
+    }
+  }
+});
+
+test('hasActiveFilterGroup is true iff some group is narrowing', () => {
+  assert.equal(hasActiveFilterGroup(controls({ statusFilter: 'all' })), false);
+  assert.equal(hasActiveFilterGroup(controls()), true); // default state=open narrows
+  assert.equal(hasActiveFilterGroup(controls({ statusFilter: 'all', cellFilter: 'todo' })), true);
+  assert.equal(hasActiveFilterGroup(controls({ statusFilter: 'all', typeFilter: 'goal' })), true);
+});
+
+// -------------------------------------------------------------------------
+// KPI strip — every value derived, and the Outstanding semantics pinned so a
+// later "fix" can't quietly redefine them.
+// -------------------------------------------------------------------------
+const KPI_BRANDS = [
+  { is_paused: false }, { is_paused: false }, { is_paused: true },
+];
+
+test('computeMatrixKpis derives every field from the loaded data', () => {
+  const k = computeMatrixKpis(DIRECTIVES, CELLS, KPI_BRANDS);
+  // d1 active, d2 resolved, d3 active, d4 unstarted, d5 resolved
+  assert.equal(k.total, 5);
+  assert.equal(k.openDirectives, 2);
+  assert.equal(k.resolved, 2);
+  assert.equal(k.unstarted, 1);
+  // The three buckets must account for every directive — no row uncategorised.
+  assert.equal(k.openDirectives + k.resolved + k.unstarted, k.total);
+  assert.equal(k.coveragePct, 40); // 2 of 5
+  assert.equal(k.brandsTotal, 3);
+  assert.equal(k.brandsActive, 2);
+  assert.equal(k.brandsPaused, 1);
+});
+
+// THE OUTSTANDING CONTRACT. Verified against prod (an MRH todo→in_progress flip
+// left the count unchanged) and must not be "fixed": a cell owes work when it is
+// neither Done nor N/A, so In progress and Blocked BOTH count.
+test('outstanding counts In progress and Blocked, excludes Done and N/A', () => {
+  const k = computeMatrixKpis(DIRECTIVES, CELLS, KPI_BRANDS);
+  // d1 todo+blocked = 2, d3 todo×3+in_progress+blocked = 5 → 7
+  assert.equal(k.outstandingCells, 7);
+  assert.equal(k.inProgressCells, 1);
+  assert.equal(k.blockedCells, 2);
+  // Moving a cell todo → in_progress must NOT change the outstanding total.
+  const flipped = CELLS.map((c, i) =>
+    i === 0 ? { ...c, status: 'in_progress' as CellStatus } : c,
+  );
+  assert.equal(computeMatrixKpis(DIRECTIVES, flipped, KPI_BRANDS).outstandingCells, k.outstandingCells);
+  // …whereas todo → done must reduce it by exactly one.
+  const doneNow = CELLS.map((c, i) => (i === 0 ? { ...c, status: 'done' as CellStatus } : c));
+  assert.equal(
+    computeMatrixKpis(DIRECTIVES, doneNow, KPI_BRANDS).outstandingCells,
+    k.outstandingCells - 1,
+  );
+});
+
+test('computeMatrixKpis: cells for unknown directives cannot inflate the strip', () => {
+  const stray = [...CELLS, cell('SOME-OTHER-PROJECT-DIRECTIVE', 'todo')];
+  assert.equal(
+    computeMatrixKpis(DIRECTIVES, stray, KPI_BRANDS).outstandingCells,
+    computeMatrixKpis(DIRECTIVES, CELLS, KPI_BRANDS).outstandingCells,
+  );
+});
+
+test('computeMatrixKpis: empty project divides by zero safely', () => {
+  const k = computeMatrixKpis([], [], []);
+  assert.equal(k.total, 0);
+  assert.equal(k.coveragePct, 0); // not NaN
+  assert.equal(k.outstandingCells, 0);
+  assert.equal(k.brandsTotal, 0);
 });

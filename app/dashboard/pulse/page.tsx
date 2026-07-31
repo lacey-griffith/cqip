@@ -51,16 +51,27 @@ import {
 } from '@/lib/client-library/directives';
 import {
   buildMatrixRows,
-  countHiddenByStatus,
+  computeMatrixKpis,
+  countByType,
+  countHiddenByFilters,
   countHiddenOwedCells,
+  hasActiveFilterGroup,
   visibleMatrixBrands,
+  MATRIX_CELL_FILTERS,
+  MATRIX_CELL_FILTER_LABEL,
   MATRIX_SORT_KEYS,
   MATRIX_SORT_LABEL,
   MATRIX_STATUS_FILTERS,
   MATRIX_STATUS_FILTER_LABEL,
+  MATRIX_TYPE_FILTERS,
+  MATRIX_TYPE_FILTER_LABEL,
+  type MatrixCellFilter,
   type MatrixSortKey,
   type MatrixStatusFilter,
+  type MatrixTypeFilter,
 } from '@/lib/client-library/matrix-controls';
+import { StatusCellBox, StatusLegend } from '@/components/client-library/status-cell';
+import { TabGroup } from '@/components/client-library/tab-group';
 import { saveDirectiveCell } from '@/lib/client-library/directive-cell-save';
 import {
   compareForPanel,
@@ -127,24 +138,23 @@ const TYPE_LABEL: Record<DirectiveType, string> = {
   audience: 'Audience',
 };
 
-// Cell status → token color (§13 r25 — reference tokens, no inline hex).
-// done = --status-resolved (green), blocked = --status-blocked (red, the
-// signal is load-bearing per spec §5). todo/in_progress/n_a use existing
-// neutral + in-progress tokens; n_a renders hollow (not owed).
-const STATUS_DOT: Record<CellStatus, string> = {
-  todo: 'var(--f92-lgray)',
-  in_progress: 'var(--status-in-progress)',
-  done: 'var(--status-resolved)',
-  blocked: 'var(--status-blocked)',
-  n_a: 'transparent',
-};
+// NOTE: the old STATUS_DOT map is gone — the cell visual moved to the shared
+// components/client-library/status-cell.tsx so the matrix, the brand page, and
+// the new legend cannot describe a status three different ways. It also stopped
+// borrowing the quality-log --status-* palette: cells now use the dedicated
+// --cell-* tokens (see globals.css).
 
-// Batch 012 Phase B — severity dot colors (§13 r25, tokens only). critical is
-// the load-bearing red signal; unset severity falls through to gray.
+// Batch 012 Phase B — severity dot colors (§13 r25, tokens only).
+//
+// REPOINTED onto the --severity-* family, which exists for exactly this and was
+// not being used: this map previously read --status-blocked (a STATUS token used
+// for SEVERITY) and --pill-amber-border (a "-border" token used as a FILL). Those
+// were the two misnamed usages; the blocker was that --severity-* had no dark
+// values, which commit cc95b7a added.
 const SEVERITY_DOT: Record<FindingSeverity, string> = {
-  critical: 'var(--status-blocked)',
-  medium: 'var(--pill-amber-border)',
-  low: 'var(--f92-lgray)',
+  critical: 'var(--severity-critical)',
+  medium: 'var(--severity-medium)',
+  low: 'var(--severity-low)',
 };
 function severityDot(severity: FindingSeverity | null): string {
   return severity === null ? 'var(--f92-lgray)' : SEVERITY_DOT[severity];
@@ -215,6 +225,11 @@ export default function ClientLibraryPage() {
   // unlike ProjectBrandFilter's persisted page scope.
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<MatrixStatusFilter>('open');
+  // Groups 2 + 3 (Batch 012 restyle). Single-choice within each, AND across, AND
+  // with the search. `all` is the default for both so the initial view is only
+  // narrowed by the State group's `open`, exactly as before this batch.
+  const [cellFilter, setCellFilter] = useState<MatrixCellFilter>('all');
+  const [typeFilter, setTypeFilter] = useState<MatrixTypeFilter>('all');
   const [sortKey, setSortKey] = useState<MatrixSortKey>('title');
   // Defaults to CHECKED (2026-07-31): a paused brand's column is dead width on
   // a ≥16-brand matrix. Safe to hide by default ONLY because it is
@@ -416,9 +431,13 @@ export default function ClientLibraryPage() {
   // hidePaused argument. That is deliberate and load-bearing — hiding paused
   // COLUMNS must never change an Outstanding count. Do not pass a
   // visible-brand-scoped cell subset in here.
+  const controls = useMemo(
+    () => ({ search, statusFilter, cellFilter, typeFilter, sortKey }),
+    [search, statusFilter, cellFilter, typeFilter, sortKey],
+  );
   const matrixRows = useMemo(
-    () => buildMatrixRows(directives, cells, { search, statusFilter, sortKey }),
-    [directives, cells, search, statusFilter, sortKey],
+    () => buildMatrixRows(directives, cells, controls),
+    [directives, cells, controls],
   );
 
   // The rendered brand axis. Orthogonal to matrixRows above: this is the only
@@ -439,11 +458,31 @@ export default function ClientLibraryPage() {
 
   // Directives matching the search but excluded by the status filter. Surfaced
   // so "search found nothing" can never be read as "it doesn't exist" — see
-  // countHiddenByStatus for why that false negative is dangerous here.
-  const hiddenByStatus = useMemo(
-    () => countHiddenByStatus(directives, cells, { search, statusFilter, sortKey }),
-    [directives, cells, search, statusFilter, sortKey],
+  // countHiddenByFilters for why that false negative is dangerous here. With
+  // three groups a hidden row can have three causes, so this is ONE honest total
+  // and the reset clears ALL of them — no per-group attribution (a row can be
+  // excluded by two groups at once, so any breakdown would double-count).
+  const hiddenByFilters = useMemo(
+    () => countHiddenByFilters(directives, cells, controls),
+    [directives, cells, controls],
   );
+  const filtersActive = hasActiveFilterGroup(controls);
+
+  // KPI strip — every value derived from loaded data, never a literal. Reuses the
+  // same classifier + outstandingCount the rows use, so the strip and the
+  // per-row Outstanding pill cannot disagree.
+  const kpi = useMemo(
+    () => computeMatrixKpis(directives, cells, brands),
+    [directives, cells, brands],
+  );
+
+  // Clears every filter group AND the search — what the hidden-count reset does.
+  const clearAllFilters = useCallback(() => {
+    setSearch('');
+    setStatusFilter('all');
+    setCellFilter('all');
+    setTypeFilter('all');
+  }, []);
 
   // "Needs action" panel (spec §4). Assigned findings are scoped to the
   // selected project via the embedded brand.project_key; null-brand findings
@@ -527,9 +566,13 @@ export default function ClientLibraryPage() {
             Pulse
           </p>
           <h1 className="text-2xl font-semibold text-[color:var(--f92-dark)]">Directive Matrix</h1>
+          {/* The paused-brand exclusion is stated in the Brands KPI card's
+              sub-label and NOWHERE ELSE. It used to live here too; saying it in
+              both places is the kind of duplicated copy that drifts, and saying
+              it in neither would drop a real caveat. Once, next to the number it
+              qualifies. */}
           <p className="mt-1 text-sm text-[color:var(--f92-gray)]">
-            Cross-brand experimentation directives × brand status. Outstanding
-            counts exclude paused brands.
+            Cross-brand experimentation directives × brand status.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -575,170 +618,255 @@ export default function ClientLibraryPage() {
           {isAdmin ? 'Create one to seed the matrix.' : 'An admin can create one.'}
         </Card>
       ) : (
+        <>
+        {/* ---------------------------------------------------------------
+            KPI strip. NEW render surface, read-only, EVERY value derived from
+            already-loaded data — no literal renders, because prod moved 76 -> 82
+            directives inside one batch. Reuses computeMatrixKpis, which reuses
+            the same classifier + outstandingCount as the rows, so the strip and
+            the per-row Outstanding pill cannot disagree.
+
+            "Largest gap" from the mockup is OMITTED rather than rendered inert:
+            it is a per-FAMILY number, and family grouping does not exist (no
+            such column; the mockup invents nine families client-side). A card
+            that permanently reads "needs family grouping" is chrome that teaches
+            the reader nothing, so the strip ships with the six cards that carry
+            real data. Batch 3/4 can add it when the grouping exists.
+            --------------------------------------------------------------- */}
+        {directives.length > 0 ? (
+          <div
+            className="mb-4 flex flex-wrap items-stretch overflow-hidden border border-[color:var(--f92-border)]"
+            style={{ borderRadius: 'var(--radius-xl)', background: 'var(--f92-surface)', boxShadow: 'var(--shadow-sm)' }}
+          >
+            {/* Coverage leads, with the teal long-range treatment already used
+                by the Coverage KPI strip (--kpi-longrange-*). */}
+            <div
+              className="min-w-[10.5rem] flex-1 border-r border-[color:var(--f92-border)] px-5 py-4"
+              style={{ background: 'var(--kpi-longrange-bg)' }}
+            >
+              <div
+                className="mb-1.5 text-[10px] font-semibold uppercase"
+                style={{ letterSpacing: 'var(--tracking-wide)', color: 'var(--kpi-longrange-border)' }}
+              >
+                Directive coverage
+              </div>
+              <div
+                className="text-2xl font-bold leading-none tabular-nums"
+                style={{ color: 'var(--kpi-longrange-fg)' }}
+              >
+                {kpi.coveragePct}%
+              </div>
+              <div className="mt-1.5 text-[10px]" style={{ color: 'var(--kpi-longrange-fg)' }}>
+                {kpi.resolved} of {kpi.total} fully rolled out
+              </div>
+            </div>
+
+            <KpiCard label="Directives" value={kpi.total}>
+              {kpi.openDirectives} with outstanding cells
+            </KpiCard>
+            <KpiCard label="Outstanding cells" value={kpi.outstandingCells} hue="var(--cell-blocked)">
+              across {kpi.openDirectives} directive{kpi.openDirectives === 1 ? '' : 's'}
+            </KpiCard>
+            <KpiCard label="In progress" value={kpi.inProgressCells} hue="var(--cell-progress)">
+              {kpi.blockedCells} blocked
+            </KpiCard>
+            <KpiCard label="Fully rolled out" value={kpi.resolved} hue="var(--cell-done)">
+              every active brand done
+            </KpiCard>
+            {/* The paused-brand exclusion is stated HERE and nowhere else — the
+                page subtitle no longer repeats it. Said once, not twice, not
+                zero times. */}
+            <KpiCard label="Brands" value={`${kpi.brandsActive}/${kpi.brandsTotal}`} last>
+              {kpi.brandsPaused > 0
+                ? `${kpi.brandsPaused} paused — excluded from Outstanding`
+                : 'none paused'}
+            </KpiCard>
+          </div>
+        ) : null}
+
         <Card className="overflow-hidden p-0" style={{ boxShadow: 'var(--shadow-sm)' }}>
           {/* Matrix controls — pinned above the horizontal-scroll region so they
-              never scroll out of view on a ≥16-brand project. All client-side
+              never scroll out of view on a >=16-brand project. All client-side
               over already-loaded data; nothing here refetches. Suppressed when
               the project has no directives (nothing to search/filter/sort) —
               that case only reaches here with the create strip open. */}
           {directives.length > 0 ? (
-          <div className="flex flex-wrap items-center gap-3 border-b border-[color:var(--f92-border)] p-3">
-            <div className="relative min-w-[15rem] flex-1">
-              <Label htmlFor="matrixSearch" className="sr-only">Search directives by title</Label>
-              {/* type="text", not "search": webkit's native cancel button would
-                  render on top of the explicit Clear button below. */}
-              <Input
-                id="matrixSearch"
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search directives…"
-                className="h-9 pr-14 text-sm"
-              />
-              {search ? (
-                <button
-                  type="button"
-                  onClick={() => setSearch('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-1.5 py-0.5 text-xs font-medium text-[color:var(--f92-gray)] hover:text-[color:var(--f92-orange)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)]"
-                  aria-label="Clear search"
-                >
-                  Clear
-                </button>
-              ) : null}
-            </div>
-
-            <div>
-              {/* No sr-only Label here: the trigger's own content is now
-                  "Status: Open", which IS the accessible name (buttons take
-                  their name from their subtree). A Label would only add
-                  "Filter by resolve status Status: Open" verbosity. The search
-                  input and the sort trigger DO keep theirs — a placeholder is
-                  not a label, and "Title (A–Z)" alone doesn't say "sort". */}
-              <Select
-                value={statusFilter}
-                onValueChange={(v) => setStatusFilter(v as MatrixStatusFilter)}
-              >
-                {/* "Status:" prefix in the trigger — a bare "Open" is ambiguous
-                    on a page that also renders the open-findings "Needs action"
-                    panel (Karen LOW-1). */}
-                <SelectTrigger id="matrixStatus" className="h-9 w-44 text-sm">
-                  <span className="shrink-0 text-[color:var(--f92-gray)]">Status:&nbsp;</span>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {MATRIX_STATUS_FILTERS.map((f) => (
-                    <SelectItem key={f} value={f}>{MATRIX_STATUS_FILTER_LABEL[f]}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label htmlFor="matrixSort" className="sr-only">Sort directives</Label>
-              <Select value={sortKey} onValueChange={(v) => setSortKey(v as MatrixSortKey)}>
-                <SelectTrigger id="matrixSort" className="h-9 w-52 text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {MATRIX_SORT_KEYS.map((k) => (
-                    <SelectItem key={k} value={k}>{MATRIX_SORT_LABEL[k]}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Hides paused brand COLUMNS only. Default ON as of 2026-07-31
-                (see the hidePaused state above for the prod evidence that this
-                is count-neutral). Outstanding counts are unaffected either way —
-                they read every cell regardless of which columns render (spec
-                §3.1). Hidden entirely when the project has no paused brands.
-                Because this is now the DEFAULT, the accepted LOW-3 behavior —
-                the editor lookup goes through visibleBrands, so a paused brand's
-                cells can't be opened, and toggling discards an unsaved note in
-                one — is reached without the user opting in. Karen verified no
-                lock-up (a stale expandedCell is inert; another dot re-targets
-                cleanly) and endorsed keeping it; unchecking this box restores
-                access to those columns. */}
-            {pausedBrandCount > 0 ? (
-              <label className="flex h-9 items-center gap-2 text-sm text-[color:var(--f92-dark)]">
-                <input
-                  type="checkbox"
-                  checked={hidePaused}
-                  onChange={(e) => setHidePaused(e.target.checked)}
-                  className="h-4 w-4 rounded border-[color:var(--f92-border)] text-[color:var(--f92-orange)] focus:ring-[color:var(--f92-orange)]"
+          <div className="border-b border-[color:var(--f92-border)] p-3">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <div className="relative min-w-[13rem] flex-1 max-w-xs">
+                <Label htmlFor="matrixSearch" className="sr-only">Search directives by title</Label>
+                {/* type="text", not "search": webkit's native cancel button would
+                    render on top of the explicit Clear button below. */}
+                <Input
+                  id="matrixSearch"
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search directives…"
+                  className="h-9 pr-14 text-sm"
                 />
-                Hide paused brands ({pausedBrandCount})
-              </label>
-            ) : null}
-
-            {/* The precondition behind the checked-by-default state, checked at
-                runtime instead of trusted (see hiddenOwedCount). If a paused
-                brand ever holds owed work, an Outstanding pill would count it
-                while no owed dot is visible in the row — so say so, and offer
-                the one click that reveals it. Renders only when the invariant is
-                actually violated, so it is silent in normal operation. */}
-            {hiddenOwedCount > 0 ? (
-              <span
-                className="flex h-9 items-center gap-2 text-xs font-medium"
-                style={{ color: 'var(--pill-amber-fg)' }}
-              >
-                ⚠ {hiddenOwedCount} outstanding{' '}
-                {hiddenOwedCount === 1 ? 'cell' : 'cells'} on paused{' '}
-                {hiddenOwedCount === 1 ? 'brand is' : 'brands are'} hidden but still counted.
-                <button
-                  type="button"
-                  onClick={() => setHidePaused(false)}
-                  className="font-semibold text-[color:var(--f92-orange)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)]"
-                >
-                  Show paused
-                </button>
-              </span>
-            ) : null}
-
-            {/* ONE polite live region holding the count AND the hidden-match
-                correction. They must share a region (Karen LOW-7): with the
-                count announced alone, a screen-reader user who searched a
-                resolved title heard "0 of 69 directives" — which AFFIRMS the
-                false "it doesn't exist" inference this signal exists to
-                correct. */}
-            <div
-              className="ml-auto flex flex-wrap items-center justify-end gap-x-2 text-xs font-medium text-[color:var(--f92-gray)]"
-              aria-live="polite"
-            >
-              <span>
-                {matrixRows.length === directives.length
-                  ? `${directives.length} directive${directives.length === 1 ? '' : 's'}`
-                  : `${matrixRows.length} of ${directives.length} directives`}
-              </span>
-
-              {/* Never let "I searched and found nothing" read as "it doesn't
-                  exist" — the status filter may be hiding the match, and a
-                  duplicate title is unguarded server-side (see
-                  countHiddenByStatus).
-                  Gated on a NON-EMPTY search (Karen LOW-6): matchesSearch()
-                  matches everything on a blank query, so without this gate the
-                  line rendered permanently on NBLYCRO's default view ("19 more
-                  directives match…") — claiming a match when nothing was
-                  searched, and making the bar two rows tall by default. With no
-                  search there is no false negative to correct; the "N of M"
-                  count above already conveys that the filter is hiding rows.
-                  Rendered regardless of matrixRows.length so the zero-row case
-                  is announced here too, rather than only in the empty state. */}
-              {searchActive && hiddenByStatus > 0 ? (
-                <span className="font-normal">
-                  ·{' '}
-                  {hiddenByStatus === 1
-                    ? '1 directive matches your search but is hidden by the status filter.'
-                    : `${hiddenByStatus} directives match your search but are hidden by the status filter.`}{' '}
+                {search ? (
                   <button
                     type="button"
-                    onClick={() => setStatusFilter('all')}
-                    className="font-medium text-[color:var(--f92-orange)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)]"
+                    onClick={() => setSearch('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-1.5 py-0.5 text-xs font-medium text-[color:var(--f92-gray)] hover:text-[color:var(--f92-orange)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-focus-ring)]"
+                    aria-label="Clear search"
                   >
-                    Show all statuses
+                    Clear
+                  </button>
+                ) : null}
+              </div>
+
+              {/* THREE INDEPENDENT GROUPS — single-choice within each, AND across,
+                  AND with the search.
+
+                  Group 1 STATE is the DERIVED classifier across all brands of a
+                  directive. Group 2 STATUS is one CELL's own status. They are
+                  different concepts and both exist; group 2 is NOT a rename of
+                  group 1, and "rolled out" is not vocabulary here. */}
+              <TabGroup
+                legend="State"
+                options={MATRIX_STATUS_FILTERS}
+                labels={MATRIX_STATUS_FILTER_LABEL}
+                value={statusFilter}
+                onChange={(v) => setStatusFilter(v)}
+              />
+              <TabGroup
+                legend="Status"
+                options={MATRIX_CELL_FILTERS}
+                labels={MATRIX_CELL_FILTER_LABEL}
+                value={cellFilter}
+                onChange={(v) => setCellFilter(v)}
+              />
+              {/* Type reads the REAL directive_type column. All four render even
+                  though prod holds only goal + trigger — Lacey intends to use the
+                  others, and an unused tab must work rather than look broken. */}
+              <TabGroup
+                legend="Type"
+                options={MATRIX_TYPE_FILTERS}
+                labels={MATRIX_TYPE_FILTER_LABEL}
+                value={typeFilter}
+                onChange={(v) => setTypeFilter(v)}
+              />
+
+              <div>
+                <Label htmlFor="matrixSort" className="sr-only">Sort directives</Label>
+                <Select value={sortKey} onValueChange={(v) => setSortKey(v as MatrixSortKey)}>
+                  <SelectTrigger id="matrixSort" className="h-9 w-48 text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MATRIX_SORT_KEYS.map((k) => (
+                      <SelectItem key={k} value={k}>{MATRIX_SORT_LABEL[k]}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Hides paused brand COLUMNS only. Default ON as of 2026-07-31
+                  (see the hidePaused state above for the prod evidence that this
+                  is count-neutral). Outstanding counts are unaffected either way —
+                  they read every cell regardless of which columns render.
+                  Because this is the DEFAULT, the accepted LOW-3 behavior — the
+                  editor lookup goes through visibleBrands, so a paused brand's
+                  cells can't be opened, and toggling discards an unsaved note in
+                  one — is reached without the user opting in. Karen verified no
+                  lock-up and endorsed keeping it; unchecking restores access. */}
+              {pausedBrandCount > 0 ? (
+                <label className="flex h-9 items-center gap-2 text-xs font-medium text-[color:var(--f92-dark)]">
+                  <input
+                    type="checkbox"
+                    checked={hidePaused}
+                    onChange={(e) => setHidePaused(e.target.checked)}
+                    className="h-4 w-4 rounded border-[color:var(--f92-border)] text-[color:var(--f92-orange)] focus:ring-[color:var(--f92-focus-ring)]"
+                  />
+                  Hide paused ({pausedBrandCount})
+                </label>
+              ) : null}
+
+              {/* The precondition behind the checked-by-default state, checked at
+                  RUNTIME instead of trusted (countHiddenOwedCells). If a paused
+                  brand ever holds owed work, an Outstanding pill would count it
+                  while no owed cell is visible in the row — so say so, and offer
+                  the one click that reveals it. Renders only when the invariant is
+                  actually violated, so it is silent in normal operation.
+                  PRESERVED from 3363629: this guard exists because nothing at the
+                  route level enforces paused-cell count-neutrality. */}
+              {hiddenOwedCount > 0 ? (
+                <span
+                  className="flex h-9 items-center gap-2 text-xs font-medium"
+                  style={{ color: 'var(--pill-amber-fg)' }}
+                >
+                  ⚠ {hiddenOwedCount} outstanding{' '}
+                  {hiddenOwedCount === 1 ? 'cell' : 'cells'} on paused{' '}
+                  {hiddenOwedCount === 1 ? 'brand is' : 'brands are'} hidden but still counted.
+                  <button
+                    type="button"
+                    onClick={() => setHidePaused(false)}
+                    className="font-semibold text-[color:var(--f92-orange)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-focus-ring)]"
+                  >
+                    Show paused
                   </button>
                 </span>
               ) : null}
+
+              {/* ONE polite live region holding the count AND the hidden-row
+                  correction. They must share a region (Karen LOW-7): with the
+                  count announced alone, a screen-reader user who searched a
+                  resolved title heard "0 of 82 directives" — which AFFIRMS the
+                  false "it doesn't exist" inference this signal exists to
+                  correct.
+
+                  The count says "N of M directives" and never implies the tabs
+                  partition the rows — they deliberately overlap, so a mixed row
+                  matches several Status tabs and the tab counts do not sum. */}
+              <div
+                className="ml-auto flex flex-wrap items-center justify-end gap-x-2 text-xs font-medium text-[color:var(--f92-gray)]"
+                aria-live="polite"
+                aria-atomic="true"
+              >
+                <span className="tabular-nums">
+                  {matrixRows.length === directives.length
+                    ? `${directives.length} directive${directives.length === 1 ? '' : 's'}`
+                    : `${matrixRows.length} of ${directives.length} directives`}
+                </span>
+
+                {/* Never let "I searched and found nothing" read as "it doesn't
+                    exist" — a filter may be hiding the match, and a duplicate
+                    title is STILL unguarded server-side (POST /api/admin/directives
+                    has no duplicate check and there is no unique constraint), so
+                    the failure this prevents is live.
+                    Gated on a NON-EMPTY search (Karen LOW-6): matchesSearch()
+                    matches everything on a blank query, so without this gate the
+                    line would render on every page load, claiming a match when
+                    nothing was searched.
+                    With THREE groups the count has three possible causes, so it
+                    is deliberately ONE total and the reset clears ALL groups —
+                    and says so. No per-group attribution: a row can be excluded
+                    by two groups at once, so any breakdown would double-count. */}
+                {searchActive && hiddenByFilters > 0 ? (
+                  <span className="font-normal">
+                    ·{' '}
+                    {hiddenByFilters === 1
+                      ? '1 directive matches your search but is hidden by the filters.'
+                      : `${hiddenByFilters} directives match your search but are hidden by the filters.`}{' '}
+                    <button
+                      type="button"
+                      onClick={clearAllFilters}
+                      className="font-medium text-[color:var(--f92-orange)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-focus-ring)]"
+                    >
+                      Clear all filters
+                    </button>
+                  </span>
+                ) : null}
+              </div>
+            </div>
+
+            {/* Legend — NEW this batch; the cell shapes were previously
+                unexplained. Renders from CELL_STATUSES via the same component
+                the cells use, so it cannot drift from what the grid draws. */}
+            <div className="mt-3 border-t border-[color:var(--f92-border)] pt-2.5">
+              <StatusLegend />
             </div>
           </div>
           ) : null}
@@ -774,45 +902,66 @@ export default function ClientLibraryPage() {
               {isAdmin ? 'Add one above.' : 'An admin can add one.'}
             </div>
           ) : matrixRows.length === 0 ? (
-            /* Filters hid everything. Distinct from the "project has none"
-               state above — the project HAS directives, this view just
-               excluded them all. Keep both reachable. */
+            /* Filters hid everything. Distinct from the "project has none" state
+               above — the project HAS directives, this view just excluded them
+               all. Keep both reachable, or a filtered-out view reads as a
+               data-loading bug on a project with 82 directives.
+
+               THREE shapes, most specific first. An unused TYPE gets its own copy
+               because "no site area directives yet" is a fact about the data,
+               while the generic no-match copy reads as a bug on a type Lacey
+               simply has not started using. */
             <div className="p-8 text-center text-sm text-[color:var(--f92-gray)]">
-              No directives match these filters.{' '}
-              {hiddenByStatus > 0 && searchActive ? (
-                /* The dangerous case — the search DID match, the status filter
-                   hid it. The count + correction + "Show all statuses" (which
-                   KEEPS the search) live in the controls bar's persistent live
-                   region just above, so they are announced reliably; don't
-                   duplicate the button here. */
-                <span className="italic">See the note above the table.</span>
-              ) : hiddenByStatus > 0 ? (
-                /* No search, but the status filter emptied the view (e.g.
-                   Resolved on a project with nothing resolved). Search-neutral
-                   copy — nothing was searched, so don't claim a "match". */
+              {typeFilter !== 'all' && countByType(directives, typeFilter) === 0 ? (
                 <>
-                  {hiddenByStatus === 1
-                    ? '1 directive is hidden by the status filter.'
-                    : `${hiddenByStatus} directives are hidden by the status filter.`}{' '}
+                  No {MATRIX_TYPE_FILTER_LABEL[typeFilter].toLowerCase()} directives yet for{' '}
+                  {projectLabel}.{' '}
                   <button
                     type="button"
-                    onClick={() => setStatusFilter('all')}
-                    className="font-medium text-[color:var(--f92-orange)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)]"
+                    onClick={() => setTypeFilter('all')}
+                    className="font-medium text-[color:var(--f92-orange)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-focus-ring)]"
                   >
-                    Show all statuses
+                    Show all types
+                  </button>
+                </>
+              ) : searchActive && hiddenByFilters > 0 ? (
+                /* The dangerous case — the search DID match, a filter hid it. The
+                   count + correction + "Clear all filters" live in the controls
+                   bar's persistent live region just above, so they are announced
+                   reliably; don't duplicate the button here (Karen LOW-7). */
+                <>
+                  No directives match these filters.{' '}
+                  <span className="italic">See the note above the table.</span>
+                </>
+              ) : filtersActive ? (
+                /* No search, but the filters emptied the view. Search-neutral
+                   copy — nothing was searched, so don't claim a "match" — and ONE
+                   total with an all-clearing reset, because with three groups the
+                   cause is ambiguous and per-group attribution would double-count
+                   a row excluded by two groups at once. */
+                <>
+                  {hiddenByFilters === 1
+                    ? '1 directive is hidden by the current filters.'
+                    : `${hiddenByFilters} directives are hidden by the current filters.`}{' '}
+                  <button
+                    type="button"
+                    onClick={clearAllFilters}
+                    className="font-medium text-[color:var(--f92-orange)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-focus-ring)]"
+                  >
+                    Clear all filters
                   </button>
                 </>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearch('');
-                    setStatusFilter('all');
-                  }}
-                  className="font-medium text-[color:var(--f92-orange)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)]"
-                >
-                  Show all {directives.length}
-                </button>
+                <>
+                  No directives match “{search.trim()}”.{' '}
+                  <button
+                    type="button"
+                    onClick={clearAllFilters}
+                    className="font-medium text-[color:var(--f92-orange)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-focus-ring)]"
+                  >
+                    Clear all filters
+                  </button>
+                </>
               )}
             </div>
           ) : (
@@ -887,14 +1036,13 @@ export default function ClientLibraryPage() {
                             // and out of the Outstanding count (computed from
                             // `cells` only).
                             const status = cell?.status ?? 'n_a';
-                            const dotColor = STATUS_DOT[status];
                             const clickable = isAdmin && !!cell;
                             const isExpanded =
                               !!cell &&
                               expandedCell?.directiveId === directive.id &&
                               expandedCell?.brandId === brand.id;
                             return (
-                              <td key={brand.id} className="px-3 py-3 text-center">
+                              <td key={brand.id} className="px-2.5 py-2.5 text-center">
                                 <button
                                   type="button"
                                   disabled={!clickable}
@@ -909,22 +1057,29 @@ export default function ClientLibraryPage() {
                                   }
                                   aria-label={`${directive.title} — ${brand.display_name}: ${CELL_STATUS_LABEL[status]}${clickable ? (isExpanded ? ' (editing — activate to close)' : ' (edit)') : ''}`}
                                   title={`${CELL_STATUS_LABEL[status]}${cell?.note ? ` — ${cell.note}` : ''}`}
+                                  // The DOT (now a rounded square) is the edit
+                                  // target — settled 5870dae, unchanged here. The
+                                  // 24x24 wrapper is both the hit area (WCAG
+                                  // 2.5.8) and the ring's carrier; the box inside
+                                  // stays 19px so the grid rhythm matches the
+                                  // mockup. Ring colour is --f92-focus-ring
+                                  // (>=3:1 both themes) rather than --f92-orange.
                                   className={
-                                    'mx-auto flex h-6 w-6 items-center justify-center rounded-full transition ' +
+                                    'mx-auto flex h-6 w-6 items-center justify-center transition ' +
                                     (clickable
-                                      ? 'cursor-pointer hover:ring-2 hover:ring-[color:var(--f92-orange)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)] '
+                                      ? 'cursor-pointer hover:ring-2 hover:ring-[color:var(--f92-focus-ring)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-focus-ring)] '
                                       : 'cursor-default ') +
-                                    (isExpanded ? 'ring-2 ring-[color:var(--f92-orange)]' : '')
+                                    (isExpanded ? 'ring-2 ring-[color:var(--f92-focus-ring)]' : '')
                                   }
+                                  style={{ borderRadius: 'var(--radius-md)' }}
                                 >
-                                  <span
-                                    className="block h-3 w-3 rounded-full"
-                                    style={
-                                      status === 'n_a'
-                                        ? { border: '1.5px dashed var(--f92-lgray)' }
-                                        : { background: dotColor }
-                                    }
-                                  />
+                                  {/* Shared visual — the legend draws the same
+                                      component, so the two cannot disagree. */}
+                                  <StatusCellBox status={status} size={19} emphasis={isExpanded} />
+                                  {/* Notes stay non-visual this batch (the
+                                      hover-inspect readout is batch 3); the
+                                      screen-reader hint is pre-existing and kept
+                                      so the information isn't lost meanwhile. */}
                                   {cell?.note ? <span className="sr-only">has note</span> : null}
                                 </button>
                               </td>
@@ -977,6 +1132,7 @@ export default function ClientLibraryPage() {
             </div>
           )}
         </Card>
+        </>
       )}
 
       {/* Needs-action panel (spec §4). Hidden entirely when there are no open
@@ -1015,6 +1171,49 @@ export default function ClientLibraryPage() {
         </section>
       ) : null}
 
+    </div>
+  );
+}
+
+// -------------------------------------------------------------------------
+// One KPI card. Presentational only — every value is computed by
+// computeMatrixKpis and passed in, so no card can derive a number of its own.
+// -------------------------------------------------------------------------
+function KpiCard({
+  label,
+  value,
+  hue,
+  last = false,
+  children,
+}: {
+  label: string;
+  value: number | string;
+  hue?: string;
+  last?: boolean;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div
+      className={
+        'min-w-[8.5rem] flex-1 px-5 py-4 ' +
+        (last ? '' : 'border-r border-[color:var(--f92-border)]')
+      }
+    >
+      <div
+        className="mb-1.5 text-[10px] font-semibold uppercase text-[color:var(--f92-gray)]"
+        style={{ letterSpacing: 'var(--tracking-wide)' }}
+      >
+        {label}
+      </div>
+      <div
+        className="text-2xl font-bold leading-none tabular-nums"
+        style={{ color: hue ?? 'var(--f92-dark)' }}
+      >
+        {value}
+      </div>
+      {children ? (
+        <div className="mt-1.5 text-[10px] text-[color:var(--f92-gray)]">{children}</div>
+      ) : null}
     </div>
   );
 }

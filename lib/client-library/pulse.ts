@@ -4,7 +4,12 @@
 // of real logic (the brand-directive filter + the client-nav list rule).
 // Mirrors the lib/client-library/{directives,monitoring}.ts split.
 
-import { CELL_STATUS_LABEL, type CellStatus } from './directives';
+import {
+  CELL_STATUS_LABEL,
+  DIRECTIVE_TYPES,
+  type CellStatus,
+  type DirectiveType,
+} from './directives';
 
 // -------------------------------------------------------------------------
 // Cross-project client nav (Pulse E1 follow-on). Groups ALL active brands by
@@ -229,4 +234,75 @@ export function filterBrandDirectiveRows<D extends DirectiveLike>(
   filter: BrandStatusFilter,
 ): BrandDirectiveRow<D>[] {
   return rows.filter((row) => matchesBrandStatusFilter(effectiveCellStatus(row.cell), filter));
+}
+
+// -------------------------------------------------------------------------
+// Brand-page TYPE group (Batch 012 restyle — new on this surface; the matrix
+// got the same group in matrix-controls.ts).
+//
+// Reads the REAL `directive_type` column (migration 024's enum). The mockup's
+// title-regex derivation is scaffolding and is NOT ported — it looks like logic,
+// which is what makes it dangerous, and it would mislabel any title outside the
+// pattern.
+//
+// All four options are always rendered even though prod holds only goal +
+// trigger today, so an empty tab needs type-specific copy rather than the
+// generic no-match state.
+//
+// The two groups on this page compose: single-choice within each, AND across,
+// AND with nothing else — there is no derived state here, because one brand
+// means one cell per directive (see the status-filter note above).
+// -------------------------------------------------------------------------
+export const BRAND_TYPE_FILTERS = [...DIRECTIVE_TYPES, 'all'] as const;
+export type BrandTypeFilter = (typeof BRAND_TYPE_FILTERS)[number];
+
+export const BRAND_TYPE_FILTER_LABEL: Record<BrandTypeFilter, string> = {
+  goal: 'Goal',
+  trigger: 'Trigger',
+  site_area: 'Site area',
+  audience: 'Audience',
+  all: 'All',
+};
+
+export function matchesBrandTypeFilter(
+  directiveType: DirectiveType,
+  filter: BrandTypeFilter,
+): boolean {
+  return filter === 'all' || directiveType === filter;
+}
+
+export interface BrandFilterControls {
+  status: BrandStatusFilter;
+  type: BrandTypeFilter;
+}
+
+// Both groups at once, so the page has ONE call and cannot apply them in a way
+// that disagrees with the hidden count below.
+export function filterBrandRows<D extends DirectiveLike & { directive_type: DirectiveType }>(
+  rows: ReadonlyArray<BrandDirectiveRow<D>>,
+  controls: BrandFilterControls,
+): BrandDirectiveRow<D>[] {
+  return rows.filter(
+    (row) =>
+      matchesBrandStatusFilter(effectiveCellStatus(row.cell), controls.status) &&
+      matchesBrandTypeFilter(row.directive.directive_type, controls.type),
+  );
+}
+
+// NOTE: a `hasActiveBrandFilter` helper was written here and then REMOVED before
+// commit — it had no consumer. On this surface it is provably redundant: reaching
+// the "filters emptied the view" branch requires rows.length > 0 AND
+// visibleRows.length === 0, which already implies a group is narrowing. Shipping a
+// tested-but-uncalled export would be dead code dressed up as coverage. The matrix
+// keeps its equivalent (hasActiveFilterGroup) because THERE it is not redundant —
+// three groups plus a search make "did a GROUP narrow this?" a genuinely separate
+// question from "are any rows hidden?".
+
+export function countBrandRowsByType<D extends DirectiveLike & { directive_type: DirectiveType }>(
+  rows: ReadonlyArray<BrandDirectiveRow<D>>,
+  type: DirectiveType,
+): number {
+  let n = 0;
+  for (const r of rows) if (r.directive.directive_type === type) n += 1;
+  return n;
 }
