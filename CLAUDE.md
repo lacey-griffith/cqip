@@ -3214,14 +3214,21 @@ box is unchanged (button preflight zeroes border/margin/padding, so `h-3 w-3` is
 same 12×12 box as the old span), and the 6px hit expansion lands in the Card's `p-3`
 padding and the `gap-3`, stealing no clicks. **Three findings, all folded as wording
 except one open decision:**
-- **F1 MEDIUM → ⚠ OPEN DECISION FOR LACEY, disclosed in spec §0.5 + in-code.** The
+- **F1 MEDIUM → RESOLVED: hover-only ACCEPTED for parity (Lacey, 2026-07-31).** The
   affordance was **deleted, not moved**: `3363629`'s chip was a RESTING-state cue,
   and hover/focus-only means an editable dot is pixel-identical to a non-editable
   one at rest — with **no hover at all on touch**. That is structurally the same
   shape as the Karen LOW this arc opened to close, and it makes the 2.76:1 ring
   load-bearing. Not a defect (matrix parity is the stated intent and the matrix's
   dot is hover-only too), but the earlier draft justified removing the chip purely
-  in terms of the PILL and never stated the net effect on the ROW.
+  in terms of the PILL and never stated the net effect on the ROW. Lacey chose
+  hover-only **on that disclosure**, over a resting cue on both surfaces (parity
+  intact, costs a matrix change + fresh review) or on the brand page alone (breaks
+  the one-mental-model goal). **It is now an as-scoped judgment call — do not "fix"
+  it in a later batch without revisiting the decision** (recorded in spec §0.5 and
+  at the call site). Carry-forward: since the ring is the SOLE affordance, its
+  2.76:1 light-mode contrast is more load-bearing than before, and **that token
+  question stays open** — accepting hover-only did not settle it.
 - **F2 LOW folded** — "the dot fill is unchanged by this commit" is true of the
   COLOUR but false of the OBLIGATION: the element went from a decorative
   `aria-hidden` span to a `<button>`, so 1.4.11 boundary contrast applies to it for

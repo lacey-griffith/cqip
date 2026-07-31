@@ -656,9 +656,11 @@ export default function PulseBrandPage({
                               // NOTE: this hover/focus ring is the ONLY affordance
                               // — at rest an editable dot is pixel-identical to a
                               // non-editable one, and on touch there is no hover
-                              // at all. Deliberate (matrix parity; its dot is
-                              // hover-only too) but it is an open question for
-                              // Lacey, see spec §0.5.
+                              // at all. That is a DECIDED trade, not an oversight:
+                              // Lacey accepted hover-only for matrix parity on
+                              // 2026-07-31 (the matrix's dot is hover-only too).
+                              // Do not add a resting cue here without revisiting
+                              // it — spec §0.5 has the full disclosure.
                               (isEditing
                                 ? 'ring-2 ring-offset-2 ring-[color:var(--f92-orange)] ring-offset-[color:var(--f92-surface)] '
                                 : '') +

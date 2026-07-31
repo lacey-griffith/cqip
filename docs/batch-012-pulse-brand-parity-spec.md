@@ -85,7 +85,13 @@ takes the matrix's orange ring so both surfaces read **analogously** mid-edit
 > below — that deferral stands on its own (the token is app-wide), so this weakens
 > the wording, not the decision.
 
-### ⚠ OPEN DECISION FOR LACEY — the resting-state affordance is GONE, not moved (Karen F1)
+### RESOLVED — hover-only accepted for parity (Lacey, 2026-07-31; Karen F1)
+
+**Decision: keep hover-and-focus-only. This is an as-scoped judgment call, not an
+oversight — do not "fix" it in a later batch without revisiting the decision.**
+
+The disclosure that produced that decision is kept below, because a future reader
+needs to know the affordance is hover-only *by choice*:
 
 The stated requirement (the pill must lose the chip) **is met**. But `3363629`'s
 chip was a **resting-state** cue, and its replacement — `hover:ring-2` /
@@ -105,11 +111,16 @@ editable dot is **pixel-identical** to a non-editable one.
 
 **Why this is a judgment call and not a defect:** matrix parity is the stated
 intent, and the matrix's dot is hover-only too (`app/dashboard/pulse/page.tsx:915`),
-so this is arguably correct-by-consistency. **Lacey decides knowingly** rather than
-finding it on the page: accept hover-only for parity, or add a resting cue (which
-means adding it to the matrix as well, or accepting divergence). Recorded here
-because the earlier draft justified removing the chip purely in terms of the *pill*
-and never stated the net effect on the *row*.
+so this is correct-by-consistency. Recorded because the earlier draft justified
+removing the chip purely in terms of the *pill* and never stated the net effect on
+the *row*.
+
+**Lacey chose hover-only, knowingly, on that disclosure** — the alternatives were a
+resting cue on both surfaces (keeps parity, costs a matrix change + a fresh review)
+or on the brand page alone (breaks the one-mental-model goal this follow-on exists
+to achieve). One consequence carries forward: because the ring is now the **sole**
+affordance, the 2.76:1 light-mode ring contrast below is more load-bearing than it
+was — that token question stays open and is **not** settled by this decision.
 
 **Hit area — 24×24, verified by arithmetic not by eye.** The visual dot stays 12px.
 `after:absolute after:-inset-1.5 after:content-['']` expands the *clickable*
