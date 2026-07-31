@@ -3202,6 +3202,45 @@ does not bite. Unchanged: `CellEditStrip`, save/reconcile/toast, the `liveKeyRef
 guard, render branch order, the status filter + hidden-count hint,
 `countHiddenOwedCells`, and **`app/dashboard/pulse/page.tsx` at a 0-line diff**.
 Gates: tsc 0 · ESLint zero · 112/112 · build 0 with the brand page still `ƒ`.
+**Karen narrow post-flight: PASS-WITH-FINDINGS, no HIGH.** She confirmed the crux
+independently — the hover IS live this time — and went past the brief: all nine
+`@property` registrations are emitted (without them the `box-shadow` shorthand
+would be invalid-at-computed-value-time and the ring dead **despite every class
+being present**, the same silent-failure shape as `3363629`), and `globals.css` is
+entirely unlayered so she checked that none of its four `box-shadow` rules match the
+dot. Also verified the aria-label moved byte-identically, the chip is fully gone
+(`pill-filter-fg` / `pill-filter-bg-hover` no longer appear in the file), the dot's
+box is unchanged (button preflight zeroes border/margin/padding, so `h-3 w-3` is the
+same 12×12 box as the old span), and the 6px hit expansion lands in the Card's `p-3`
+padding and the `gap-3`, stealing no clicks. **Three findings, all folded as wording
+except one open decision:**
+- **F1 MEDIUM → ⚠ OPEN DECISION FOR LACEY, disclosed in spec §0.5 + in-code.** The
+  affordance was **deleted, not moved**: `3363629`'s chip was a RESTING-state cue,
+  and hover/focus-only means an editable dot is pixel-identical to a non-editable
+  one at rest — with **no hover at all on touch**. That is structurally the same
+  shape as the Karen LOW this arc opened to close, and it makes the 2.76:1 ring
+  load-bearing. Not a defect (matrix parity is the stated intent and the matrix's
+  dot is hover-only too), but the earlier draft justified removing the chip purely
+  in terms of the PILL and never stated the net effect on the ROW.
+- **F2 LOW folded** — "the dot fill is unchanged by this commit" is true of the
+  COLOUR but false of the OBLIGATION: the element went from a decorative
+  `aria-hidden` span to a `<button>`, so 1.4.11 boundary contrast applies to it for
+  the FIRST TIME here. Still LOW (the status is also text in the same row at
+  4.83:1, and 2.5.8 is met), but newly in scope rather than inherited.
+- **F3 LOW folded, both parts corrections to my own claims** — (a) "one control per
+  row" does NOT mean "the status isn't announced twice": browse mode now speaks it
+  twice (label + visible span), where `3363629` spoke it once because the pill's
+  `aria-label` overrode that span. Kept anyway — `aria-hidden` on the pill would
+  strip the status from read-only rows entirely, and dropping it from the label
+  costs a keyboard user the value at the tab stop; only the claim was softened.
+  (b) "read identically mid-edit" → **analogously**: the matrix rings a 24px wrapper
+  with no offset (6px annulus), this rings a 12px dot with `ring-offset-2` (2px).
+- **Two inert-by-design details recorded** (pre-existing, app-wide, matrix-identical,
+  neither affects whether the ring applies): `focus-visible:outline-none` is inert
+  because unlayered `globals.css:279` wins, so keyboard focus paints outline + ring
+  (and its forced `border-radius:6px` is still a perfect circle on a 12×12 box); and
+  `transition` is inert for `box-shadow` because `globals.css:273` restricts
+  `transition-property` deliberately, so the ring snaps.
 
 The rest of this entry describes the pushed three commits; the pill styling it
 records is **superseded** by the follow-on above.

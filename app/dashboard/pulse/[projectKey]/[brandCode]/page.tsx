@@ -612,9 +612,15 @@ export default function PulseBrandPage({
                             }
                             // Leads with the ACTION and names the directive:
                             // "To do" repeated down 82 rows tells a screen-reader
-                            // user nothing about which row they are on. This is
-                            // the row's ONLY accessible name — the pill carries
-                            // none, so there is one control per row, not two.
+                            // user nothing about which row they are on. The pill
+                            // is not a control and carries no accessible name, so
+                            // there is exactly one control + one tab stop per row.
+                            // NOT the same as "the status is announced once":
+                            // browse mode speaks it twice (this label, then the
+                            // visible span). Kept deliberately — aria-hidden on
+                            // the pill would strip the status from read-only rows
+                            // entirely, and dropping it from this label costs a
+                            // keyboard-only user the current value at the tab stop.
                             aria-label={`Edit status for ${directive.title}: ${CELL_STATUS_LABEL[status]}${isEditing ? ' (editing — activate to close)' : ''}`}
                             // HIT AREA: the dot is 12px, but WCAG 2.5.8 wants a
                             // ≥24×24 target. The `after:` pseudo-element expands
@@ -640,10 +646,19 @@ export default function PulseBrandPage({
                               'hover:ring-2 hover:ring-[color:var(--f92-orange)] ' +
                               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)] ' +
                               // Mid-edit the dot takes the matrix's orange-ring
-                              // treatment so both surfaces read identically. The
-                              // offset separates ring from dot the way the
-                              // matrix's larger button does, and is a box-shadow,
-                              // so it costs no layout either.
+                              // treatment, so the two surfaces read ANALOGOUSLY —
+                              // not identically: the matrix rings a 24px wrapper
+                              // with no offset (6px annulus), this rings a 12px
+                              // dot with ring-offset-2 (2px). Same treatment, not
+                              // the same pixels. A ring is a box-shadow, so it
+                              // costs no layout either.
+                              //
+                              // NOTE: this hover/focus ring is the ONLY affordance
+                              // — at rest an editable dot is pixel-identical to a
+                              // non-editable one, and on touch there is no hover
+                              // at all. Deliberate (matrix parity; its dot is
+                              // hover-only too) but it is an open question for
+                              // Lacey, see spec §0.5.
                               (isEditing
                                 ? 'ring-2 ring-offset-2 ring-[color:var(--f92-orange)] ring-offset-[color:var(--f92-surface)] '
                                 : '') +

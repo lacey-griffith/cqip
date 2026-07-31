@@ -55,14 +55,61 @@ with:
 - The right-hand pill **reverts to an inert `<span>`** and **loses** the
   bordered-chip styling from `3363629`.
 - The action-leading aria-label **moved to the dot verbatim** — `Edit status for
-  {title}: {status}`. The pill keeps **no accessible name of its own**: one control
-  per row, not two, or a screen-reader user hears every row twice.
+  {title}: {status}`. The pill is not a control and carries no accessible name of
+  its own, so there is exactly **one control and one tab stop per row**.
+  - **Correction to an earlier, too-strong version of this claim** (Karen F3a):
+    that is *not* the same as "the status isn't announced twice." In a screen
+    reader's browse mode the row now reads `"Edit status for Foo: To do, button"`
+    … `"AUDIENCE"` … `"Foo"` … `"To do"` — the status string is spoken **twice**,
+    once from the label and once from the visible span. Under `3363629` it was
+    spoken **once**, because the `aria-label` on the pill overrode that same
+    span's text while the dot was `aria-hidden`. So verbosity here is marginally
+    *worse*. Kept anyway, because both fixes are worse: `aria-hidden` on the pill
+    would strip the status from read-only users' rows entirely (their dot is
+    already `aria-hidden`), and dropping the status from the button label costs a
+    keyboard-only user the current value at the tab stop. Keeping it is the better
+    trade; only the claim needed softening.
 - Copy updated to stay true: *"Click a status **dot** to edit it for this brand."*
 
 **Affordance mirrors the matrix, not invented:** `hover:ring-2` +
 `focus-visible:ring-2` in `--f92-orange`, and while a row is being edited the dot
-takes the matrix's orange ring so both surfaces read identically mid-edit
-(`ring-offset-2` separates ring from dot the way the matrix's larger button does).
+takes the matrix's orange ring so both surfaces read **analogously** mid-edit
+(`ring-offset-2` separates ring from dot).
+
+> **"Identically" was overstated** (Karen F3b). The matrix uses `ring-2` with **no
+> offset** on a 24px wrapper, so its ~6px annulus comes from a 12px dot sitting
+> inside a 24px button. This dot uses `ring-2 ring-offset-2` on a 12px box:
+> different mechanism, 2px gap rather than 6px, smaller ring diameter. Same
+> *treatment* (orange ring on the dot mid-edit), not the same pixels. Noted because
+> the phrase was also used as supporting rhetoric for the ring-contrast deferral
+> below — that deferral stands on its own (the token is app-wide), so this weakens
+> the wording, not the decision.
+
+### ⚠ OPEN DECISION FOR LACEY — the resting-state affordance is GONE, not moved (Karen F1)
+
+The stated requirement (the pill must lose the chip) **is met**. But `3363629`'s
+chip was a **resting-state** cue, and its replacement — `hover:ring-2` /
+`focus-visible:ring-2` / `cursor-pointer` — is **hover-and-focus only**. At rest an
+editable dot is **pixel-identical** to a non-editable one.
+
+- An admin sees ~82 rows of identical grey dots with no visual cue which are
+  actionable. **On touch there is no hover at all**, so the only affordance is one
+  sentence above the list.
+- That is structurally the same shape as the Karen LOW this whole arc opened to
+  close (*"a text button styled like the read-only span"*), and the copy barely
+  strengthened — pre-chip it already read "Click a status to edit it for this
+  brand"; it now says "status **dot**".
+- **Compounded by the contrast note below:** the sole affordance is now a 2.76:1
+  ring in light mode. When a bordered chip carried the signal, the ring's contrast
+  mattered less; now it is load-bearing.
+
+**Why this is a judgment call and not a defect:** matrix parity is the stated
+intent, and the matrix's dot is hover-only too (`app/dashboard/pulse/page.tsx:915`),
+so this is arguably correct-by-consistency. **Lacey decides knowingly** rather than
+finding it on the page: accept hover-only for parity, or add a resting cue (which
+means adding it to the matrix as well, or accepting divergence). Recorded here
+because the earlier draft justified removing the chip purely in terms of the *pill*
+and never stated the net effect on the *row*.
 
 **Hit area — 24×24, verified by arithmetic not by eye.** The visual dot stays 12px.
 `after:absolute after:-inset-1.5 after:content-['']` expands the *clickable*
@@ -127,9 +174,32 @@ Two shortfalls, both **pre-existing and deliberately not fixed here**:
    one dot" directly contradicts the requirement that both surfaces read
    identically. **Flagged for Lacey as a token-level call**, not changed
    unilaterally.
-2. **The `--f92-lgray` dot fill at 2.54:1 light** is unchanged by this commit, and
-   1.4.11 does not bite: the status is *also* rendered as text in the same row (the
-   inert label), so the dot is never the sole carrier of that information.
+2. **The `--f92-lgray` dot fill at 2.54:1 light.** 1.4.11 does not bite: the status
+   is *also* rendered as text in the same row (the inert label at 4.83:1), so the
+   dot is never the sole carrier of that information.
+   - **Correction** (Karen F2): calling this "unchanged by this commit" is true of
+     the **colour** but false of the **obligation**. The element went from a
+     decorative `aria-hidden` `<span>` to a `<button>` — a UI component — so
+     1.4.11's boundary-contrast requirement applies to it **for the first time in
+     this commit**. Still LOW, mitigated by the adjacent text label and by 2.5.8
+     compliance, but it is newly in scope here rather than purely inherited.
+
+### Two inert-by-design details, recorded because they are non-obvious
+
+Neither affects whether the ring **applies**; both are pre-existing, app-wide, and
+identical on the matrix, so parity holds:
+
+- **`focus-visible:outline-none` on the dot is INERT.** `app/globals.css` is
+  entirely unlayered, so its `:focus-visible { outline: 2px solid var(--f92-orange) }`
+  (line 279) beats the layered utility. Keyboard focus paints **outline + ring**.
+  Harmless (orange on orange). Happy accident: the same rule forces
+  `border-radius: 6px` on focus, which on a 12×12 box is still a perfect circle, so
+  the dot does not square off.
+- **`transition` is inert for `box-shadow`.** `globals.css:273` restricts
+  `transition-property` on `button, a, [role="button"]` to
+  background/color/border/transform/opacity — deliberately, per its own comment
+  ("let those snap"). The ring appears instantly. `transition-property` governs
+  animation only, never the computed value.
 
 ### Unchanged, confirmed
 
