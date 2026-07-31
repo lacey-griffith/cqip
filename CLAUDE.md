@@ -3156,8 +3156,57 @@ and reviewed, awaiting only Lacey's run, so it is not in-flight work.)
 
 ### Batch 012 — Pulse: brand-page parity + matrix paused default
 
-**Status:** IN FLIGHT (2026-07-31). Render/interaction only over already-loaded
-data. **NO migration · NO schema change · NO new route · NO new mutation surface ·
+**Status:** IN FLIGHT (2026-07-31) — **first three commits `61a03b8` → `0988ce6` →
+`3363629` are PUSHED + auto-deployed**; a follow-on (below) is committed and NOT
+pushed. The whole arc stays in §15.5 until the follow-on lands, then ONE
+§15.5 → §16 reconcile covers all of it (§13 r34 — the arc has exactly one home; do
+not write a partial §16 entry now).
+
+**FOLLOW-ON (committed, NOT pushed) — the edit target moved from the pill to the
+status DOT.** The pill was the wrong element: the intent was matrix consistency, and
+on the matrix the DOT is the target, so the brand page's leading dot is now the
+control (shorter travel from where the eye scans; one mental model across both
+surfaces). **Target and affordance moved together as ONE change** — the pill reverts
+to an inert `<span>` and LOSES `3363629`'s bordered chip, because a chip that reads
+clickable but isn't is worse than the flat label it started as. The action-leading
+aria-label moved to the dot verbatim; the pill keeps NO accessible name, so there is
+one control per row rather than a screen-reader user hearing every row twice.
+`editable = isAdmin && !!cell` unchanged; non-admins get a plain inert dot, never a
+disabled button. Affordance mirrors the matrix (`hover:ring-2` +
+`focus-visible:ring-2` in `--f92-orange`, plus the matrix's orange ring while
+editing, with `ring-offset-2` separating ring from dot). **Hit area is exactly
+24×24 CSS px** (WCAG 2.5.8) via `after:absolute after:-inset-1.5
+after:content-['']` — `--spacing` is `.25rem`, so `-inset-1.5` = −6px per side and
+12 + 2×6 = 24; the pseudo-element costs NO layout, so the dot does not move, row
+height is untouched, and the dot is not scaled up to fake a target (a 24×24 button
+like the matrix's would have shifted this row's text — the matrix can afford it
+because its dot sits alone in a table cell). The status→colour map became
+`STATUS_DOT_CLASS` (**classes, no inline `style` on the dot at all**) precisely
+because the dot now carries `hover:`/`focus-visible:` ring rules: an inline
+declaration beats an author stylesheet absent `!important`, so a `style` prop here
+would be one refactor from re-creating the `3363629` dead-hover regression. Copy
+updated to "Click a status **dot** to edit it". **Verified in the COMPILED CSS**
+(all ring rules, `after:content-['']` — without which the pseudo-element never
+renders and the hit area silently would not exist —, `after:-inset-1.5`, the four
+dot fills, `border-dashed`), and `ring-offset-[color:var(--f92-surface)]` confirmed
+correct in BOTH themes (`Card` is `bg-white`; `--f92-surface` is `#FFFFFF` in
+`:root`; `globals.css:307` maps `.bg-white` → `var(--f92-surface)` under
+`data-theme="dark"`). **Contrast stated including what falls short:** orange ring
+2.76:1 light / 4.34:1 dark and the `--f92-lgray` dot fill 2.54:1 light / 3.30:1
+dark. Both shortfalls are **pre-existing and deliberately NOT fixed here** — the
+orange ring is the app-wide focus ring (buttons, filter controls, the matrix dot),
+so it is a design-token call and "fix it on this one dot" would contradict the
+read-identically requirement → **flagged for Lacey**; and the dot fill is not a sole
+indicator because the status is also rendered as text in the same row, so 1.4.11
+does not bite. Unchanged: `CellEditStrip`, save/reconcile/toast, the `liveKeyRef`
+guard, render branch order, the status filter + hidden-count hint,
+`countHiddenOwedCells`, and **`app/dashboard/pulse/page.tsx` at a 0-line diff**.
+Gates: tsc 0 · ESLint zero · 112/112 · build 0 with the brand page still `ƒ`.
+
+The rest of this entry describes the pushed three commits; the pill styling it
+records is **superseded** by the follow-on above.
+
+Render/interaction only over already-loaded data. **NO migration · NO schema change · NO new route · NO new mutation surface ·
 NO new fetch · NO new dep → no Jenny (E-track profile), no version bump.** Spec:
 `docs/batch-012-pulse-brand-parity-spec.md`. **Karen post-flight. DO NOT PUSH.**
 

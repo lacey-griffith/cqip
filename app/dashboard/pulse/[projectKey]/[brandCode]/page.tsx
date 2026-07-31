@@ -11,7 +11,9 @@
 //
 // Admins edit a directive's status/note for THIS brand inline (same PATCH
 // route the matrix uses, via the shared saveDirectiveCell + CellEditStrip) by
-// clicking the row's STATUS PILL — the only interactive element in the row.
+// clicking the row's leading STATUS DOT — the only interactive element in the
+// row, and the same element that is the target on the matrix. The right-hand
+// status label is inert.
 // A client-side status filter scopes the list (default `Open` = not Done and
 // not N/A); see lib/client-library/pulse.ts for why that is a different
 // function from the matrix's derived-resolve filter and must not be unified
@@ -78,14 +80,22 @@ const TYPE_LABEL: Record<DirectiveType, string> = {
   audience: 'Audience',
 };
 
-// Cell status → token color (§13 r25 — tokens, no inline hex). Matches the
-// matrix's dot palette. n_a renders hollow (not owed).
-const STATUS_DOT: Record<CellStatus, string> = {
-  todo: 'var(--f92-lgray)',
-  in_progress: 'var(--status-in-progress)',
-  done: 'var(--status-resolved)',
-  blocked: 'var(--status-blocked)',
-  n_a: 'transparent',
+// Cell status → dot appearance (§13 r25 — tokens, no inline hex). Same palette
+// as the matrix's dots; n_a renders hollow (not owed).
+//
+// These are CLASSES, not an inline style map, because the dot is now a button
+// carrying `hover:ring-*` / `focus-visible:ring-*`. Inline declarations beat
+// author-stylesheet rules absent !important, so keeping a `style` prop on this
+// element would be one refactor away from silently killing those rings — exactly
+// the 3363629 regression. No inline style on the element means the hazard cannot
+// reappear. (The matrix still uses an inline style for its dots; it is untouched
+// in this commit, and its dot has no color-carrying hover rule to break.)
+const STATUS_DOT_CLASS: Record<CellStatus, string> = {
+  todo: 'bg-[color:var(--f92-lgray)]',
+  in_progress: 'bg-[color:var(--status-in-progress)]',
+  done: 'bg-[color:var(--status-resolved)]',
+  blocked: 'bg-[color:var(--status-blocked)]',
+  n_a: 'border-[1.5px] border-dashed border-[color:var(--f92-lgray)]',
 };
 
 export default function PulseBrandPage({
@@ -454,7 +464,7 @@ export default function PulseBrandPage({
             <p className="mb-3 text-sm text-[color:var(--f92-gray)]">
               This brand&rsquo;s status on each active directive.{' '}
               {isAdmin ? (
-                <>Click a status to edit it for this brand.</>
+                <>Click a status dot to edit it for this brand.</>
               ) : (
                 <>
                   Edit statuses on the{' '}
@@ -581,15 +591,73 @@ export default function PulseBrandPage({
                       style={{ boxShadow: 'var(--shadow-sm)' }}
                     >
                       <div className="flex items-start gap-3">
-                        <span
-                          className="mt-1.5 block h-3 w-3 shrink-0 rounded-full"
-                          style={
-                            status === 'n_a'
-                              ? { border: '1.5px dashed var(--f92-lgray)' }
-                              : { background: STATUS_DOT[status] }
-                          }
-                          aria-hidden="true"
-                        />
+                        {/* THE STATUS DOT IS THE EDIT TARGET — matching the
+                            matrix, where the cell dot is the control and the
+                            directive title is not. Shorter travel from where the
+                            eye already scans, and one mental model across both
+                            surfaces.
+                            The right-hand pill is INERT (see below): the target
+                            and its affordance moved together, deliberately as one
+                            change. A chip that reads clickable but isn't is worse
+                            than a flat label.
+                            Non-admins (and any row whose cell doesn't exist yet)
+                            get the same inert dot — a plain <span>, never a
+                            disabled button, so no interactive control leaks. */}
+                        {editable ? (
+                          <button
+                            type="button"
+                            aria-expanded={isEditing}
+                            onClick={() =>
+                              setEditingId((cur) => (cur === directive.id ? null : directive.id))
+                            }
+                            // Leads with the ACTION and names the directive:
+                            // "To do" repeated down 82 rows tells a screen-reader
+                            // user nothing about which row they are on. This is
+                            // the row's ONLY accessible name — the pill carries
+                            // none, so there is one control per row, not two.
+                            aria-label={`Edit status for ${directive.title}: ${CELL_STATUS_LABEL[status]}${isEditing ? ' (editing — activate to close)' : ''}`}
+                            // HIT AREA: the dot is 12px, but WCAG 2.5.8 wants a
+                            // ≥24×24 target. The `after:` pseudo-element expands
+                            // the CLICKABLE region to 24×24 (12 + 6 either side)
+                            // while contributing NOTHING to layout — so the dot
+                            // does not move, the row height is untouched, and the
+                            // dot is not scaled up to fake a bigger target. A
+                            // 24×24 button like the matrix's would have shifted
+                            // this row's text; the matrix can afford it because
+                            // its dot sits alone in a table cell.
+                            //
+                            // ALL colors via className, NEVER an inline style.
+                            // That is not stylistic: 3363629 set color/borderColor
+                            // inline, which silently beat the Tailwind `hover:`
+                            // rules (an inline declaration wins over an author
+                            // stylesheet absent !important), so the advertised
+                            // hover was dead code asserted in three documents.
+                            // Verify any change here against the COMPILED CSS —
+                            // a class-list review cannot see that bug.
+                            className={
+                              'relative mt-1.5 block h-3 w-3 shrink-0 cursor-pointer rounded-full transition ' +
+                              "after:absolute after:-inset-1.5 after:rounded-full after:content-[''] " +
+                              'hover:ring-2 hover:ring-[color:var(--f92-orange)] ' +
+                              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)] ' +
+                              // Mid-edit the dot takes the matrix's orange-ring
+                              // treatment so both surfaces read identically. The
+                              // offset separates ring from dot the way the
+                              // matrix's larger button does, and is a box-shadow,
+                              // so it costs no layout either.
+                              (isEditing
+                                ? 'ring-2 ring-offset-2 ring-[color:var(--f92-orange)] ring-offset-[color:var(--f92-surface)] '
+                                : '') +
+                              STATUS_DOT_CLASS[status]
+                            }
+                          />
+                        ) : (
+                          <span
+                            className={
+                              'mt-1.5 block h-3 w-3 shrink-0 rounded-full ' + STATUS_DOT_CLASS[status]
+                            }
+                            aria-hidden="true"
+                          />
+                        )}
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <span
@@ -618,78 +686,20 @@ export default function PulseBrandPage({
                             </p>
                           ) : null}
                         </div>
-                        {/* The status pill is the ONLY interactive element in
-                            the row — title / type badge / description are inert
-                            text, matching the matrix, where the cell dot is the
-                            target and not the directive title.
-                            It now carries a visible chip affordance (fill +
-                            border) so it reads as a control rather than as the
-                            read-only span it used to be indistinguishable from
-                            — the third, previously-unfolded Karen LOW from the
-                            brand-page inline-edit batch. Non-admins still get a
-                            plain <span>, never a disabled button, so no
-                            interactive control leaks to a read-only user; that
-                            also means the chip treatment is itself the signal
-                            that this row is editable. */}
-                        {editable ? (
-                          <button
-                            type="button"
-                            aria-expanded={isEditing}
-                            onClick={() =>
-                              setEditingId((cur) => (cur === directive.id ? null : directive.id))
-                            }
-                            // Leads with the ACTION and names the directive:
-                            // "To do" repeated down 82 rows tells a screen-reader
-                            // user nothing about which row they are on.
-                            aria-label={`Edit status for ${directive.title}: ${CELL_STATUS_LABEL[status]}${isEditing ? ' (editing — activate to close)' : ''}`}
-                            // ALL colors live in className, NOT in an inline
-                            // `style` (Karen MEDIUM-2). An inline declaration
-                            // beats an author stylesheet regardless of
-                            // specificity unless the stylesheet says
-                            // !important, and Tailwind's `hover:` variants are
-                            // author-stylesheet rules — so the first cut, which
-                            // set `color`/`borderColor` inline, silently killed
-                            // both hover rules while three documents claimed
-                            // "orange on hover". Verify any change here against
-                            // the COMPILED css, not against the class list.
-                            //
-                            // Text is --pill-filter-fg, the fill's matching
-                            // token (Karen MEDIUM-1): --f92-navy is #4A5AB9 in
-                            // dark mode, which lands at 2.42:1 on this fill —
-                            // an AA failure, and WORSE than the plain --f92-gray
-                            // span this replaced. --pill-filter-fg is 11.0:1
-                            // light / 9.6:1 dark.
-                            //
-                            // The BORDER is the discriminator (Karen MEDIUM-3):
-                            // the inert TYPE_LABEL badge two lines up wears this
-                            // same --pill-filter-bg fill, so fill alone cannot
-                            // say "control". --f92-gray is a deliberate step up
-                            // from the --f92-border used by the app's outline
-                            // Button (1.4:1) — it clears the 3:1 non-text
-                            // threshold in both themes (4.5:1 light / 5.9:1
-                            // dark) on the one control this change exists to
-                            // make discoverable.
-                            //
-                            // Idle and editing border classes are mutually
-                            // exclusive branches: emitting both would leave the
-                            // winner to CSS source order, not to this string.
-                            className={
-                              'shrink-0 cursor-pointer rounded-full border px-2.5 py-0.5 text-xs font-medium transition ' +
-                              'bg-[color:var(--pill-filter-bg)] text-[color:var(--pill-filter-fg)] ' +
-                              'hover:bg-[color:var(--pill-filter-bg-hover)] hover:text-[color:var(--f92-orange)] ' +
-                              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)] ' +
-                              (isEditing
-                                ? 'border-[color:var(--f92-orange)] ring-2 ring-[color:var(--f92-orange)]'
-                                : 'border-[color:var(--f92-gray)] hover:border-[color:var(--f92-orange)]')
-                            }
-                          >
-                            {CELL_STATUS_LABEL[status]}
-                          </button>
-                        ) : (
-                          <span className="shrink-0 text-xs font-medium text-[color:var(--f92-gray)]">
-                            {CELL_STATUS_LABEL[status]}
-                          </span>
-                        )}
+                        {/* INERT status label — one control per row, and it is
+                            the dot. This deliberately drops the bordered-chip
+                            treatment 3363629 gave it: that chip existed to say
+                            "click me", and now something else is the target, so
+                            keeping it would advertise a control that no longer
+                            exists. It carries no accessible name of its own
+                            either — the dot's aria-label already speaks the
+                            status, and a second name would make screen-reader
+                            users hear every row twice. Same flat span for admins
+                            and read-only users; the row's editability is signalled
+                            by the dot's hover/focus ring. */}
+                        <span className="shrink-0 text-xs font-medium text-[color:var(--f92-gray)]">
+                          {CELL_STATUS_LABEL[status]}
+                        </span>
                       </div>
 
                       {/* Inline editor (admin). The CellEditStrip container is

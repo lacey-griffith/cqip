@@ -37,7 +37,110 @@ the V2.1 backport window and will move again. Every count renders from live data
 
 ---
 
-## 1. Change 1 — brand-page edit trigger
+## 0.5 Follow-on (2026-07-31, after the first three commits were pushed) — the edit target moved to the status DOT
+
+The pill was the wrong element. The intent was **matrix consistency**, and on the
+matrix the **dot** is the target — so the brand page's leading status dot is now
+the control too: shorter travel from where the eye already scans, and one mental
+model across both surfaces. §1 below records the pill version as shipped history;
+this section supersedes its *target and styling*.
+
+**Target and affordance moved together, as one change** — they cannot separate. A
+chip that reads as clickable but isn't is worse than the flat label we started
+with:
+
+- The leading **status dot** is a real `<button>`. `editable = isAdmin && !!cell`
+  unchanged; non-admins and cell-less rows get a plain inert `<span>` dot, never a
+  disabled button.
+- The right-hand pill **reverts to an inert `<span>`** and **loses** the
+  bordered-chip styling from `3363629`.
+- The action-leading aria-label **moved to the dot verbatim** — `Edit status for
+  {title}: {status}`. The pill keeps **no accessible name of its own**: one control
+  per row, not two, or a screen-reader user hears every row twice.
+- Copy updated to stay true: *"Click a status **dot** to edit it for this brand."*
+
+**Affordance mirrors the matrix, not invented:** `hover:ring-2` +
+`focus-visible:ring-2` in `--f92-orange`, and while a row is being edited the dot
+takes the matrix's orange ring so both surfaces read identically mid-edit
+(`ring-offset-2` separates ring from dot the way the matrix's larger button does).
+
+**Hit area — 24×24, verified by arithmetic not by eye.** The visual dot stays 12px.
+`after:absolute after:-inset-1.5 after:content-['']` expands the *clickable*
+region only: `--spacing` is `.25rem` = 4px, so `-inset-1.5` = **−6px** per side →
+12 + 2×6 = **exactly 24×24 CSS px** (WCAG 2.5.8). The pseudo-element contributes
+**nothing** to layout, so the dot does not move and the row height is untouched —
+and the dot is *not* scaled up to fake a bigger target. A 24×24 button like the
+matrix's would have shifted this row's text right; the matrix can afford that
+because its dot sits alone in a table cell.
+
+**No inline `style` on the dot at all.** The status→colour map became
+`STATUS_DOT_CLASS` (classes, not a `style` object) specifically because the dot now
+carries `hover:ring-*` / `focus-visible:ring-*`: an inline declaration beats an
+author-stylesheet rule absent `!important`, so leaving a `style` prop here would be
+one refactor away from re-creating the `3363629` dead-hover regression. (The matrix
+still uses an inline style for its dots — untouched this commit, and its dot has no
+colour-carrying hover rule to break.)
+
+### Compiled-CSS verification — the check that caught `3363629`
+
+Extracted from the built chunk, because a class-list review provably cannot see
+this class of bug:
+
+```
+.hover\:ring-\[color\:var\(--f92-orange\)\]:hover          { --tw-ring-color:var(--f92-orange) }
+.hover\:ring-2:hover                                       { --tw-ring-shadow:… ; box-shadow:… }
+.focus-visible\:ring-\[color\:var\(--f92-orange\)\]:focus-visible { --tw-ring-color:var(--f92-orange) }
+.ring-\[color\:var\(--f92-orange\)\]                       { --tw-ring-color:var(--f92-orange) }   ← the editing ring
+.after\:content-\[\'\'\]:after                             { --tw-content:""; content:var(--tw-content) }
+.after\:-inset-1\.5:after                                  { inset:calc(var(--spacing) * -1.5) }
+.after\:rounded-full:after                                 { border-radius:… }
+.ring-offset-2                                             { --tw-ring-offset-width:2px; … }
+.ring-offset-\[color\:var\(--f92-surface\)\]               { --tw-ring-offset-color:var(--f92-surface) }
+background-color:var(--f92-lgray|--status-in-progress|--status-resolved|--status-blocked)  ← 1 rule each
+.border-dashed                                             { border-style:dashed }   ← the n_a hollow dot
+```
+
+`after:content-['']` mattering is not hypothetical: without it the pseudo-element
+never renders and the 24×24 hit area would silently not exist.
+
+`ring-offset-[color:var(--f92-surface)]` is correct in **both** themes — verified,
+not assumed: `Card` is `bg-white`, `--f92-surface` is `#FFFFFF` in `:root`, and
+`app/globals.css:307` maps `:root[data-theme="dark"] .bg-white` →
+`var(--f92-surface)`. So the offset gap always matches the real card background.
+
+### Contrast, both themes — stated including the one that falls short
+
+| | ratio | |
+|---|---|---|
+| Orange ring vs card — **light** | **2.76:1** | **under 3:1** |
+| Orange ring vs card — dark | 4.34:1 | ok |
+| Dot fill `todo`/`n_a` (`--f92-lgray`) — light | 2.54:1 | under 3:1 |
+| Dot fill `todo`/`n_a` — dark | 3.30:1 | ok |
+| Inert status label (`--f92-gray`) — light / dark | 4.83:1 / 6.13:1 | ok |
+
+Two shortfalls, both **pre-existing and deliberately not fixed here**:
+
+1. **The orange focus/hover ring at 2.76:1 in light mode** is the app-wide focus
+   ring (`focus-visible:ring-[color:var(--f92-orange)]` appears on buttons, filter
+   controls, and the matrix dot). WCAG 1.4.11 covers focus indicators, so this is a
+   real AA shortfall — but it is a **design-token decision**, and "fix it on this
+   one dot" directly contradicts the requirement that both surfaces read
+   identically. **Flagged for Lacey as a token-level call**, not changed
+   unilaterally.
+2. **The `--f92-lgray` dot fill at 2.54:1 light** is unchanged by this commit, and
+   1.4.11 does not bite: the status is *also* rendered as text in the same row (the
+   inert label), so the dot is never the sole carrier of that information.
+
+### Unchanged, confirmed
+
+`CellEditStrip` and everything in it · save / reconcile / toast · the `liveKeyRef`
+staleness guard · the render branch order · the status filter and its hidden-count
+hint · `countHiddenOwedCells` · **`app/dashboard/pulse/page.tsx` — 0-line diff in
+this commit.**
+
+---
+
+## 1. Change 1 — brand-page edit trigger *(superseded by §0.5 — kept as shipped history)*
 
 ### Correction to the ask, recorded rather than silently absorbed
 
