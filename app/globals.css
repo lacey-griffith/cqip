@@ -134,8 +134,58 @@
   --shadow-sm: 0 1px 2px rgba(26, 26, 46, .06), 0 1px 3px rgba(26, 26, 46, .10);
   --tracking-eyebrow: .16em;
   --tracking-wide: .12em;
+  /* NOT named --tracking-tight: that would shadow Tailwind v4's OWN
+     `tracking-tight` utility token, whose value is NEGATIVE (-.025em). Because
+     this file is unlayered it wins over Tailwind's @layer theme, so anyone later
+     writing className="tracking-tight" expecting tighter text would silently get
+     WIDER text. Distinct name, no collision. */
+  --tracking-label: .04em;
   --f92-on-orange: #FFFFFF;
   --f92-orange-hover: #DA6A17;
+
+  /* ------------------------------------------------------------------
+     Focus ring (Batch 012 restyle). A DEDICATED token, not --f92-orange.
+     WHY: --f92-orange is #F47920, which is 2.76:1 on white — under WCAG
+     1.4.11's 3:1 for the visual information that identifies a component
+     or its state. That was tolerable while the brand-page pill's chip
+     shared the affordance job; after 5870dae the hover/focus ring is the
+     SOLE affordance on the brand-page dot, and the same colour serves the
+     matrix dot, the filter controls, and the :focus-visible outline below.
+     So it is raised HERE, once, rather than patched at one call site —
+     and it is a NEW token rather than a change to --f92-orange, because
+     --f92-orange is the brand accent (H1s, primary buttons, links) and
+     must not shift.
+     Light #C2410C = 5.18:1 on white / 4.84:1 on the cream page bg.
+     Dark  #E8833A = 5.80:1 on the card / 6.95:1 on the page / 4.86:1 on
+     the tint — dark already passed on --f92-orange (4.34/5.21/3.64) but
+     the tint case was marginal, so this buys headroom in both themes. */
+  --f92-focus-ring: #C2410C;
+
+  /* ------------------------------------------------------------------
+     Pulse CELL statuses (Batch 012 restyle). Distinct from the --status-*
+     family above, which is the QUALITY-LOG status palette (§12) — a log
+     status and a directive-cell status are different domains that merely
+     shared hues by accident before this batch.
+     Dark values are the mockup's verbatim (Pulse_v2 HUE map). LIGHT values
+     are derived F92-conformant, desaturated so each clears ≥3:1 against
+     the white card, following the --ledger-* precedent — NOT a dark island.
+     Two tokens per status: the solid hue (border, legend swatch, KPI
+     numeral) and a pale interior fill. The FILL is deliberately subtle
+     (~1.15:1) because the BORDER carries the signal; the shapes also
+     differ per status (solid / half / dashed / hatched / bar), so colour
+     is never the sole channel.
+     Light ratios on the white card: done 5.02:1 · in-progress 4.10:1 ·
+     to-do 4.47:1 · blocked 5.02:1 · n/a 4.83:1. */
+  --cell-done:            #15803D;   /* green-700  — 5.02:1 */
+  --cell-done-fill:       #E6F4EA;
+  --cell-progress:        #0284C7;   /* sky-600, matches --ledger-seg-ni — 4.10:1 */
+  --cell-progress-fill:   #E4F1FB;
+  --cell-todo:            #6366F1;   /* indigo-500, matches --ledger-seg-ready — 4.47:1 */
+  --cell-todo-fill:       #ECECFE;
+  --cell-blocked:         #B45309;   /* amber-700, matches --ledger-gauge-health — 5.02:1 */
+  --cell-blocked-fill:    #FAEEDA;
+  --cell-na:              #6B7280;   /* gray-500 — 4.83:1; n/a is muted by design */
+  --cell-na-fill:         transparent;  /* n/a renders as a bar, never a filled box */
 }
 
 :root[data-theme="dark"] {
@@ -237,6 +287,37 @@
   --ledger-gauge-health:   #F59E0B;
   --ledger-gauge-quality:  #34D399;
   --ledger-kpi-mid:        #AAB2FF;
+
+  /* Focus ring — dark. See the :root note: dark already cleared 3:1 on
+     --f92-orange (4.34 card / 5.21 page / 3.64 tint), but the tint case was
+     thin, so this lifts all three (5.80 / 6.95 / 4.86). */
+  --f92-focus-ring: #E8833A;
+
+  /* Severity — dark overrides. These were MISSING: the four --severity-*
+     tokens were declared light-only and inherited into dark, where
+     #DC2626 sat at 3.26:1 on the card. Added now because the Pulse
+     monitoring panel's severity dots are being repointed onto this family
+     (see the misnamed-token note in the commit message), so the family has
+     to be theme-correct before anything relies on it.
+     On the dark card: critical 5.68:1 · high 6.95:1 · medium 9.42:1 ·
+     low 6.13:1. */
+  --severity-critical: #F87171;
+  --severity-high:     #FB923C;
+  --severity-medium:   #FBBF24;
+  --severity-low:      #94A3B8;
+
+  /* Pulse CELL statuses — dark. The mockup's HUE map, verbatim. Fills are
+     the mockup's rgba interiors of the same hues. */
+  --cell-done:            #34D399;
+  --cell-done-fill:       rgba(52, 211, 153, 0.18);
+  --cell-progress:        #38BDF8;
+  --cell-progress-fill:   rgba(56, 189, 248, 0.18);
+  --cell-todo:            #AAB2FF;
+  --cell-todo-fill:       rgba(170, 178, 255, 0.10);
+  --cell-blocked:         #F59E0B;
+  --cell-blocked-fill:    rgba(245, 158, 11, 0.16);
+  --cell-na:              #64748B;
+  --cell-na-fill:         transparent;
 }
 
 @theme inline {
@@ -275,9 +356,13 @@ button, a, [role="button"] {
 }
 
 /* Visible focus ring for keyboard users on any focusable element that
-   doesn't already declare its own focus-visible style. */
+   doesn't already declare its own focus-visible style.
+   Uses --f92-focus-ring, NOT --f92-orange: this rule is unlayered, so it
+   applies app-wide to every focusable element and is the single biggest
+   consumer of the ring colour. Repointing it here is what makes the ≥3:1
+   fix token-level rather than one-call-site — see the token's note. */
 :focus-visible {
-  outline: 2px solid var(--f92-orange);
+  outline: 2px solid var(--f92-focus-ring);
   outline-offset: 2px;
   border-radius: 6px;
 }
