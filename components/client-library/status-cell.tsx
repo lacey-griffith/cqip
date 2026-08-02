@@ -59,22 +59,37 @@ export function cellBoxStyle(
       return { ...base, background: fill, border: `1px solid ${hue}`, opacity: emphasis ? 1 : 0.92 };
     case 'in_progress':
       // Half-filled from the bottom — reads as "partway".
+      //
+      // The half uses the FULL-STRENGTH hue, not the pale fill (Karen MEDIUM-2).
+      // Measured: with the pale fill, the half/empty boundary was ~1.15:1 in
+      // light — imperceptible, which collapsed the shape channel and left hue
+      // doing all the work. At full strength the boundary is the hue's own
+      // contrast (4.10:1), so "half-filled" is actually legible as a shape.
       return {
         ...base,
         border: `1px solid ${hue}`,
-        background: `linear-gradient(to top, ${fill} 50%, transparent 50%)`,
+        background: `linear-gradient(to top, ${hue} 50%, transparent 50%)`,
         opacity: emphasis ? 1 : 0.92,
       };
     case 'todo':
-      // Empty + DASHED: nothing has happened yet.
+      // Empty + DASHED: nothing has happened yet. The dash is a border-level
+      // signal, so it was already the strongest shape cue of the five — it is
+      // what rescues to-do vs in-progress, whose hues are near-identical under
+      // deuteranopia.
       return { ...base, border: `1px dashed ${hue}`, background: 'transparent' };
     case 'blocked':
-      // Hatched — visually "obstructed", and distinct from done/in-progress
-      // without relying on the hue alone.
+      // Hatched — visually "obstructed".
+      //
+      // Same full-strength change as in_progress, and here it matters most: DONE
+      // and BLOCKED are semantically opposite, are the two that drive action, and
+      // their light hues are a deuteranope confusion pair (~1.16:1 apparent).
+      // With a ~1.15:1 hatch nothing distinguished them but colour. At full
+      // strength the stripes read as stripes, so the shape channel genuinely
+      // carries the distinction rather than merely claiming to.
       return {
         ...base,
         border: `1px solid ${hue}`,
-        background: `repeating-linear-gradient(45deg, ${fill} 0 2px, transparent 2px 5px)`,
+        background: `repeating-linear-gradient(45deg, ${hue} 0 2px, transparent 2px 5px)`,
         opacity: emphasis ? 1 : 0.92,
       };
     case 'n_a':

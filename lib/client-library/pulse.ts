@@ -245,9 +245,10 @@ export function filterBrandDirectiveRows<D extends DirectiveLike>(
 // which is what makes it dangerous, and it would mislabel any title outside the
 // pattern.
 //
-// All four options are always rendered even though prod holds only goal +
-// trigger today, so an empty tab needs type-specific copy rather than the
-// generic no-match state.
+// All four options are always rendered. Prod is not goal+trigger-only (Karen
+// LOW-4): SPLCRO already carries a site_area directive, so an empty tab on one
+// project is populated on another. An empty tab needs type-specific copy rather
+// than the generic no-match state.
 //
 // The two groups on this page compose: single-choice within each, AND across,
 // AND with nothing else — there is no derived state here, because one brand

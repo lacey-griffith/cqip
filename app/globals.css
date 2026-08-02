@@ -138,7 +138,15 @@
      `tracking-tight` utility token, whose value is NEGATIVE (-.025em). Because
      this file is unlayered it wins over Tailwind's @layer theme, so anyone later
      writing className="tracking-tight" expecting tighter text would silently get
-     WIDER text. Distinct name, no collision. */
+     WIDER text. Distinct name, no collision.
+
+     PRECISE CLAIM (Karen LOW-1 corrected an over-broad earlier wording): what is
+     true is that *globals.css no longer DECLARES* --tracking-tight. The name still
+     appears in the built stylesheet — Tailwind's own `@layer theme` declaration
+     plus its `.tracking-tight` utility — which is exactly the point: unshadowed,
+     Tailwind's negative value survives and the utility behaves as documented.
+     Do not "verify the fix" by grepping the built CSS for the name; grep this
+     file for the declaration. */
   --tracking-label: .04em;
   --f92-on-orange: #FFFFFF;
   --f92-orange-hover: #DA6A17;
@@ -293,18 +301,25 @@
      thin, so this lifts all three (5.80 / 6.95 / 4.86). */
   --f92-focus-ring: #E8833A;
 
-  /* Severity — dark overrides. These were MISSING: the four --severity-*
-     tokens were declared light-only and inherited into dark, where
-     #DC2626 sat at 3.26:1 on the card. Added now because the Pulse
-     monitoring panel's severity dots are being repointed onto this family
-     (see the misnamed-token note in the commit message), so the family has
-     to be theme-correct before anything relies on it.
-     On the dark card: critical 5.68:1 · high 6.95:1 · medium 9.42:1 ·
-     low 6.13:1. */
-  --severity-critical: #F87171;
-  --severity-high:     #FB923C;
-  --severity-medium:   #FBBF24;
-  --severity-low:      #94A3B8;
+  /* Severity — dark overrides DELIBERATELY ABSENT. An earlier cut of this batch
+     added them (critical #F87171 etc.) on the reasoning that the family "had to
+     be theme-correct" before the Pulse monitoring dots could use it. That
+     reasoning was WRONG in both directions (Karen HIGH-2):
+       1. The dots never needed them. As non-text indicators they need 3:1, and
+          the LIGHT values already clear that on the dark card — critical #DC2626
+          3.26:1, medium #EAB308 8.20:1, low #9CA3AF 6.19:1.
+       2. The overrides actively REGRESSED text elsewhere. components/ui/badge.tsx
+          consumes these four as BACKGROUNDS with text-white, and has since long
+          before this batch: brightening critical to #F87171 took white-on-badge
+          from 4.83:1 (AA PASS) to 2.77:1 (FAIL) across /dashboard/logs, both log
+          drawers, and Coverage's "Drought" badge.
+     Two consumers pulling opposite ways — a dot wants bright, a white-text badge
+     wants dark — and only one was measured. Inheriting the light values keeps the
+     dots compliant AND leaves the badges exactly as they shipped.
+     PRE-EXISTING, not introduced and not fixed here: badge `high` (2.80:1),
+     `medium` (1.92:1) and `low` (2.54:1) already fail 4.5:1 for white text in
+     BOTH themes. That is an app-wide badge-contrast problem on its own surface,
+     outside a render-only Pulse restyle. */
 
   /* Pulse CELL statuses — dark. The mockup's HUE map, verbatim. Fills are
      the mockup's rgba interiors of the same hues. */

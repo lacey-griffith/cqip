@@ -500,7 +500,10 @@ export default function PulseBrandPage({
                     onChange={handleStatusFilterChange}
                   />
                   {/* Type — NEW this batch. Reads the real directive_type column;
-                      all four render even though prod holds only goal + trigger. */}
+                      all four always render. (Karen LOW-4: "prod holds only goal +
+                      trigger" was wrong — verified 2026-08-02, NBLYCRO is goal 75 /
+                      trigger 7 but SPLCRO has 1 site_area. Which only strengthens
+                      rendering all four.) */}
                   <TabGroup
                     legend="Type"
                     options={BRAND_TYPE_FILTERS}
@@ -753,8 +756,15 @@ export default function PulseBrandPage({
                             // hover, no ring, and it is a <span>. Border + hover are
                             // what made the old chip read as clickable, which is the
                             // exact confusion 5870dae fixed by moving the target to
-                            // the box. The status hue tints it so it still carries
-                            // meaning at a glance.
+                            // the box.
+                            // The tint is NEUTRAL, not status-hued (Karen LOW-3
+                            // caught an earlier comment claiming otherwise). That is
+                            // the right call, not an oversight: the row's status is
+                            // already carried by the coloured box on the left, and
+                            // hue-tinting the label too would give one row two
+                            // competing colour signals — and would make the inert
+                            // label look MORE like the interactive control, which is
+                            // the opposite of what this element needs.
                             borderRadius: 'var(--radius-full)',
                             background: 'var(--f92-tint)',
                             color: 'var(--f92-gray)',

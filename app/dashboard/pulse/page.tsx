@@ -657,7 +657,7 @@ export default function ClientLibraryPage() {
                 {kpi.coveragePct}%
               </div>
               <div className="mt-1.5 text-[10px]" style={{ color: 'var(--kpi-longrange-fg)' }}>
-                {kpi.resolved} of {kpi.total} fully rolled out
+                {kpi.resolved} of {kpi.total} resolved
               </div>
             </div>
 
@@ -670,15 +670,30 @@ export default function ClientLibraryPage() {
             <KpiCard label="In progress" value={kpi.inProgressCells} hue="var(--cell-progress)">
               {kpi.blockedCells} blocked
             </KpiCard>
-            <KpiCard label="Fully rolled out" value={kpi.resolved} hue="var(--cell-done)">
-              every active brand done
+            {/* LABELLED "Resolved", not "Fully rolled out" (Karen HIGH-1). This
+                value IS `resolveStateFrom(...) === 'resolved'` — the exact
+                population the State tab labels Resolved. Two names for one
+                concept is the confusion the locked vocabulary exists to prevent,
+                and "rolled out" is dead vocabulary besides. */}
+            <KpiCard label="Resolved" value={kpi.resolved} hue="var(--cell-done)">
+              no cells owing, ≥1 done
             </KpiCard>
-            {/* The paused-brand exclusion is stated HERE and nowhere else — the
-                page subtitle no longer repeats it. Said once, not twice, not
-                zero times. */}
+            {/* The paused-brand caveat is stated HERE and nowhere else — the page
+                subtitle no longer repeats it. Said once, not twice, not zero times.
+
+                The wording is "columns hidden by default", NOT "excluded from
+                Outstanding" (Karen MEDIUM-1). The latter was inherited from the old
+                subtitle and is FALSE: computeMatrixKpis counts every cell of the
+                loaded directives, and buildMatrixRows is required to see the FULL
+                cell set — paused included — which is the structural guarantee
+                behind hiding columns not changing counts. Paused cells merely start
+                as n_a at fan-out, so they usually owe nothing; they CAN owe, which
+                is exactly why countHiddenOwedCells and its amber warning exist. The
+                old wording would have contradicted that warning on the same screen,
+                and the KPI card would have been the false one. */}
             <KpiCard label="Brands" value={`${kpi.brandsActive}/${kpi.brandsTotal}`} last>
               {kpi.brandsPaused > 0
-                ? `${kpi.brandsPaused} paused — excluded from Outstanding`
+                ? `${kpi.brandsPaused} paused — columns hidden by default`
                 : 'none paused'}
             </KpiCard>
           </div>
@@ -738,9 +753,12 @@ export default function ClientLibraryPage() {
                 value={cellFilter}
                 onChange={(v) => setCellFilter(v)}
               />
-              {/* Type reads the REAL directive_type column. All four render even
-                  though prod holds only goal + trigger — Lacey intends to use the
-                  others, and an unused tab must work rather than look broken. */}
+              {/* Type reads the REAL directive_type column. All four always render.
+                  (Karen LOW-4: "prod holds only goal + trigger" was wrong — verified
+                  2026-08-02, NBLYCRO is goal 75 / trigger 7 but SPLCRO already has 1
+                  site_area, so a tab empty on one project is populated on another.
+                  That strengthens the case for all four rather than weakening it.)
+                  An empty tab must read as empty, not broken. */}
               <TabGroup
                 legend="Type"
                 options={MATRIX_TYPE_FILTERS}

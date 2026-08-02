@@ -249,9 +249,12 @@ export function matchesCellFilter(
 // likely thing to slip through, and it would silently mislabel any directive
 // whose title doesn't match the pattern.
 //
-// All four options are ALWAYS rendered even though prod holds only goal +
-// trigger today — Lacey intends to use site_area and audience. An empty tab
-// therefore needs its own copy; the generic no-match state reads as a bug.
+// All four options are ALWAYS rendered. Prod is NOT goal+trigger-only, contrary to
+// an earlier note here (Karen LOW-4): verified 2026-08-02, NBLYCRO is goal 75 /
+// trigger 7 while SPLCRO already has 1 site_area directive — so a tab that is empty
+// on one project is populated on another, and rendering all four is required rather
+// than merely forward-looking. An empty tab still needs its own copy; the generic
+// no-match state reads as a bug.
 // -------------------------------------------------------------------------
 export const MATRIX_TYPE_FILTERS = [...DIRECTIVE_TYPES, 'all'] as const;
 export type MatrixTypeFilter = (typeof MATRIX_TYPE_FILTERS)[number];
@@ -404,7 +407,7 @@ export interface MatrixKpis {
   total: number;
   /** Directives with ≥1 outstanding cell (i.e. resolveState === 'active'). */
   openDirectives: number;
-  /** Directives fully rolled out: 0 outstanding AND ≥1 done → 'resolved'. */
+  /** Directives in the derived 'resolved' state: 0 outstanding AND ≥1 done. */
   resolved: number;
   /** Directives with no cells owing and none done → 'unstarted'. */
   unstarted: number;
