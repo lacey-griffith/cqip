@@ -2720,6 +2720,28 @@ reviews. Effort: LG (multi-phase).
   (renders hollow n_a, non-interactive). Backfill on brand-add or a target
   picker at directive-create.
 
+**PROCESS — commit the spec BEFORE the build session opens, not during it
+(recorded 2026-08-02; candidate for a §13 rule).** Restyle batch 3 opened against
+`docs/batch-012-pulse-restyle-3-spec.md`, which the prompt called canonical and
+cited by section (`§2.6` for a locked shape, `§4` for the test list) — and which
+did not exist in the repo, in git history on any ref, or anywhere on disk. The
+companion `docs/HANDOFF-pulse-design-restyle-review.md` was likewise absent, and
+the prompt's claim that it was "cited by path elsewhere" was **not true of the
+repo** — the by-path citation lives in a planning doc in **project knowledge**, so
+a repo grep correctly returned zero. Both were supplied on request and committed as
+that batch's commit 1; nothing was reconstructed. **This is the SECOND time a Pulse
+batch has opened against an authority that existed only outside the repo.** The
+first was the abandoned V2.1 trigger loader (see the entry above), where the
+mapping was wrong in four independent ways, **every in-repo check passed anyway**,
+and the durable lesson was that no in-repo verification can reach an out-of-repo
+authority. The cheap corrective is ordering, not more checks: **the spec is commit
+1, and commit 1 lands before the build starts.** Note the shape difference, because
+it is the reason this one cost minutes instead of a batch — V2.1's authority was
+*absent and silently substituted for*; here it was *absent and the absence was
+detected*, because the prompt cited sections that could be looked for and found
+missing. **A spec cited by section number is falsifiable; a spec paraphrased into
+bullets is not.** That is worth more than the ordering rule it sits under.
+
 **Restyle-core follow-ons (backlog, from the 2026-08-02 ship):**
 - **Sweep the remaining 32 `ring-[color:var(--f92-orange)]` call sites onto
   `--f92-focus-ring`.** The token fix is already app-wide for KEYBOARD focus — the
@@ -3256,6 +3278,47 @@ deleted in the same commit that writes the §16 shipped entry.
 
 (The Convert reconciliation backfill is NOT here — it lives in §16: it is BUILT
 and reviewed, awaiting only Lacey's run, so it is not in-flight work.)
+
+### Batch 012 — Pulse: restyle batch 3 of 4 — hover-inspect + note surfacing (IN FLIGHT)
+
+Spec: `docs/batch-012-pulse-restyle-3-spec.md` (rev 2, canonical — committed with
+this entry). Companion: `docs/HANDOFF-pulse-design-restyle-review.md` (the
+2026-07-25 design review, committed verbatim/retroactively; its by-path citation
+lives in the `CQIP-batch-outline.md` planning doc in project knowledge, NOT in the
+repo, so a repo grep for it correctly returned zero before now).
+
+**Gate profile:** render/interaction only — NO migration · NO schema · NO route ·
+NO mutation surface · NO new fetch · NO new dep → **no Jenny** (E-track).
+**Gates cleared 2026-08-02 before any code:** 0a — the brand page already holds
+`note` at both fetch sites (`:278` initial, `:371` refetch reconcile), threads it
+through `applyOptimistic` and passes `initialNote`, so no fetch change and the gate
+profile is unchanged. 0b — `###` count between `## 15.5.` and `## 16.` was **0**.
+
+**Locked decisions (do not relitigate):**
+- ONE shared note module, two consumers, zero second definitions.
+- The matrix **rendered note indicator** is the load-bearing deliverable — it makes
+  notes findable by scanning. The readout is only how you read one once found.
+- `<button disabled>` is REMOVED for non-admins: it kills hover, focus and tooltip
+  for exactly the person the readout exists for. Locked shape in spec §2.6 — real
+  `<button>` for everyone, `aria-disabled` never `disabled`, non-admin click
+  pins/unpins the readout (the only note path that works on touch).
+- Brand page §2.7 is a **REFACTOR, not a build** — the persistent note render
+  already exists at `:733-738`. Point it at the shared module; do not rebuild or
+  restyle it.
+- The native `title` note goes: once the readout ships, `title` is a second
+  competing hover surface with the same content and a different delay/position.
+
+**Known tension resolved in-build, flagged for Karen:** spec §2.3 requires a polite
+`aria-live` region while §5 requires the readout announce "once per cell, not
+twice". On focus, the cell button's own accessible name already speaks
+directive + brand + status, so a live region repeating it is the exact double
+announcement §5 forbids. Resolution recorded at the call site and in the §16 entry
+at ship.
+
+**Status:** building §2.1–§2.8. Commit 1 = docs-only (this entry + the two specs).
+Commit 2 = code + atomic CLAUDE.md per §13 r23. **DO NOT PUSH** — Karen post-flight
+with a findable recorded verdict → Lacey smoke (incl. both themes by eye, which is
+not self-satisfiable) → Lacey pushes.
 
 ---
 
