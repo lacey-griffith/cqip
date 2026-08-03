@@ -135,14 +135,62 @@ export function StatusCellBox({
 }
 
 /**
- * The legend. NEW this batch — there was none, so the shapes were unexplained.
- * Renders every declared status by mapping CELL_STATUSES, so a sixth status
- * appears here automatically instead of being silently unexplained.
+ * The "this cell carries a note" marker (batch 3, spec §2.2).
  *
- * Deliberately does NOT include a "has note" swatch: the mockup has one, but
- * cell notes stay invisible on the matrix this batch (the hover-inspect readout
- * is batch 3), and a legend entry for an indicator that isn't rendered would be
- * a lie.
+ * THE LOAD-BEARING PIECE OF THE BATCH. Before it, the only way to discover a
+ * note was to hover cells one at a time — across ~1,300 of them, which is not a
+ * discovery mechanism. The readout bar is how you READ a note; this is how you
+ * FIND one.
+ *
+ * Absolutely positioned, so it costs no layout: the cell box does not move, row
+ * rhythm is unchanged, and the parent button's 24x24 hit area (WCAG 2.5.8) is
+ * untouched. `pointer-events-none` so the marker can never swallow a click or
+ * break the parent's hover — it is decoration over a control.
+ *
+ * WHY A HALOED DOT, AND WHY NO NEW TOKEN. The marker sits on top of five
+ * different cell treatments in two themes, including full-strength hatching. A
+ * flat mark fails that: measured, a plain `--f92-dark` triangle over the dark
+ * theme's bright hues lands at 1.56:1 on `done` (#34D399) and 1.74:1 on
+ * `blocked`'s amber stripes (#F59E0B) — both under the 3:1 that WCAG 1.4.11
+ * asks of a non-text indicator. The 1.5px halo fixes that structurally rather
+ * than by picking a luckier colour: the eye judges the dot against its OWN
+ * ring, and the ring is the card itself. So the only contrast that has to hold
+ * is dot-vs-surface, which is `--f92-dark` on `--f92-surface`:
+ *   light  #1A1A2E on #FFFFFF  = 17.06:1
+ *   dark   #E2E8F0 on #1E2235  = 12.76:1
+ * Both existing app-wide tokens, both already theme-correct, so this adds NO
+ * token and needs no cross-app measurement sweep. It is also unmistakable for a
+ * status: all five statuses are squares or a bar, none is a circle, and none
+ * uses `--f92-dark`.
+ *
+ * Static Tailwind classes, not inline `style`, deliberately: it keeps the
+ * marker verifiable in the COMPILED stylesheet (spec §5) instead of only in the
+ * JS bundle, and it cannot repeat 3363629 — an inline declaration silently
+ * beating a `hover:` rule — because there is nothing inline to do the beating.
+ */
+export function NoteIndicator() {
+  return (
+    <span
+      aria-hidden="true"
+      className="pointer-events-none absolute right-px top-px h-1.5 w-1.5 rounded-full bg-[color:var(--f92-dark)] shadow-[0_0_0_1.5px_var(--f92-surface)]"
+    />
+  );
+}
+
+/**
+ * The legend. Renders every declared status by mapping CELL_STATUSES, so a
+ * sixth status appears here automatically instead of being silently
+ * unexplained.
+ *
+ * The note entry (spec §2.5) is now real. It was deliberately absent in batch 2
+ * — the mockup had one, but nothing rendered a note indicator then, and a
+ * legend entry for an unrendered indicator would have been a lie. §2.2 landed
+ * the indicator, so the converse now holds: shipping the marker without
+ * explaining it would leave a dot in the corner of some cells and no way to
+ * learn what it means.
+ *
+ * It sits AFTER the statuses and is visually separated, because it is not a
+ * sixth status — it is an overlay that can appear on any of the five.
  */
 export function StatusLegend() {
   return (
@@ -161,6 +209,22 @@ export function StatusLegend() {
           {CELL_STATUS_LABEL[s]}
         </span>
       ))}
+
+      <span className="inline-flex items-center gap-2 border-l border-[color:var(--f92-border)] pl-4 text-[11px] font-medium text-[color:var(--f92-gray)]">
+        {/* The same component the cells draw, in the same corner position, so
+            the legend cannot describe a marker the grid doesn't render. The
+            wrapper is `relative` and box-sized to mirror a real cell.
+            The carrier is `todo` because the marker has to sit ON something to
+            teach where it appears, and todo is the one treatment that is an
+            empty outline — it shows the corner without a fill competing with
+            the dot. It is not claiming notes belong to to-do cells; the label
+            is "Has note", and the same swatch is two entries to the left. */}
+        <span className="relative inline-flex h-[13px] w-[13px] items-center justify-center">
+          <StatusCellBox status="todo" size={13} />
+          <NoteIndicator />
+        </span>
+        Has note
+      </span>
     </div>
   );
 }

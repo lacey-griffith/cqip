@@ -49,6 +49,7 @@ import { TabGroup } from '@/components/client-library/tab-group';
 import { broadcastPulseProject } from '@/lib/client-library/pulse-project-channel';
 import { fetchAllPaged } from '@/lib/client-library/paged-fetch';
 import { saveDirectiveCell } from '@/lib/client-library/directive-cell-save';
+import { buildCellReadout } from '@/lib/client-library/cell-note';
 import {
   CELL_STATUS_LABEL,
   type CellStatus,
@@ -609,6 +610,18 @@ export default function PulseBrandPage({
               <div className="space-y-2">
                 {visibleRows.map(({ directive, cell }) => {
                   const status = effectiveCellStatus(cell);
+                  // The shared readout model (§2.1). Used here only for its
+                  // `note` field — this page needs no hover readout — but built
+                  // through the same function the matrix calls so the whitespace
+                  // rule is one definition rather than two agreeing habits.
+                  // `status` is the effective status already resolved above, so
+                  // a cell-less directive still yields a model.
+                  const readout = buildCellReadout({
+                    brandLabel: brand.display_name,
+                    directiveTitle: directive.title,
+                    status,
+                    note: cell?.note,
+                  });
                   // A cell must EXIST to be editable (Phase A design): a
                   // directive with no directive_brand_status row for this brand
                   // renders hollow n_a and stays non-interactive.
@@ -730,10 +743,27 @@ export default function PulseBrandPage({
                               {directive.description}
                             </p>
                           ) : null}
-                          {cell?.note ? (
+                          {/* §2.7 — a REFACTOR, not a rebuild. This persistent
+                              note render already shipped; the treatment,
+                              placement and the "Note: " prefix are all
+                              deliberately byte-for-byte unchanged. The ONLY
+                              change is the source of truth: it used to be a bare
+                              `cell?.note` truthiness test, which called an
+                              all-whitespace note a note and would have rendered
+                              this `Note:` label with nothing after it. It now
+                              reads the same shared model the matrix does, so the
+                              two surfaces cannot disagree about what counts as a
+                              note — previously they agreed only by both being
+                              wrong in the same direction.
+
+                              This is the second consumer, and the one that
+                              proves the seam: notes here stay PERSISTENT text
+                              with no hover, because on a one-brand page there is
+                              no grid to scan and nothing to inspect. */}
+                          {readout.note ? (
                             <p className="mt-1 text-xs text-[color:var(--f92-dark)]">
                               <span className="text-[color:var(--f92-gray)]">Note: </span>
-                              {cell.note}
+                              {readout.note}
                             </p>
                           ) : null}
                         </div>

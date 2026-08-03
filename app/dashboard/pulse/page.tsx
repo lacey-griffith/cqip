@@ -49,6 +49,7 @@ import {
   type CellStatus,
   type DirectiveType,
 } from '@/lib/client-library/directives';
+import { buildCellReadout, hasNote } from '@/lib/client-library/cell-note';
 import {
   buildMatrixRows,
   computeMatrixKpis,
@@ -70,7 +71,7 @@ import {
   type MatrixStatusFilter,
   type MatrixTypeFilter,
 } from '@/lib/client-library/matrix-controls';
-import { StatusCellBox, StatusLegend } from '@/components/client-library/status-cell';
+import { NoteIndicator, StatusCellBox, StatusLegend } from '@/components/client-library/status-cell';
 import { TabGroup } from '@/components/client-library/tab-group';
 import { saveDirectiveCell } from '@/lib/client-library/directive-cell-save';
 import {
@@ -217,6 +218,28 @@ export default function ClientLibraryPage() {
     directiveId: string;
     brandId: string;
   } | null>(null);
+
+  // ── Hover-inspect (batch 3, spec §2.3/§2.4) ────────────────────────────────
+  //
+  // `hover` is the transiently-inspected cell; `pinned` is one deliberately
+  // stuck there by a click. PIN WINS — a pin that silently follows the mouse
+  // isn't a pin. Clicking a different cell re-pins to it; clicking the pinned
+  // cell unpins.
+  //
+  // `source` exists ONLY to keep the live region honest, and it is the whole
+  // resolution of the §2.3-vs-§5 tension: §2.3 asks for a polite aria-live
+  // readout, §5 requires the readout announce once per cell and not twice. On
+  // FOCUS the cell button's own accessible name already speaks
+  // "<directive> — <brand>: <status>", so a live region repeating it is exactly
+  // the double announcement §5 forbids. So focus updates the readout VISUALLY
+  // and stays silent; pointer and pin — neither of which moves focus, so
+  // neither announces anything on its own — speak.
+  const [hover, setHover] = useState<{
+    directiveId: string;
+    brandId: string;
+    source: 'pointer' | 'focus';
+  } | null>(null);
+  const [pinned, setPinned] = useState<{ directiveId: string; brandId: string } | null>(null);
 
   // Matrix controls (search · status filter · sort · hide paused). All four are
   // client-side over data already loaded — no refetch on change. Session-only
@@ -380,6 +403,8 @@ export default function ClientLibraryPage() {
   function handleProjectChange(key: string) {
     setProjectKey(key);
     setExpandedCell(null); // stale across a project switch
+    setPinned(null); // ditto — a pinned readout from another client is nonsense
+    setHover(null);
     writeStoredPulseProject(key); // persist only — this page owns the state (no self-dispatch)
     void loadProject(key);
   }
@@ -409,6 +434,8 @@ export default function ClientLibraryPage() {
       if (typeof detail === 'string' && detail && detail !== projectKey) {
         setProjectKey(detail);
         setExpandedCell(null); // symmetric with handleProjectChange — no stale open editor across a switch
+        setPinned(null);
+        setHover(null);
         void loadProject(detail);
       }
     }
@@ -447,6 +474,59 @@ export default function ClientLibraryPage() {
     [brands, hidePaused],
   );
   const pausedBrandCount = useMemo(() => brands.filter((b) => b.is_paused).length, [brands]);
+
+  // ── The inspected cell, RESOLVED against what is actually on screen ────────
+  //
+  // Pin wins over hover (see the state declaration). Both are then looked up in
+  // `matrixRows` and `visibleBrands` — the rendered sets, not the raw data — so
+  // a cell that a filter, the hide-paused toggle, or a project switch has taken
+  // off screen resolves to nothing instead of leaving a readout describing a
+  // cell nobody can see. Deriving this is why there is no cleanup handler on
+  // every filter setter: the invariant is "the readout describes a visible
+  // cell", and it holds by construction rather than by remembering to clear.
+  const activeCell = pinned ?? hover;
+  const inspected = useMemo(() => {
+    if (!activeCell) return null;
+    const row = matrixRows.find((r) => r.directive.id === activeCell.directiveId);
+    const brand = visibleBrands.find((b) => b.id === activeCell.brandId);
+    if (!row || !brand) return null;
+    const cell = cellByKey.get(`${row.directive.id}:${brand.id}`);
+    return {
+      directiveId: row.directive.id,
+      brandId: brand.id,
+      readout: buildCellReadout({
+        brandLabel: brand.display_name,
+        directiveTitle: row.directive.title,
+        // Same effective-status resolution the grid uses: a brand added after
+        // the directive has no cell row and renders n_a.
+        status: cell?.status ?? 'n_a',
+        note: cell?.note,
+      }),
+    };
+  }, [activeCell, matrixRows, visibleBrands, cellByKey]);
+  const readout = inspected?.readout ?? null;
+  // The column to band (spec §2.4). Rows band in pure CSS via `group-hover` /
+  // `group-focus-within` on the <tr>, which costs no re-render at all; a COLUMN
+  // cannot be expressed that way — CSS has no way to reach the nth cell of every
+  // OTHER row from a hover on one of them — so this is the one piece that needs
+  // state. See the perf note on the cell handlers.
+  const hotBrandId = inspected?.brandId ?? null;
+  const isHotCell = useCallback(
+    (directiveId: string, brandId: string) =>
+      inspected?.directiveId === directiveId && inspected?.brandId === brandId,
+    [inspected],
+  );
+
+  // The live region's text. EMPTY on a focus-driven change — the button's own
+  // accessible name already said it, and repeating it is the double
+  // announcement spec §5 forbids. Pointer and pin move no focus, so nothing
+  // else announces for them and the readout is the only voice.
+  const readoutAnnouncement = useMemo(() => {
+    if (!readout) return '';
+    if (!pinned && hover?.source === 'focus') return '';
+    const note = readout.note ? `Note: ${readout.note}` : 'No note';
+    return `${readout.brandLabel}, ${readout.directiveTitle}: ${readout.statusLabel}. ${note}`;
+  }, [readout, pinned, hover]);
 
   // Runtime check on the property that justified defaulting hide-paused to
   // CHECKED (Karen MEDIUM-4) — see countHiddenOwedCells for why a prod
@@ -880,11 +960,85 @@ export default function ClientLibraryPage() {
               </div>
             </div>
 
-            {/* Legend — NEW this batch; the cell shapes were previously
-                unexplained. Renders from CELL_STATUSES via the same component
-                the cells use, so it cannot drift from what the grid draws. */}
+            {/* Legend — renders from CELL_STATUSES via the same component the
+                cells use, so it cannot drift from what the grid draws. The note
+                entry is real as of batch 3 (§2.5). */}
             <div className="mt-3 border-t border-[color:var(--f92-border)] pt-2.5">
               <StatusLegend />
+            </div>
+
+            {/* ── Readout bar (spec §2.3) ────────────────────────────────────
+                PERSISTENT in the DOM and fixed-height, for two separate
+                reasons: an aria-live region that gets mounted at the moment its
+                content appears is unreliable (many AT/browser pairs only watch
+                regions that existed beforehand), and a bar that appears on
+                first hover would shove the whole matrix down by its own height
+                exactly when the pointer is over it.
+
+                Driven by hover AND focus identically (§2.3). It also shows the
+                PINNED cell, which is what a read-only user gets on touch, where
+                hover does not exist.
+
+                aria-live lives here; its text is deliberately empty for
+                focus-driven changes — see readoutAnnouncement. The visible
+                content is aria-hidden so the region never speaks the same cell
+                twice (§5). */}
+            <div
+              className="mt-2.5 flex min-h-9 flex-wrap items-center gap-x-2 gap-y-1 border-t border-[color:var(--f92-border)] pt-2.5 text-xs"
+              aria-live="polite"
+              aria-atomic="true"
+            >
+              <span className="sr-only">{readoutAnnouncement}</span>
+              {readout ? (
+                <span aria-hidden="true" className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="font-semibold uppercase text-[color:var(--f92-navy)]" style={{ letterSpacing: 'var(--tracking-label)' }}>
+                    {readout.brandLabel}
+                  </span>
+                  <span className="text-[color:var(--f92-lgray)]">×</span>
+                  <span className="font-medium text-[color:var(--f92-dark)]">{readout.directiveTitle}</span>
+                  <span className="text-[color:var(--f92-lgray)]">→</span>
+                  <span className="inline-flex items-center gap-1.5 font-semibold text-[color:var(--f92-dark)]">
+                    <StatusCellBox status={readout.status} size={13} emphasis />
+                    {readout.statusLabel}
+                  </span>
+                  {/* NEVER an empty region — an absent note says so out loud.
+                      A blank gap after the arrow reads as a rendering fault, and
+                      "does this cell have a note?" is the question the bar
+                      exists to answer. */}
+                  <span className="text-[color:var(--f92-gray)]">
+                    ·{' '}
+                    {readout.note ? (
+                      <>
+                        <span className="font-medium text-[color:var(--f92-dark)]">Note:</span>{' '}
+                        {readout.note}
+                      </>
+                    ) : (
+                      <span className="italic">No note</span>
+                    )}
+                  </span>
+                  {pinned ? (
+                    <span
+                      className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-semibold uppercase text-[color:var(--pill-filter-fg)]"
+                      style={{ letterSpacing: 'var(--tracking-label)', background: 'var(--pill-filter-bg)', borderRadius: 'var(--radius-full)' }}
+                    >
+                      Pinned
+                    </span>
+                  ) : null}
+                </span>
+              ) : (
+                <span aria-hidden="true" className="text-[color:var(--f92-lgray)]">
+                  Hover or focus a cell to inspect it.
+                </span>
+              )}
+              {pinned ? (
+                <button
+                  type="button"
+                  onClick={() => setPinned(null)}
+                  className="font-medium text-[color:var(--f92-orange)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-focus-ring)]"
+                >
+                  Unpin
+                </button>
+              ) : null}
             </div>
           </div>
           ) : null}
@@ -994,7 +1148,13 @@ export default function ClientLibraryPage() {
                     {visibleBrands.map((brand) => (
                       <th
                         key={brand.id}
-                        className="px-3 py-3 text-center text-[10px] font-semibold uppercase"
+                        // §2.4 — the brand header bands with its column, so the
+                        // band reads as "this column" rather than as a stripe
+                        // floating in the middle of the grid.
+                        className={
+                          'px-3 py-3 text-center text-[10px] font-semibold uppercase transition-colors ' +
+                          (hotBrandId === brand.id ? 'bg-[color:var(--f92-tint)]' : '')
+                        }
                         style={{
                           letterSpacing: 'var(--tracking-wide)',
                           color: brand.is_paused ? 'var(--f92-lgray)' : 'var(--f92-gray)',
@@ -1025,8 +1185,20 @@ export default function ClientLibraryPage() {
                       : undefined;
                     return (
                       <Fragment key={directive.id}>
-                        <tr className="border-b border-[color:var(--f92-border)] last:border-0">
-                          <td className="sticky left-0 z-10 bg-[color:var(--f92-surface)] px-4 py-3 align-top">
+                        {/* `group` drives the ROW band (spec §2.4) in pure CSS:
+                            group-hover for the mouse, group-focus-within for the
+                            keyboard, so the two paths are identical and neither
+                            costs a React render. */}
+                        <tr className="group border-b border-[color:var(--f92-border)] last:border-0">
+                          {/* The sticky column MUST band too. It carries an
+                              opaque --f92-surface background (without which rows
+                              would show through it while scrolled), so a row
+                              band that skipped it would leave a white notch at
+                              the start of every highlighted row and read as
+                              broken. The group-* variants are ordered after the
+                              base `bg-*` in Tailwind's output, so they win —
+                              verified in the compiled CSS, not assumed. */}
+                          <td className="sticky left-0 z-10 bg-[color:var(--f92-surface)] px-4 py-3 align-top transition-colors group-hover:bg-[color:var(--f92-tint)] group-focus-within:bg-[color:var(--f92-tint)]">
                             <div className="flex flex-col gap-1">
                               <span
                                 className="inline-flex w-fit items-center px-2 py-0.5 text-[10px] font-semibold uppercase text-[color:var(--f92-navy)]"
@@ -1054,56 +1226,176 @@ export default function ClientLibraryPage() {
                             // and out of the Outstanding count (computed from
                             // `cells` only).
                             const status = cell?.status ?? 'n_a';
-                            const clickable = isAdmin && !!cell;
+                            // EDITING needs a real cell and admin. INSPECTING
+                            // needs neither — that split is the whole of §2.6.
+                            const canEdit = isAdmin && !!cell;
                             const isExpanded =
                               !!cell &&
                               expandedCell?.directiveId === directive.id &&
                               expandedCell?.brandId === brand.id;
+                            const isPinned =
+                              pinned?.directiveId === directive.id && pinned?.brandId === brand.id;
+                            const cellHasNote = hasNote(cell?.note);
                             return (
-                              <td key={brand.id} className="px-2.5 py-2.5 text-center">
+                              <td
+                                key={brand.id}
+                                className={
+                                  'px-2.5 py-2.5 text-center transition-colors group-hover:bg-[color:var(--f92-tint)] group-focus-within:bg-[color:var(--f92-tint)] ' +
+                                  (hotBrandId === brand.id ? 'bg-[color:var(--f92-tint)]' : '')
+                                }
+                              >
                                 <button
                                   type="button"
-                                  disabled={!clickable}
-                                  aria-expanded={clickable ? isExpanded : undefined}
-                                  onClick={() =>
-                                    cell &&
-                                    setExpandedCell((cur) =>
+                                  // NOT `disabled` — never again. `disabled`
+                                  // removes the element from the tab order AND
+                                  // suppresses its mouse events in most
+                                  // browsers, so it killed hover, focus and the
+                                  // tooltip for read-only users: precisely the
+                                  // people the readout exists for, and the only
+                                  // ones with no other way to reach a note.
+                                  // `aria-disabled` says "not actionable" to
+                                  // assistive tech while keeping the control
+                                  // focusable and hoverable. Also brings the
+                                  // matrix in line with the standing "never a
+                                  // disabled control" rule the brand page has
+                                  // always honoured and this page never did.
+                                  aria-disabled={canEdit ? undefined : true}
+                                  aria-expanded={canEdit ? isExpanded : undefined}
+                                  // Editors edit. Everyone else pins/unpins the
+                                  // readout — which gives the control an honest
+                                  // job instead of being a button that does
+                                  // nothing, and is the ONLY note path that
+                                  // works on touch, where there is no hover at
+                                  // all. Admins on a cell-less cell land here
+                                  // too: there is no row to PATCH, so pinning is
+                                  // the only truthful behaviour.
+                                  onClick={() => {
+                                    if (canEdit && cell) {
+                                      setExpandedCell((cur) =>
+                                        cur && cur.directiveId === directive.id && cur.brandId === brand.id
+                                          ? null
+                                          : { directiveId: directive.id, brandId: brand.id },
+                                      );
+                                      return;
+                                    }
+                                    setPinned((cur) =>
                                       cur && cur.directiveId === directive.id && cur.brandId === brand.id
                                         ? null
                                         : { directiveId: directive.id, brandId: brand.id },
-                                    )
+                                    );
+                                  }}
+                                  // PERF (spec §3, and it is a real constraint).
+                                  // The naive version is `onMouseMove`, which
+                                  // fires at pointer rate — ~60Hz — and would
+                                  // reconcile the grid on every event. What
+                                  // actually keeps this cheap is ONE thing:
+                                  //
+                                  //   `onMouseEnter`, not `onMouseMove`. State
+                                  //   changes only when the pointer CROSSES a
+                                  //   cell boundary, so the rate is bounded by
+                                  //   how fast a hand moves across cells (a
+                                  //   handful per second) rather than by the
+                                  //   event loop.
+                                  //
+                                  // COST, stated plainly and WITHOUT the
+                                  // flattering version of this claim: EVERY
+                                  // crossing re-renders the matrix subtree —
+                                  // vertical as well as horizontal. An earlier
+                                  // draft of this comment said the pure-CSS row
+                                  // band made vertical movement "cost zero
+                                  // renders". That was FALSE: the band needs no
+                                  // state, but the READOUT does, and it is fed
+                                  // by the same `hover` — whose directiveId
+                                  // changes on a vertical crossing. The CSS band
+                                  // buys simplicity (no isHotRow prop threaded
+                                  // through the row), not renders.
+                                  //
+                                  // So: worst case 82 directives × 16 brands =
+                                  // 1,312 cells per crossing, typically ~650
+                                  // with the default `open` filter and paused
+                                  // columns hidden. Each cell is a button plus
+                                  // one styled span, so it is a cheap reconcile
+                                  // a few times a second, not sixty — which is
+                                  // why this is acceptable, rather than because
+                                  // half the crossings were free.
+                                  //
+                                  // If it ever janks, the next step is a
+                                  // memoized row keyed on `hotBrandId`. That
+                                  // WOULD make vertical crossings nearly free
+                                  // (the band is CSS, so no row-level prop
+                                  // changes and every row bails out; only the
+                                  // readout re-renders) — which is precisely why
+                                  // the CSS band is still the right call. NOT
+                                  // done here: extracting the row would put the
+                                  // sticky editor strip and the E3 seam in the
+                                  // blast radius of a render-only batch.
+                                  onMouseEnter={() =>
+                                    setHover({ directiveId: directive.id, brandId: brand.id, source: 'pointer' })
                                   }
-                                  aria-label={`${directive.title} — ${brand.display_name}: ${CELL_STATUS_LABEL[status]}${clickable ? (isExpanded ? ' (editing — activate to close)' : ' (edit)') : ''}`}
-                                  title={`${CELL_STATUS_LABEL[status]}${cell?.note ? ` — ${cell.note}` : ''}`}
-                                  // The DOT (now a rounded square) is the edit
-                                  // target — settled 5870dae, unchanged here. The
-                                  // 24x24 wrapper is both the hit area (WCAG
-                                  // 2.5.8) and the ring's carrier; the box inside
-                                  // stays 19px so the grid rhythm matches the
-                                  // mockup. Ring colour is --f92-focus-ring
-                                  // (>=3:1 both themes) rather than --f92-orange.
+                                  onMouseLeave={() => setHover(null)}
+                                  onFocus={() =>
+                                    setHover({ directiveId: directive.id, brandId: brand.id, source: 'focus' })
+                                  }
+                                  onBlur={() => setHover(null)}
+                                  // The accessible name carries the NOTE now.
+                                  // The old `sr-only "has note"` span inside
+                                  // this button was dead: aria-label overrides
+                                  // descendant content in the accessible-name
+                                  // computation, so screen-reader users have
+                                  // never heard it — the comment claiming the
+                                  // information "isn't lost meanwhile" was
+                                  // false. Putting the note in the name fixes
+                                  // that for every mode, including browse mode,
+                                  // where a virtual cursor never fires onFocus
+                                  // and so never triggers the live region.
+                                  aria-label={
+                                    `${directive.title} — ${brand.display_name}: ${CELL_STATUS_LABEL[status]}` +
+                                    (cellHasNote ? `. Note: ${cell?.note?.trim()}` : '') +
+                                    (canEdit ? (isExpanded ? ' (editing — activate to close)' : ' (edit)') : '') +
+                                    (!canEdit ? (isPinned ? ' (activate to unpin)' : ' (activate to pin)') : '')
+                                  }
+                                  // §2.8 — the native `title` is GONE, not
+                                  // merely stripped of its note. Keeping a
+                                  // status-only tooltip would leave a second
+                                  // hover surface for information the readout
+                                  // bar already shows, with a different delay
+                                  // and a different position; the status lives
+                                  // in the accessible name above.
+                                  //
+                                  // The DOT (a rounded square) is still the edit
+                                  // target — settled 5870dae, unchanged. The
+                                  // 24x24 wrapper is both hit area (WCAG 2.5.8)
+                                  // and ring carrier; the box stays 19px so grid
+                                  // rhythm matches the mockup. `relative` is new
+                                  // — it anchors the note marker, and costs no
+                                  // layout.
                                   className={
-                                    'mx-auto flex h-6 w-6 items-center justify-center transition ' +
-                                    (clickable
-                                      ? 'cursor-pointer hover:ring-2 hover:ring-[color:var(--f92-focus-ring)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-focus-ring)] '
-                                      : 'cursor-default ') +
-                                    (isExpanded ? 'ring-2 ring-[color:var(--f92-focus-ring)]' : '')
+                                    'relative mx-auto flex h-6 w-6 items-center justify-center transition ' +
+                                    'hover:ring-2 hover:ring-[color:var(--f92-focus-ring)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-focus-ring)] ' +
+                                    (canEdit ? 'cursor-pointer ' : 'cursor-default ') +
+                                    (isExpanded || isPinned ? 'ring-2 ring-[color:var(--f92-focus-ring)]' : '')
                                   }
                                   style={{ borderRadius: 'var(--radius-md)' }}
                                 >
                                   {/* Shared visual — the legend draws the same
                                       component, so the two cannot disagree. */}
-                                  <StatusCellBox status={status} size={19} emphasis={isExpanded} />
-                                  {/* Notes stay non-visual this batch (the
-                                      hover-inspect readout is batch 3); the
-                                      screen-reader hint is pre-existing and kept
-                                      so the information isn't lost meanwhile. */}
-                                  {cell?.note ? <span className="sr-only">has note</span> : null}
+                                  <StatusCellBox
+                                    status={status}
+                                    size={19}
+                                    emphasis={isExpanded || isPinned || isHotCell(directive.id, brand.id)}
+                                  />
+                                  {/* §2.2 — the rendered marker. This is what
+                                      makes a note findable by SCANNING; the
+                                      readout is only how you read one once
+                                      found. `hasNote` from the shared module, so
+                                      an all-whitespace note draws nothing here
+                                      and the brand page agrees by contract. */}
+                                  {cellHasNote ? <NoteIndicator /> : null}
                                 </button>
                               </td>
                             );
                           })}
-                          <td className="px-4 py-3 text-right">
+                          <td className="px-4 py-3 text-right transition-colors group-hover:bg-[color:var(--f92-tint)] group-focus-within:bg-[color:var(--f92-tint)]">
                             <span
                               className="inline-flex min-w-6 items-center justify-center px-2 py-0.5 text-xs font-semibold"
                               style={{
