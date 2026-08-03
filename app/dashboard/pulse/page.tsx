@@ -530,12 +530,13 @@ export default function ClientLibraryPage() {
     return resolve(pinned, true) ?? resolve(hover, false);
   }, [pinned, hover, matrixRows, visibleBrands, cellByKey]);
   const readout = inspected?.readout ?? null;
-  // The column to band (spec §2.4). The ROW bands in pure CSS (`group-hover` /
-  // `group-focus-within` on the <tr>); a COLUMN cannot be expressed that way,
-  // because CSS has no way to reach the nth cell of every OTHER row from a hover
-  // on one of them — so this is the piece that needs state. NOTE that this does
-  // NOT make hovering free: the readout is state-driven too, so a crossing in
-  // either direction re-renders. See the perf note on the cell handlers.
+  // The crosshair axes (spec §2.4). BOTH derive from `inspected` — the same
+  // resolved cell the readout describes — so the row band, the column band and
+  // the readout cannot disagree. See the <tr>'s `isHotRow` comment for why the
+  // row band moved off pure CSS to get here (Karen MEDIUM-4).
+  //
+  // A column could never have been CSS anyway: there is no way to reach the nth
+  // cell of every OTHER row from a hover on one of them.
   const hotBrandId = inspected?.brandId ?? null;
   const isHotCell = useCallback(
     (directiveId: string, brandId: string) =>
@@ -1226,31 +1227,57 @@ export default function ClientLibraryPage() {
                     const editorCell = editorBrand
                       ? cellByKey.get(`${directive.id}:${editorBrand.id}`)
                       : undefined;
+                    // ROW BAND — from STATE, off the same resolved cell the
+                    // column band and the readout use (Karen MEDIUM-4, option 1).
+                    //
+                    // It used to be pure CSS (`group-hover` / `group-focus-within`
+                    // on the <tr>), which was cheaper but could DISAGREE with the
+                    // rest of the crosshair: the row came from the pointer while
+                    // the column came from `inspected`, and `inspected` prefers a
+                    // PIN. Pin A then hover B and you got row B + column A —
+                    // crosshairing a cell that was neither pinned nor hovered nor
+                    // the one the readout was describing. Suppressing the focus
+                    // variant while pinned does NOT fix that (it only stops row A
+                    // self-banding; `group-hover` still bands row B), and neither
+                    // does blurring after the pin. The defect was structural: one
+                    // axis pointer-driven, the other state-driven, pin winning.
+                    //
+                    // Now BOTH axes read `inspected`. One derivation, one render,
+                    // so the crosshair cannot disagree with the readout — the
+                    // same argument that put `hasNote` in a shared module.
+                    //
+                    // Dropping `group-focus-within` costs nothing, because
+                    // `onFocus` already feeds `hover`: a tabbed-to cell resolves
+                    // through `inspected` and bands its row from state.
+                    const isHotRow = inspected?.directiveId === directive.id;
                     return (
                       <Fragment key={directive.id}>
-                        {/* `group` drives the ROW band (spec §2.4) in pure CSS:
-                            group-hover for the mouse, group-focus-within for the
-                            keyboard, so the two paths are identical and the BAND
-                            itself needs no state. That is simplicity, NOT free
-                            hovering — the readout is state-driven, so a crossing
-                            in either direction still re-renders. See the perf
-                            note on the cell handlers for the real cost. */}
-                        <tr className="group border-b border-[color:var(--f92-border)] last:border-0">
+                        <tr className="border-b border-[color:var(--f92-border)] last:border-0">
                           {/* The sticky column MUST band too. It carries an
                               opaque --f92-surface background (without which rows
                               would show through it while scrolled), so a row
                               band that skipped it would leave a white notch at
                               the start of every highlighted row and read as
                               broken.
-                              WHY the band wins: SPECIFICITY, not source order.
-                              `.group-hover\:bg-…:is(:where(.group):hover *)` is
-                              (0,2,0) — the leading class, plus :is() taking its
-                              most specific argument, where :where() contributes
-                              zero and :hover one class — against (0,1,0) for the
-                              base `bg-*`. Tailwind also happens to emit it later,
-                              but order is a compiler detail and specificity is
-                              not. Verified in the compiled CSS, not assumed. */}
-                          <td className="sticky left-0 z-10 bg-[color:var(--f92-surface)] px-4 py-3 align-top transition-colors group-hover:bg-[color:var(--f92-tint)] group-focus-within:bg-[color:var(--f92-tint)]">
+                              The two backgrounds are MUTUALLY EXCLUSIVE, not
+                              layered, and that is load-bearing: both are plain
+                              `bg-*` utilities at specificity (0,1,0), so if both
+                              were ever present the winner would be decided by
+                              Tailwind's EMISSION ORDER — not by the order they
+                              appear in this className. The old `group-hover:`
+                              variant could be layered safely because its
+                              `:is(:where(.group):hover *)` made it (0,2,0); a
+                              state-driven plain class has no such advantage. A
+                              ternary is the only form that is order-independent
+                              here. */}
+                          <td
+                            className={
+                              'sticky left-0 z-10 px-4 py-3 align-top transition-colors ' +
+                              (isHotRow
+                                ? 'bg-[color:var(--f92-tint)]'
+                                : 'bg-[color:var(--f92-surface)]')
+                            }
+                          >
                             <div className="flex flex-col gap-1">
                               <span
                                 className="inline-flex w-fit items-center px-2 py-0.5 text-[10px] font-semibold uppercase text-[color:var(--f92-navy)]"
@@ -1291,9 +1318,14 @@ export default function ClientLibraryPage() {
                             return (
                               <td
                                 key={brand.id}
+                                // Both crosshair axes, ONE source (`inspected`).
+                                // A single class either way, so no two `bg-*`
+                                // utilities ever compete at equal specificity.
                                 className={
-                                  'px-2.5 py-2.5 text-center transition-colors group-hover:bg-[color:var(--f92-tint)] group-focus-within:bg-[color:var(--f92-tint)] ' +
-                                  (hotBrandId === brand.id ? 'bg-[color:var(--f92-tint)]' : '')
+                                  'px-2.5 py-2.5 text-center transition-colors ' +
+                                  (isHotRow || hotBrandId === brand.id
+                                    ? 'bg-[color:var(--f92-tint)]'
+                                    : '')
                                 }
                               >
                                 <button
@@ -1360,7 +1392,7 @@ export default function ClientLibraryPage() {
                                   // The naive version is `onMouseMove`, which
                                   // fires at pointer rate — ~60Hz — and would
                                   // reconcile the grid on every event. What
-                                  // actually keeps this cheap is ONE thing:
+                                  // keeps this cheap is ONE thing:
                                   //
                                   //   `onMouseEnter`, not `onMouseMove`. State
                                   //   changes only when the pointer CROSSES a
@@ -1369,18 +1401,18 @@ export default function ClientLibraryPage() {
                                   //   handful per second) rather than by the
                                   //   event loop.
                                   //
-                                  // COST, stated plainly and WITHOUT the
-                                  // flattering version of this claim: EVERY
-                                  // crossing re-renders the matrix subtree —
-                                  // vertical as well as horizontal. An earlier
-                                  // draft of this comment said the pure-CSS row
-                                  // band made vertical movement "cost zero
-                                  // renders". That was FALSE: the band needs no
-                                  // state, but the READOUT does, and it is fed
-                                  // by the same `hover` — whose directiveId
-                                  // changes on a vertical crossing. The CSS band
-                                  // buys simplicity (no isHotRow prop threaded
-                                  // through the row), not renders.
+                                  // COST: EVERY crossing re-renders the matrix
+                                  // subtree, vertical as well as horizontal.
+                                  // BOTH axes are state-driven as of the
+                                  // MEDIUM-4 fix, and even before it the readout
+                                  // alone made vertical crossings re-render — so
+                                  // there was never a free axis. Two earlier
+                                  // drafts of this comment claimed the pure-CSS
+                                  // row band made vertical movement "cost zero
+                                  // renders"; that was false then and is moot
+                                  // now, and leaving it standing would have been
+                                  // the spec §1 violation this batch corrected
+                                  // in batch 2's comments.
                                   //
                                   // THE NUMBER, DERIVED — because it is what
                                   // decides whether the memo follow-on is
@@ -1507,7 +1539,12 @@ export default function ClientLibraryPage() {
                               </td>
                             );
                           })}
-                          <td className="px-4 py-3 text-right transition-colors group-hover:bg-[color:var(--f92-tint)] group-focus-within:bg-[color:var(--f92-tint)]">
+                          <td
+                            className={
+                              'px-4 py-3 text-right transition-colors ' +
+                              (isHotRow ? 'bg-[color:var(--f92-tint)]' : '')
+                            }
+                          >
                             <span
                               className="inline-flex min-w-6 items-center justify-center px-2 py-0.5 text-xs font-semibold"
                               style={{
