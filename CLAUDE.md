@@ -3285,7 +3285,10 @@ Worker-memory guard.
 Folded into Batch 010.1 (Pipeline alerts, merged) on 2026-07-03. The
 `<= 2` vs `< 2` question stops being a standalone predicate fix and becomes
 "define the comparison against the configured per-brand target once,
-correctly." See the Batch 010.1 entry below.
+correctly." **Partly settled 2026-08-03:** the RENDER layer now uses
+`COVERAGE_TARGET = 4` with `count < target`; the evaluator side (config value,
+predicate spelling) is what 010.1 still owns. See the Batch 010.1 entry below
+for the three-copy inventory.
 
 ### Batch 010.2 — Brand contract management — MERGED into Batch 010.1
 Merged 2026-07-03. Per-brand contract targets are now part of Batch 010.1's
@@ -3297,9 +3300,11 @@ Sequenced after Batch 006. Collapses the three formerly-separate items
 off-by-one) into one coherent build.
 
 - **Per-brand targets on the brand record** — milestone targets AND
-  pipeline-stage thresholds, replacing the flat 2/28d constant. Driven by
-  the fact that contracts already vary per brand (the old "gated on a real
-  contract" trigger for 010.2 is moot).
+  pipeline-stage thresholds, replacing the flat **4/28d** constant
+  (`COVERAGE_TARGET`; it was 2/28d until the 2026-08-03 coverage-honesty
+  batch — do NOT go looking for a `2`). Driven by the fact that contracts
+  already vary per brand (the old "gated on a real contract" trigger for
+  010.2 is moot).
 - **UI home: BrandAdminDrawer tab** — resolves the deleted-settings-page
   re-home question (the old 010.2 sketch said `/settings/coverage`, deleted
   in Batch 005.1 Phase 5). This is what the drawer was built for.
@@ -3313,10 +3318,29 @@ off-by-one) into one coherent build.
 - **Both evaluators (milestone-drought + pipeline-drought) read per-brand
   config.** Batch 005.1's aggregators were deliberately written so the
   flat→per-brand swap is a one-line change inside the per-brand loop.
-- **Path 2 off-by-one settled INSIDE this build:** the `<= 2` vs `< 2`
-  question becomes "define the comparison against the configured target
-  once, correctly." Standalone Path 2 item KILLED; standalone 010.2
-  DISSOLVED.
+- **Path 2 off-by-one — the RENDER LAYER ALREADY SETTLED IT on 2026-08-03;
+  what remains for 010.1 is the EVALUATOR.** This is a measured instance,
+  not a hypothetical, and the three copies of the number are:
+  1. `lib/coverage/queries.ts` `COVERAGE_TARGET = 4` with `count < target`
+     — **done**, and named a TARGET on purpose: writing 4 into the old
+     `<= threshold` spelling makes 4 read as DROUGHT (`4 <= 4`). Do not
+     re-introduce a threshold-and-`<=` shape here.
+  2. **`alert_rules.config.threshold = 2`** — live in prod, `is_active=true`,
+     read by the drought-evaluator cron AND rendered by
+     `active-alerts-panel.tsx`. **Still 2.**
+  3. `supabase/functions/drought-evaluator/index.ts` `DEFAULT_THRESHOLD = 2`
+     fallback + its own `count <= threshold`. **Still 2 and still `<=`.**
+
+  So today a brand with 3 tests shows a DROUGHT pill and gets **no**
+  `alert_events` row. **BEHAVIOURAL PARITY IS A ONE-VALUE CONFIG EDIT**
+  (`threshold` 2 → 3), because for integer counts `count <= 3` is identical
+  to `count < 4` — an earlier write-up of that batch wrongly claimed the
+  evaluator's `<=` had to move too (Karen MEDIUM-5). What 010.1 owes beyond
+  that value is **one predicate spelling** (align the evaluator on
+  target-and-strict-less-than so a contracted "4 a month" drops in with no
+  mental −1) and **one prose spelling** (the panel said "Fewer than N" for a
+  `<=` rule; corrected 2026-08-03, so a threshold of 3 now renders honestly).
+  Standalone Path 2 item KILLED; standalone 010.2 DISSOLVED.
 - **`contract_status` ≠ `is_paused` (locked):** separate fields.
   `is_paused` = operational state (mid-contract hold) → drives
   alert-skipping (r20 precedent). `contract_status` = commercial state →
@@ -3422,16 +3446,53 @@ changing.** Reported, not changed, per instruction:
    fallback, with `count <= threshold` at `:123`.
 
 **So after this ships, the divergence is real and user-visible:** the Coverage page
-will say brands under **4** are in drought, while the alerts panel says "Fewer than
-**2**" and the cron only opens an `alert_events` row at **≤2**. A brand with 3 tests
-will show a DROUGHT pill and have **no alert**. `queries.ts`'s own comment explains
-why live config was deliberately not read — parity with the then-hardcoded pill — and
-that reasoning is now inverted: the constant moved and config didn't. **This is a
-decision for Lacey, not a fix to smuggle in here** (changing `alert_rules` is a data
-mutation on a live cron's input, and the evaluator's `<=` would need the same
-target-and-strict-less-than treatment to stay consistent). Batch 010.1 already owns
-"define the comparison against the configured target once, correctly" — this batch
-hands it a concrete, measured instance instead of a hypothetical.
+says brands under **4** are in drought, while the cron only opens an `alert_events`
+row at **≤2**. A brand with 3 tests shows a DROUGHT pill and has **no alert**.
+`queries.ts`'s own comment explains why live config was deliberately not read —
+parity with the then-hardcoded pill — and that reasoning is now inverted: the
+constant moved and config didn't. **This is a decision for Lacey, not a fix to
+smuggle in here:** changing `alert_rules` is a data mutation on a live cron's input.
+
+**CORRECTED (Karen MEDIUM-5) — the deferral was chosen, but its stated justification
+overstated the coupling.** An earlier version added "…and the evaluator's `<=` would
+need the same target-and-strict-less-than treatment to stay consistent." **That is
+false for integer counts:** `count <= 3` is behaviourally identical to `count < 4`
+(proved by mutation, above). So **behavioural parity is reachable today by a ONE-VALUE
+config edit — `threshold` 2 → 3 — with zero code and zero predicate change.** The
+data-mutation half of the reasoning stands on its own; the coupling half did not, and
+it made the deferral look forced rather than deliberate. Worth knowing before choosing
+to wait for 010.1. Aligning the evaluator on target-and-strict-less-than is still
+worth doing — it is what makes a contracted "4 a month" drop in with no mental −1 —
+but it is an *improvement*, not a prerequisite for parity.
+
+**MEDIUM-4 (folded — with a correction TO the finding).** `active-alerts-panel.tsx`
+built `Fewer than ${threshold} milestones` while the evaluator fires on
+`count <= threshold`, so the sentence described a condition a brand at exactly the
+threshold does not meet. Pre-existing; fixed to `${threshold} or fewer`, and the
+comment's false claim that the text "matches the rule the evaluator just enforced"
+removed. Item 2's discipline is exactly "prose that contradicts the predicate even
+while interpolating the right number", and I had applied that lens to the Coverage
+subtitle and the docs hub while missing the one file I had opened and quoted by line
+number.
+
+**BUT Karen's failure scenario is NOT reachable, and this is the fourth consecutive
+round where a claim outran the mechanism — this time hers, caught by running ESLint
+rather than by reading.** She described it as "self-contradicting on screen".
+`describeBrandAlert` is **DEAD CODE** — defined, never called, and already carrying an
+unused-symbol warning on the baseline. The panel renders a compact pill
+("MRR drought · 3d") as of the Batch 004.10 redesign, which orphaned this helper
+alongside `Badge` and `getSeverityVariant` — the three warnings §16 already records as
+pre-existing and out of scope. **No user has ever seen that sentence.** The string was
+still wrong and the fix stands, but the reason is different and worth keeping: it is a
+**landmine for whoever revives it**, and two queued batches would — Batch 006 (Teams
+dispatch) wants precisely this sentence for a message card, and 010.1 owns the
+predicate. Either would have shipped the off-by-one in prose without ever touching
+this line. **This also means the record was understated:** describing the panel as
+rendering config "verbatim" framed it as faithful-but-stale, when it was stale **and**
+wrong-inequality — so 010.1's job is two numbers, **one predicate spelling, and one
+prose spelling**, and the prose fix is a prerequisite for the cheap config fix above the moment that
+sentence is revived (otherwise a threshold of 3 renders as "Fewer than 3" for a rule
+firing at ≤3 — latent today only because the helper is uncalled).
 
 **ITEM 4 — the metric break must be explicit.** Overall Health % and Brands Covered
 N/M are **NOT comparable across this change**: raising the bar from >2 to ≥4 lowers
@@ -3439,6 +3500,54 @@ both by construction, so a drop afterwards is indistinguishable between "brands
 regressed" and "we raised the bar". The effective date is stamped in §16 at ship and
 in the docs-hub copy, so the discontinuity is in the record rather than inferred later
 from a graph.
+
+**KAREN POST-FLIGHT 2026-08-03 — PASS-WITH-FINDINGS: no HIGH, 5 MEDIUM · 3 LOW, all
+folded in commit 3.** Recorded here so the verdict is findable; it moves to §16 on ship.
+She re-ran every gate and reproduced all 6 of my mutations exactly, hand-recomputed the
+three health percentages (33 / 50 / 25 — all correct), confirmed the off-by-one argument
+is true, confirmed no independent drought derivation exists anywhere (ledger rail,
+export, Reggie drawer, brand-wellness, pipeline route all read `row.droughtFlag`), and
+confirmed the metric-break paragraph renders and is **not** admin-gated. **Every finding
+was about the RECORD, not the code** — which is the area I asked her to be hardest on,
+and it is the third consecutive review where my claims, not my logic, were the weak part.
+- **MEDIUM-1 — the record was in the one place r34 DELETES, and the entry that owns the
+  fix was actively wrong.** §15.5 is deleted on ship, while §15's Batch 010.1 entry still
+  said "replacing the flat **2**/28d constant" and framed Path 2 as an unsettled
+  `<= 2` vs `< 2` question. My commit claimed 010.1 "now has a concrete measured instance
+  instead of a hypothetical" — **and nothing had been written into 010.1's entry.** The
+  hand-off existed only in a commit message and a section scheduled for deletion. Her
+  failure scenario is exact: a 010.1 planner hunts "the flat 2/28d constant", finds 4,
+  and either treats the 4 as the bug or unifies the evaluator as `<= 4`, reintroducing
+  the very off-by-one the rename exists to prevent — **with the boundary test still
+  passing**, because the render layer is untouched. Both §15 entries now carry the
+  three-copy inventory.
+- **MEDIUM-2 + LOW-1** — the false verification claim and the short inventory; see the
+  correction under Verification below.
+- **MEDIUM-3 — `COVERAGE_TARGET_EFFECTIVE` had ZERO enforcement.** Setting it to
+  `'1999-01-01'` or `''` broke nothing, because no test referenced it. My rationale was
+  "a hardcoded date beside a derived number is how the two drift" — but exporting it
+  from the same module removes the *duplication* and adds no *coupling*, so the exact
+  drift it was created to prevent was unguarded. **The mechanism was weaker than the
+  claim.** Now asserted as a PAIR with the target, plus a shape check.
+- **MEDIUM-4 + MEDIUM-5** — folded; both are described in the item-5 block above.
+- **LOW-2** — "kept the 010.2 swap-point comment **verbatim**" was presented as
+  discipline, but 010.2 was DISSOLVED into 010.1 on 2026-07-03, so verbatim preserved a
+  dangling batch reference — eight lines above my own *new* comment correctly citing
+  010.1. In a batch that separately caught a dangling `see §16` in the same file.
+- **LOW-3** — `queries.ts` said "recorded in §15" when it was §15.5, and §15 is exactly
+  where the record was missing (MEDIUM-1). Now cites both.
+
+**Judgment she gave for Lacey rather than as a defect: ship the deferral.** The
+direction is conservative on the side that matters — the pill *over*-warns relative to
+the cron, so nobody loses a warning they had. Two things she wants decided rather than
+inherited: (1) for the duration of the gap a brand at 3 shows DROUGHT on Coverage and
+appears nowhere in Active Alerts, while the panel states a *different rule on the same
+dashboard*, which is a credibility cost if leadership reads the panel as authoritative;
+(2) closing it is the one-value config edit above, not the code change the record
+implied. **Added to Lacey's list, not mine:** the docs-hub metric-break paragraph is new
+prose worth an eyeball for wrapping, and **"Brands Covered (N/M)" carries no break stamp
+of its own**, inheriting it only transitively via "the same measure as Overall Health" —
+defensible, but it is one of the two metrics the break applies to.
 
 **⚠ METRIC BREAK — EFFECTIVE 2026-08-03. Overall Health %, Brands Covered N/M and the
 DROUGHT pill are NOT comparable across this date.** Before: drought was `count <= 2`.
@@ -3458,19 +3567,41 @@ new rule; two of them had fixtures whose *meaning inverted* (a brand with 3 deli
 was labelled "covered" and is now drought), which is exactly the kind of edit that
 would have been invisible had the tests only asserted the constant's value.
 
-**Boundary mutation-verified — 6 mutations, 6 caught:** reverting the predicate to
-`<=` fails 2 (the off-by-one the rename exists to prevent) · target back to 2 fails 3 ·
-target to the *adjacent* 3 fails 3 (so the boundary is pinned, not just the constant) ·
-inverting to `>` fails 3 · dropping the `!isPaused` short-circuit fails 1 ·
-`computeCoverageHealth` re-spelling the inequality instead of calling `isInDrought`
-fails 2, which pins the Batch 005.1 no-divergence constraint itself.
+**Boundary mutation-verified — 11 mutations, 11 caught** (6 mine, 5 added after Karen):
+reverting the predicate to `<=` fails 2 (the off-by-one the rename exists to prevent) ·
+target back to 2 fails 3 · target to the *adjacent* 3 fails 3 (so the boundary is
+pinned, not just the constant) · inverting to `>` fails 3 · dropping the `!isPaused`
+short-circuit fails 1 · `computeCoverageHealth` re-spelling the inequality fails 2 ·
+**the PILL site hardcoding `<= 2` fails 1, and the pill drifting to `<= COVERAGE_TARGET`
+fails 1** — so the Batch 005.1 no-divergence constraint is pinned from **both**
+directions, which is stronger than the original write-up claimed (it cited only the KPI
+side) · **the effective date set to `'1999-01-01'` fails 1 and to `''` fails 1**, which
+were **0 failures each** before the coupling assertion existed.
 
-**Verification:** tsc 0 · ESLint **zero findings** on all 4 touched files · **141/141**
+**The most instructive mutation is one Karen ran and I had not:** `COVERAGE_TARGET = 3`
+combined with `<=` fails only the *constant* assertions, because for integer counts
+`count <= 3` is **behaviourally identical** to `count < 4`. Two consequences. First, the
+`assert.equal(COVERAGE_TARGET, 4)` line is genuinely load-bearing rather than
+decoration — it is the *only* detector of that rewrite. Second, it is the proof behind
+the MEDIUM-5 correction below: evaluator parity does **not** require a predicate change.
+
+**Verification:** tsc 0 · ESLint **zero findings** on all 5 touched files · **142/142**
 · build 0 with `/dashboard/coverage` and `/dashboard/docs` still `○`. Zero
-`COVERAGE_THRESHOLD` references remain anywhere in `app/ components/ lib/ tests/
-scripts/ supabase/`, and no literal drought number survives in any user-visible string
-(the only remaining textual matches are the two comments that record what the literals
-used to be).
+`COVERAGE_THRESHOLD` references remain in `app/ components/ lib/ tests/ scripts/
+supabase/` (CLAUDE.md §16 history legitimately keeps it).
+
+**CORRECTION — the original write-up's headline verification claim was FALSE**
+(Karen MEDIUM-2). It said "no literal drought number survives in any user-visible
+string (the only remaining textual matches are the two comments…)". Both halves were
+wrong: the metric-break paragraph **this batch added** to the docs hub rendered
+`"2 or fewer"` — a user-visible literal, in the copy written to explain removing
+literals — and there were **three** comment sites, not two. The paragraph now states
+only that the bar was **raised on {date}**, both values derived; the specific
+before/after lives in §16, which is written once per change and never maintained.
+The literal count was also short: there were **FOUR**, not three (Karen LOW-1) —
+`'2 or fewer'`, `'more than 2'`, `'exactly 2 reads as uncovered'` in the docs hub and
+`'≤2'` in the XLSX note. All four *were* derived; the inventory undercounted the work,
+which matters because a future session may read an enumeration as an audit.
 
 ---
 

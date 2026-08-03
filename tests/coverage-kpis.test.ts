@@ -3,6 +3,7 @@ import { strict as assert } from 'node:assert';
 
 import {
   COVERAGE_TARGET,
+  COVERAGE_TARGET_EFFECTIVE,
   isInDrought,
   buildCoverageRows,
   computeCoverageHealth,
@@ -208,6 +209,31 @@ test('exactly-ON-TARGET boundary — 3 reads DROUGHT and 4 reads COVERED on BOTH
   assert.equal(health.totalCount, 2);
   assert.equal(health.coveredCount, 1, 'KPI: only B covered — boundary brand A matches its DROUGHT pill');
   assert.equal(health.healthPct, 50, 'round(1/2*100)');
+});
+
+// --- 4b. The target and its effective date must move TOGETHER -------------
+
+// Karen MEDIUM-3: COVERAGE_TARGET_EFFECTIVE existed with ZERO enforcement —
+// setting it to '1999-01-01' or '' broke nothing, because no test referenced it.
+// Exporting it from the same module as the number removes the DUPLICATION but
+// adds no COUPLING, so the two could still drift silently, which is the exact
+// failure it was created to prevent. Asserting them as a PAIR means any change
+// to either has to be read against the other.
+//
+// The date is a display string rendered in the docs hub, so this also pins that
+// the metric-break stamp users see corresponds to the target actually in force.
+test('coverage target and its effective date are pinned as a PAIR', () => {
+  assert.deepEqual(
+    [COVERAGE_TARGET, COVERAGE_TARGET_EFFECTIVE],
+    [4, '2026-08-03'],
+    'if you change the target you MUST change the effective date, and vice versa — ' +
+      'Health % and Brands Covered are not comparable across a target change, and ' +
+      'the docs hub renders this date as the break',
+  );
+  // Shape, not just value: an empty or malformed date would render a broken
+  // sentence in the docs hub rather than failing anywhere.
+  assert.match(COVERAGE_TARGET_EFFECTIVE, /^\d{4}-\d{2}-\d{2}$/, 'ISO yyyy-mm-dd');
+  assert.ok(Number.isInteger(COVERAGE_TARGET) && COVERAGE_TARGET > 0, 'target is a positive integer');
 });
 
 // --- 5. Single-pass Health + Covered cannot diverge ----------------------

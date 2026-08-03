@@ -126,10 +126,21 @@ export function startOfMonth(year: number, monthIndex: number): Date {
 // the render layer and the drought-evaluator cron now genuinely disagree,
 // and a brand with 3 tests shows a DROUGHT pill with no alert_events row.
 // That is Lacey's call and Batch 010.1's scope ("define the comparison
-// against the configured target once, correctly"); it is recorded in §15,
-// deliberately NOT patched here, because editing alert_rules is a data
-// mutation on a live cron's input and the evaluator's own `<=` would need
-// the same treatment to stay consistent.
+// against the configured target once, correctly"); it is recorded in §15
+// (the 010.1 entry) and §15.5, and deliberately NOT patched here, because
+// editing alert_rules is a data mutation on a live cron's input.
+//
+// CORRECTION (Karen MEDIUM-5): an earlier version of this comment also said
+// the evaluator's `<=` "would need the same treatment to stay consistent".
+// That is FALSE for integer counts — `count <= 3` is behaviourally IDENTICAL
+// to `count < 4`. So behavioural parity is reachable TODAY by a ONE-VALUE
+// config edit (threshold 2 → 3) with no code and no predicate change. The
+// data-mutation-on-a-live-cron half of the reasoning stands on its own; the
+// coupling half did not, and it made the deferral look forced rather than
+// chosen. Prerequisite: the alerts panel's prose had to stop saying "Fewer
+// than N" for a `<=` rule first, or a threshold of 3 would render as "Fewer
+// than 3" for a rule firing at ≤3 — fixed 2026-08-03 in
+// active-alerts-panel.tsx.
 // -----------------------------------------------------------------------
 
 /**
@@ -382,7 +393,9 @@ export function computeCoverageHealth(
   for (const brand of brands) {
     if (!brand.is_active) continue; // spec §3.1: "active brands"
     if (brand.is_paused) continue; // excluded from the denominator
-    // 010.2 swap point: read the per-brand contracted target here
+    // 010.1 swap point (was labelled 010.2 until 2026-08-03 — that batch was
+    // DISSOLVED into 010.1 on 2026-07-03; "kept verbatim" had preserved a
+    // dangling reference, Karen LOW-2): read the per-brand contracted target here
     // (e.g. brand.contract_milestones_per_month) instead of the flat
     // constant. The loop already reads `target` per brand, so the swap
     // is THIS ONE LINE.

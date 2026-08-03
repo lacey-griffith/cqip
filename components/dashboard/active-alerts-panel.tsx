@@ -214,16 +214,40 @@ export function ActiveAlertsPanel() {
 
   // Brand-scoped alerts (drought) have log_entry_id IS NULL and a brand_id set.
   // Pull threshold + window from alert_rules.config — the drought evaluator
-  // reads these same fields from the same row, so the rendered text matches
-  // the rule the evaluator just enforced. Falls back to documented defaults
-  // (threshold=2, window_days=28) when config is missing keys, mirroring the
-  // evaluator's defaults.
+  // reads these same fields from the same row. Falls back to documented
+  // defaults (threshold=2, window_days=28) when config is missing keys,
+  // mirroring the evaluator's defaults.
+  //
+  // ⚠ THIS FUNCTION IS CURRENTLY DEAD CODE — defined and never called. The
+  // panel renders a compact pill ("MRR drought · 3d") as of the Batch 004.10
+  // redesign, which orphaned this helper along with `Badge` and
+  // `getSeverityVariant` (all three are the pre-existing unused-symbol
+  // warnings §16 records as out of scope). Do not read the fix below as
+  // repairing something users see.
+  //
+  // THE PROSE MUST MATCH THE EVALUATOR'S INEQUALITY, WHICH IS `<=`, NOT `<`.
+  // This read "Fewer than N" while drought-evaluator/index.ts:123 fires on
+  // `count <= threshold`, so the sentence described a condition a brand at
+  // exactly the threshold does NOT meet. Karen raised it (MEDIUM-4) as a
+  // user-visible self-contradiction; that half was wrong — nothing renders it —
+  // but the string was still wrong, and it is a LANDMINE for whoever revives
+  // it. Batch 006 (Teams dispatch) wants exactly this sentence for a message
+  // card, and 010.1 owns aligning the predicate; either would have shipped the
+  // off-by-one in prose. Fixed while it is cheap.
+  //
+  // Interpolating the right number is not enough if the phrasing states the
+  // wrong comparison — the same defect the 2026-08-03 coverage batch fixed on
+  // the Coverage page subtitle ("N or fewer" vs "fewer than N").
+  //
+  // NOTE this is the EVALUATOR's threshold from live config, deliberately NOT
+  // lib/coverage/queries.ts's COVERAGE_TARGET. Those two genuinely disagree as
+  // of 2026-08-03 (4 vs 2) and unifying them is Batch 010.1's job — see §15.
   function describeBrandAlert(rule: AlertRule | undefined): string {
     const config = rule?.config ?? {};
     const threshold = typeof config.threshold === 'number' ? config.threshold : 2;
     const windowDays = typeof config.window_days === 'number' ? config.window_days : 28;
     const noun = threshold === 1 ? 'milestone' : 'milestones';
-    return `Fewer than ${threshold} ${noun} in last ${windowDays} days`;
+    return `${threshold} or fewer ${noun} in last ${windowDays} days`;
   }
 
   if (loading) {

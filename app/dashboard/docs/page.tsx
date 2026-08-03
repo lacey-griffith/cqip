@@ -5,9 +5,13 @@ import Image from 'next/image';
 import { Card } from '@/components/ui/card';
 import { supabase } from '@/lib/supabase/client';
 // Drought copy derives the number AND its effective date from the single source
-// of truth. Three literals ('2 or fewer', 'more than 2', '≤2') used to live in
-// this file and on the Coverage page; they were correct until 2026-08-03, which
-// is precisely why nothing ever caught them.
+// of truth. FOUR literals used to live in this file and on the Coverage page —
+// '2 or fewer' and 'more than 2' and 'exactly 2 reads as uncovered' here, plus
+// '≤2' in the Coverage XLSX export note. (The 2026-08-03 batch derived all four
+// but its own write-up counted three; Karen LOW-1. The work was complete, the
+// inventory was short — worth correcting because a future session may read an
+// enumeration as an audit.) All four were CORRECT until 2026-08-03, which is
+// precisely why nothing ever caught them.
 import { COVERAGE_TARGET, COVERAGE_TARGET_EFFECTIVE } from '@/lib/coverage/queries';
 
 export default function DocsPage() {
@@ -196,11 +200,19 @@ export default function DocsPage() {
           Output table — a flag that delivery for that brand has gone quiet. A brand
           sitting exactly on {COVERAGE_TARGET} is covered.
         </p>
+        {/* Karen MEDIUM-2: this paragraph originally spelled the OLD bar as a
+            literal ("2 or fewer") — a third co-varying value, in RENDERED copy,
+            introduced by the very batch that removed three other such literals.
+            When the target next moves it would have read "the bar was previously
+            2 or fewer" while the previous bar was actually 4. The specific
+            before/after belongs in the historical record (CLAUDE.md §16), which
+            is written once per change and never has to be maintained; live copy
+            states only that the bar MOVED and on what date, both derived. */}
         <p>
-          <strong>Changed {COVERAGE_TARGET_EFFECTIVE}:</strong> the bar was previously
-          &ldquo;2 or fewer&rdquo;. Overall Health % and Brands Covered are{' '}
-          <strong>not comparable</strong> across that date — raising the bar lowers both
-          by construction, so a drop is not evidence that delivery regressed.
+          <strong>Changed {COVERAGE_TARGET_EFFECTIVE}:</strong> the bar was raised on
+          this date. Overall Health % and Brands Covered are{' '}
+          <strong>not comparable</strong> across it — raising the bar lowers both by
+          construction, so a drop is not evidence that delivery regressed.
         </p>
 
         <h3>The KPI row</h3>
