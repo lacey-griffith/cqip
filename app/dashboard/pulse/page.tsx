@@ -44,12 +44,16 @@ import {
 import { useToast } from '@/components/layout/toaster';
 import { CellEditStrip } from '@/components/client-library/cell-edit-strip';
 import {
-  CELL_STATUS_LABEL,
   DIRECTIVE_TYPES,
   type CellStatus,
   type DirectiveType,
 } from '@/lib/client-library/directives';
-import { buildCellReadout, hasNote } from '@/lib/client-library/cell-note';
+import {
+  buildCellAriaLabel,
+  buildCellReadout,
+  buildReadoutAnnouncement,
+  hasNote,
+} from '@/lib/client-library/cell-note';
 import {
   buildMatrixRows,
   computeMatrixKpis,
@@ -477,39 +481,61 @@ export default function ClientLibraryPage() {
 
   // ── The inspected cell, RESOLVED against what is actually on screen ────────
   //
-  // Pin wins over hover (see the state declaration). Both are then looked up in
-  // `matrixRows` and `visibleBrands` — the rendered sets, not the raw data — so
-  // a cell that a filter, the hide-paused toggle, or a project switch has taken
-  // off screen resolves to nothing instead of leaving a readout describing a
-  // cell nobody can see. Deriving this is why there is no cleanup handler on
-  // every filter setter: the invariant is "the readout describes a visible
-  // cell", and it holds by construction rather than by remembering to clear.
-  const activeCell = pinned ?? hover;
+  // Candidates are looked up in `matrixRows` and `visibleBrands` — the RENDERED
+  // sets, not the raw data — so a cell that a filter, the hide-paused toggle or
+  // a project switch has taken off screen can never leave a readout describing
+  // a cell nobody can see. That invariant is why there is no cleanup handler on
+  // every filter setter: it holds by construction rather than by remembering to
+  // clear.
   const inspected = useMemo(() => {
-    if (!activeCell) return null;
-    const row = matrixRows.find((r) => r.directive.id === activeCell.directiveId);
-    const brand = visibleBrands.find((b) => b.id === activeCell.brandId);
-    if (!row || !brand) return null;
-    const cell = cellByKey.get(`${row.directive.id}:${brand.id}`);
-    return {
-      directiveId: row.directive.id,
-      brandId: brand.id,
-      readout: buildCellReadout({
-        brandLabel: brand.display_name,
-        directiveTitle: row.directive.title,
-        // Same effective-status resolution the grid uses: a brand added after
-        // the directive has no cell row and renders n_a.
-        status: cell?.status ?? 'n_a',
-        note: cell?.note,
-      }),
+    // Pin wins — but only if it still RESOLVES. Karen HIGH-1: an unconditional
+    // `pinned ?? hover` meant a pin that a filter, the hide-paused toggle or a
+    // search had taken off screen returned null and never consulted `hover`, so
+    // the readout went dead on every visible cell with no explanation — and the
+    // recovery was noticing an orphaned "Unpin" link next to an empty state.
+    // That is a real flow: a read-only user pins a cell to read its note (the
+    // only touch path), then searches for the next one.
+    //
+    // Resolving the CANDIDATES in order, rather than picking one and then
+    // resolving it, keeps the "readout describes a visible cell" invariant
+    // without letting an unresolvable pin disable the deliverable. The dangling
+    // pin is left set deliberately: it re-takes precedence the moment its row
+    // comes back, and the Unpin control stays available meanwhile.
+    // `isPinnedCell` marks whether the thing we RESOLVED is the pin — not the
+    // same as "a pin exists". That is the distinction the live region needs: a
+    // pin that has fallen back to hover must not be announced as a pin.
+    const resolve = (
+      candidate: { directiveId: string; brandId: string } | null,
+      isPinnedCell: boolean,
+    ) => {
+      if (!candidate) return null;
+      const row = matrixRows.find((r) => r.directive.id === candidate.directiveId);
+      const brand = visibleBrands.find((b) => b.id === candidate.brandId);
+      if (!row || !brand) return null;
+      const cell = cellByKey.get(`${row.directive.id}:${brand.id}`);
+      return {
+        directiveId: row.directive.id,
+        brandId: brand.id,
+        isPinnedCell,
+        readout: buildCellReadout({
+          brandLabel: brand.display_name,
+          directiveTitle: row.directive.title,
+          // Same effective-status resolution the grid uses: a brand added after
+          // the directive has no cell row and renders n_a.
+          status: cell?.status ?? 'n_a',
+          note: cell?.note,
+        }),
+      };
     };
-  }, [activeCell, matrixRows, visibleBrands, cellByKey]);
+    return resolve(pinned, true) ?? resolve(hover, false);
+  }, [pinned, hover, matrixRows, visibleBrands, cellByKey]);
   const readout = inspected?.readout ?? null;
-  // The column to band (spec §2.4). Rows band in pure CSS via `group-hover` /
-  // `group-focus-within` on the <tr>, which costs no re-render at all; a COLUMN
-  // cannot be expressed that way — CSS has no way to reach the nth cell of every
-  // OTHER row from a hover on one of them — so this is the one piece that needs
-  // state. See the perf note on the cell handlers.
+  // The column to band (spec §2.4). The ROW bands in pure CSS (`group-hover` /
+  // `group-focus-within` on the <tr>); a COLUMN cannot be expressed that way,
+  // because CSS has no way to reach the nth cell of every OTHER row from a hover
+  // on one of them — so this is the piece that needs state. NOTE that this does
+  // NOT make hovering free: the readout is state-driven too, so a crossing in
+  // either direction re-renders. See the perf note on the cell handlers.
   const hotBrandId = inspected?.brandId ?? null;
   const isHotCell = useCallback(
     (directiveId: string, brandId: string) =>
@@ -517,16 +543,21 @@ export default function ClientLibraryPage() {
     [inspected],
   );
 
-  // The live region's text. EMPTY on a focus-driven change — the button's own
-  // accessible name already said it, and repeating it is the double
-  // announcement spec §5 forbids. Pointer and pin move no focus, so nothing
-  // else announces for them and the readout is the only voice.
-  const readoutAnnouncement = useMemo(() => {
-    if (!readout) return '';
-    if (!pinned && hover?.source === 'focus') return '';
-    const note = readout.note ? `Note: ${readout.note}` : 'No note';
-    return `${readout.brandLabel}, ${readout.directiveTitle}: ${readout.statusLabel}. ${note}`;
-  }, [readout, pinned, hover]);
+  // Pure — see buildReadoutAnnouncement for the §2.3-vs-§5 argument and for why
+  // a PIN always speaks despite clicking a button also focusing it.
+  //
+  // `focusDriven` is asked of the HOVER state, and `pinned` of what actually
+  // RESOLVED (isPinnedCell), not of whether a pin exists: a pin that has been
+  // filtered off screen falls back to hover, and that fallback must not be
+  // announced as though it were the pin.
+  const readoutAnnouncement = useMemo(
+    () =>
+      buildReadoutAnnouncement(readout, {
+        pinned: inspected?.isPinnedCell ?? false,
+        focusDriven: hover?.source === 'focus',
+      }),
+    [readout, inspected, hover],
+  );
 
   // Runtime check on the property that justified defaulting hide-paused to
   // CHECKED (Karen MEDIUM-4) — see countHiddenOwedCells for why a prod
@@ -1027,12 +1058,24 @@ export default function ClientLibraryPage() {
                 </span>
               ) : (
                 <span aria-hidden="true" className="text-[color:var(--f92-lgray)]">
-                  Hover or focus a cell to inspect it.
+                  {/* Interaction-NEUTRAL wording (Karen MEDIUM-3). "Hover or
+                      focus" named two interactions a touch device does not have,
+                      on the one surface whose whole justification is that tapping
+                      to pin is the only note path when there is no hover. */}
+                  Hover, focus, or select a cell to inspect it.
                 </span>
               )}
               {pinned ? (
+                /* aria-hidden (Karen LOW-6): this button sits INSIDE the
+                   aria-atomic live region, so without it every pin announcement
+                   ended "… Unpin button", and the control appearing/disappearing
+                   was itself a content change in the region. The pin is already
+                   undoable from the cell (activating it again unpins, and the
+                   accessible name says so), so nothing is lost for AT users. */
                 <button
                   type="button"
+                  aria-hidden="true"
+                  tabIndex={-1}
                   onClick={() => setPinned(null)}
                   className="font-medium text-[color:var(--f92-orange)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-focus-ring)]"
                 >
@@ -1187,17 +1230,26 @@ export default function ClientLibraryPage() {
                       <Fragment key={directive.id}>
                         {/* `group` drives the ROW band (spec §2.4) in pure CSS:
                             group-hover for the mouse, group-focus-within for the
-                            keyboard, so the two paths are identical and neither
-                            costs a React render. */}
+                            keyboard, so the two paths are identical and the BAND
+                            itself needs no state. That is simplicity, NOT free
+                            hovering — the readout is state-driven, so a crossing
+                            in either direction still re-renders. See the perf
+                            note on the cell handlers for the real cost. */}
                         <tr className="group border-b border-[color:var(--f92-border)] last:border-0">
                           {/* The sticky column MUST band too. It carries an
                               opaque --f92-surface background (without which rows
                               would show through it while scrolled), so a row
                               band that skipped it would leave a white notch at
                               the start of every highlighted row and read as
-                              broken. The group-* variants are ordered after the
-                              base `bg-*` in Tailwind's output, so they win —
-                              verified in the compiled CSS, not assumed. */}
+                              broken.
+                              WHY the band wins: SPECIFICITY, not source order.
+                              `.group-hover\:bg-…:is(:where(.group):hover *)` is
+                              (0,2,0) — the leading class, plus :is() taking its
+                              most specific argument, where :where() contributes
+                              zero and :hover one class — against (0,1,0) for the
+                              base `bg-*`. Tailwind also happens to emit it later,
+                              but order is a compiler detail and specificity is
+                              not. Verified in the compiled CSS, not assumed. */}
                           <td className="sticky left-0 z-10 bg-[color:var(--f92-surface)] px-4 py-3 align-top transition-colors group-hover:bg-[color:var(--f92-tint)] group-focus-within:bg-[color:var(--f92-tint)]">
                             <div className="flex flex-col gap-1">
                               <span
@@ -1252,14 +1304,34 @@ export default function ClientLibraryPage() {
                                   // browsers, so it killed hover, focus and the
                                   // tooltip for read-only users: precisely the
                                   // people the readout exists for, and the only
-                                  // ones with no other way to reach a note.
-                                  // `aria-disabled` says "not actionable" to
-                                  // assistive tech while keeping the control
-                                  // focusable and hoverable. Also brings the
-                                  // matrix in line with the standing "never a
-                                  // disabled control" rule the brand page has
-                                  // always honoured and this page never did.
-                                  aria-disabled={canEdit ? undefined : true}
+                                  // ones with no other way to reach a note. It
+                                  // also brings the matrix in line with the
+                                  // standing "never a disabled control" rule the
+                                  // brand page has always honoured and this page
+                                  // never did.
+                                  //
+                                  // AND NOT `aria-disabled` EITHER (Karen
+                                  // MEDIUM-2, DC's call 2026-08-03 — the spec's
+                                  // §2.6 asks for it, and the spec is wrong
+                                  // here). ARIA defines aria-disabled as
+                                  // "perceivable but disabled … not editable or
+                                  // otherwise operable". This control IS
+                                  // operable: the click pins/unpins the readout.
+                                  // Announcing "unavailable" on a button that
+                                  // works is incoherent on its own, and it
+                                  // directly contradicted this cell's own
+                                  // accessible name, which ends "(activate to
+                                  // pin)" — so AT spoke "unavailable … activate
+                                  // to pin". Worse, NVDA and JAWS can be
+                                  // configured to skip unavailable controls,
+                                  // which would have degraded exactly the
+                                  // population §2.6 exists to serve.
+                                  //
+                                  // The role difference is carried in the
+                                  // ACCESSIBLE NAME instead — "(edit)" vs
+                                  // "(activate to pin)" — which states what the
+                                  // control does rather than falsely denying it
+                                  // does anything.
                                   aria-expanded={canEdit ? isExpanded : undefined}
                                   // Editors edit. Everyone else pins/unpins the
                                   // readout — which gives the control an honest
@@ -1310,12 +1382,38 @@ export default function ClientLibraryPage() {
                                   // buys simplicity (no isHotRow prop threaded
                                   // through the row), not renders.
                                   //
-                                  // So: worst case 82 directives × 16 brands =
-                                  // 1,312 cells per crossing, typically ~650
-                                  // with the default `open` filter and paused
-                                  // columns hidden. Each cell is a button plus
-                                  // one styled span, so it is a cheap reconcile
-                                  // a few times a second, not sixty — which is
+                                  // THE NUMBER, DERIVED — because it is what
+                                  // decides whether the memo follow-on is
+                                  // needed, and an earlier draft's "~650
+                                  // typically" was a STALE figure, not an
+                                  // estimate. Rendered cells are exactly
+                                  //   matrixRows.length × visibleBrands.length
+                                  // (the two `.map`s below). 650 = 50 × 13, and
+                                  // 50 was the open-filtered row count recorded
+                                  // when prod held 69 directives; prod is now
+                                  // 82, so that product describes a tree that
+                                  // no longer exists. Same shelf-life problem
+                                  // the 2026-07-31 batch hit at 45 minutes.
+                                  //
+                                  // What IS derivable today:
+                                  //   82 × 13 = 1,066  defaults (hide-paused ON
+                                  //                     → 16 active − 3 paused),
+                                  //                     before the status filter
+                                  //                     removes any row
+                                  //   82 × 16 = 1,312  paused columns shown
+                                  // The `open` default only ever subtracts rows,
+                                  // so 1,066 is the ceiling under defaults and
+                                  // the typical figure sits below it by however
+                                  // many directives are fully resolved — a count
+                                  // nobody has measured at 82 directives. Probe
+                                  // it before sizing the follow-on; do not scale
+                                  // the old 50/69 ratio, which is how the stale
+                                  // number got here.
+                                  //
+                                  // So judge the follow-on against ~1,066, not
+                                  // 650. Each cell is a button plus one styled
+                                  // span, so it is still a cheap reconcile a few
+                                  // times a second rather than sixty — which is
                                   // why this is acceptable, rather than because
                                   // half the crossings were free.
                                   //
@@ -1337,23 +1435,32 @@ export default function ClientLibraryPage() {
                                     setHover({ directiveId: directive.id, brandId: brand.id, source: 'focus' })
                                   }
                                   onBlur={() => setHover(null)}
-                                  // The accessible name carries the NOTE now.
-                                  // The old `sr-only "has note"` span inside
-                                  // this button was dead: aria-label overrides
-                                  // descendant content in the accessible-name
-                                  // computation, so screen-reader users have
-                                  // never heard it — the comment claiming the
-                                  // information "isn't lost meanwhile" was
-                                  // false. Putting the note in the name fixes
-                                  // that for every mode, including browse mode,
-                                  // where a virtual cursor never fires onFocus
-                                  // and so never triggers the live region.
-                                  aria-label={
-                                    `${directive.title} — ${brand.display_name}: ${CELL_STATUS_LABEL[status]}` +
-                                    (cellHasNote ? `. Note: ${cell?.note?.trim()}` : '') +
-                                    (canEdit ? (isExpanded ? ' (editing — activate to close)' : ' (edit)') : '') +
-                                    (!canEdit ? (isPinned ? ' (activate to unpin)' : ' (activate to pin)') : '')
-                                  }
+                                  // The accessible name carries the NOTE now,
+                                  // and it is built by a TESTED pure function
+                                  // rather than inlined here (Karen MEDIUM-5).
+                                  // Why that matters: the old
+                                  // `sr-only "has note"` span in this button was
+                                  // dead — aria-label wins at AccName step 2C
+                                  // and name-from-content never runs at 2F — so
+                                  // screen-reader users never heard it by ANY
+                                  // mechanism, and the batch-2 comment claiming
+                                  // the information "isn't lost meanwhile" was
+                                  // false. This string is now the only announced
+                                  // path to a note on focus and in browse mode
+                                  // (where a virtual cursor never fires onFocus,
+                                  // so the live region never speaks at all), and
+                                  // 8 lines of inline concatenation in a
+                                  // 200-line JSX block is how the last one
+                                  // rotted unnoticed.
+                                  aria-label={buildCellAriaLabel(
+                                    buildCellReadout({
+                                      brandLabel: brand.display_name,
+                                      directiveTitle: directive.title,
+                                      status,
+                                      note: cell?.note,
+                                    }),
+                                    { canEdit, isExpanded, isPinned },
+                                  )}
                                   // §2.8 — the native `title` is GONE, not
                                   // merely stripped of its note. Keeping a
                                   // status-only tooltip would leave a second
@@ -1372,7 +1479,12 @@ export default function ClientLibraryPage() {
                                   className={
                                     'relative mx-auto flex h-6 w-6 items-center justify-center transition ' +
                                     'hover:ring-2 hover:ring-[color:var(--f92-focus-ring)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-focus-ring)] ' +
-                                    (canEdit ? 'cursor-pointer ' : 'cursor-default ') +
+                                    // cursor-pointer for BOTH roles (Karen
+                                    // MEDIUM-3): the non-admin click really does
+                                    // something — it pins the readout — so
+                                    // cursor-default was the same lie as
+                                    // aria-disabled, in the mouse channel.
+                                    'cursor-pointer ' +
                                     (isExpanded || isPinned ? 'ring-2 ring-[color:var(--f92-focus-ring)]' : '')
                                   }
                                   style={{ borderRadius: 'var(--radius-md)' }}

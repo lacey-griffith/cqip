@@ -147,21 +147,40 @@ export function StatusCellBox({
  * untouched. `pointer-events-none` so the marker can never swallow a click or
  * break the parent's hover — it is decoration over a control.
  *
- * WHY A HALOED DOT, AND WHY NO NEW TOKEN. The marker sits on top of five
- * different cell treatments in two themes, including full-strength hatching. A
- * flat mark fails that: measured, a plain `--f92-dark` triangle over the dark
- * theme's bright hues lands at 1.56:1 on `done` (#34D399) and 1.74:1 on
- * `blocked`'s amber stripes (#F59E0B) — both under the 3:1 that WCAG 1.4.11
- * asks of a non-text indicator. The 1.5px halo fixes that structurally rather
- * than by picking a luckier colour: the eye judges the dot against its OWN
- * ring, and the ring is the card itself. So the only contrast that has to hold
- * is dot-vs-surface, which is `--f92-dark` on `--f92-surface`:
+ * It DOES overlap the box (Karen LOW-2) — the positioning ancestor is the 24px
+ * button, so the dot lands at x 17–23 / y 1–7 over the 19px box's rounded
+ * top-right corner, occluding ~6px of it. Zero layout cost is not zero overlap.
+ * That slightly erodes the shape channel batch 2's MEDIUM-2 fought for on `todo`
+ * (dashed) and `blocked` (hatched); at this scale it should be fine, but it is an
+ * eye-gate item rather than something a ratio can settle.
+ *
+ * WHY A HALOED DOT, AND WHY NO NEW TOKEN. The marker overlaps the cell box's
+ * rounded top-right corner, so it sits over five different treatments in two
+ * themes. A flat mark fails that in DARK: measured, a plain `--f92-dark` mark
+ * over dark `blocked`'s amber stripes (#F59E0B, full-strength across the whole
+ * box) is 1.74:1, and over dark `done`'s 1px BORDER (#34D399) 1.56:1 — both
+ * under the 3:1 WCAG 1.4.11 asks of a non-text indicator. Precision matters
+ * there (Karen LOW-3): `done`'s FILL is rgba(52,211,153,0.18), which composites
+ * to ≈#224247 and would have measured 8.79:1 — it is the border arc in the dot's
+ * path that fails, not the treatment's dominant area. In LIGHT a flat mark
+ * already clears it (3.40:1 on both), so the halo is required by dark alone.
+ *
+ * The 1.5px halo fixes it structurally rather than by picking a luckier colour:
+ * the eye judges the dot against its OWN ring, so the only contrast that must
+ * hold is dot-vs-ring — `--f92-dark` on `--f92-surface`:
  *   light  #1A1A2E on #FFFFFF  = 17.06:1
  *   dark   #E2E8F0 on #1E2235  = 12.76:1
  * Both existing app-wide tokens, both already theme-correct, so this adds NO
  * token and needs no cross-app measurement sweep. It is also unmistakable for a
  * status: all five statuses are squares or a bar, none is a circle, and none
  * uses `--f92-dark`.
+ *
+ * ONE HONEST LIMIT (Karen's eye-gate item 4): on a BANDED row the td background
+ * becomes --f92-tint, and in light that is #FEF6EE against the halo's #FFFFFF —
+ * 1.07:1, so the halo effectively vanishes there. Harmless, because the dot is
+ * still 15.95:1 on the tint itself; but "the ring is the card" is only true off
+ * the band, and the marker on a banded row is a look-at-it item, not a measured
+ * one.
  *
  * Static Tailwind classes, not inline `style`, deliberately: it keeps the
  * marker verifiable in the COMPILED stylesheet (spec §5) instead of only in the
@@ -211,9 +230,17 @@ export function StatusLegend() {
       ))}
 
       <span className="inline-flex items-center gap-2 border-l border-[color:var(--f92-border)] pl-4 text-[11px] font-medium text-[color:var(--f92-gray)]">
-        {/* The same component the cells draw, in the same corner position, so
-            the legend cannot describe a marker the grid doesn't render. The
-            wrapper is `relative` and box-sized to mirror a real cell.
+        {/* The same COMPONENT the cells draw, so the legend cannot describe a
+            marker the grid doesn't render.
+            NOT the same geometry, though (Karen LOW-1): in the grid the
+            positioning ancestor is the 24px button and the dot overhangs the
+            box's corner; here it is a 13px wrapper equal to the box, so the dot
+            sits fully inside and reads proportionally larger (~46% of the edge
+            vs ~25%). An earlier version of this comment claimed "same corner
+            position, box-sized to mirror a real cell" — the second half is
+            true, the first is not, and the two marks will not look identical.
+            Accepted: the legend's job is to teach "corner dot = note", which it
+            does. Flagged for the eye-gate as the most likely thing to look off.
             The carrier is `todo` because the marker has to sit ON something to
             teach where it appears, and todo is the one treatment that is an
             empty outline — it shows the corner without a fill competing with

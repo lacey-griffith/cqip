@@ -1,7 +1,12 @@
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
 
-import { buildCellReadout, hasNote } from '../lib/client-library/cell-note';
+import {
+  buildCellAriaLabel,
+  buildCellReadout,
+  buildReadoutAnnouncement,
+  hasNote,
+} from '../lib/client-library/cell-note';
 import { CELL_STATUSES, CELL_STATUS_LABEL } from '../lib/client-library/directives';
 
 // Spec §4.1 — hasNote. The whitespace case is the whole reason this module
@@ -80,6 +85,104 @@ test('buildCellReadout: note is never an empty string, for any status', () => {
       assert.equal(r.note, null, `status=${status} note=${JSON.stringify(note)}`);
     }
   }
+});
+
+// ── The accessible name ────────────────────────────────────────────────────
+// After this batch this string is the ONLY announced path to a note for
+// keyboard and browse-mode users, so it is pinned rather than left to a comment.
+// This is the regression guard for the exact defect this batch found: a dead
+// `sr-only "has note"` span that nobody noticed for months.
+test('aria label: carries the note when there is one, and omits it when there is not', () => {
+  const withNote = buildCellAriaLabel(
+    buildCellReadout({
+      brandLabel: 'Aire Serv',
+      directiveTitle: 'Clicks Print Offer',
+      status: 'blocked',
+      note: 'waiting on Convert goal id',
+    }),
+    { canEdit: false, isExpanded: false, isPinned: false },
+  );
+  assert.ok(
+    withNote.includes('Note: waiting on Convert goal id'),
+    'a noted cell must announce its note — this is the whole of §2.2 for AT users',
+  );
+
+  const without = buildCellAriaLabel(
+    buildCellReadout({ brandLabel: 'Aire Serv', directiveTitle: 'Clicks Print Offer', status: 'blocked' }),
+    { canEdit: false, isExpanded: false, isPinned: false },
+  );
+  // Case-INSENSITIVE deliberately. The case-sensitive form of this assertion
+  // let a mutation through: padding the name with ". No note" contains no
+  // substring "Note" (capital N, lowercase "ote"), so `!includes('Note')`
+  // passed while every one of ~1,300 names grew a clause conveying nothing.
+  // Found by mutation, not by review.
+  assert.ok(
+    !/note/i.test(without),
+    'a bare cell must not pad ~1,300 names with "No note" — absence is the signal',
+  );
+
+  // The distinction §2.2 needs: the two names must differ.
+  assert.notEqual(withNote, without);
+});
+
+test('aria label: the action clause differentiates role and state', () => {
+  const r = buildCellReadout({ brandLabel: 'B', directiveTitle: 'D', status: 'todo' });
+  const label = (o: { canEdit: boolean; isExpanded: boolean; isPinned: boolean }) =>
+    buildCellAriaLabel(r, o);
+
+  assert.ok(label({ canEdit: true, isExpanded: false, isPinned: false }).endsWith('(edit)'));
+  assert.ok(
+    label({ canEdit: true, isExpanded: true, isPinned: false }).endsWith('(editing — activate to close)'),
+  );
+  // Non-admins: the name is what says the control is inert-but-operable, since
+  // aria-disabled was dropped from a button whose click really pins.
+  assert.ok(label({ canEdit: false, isExpanded: false, isPinned: false }).endsWith('(activate to pin)'));
+  assert.ok(label({ canEdit: false, isExpanded: false, isPinned: true }).endsWith('(activate to unpin)'));
+});
+
+// ── The live region ────────────────────────────────────────────────────────
+test('announcement: silent on a focus-driven change, spoken on a pointer-driven one', () => {
+  const r = buildCellReadout({ brandLabel: 'Aire Serv', directiveTitle: 'D', status: 'todo' });
+
+  // Focus already speaks the button's name; repeating it is the double
+  // announcement spec §5 forbids.
+  assert.equal(buildReadoutAnnouncement(r, { pinned: false, focusDriven: true }), '');
+  // Pointer moves no focus, so the region is the only voice.
+  assert.ok(buildReadoutAnnouncement(r, { pinned: false, focusDriven: false }).length > 0);
+  assert.equal(buildReadoutAnnouncement(null, { pinned: false, focusDriven: false }), '');
+});
+
+// THE ONE THAT MATTERS. Clicking a button FOCUSES it in Chrome and Firefox, so a
+// pin arrives with focusDriven=true. If the focus rule won, a pinned note would
+// be announced to nobody — and the pin is the touch/screen-reader path to a
+// note, i.e. precisely the user §2.6 exists for. Modelled on the real event
+// order a click produces: mouseenter (pointer) → focus (focus) → click (pin).
+test('announcement: a PIN speaks even though clicking focuses the button', () => {
+  const r = buildCellReadout({
+    brandLabel: 'Aire Serv',
+    directiveTitle: 'Clicks Print Offer',
+    status: 'todo',
+    note: 'ask Xandor',
+  });
+
+  // state after mouseenter
+  assert.ok(buildReadoutAnnouncement(r, { pinned: false, focusDriven: false }).length > 0);
+  // state after focus, before click — silent, name is speaking
+  assert.equal(buildReadoutAnnouncement(r, { pinned: false, focusDriven: true }), '');
+  // state after click: pinned, and STILL focus-driven. Must speak.
+  const pinned = buildReadoutAnnouncement(r, { pinned: true, focusDriven: true });
+  assert.ok(pinned.length > 0, 'a pin must never be silent — it is the touch path to a note');
+  assert.ok(pinned.includes('Note: ask Xandor'));
+
+  // Keyboard activation reaches the same state by a different route.
+  assert.equal(pinned, buildReadoutAnnouncement(r, { pinned: true, focusDriven: true }));
+});
+
+test('announcement: an absent note is spoken as "No note", never as a gap', () => {
+  const r = buildCellReadout({ brandLabel: 'B', directiveTitle: 'D', status: 'n_a' });
+  const said = buildReadoutAnnouncement(r, { pinned: true, focusDriven: false });
+  assert.ok(said.endsWith('No note'));
+  assert.ok(!said.endsWith('. '), 'never trail off into an empty note slot');
 });
 
 // Every declared status must produce a label — so a sixth cell status can't be

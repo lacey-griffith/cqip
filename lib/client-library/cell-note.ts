@@ -77,3 +77,69 @@ export function buildCellReadout(input: {
     note: noteText(input.note),
   };
 }
+
+/**
+ * The matrix cell's ACCESSIBLE NAME.
+ *
+ * Extracted here rather than inlined in JSX for one reason: after this batch it
+ * is the ONLY announced path to a note for keyboard and browse-mode users. The
+ * readout's live region is deliberately silent on focus (see
+ * `buildReadoutAnnouncement`), and browse mode never fires `onFocus` at all, so
+ * a virtual cursor only ever hears this string. Left as 8 lines of concatenation
+ * inside a 200-line JSX block, a later simplification could drop the note clause
+ * with tsc, ESLint and every test still green and the VISIBLE readout still
+ * working — which is exactly how the dead `sr-only "has note"` span survived
+ * unnoticed. A pure function with a test turns that convention into a contract.
+ *
+ * The note is included when present and OMITTED when absent — deliberately not
+ * "No note", which would add a clause to ~1,300 cells to convey nothing. Present
+ * vs absent is itself the distinction, which is what §2.2 needs: a
+ * screen-reader user can tell a noted cell from a bare one.
+ *
+ * `canEdit` differentiates the two roles here, in the NAME, rather than via
+ * `aria-disabled` on a control whose click really does something. See the call
+ * site for that decision.
+ */
+export function buildCellAriaLabel(
+  readout: CellReadout,
+  opts: { canEdit: boolean; isExpanded: boolean; isPinned: boolean },
+): string {
+  const base = `${readout.directiveTitle} — ${readout.brandLabel}: ${readout.statusLabel}`;
+  const note = readout.note ? `. Note: ${readout.note}` : '';
+  const action = opts.canEdit
+    ? opts.isExpanded
+      ? ' (editing — activate to close)'
+      : ' (edit)'
+    : opts.isPinned
+      ? ' (activate to unpin)'
+      : ' (activate to pin)';
+  return base + note + action;
+}
+
+/**
+ * The live region's text — '' means "say nothing".
+ *
+ * THE §2.3-vs-§5 RESOLUTION LIVES HERE. §2.3 wants a polite region; §5 wants the
+ * readout announced once per cell, not twice. On a FOCUS-driven change the cell
+ * button's own accessible name already speaks brand + directive + status + note,
+ * so a region repeating it is exactly the double announcement §5 forbids →
+ * silent. Pointer moves no focus, so nothing else announces → speak.
+ *
+ * A PIN ALWAYS SPEAKS, even though clicking a button focuses it in Chrome and
+ * Firefox and therefore arrives with `focusDriven: true`. That is what the
+ * `pinned` term is doing, and it is not incidental: pinning is the touch and
+ * screen-reader path to a note (§2.6), so a silent pin would mean the note
+ * reaches nobody in exactly the case the pin exists for. Pinned state is also
+ * NEW information the button's name does not carry at the moment of the click.
+ * Tested against the real event order (mouseenter → focus → click), not against
+ * this paragraph.
+ */
+export function buildReadoutAnnouncement(
+  readout: CellReadout | null,
+  opts: { pinned: boolean; focusDriven: boolean },
+): string {
+  if (!readout) return '';
+  if (!opts.pinned && opts.focusDriven) return '';
+  const note = readout.note ? `Note: ${readout.note}` : 'No note';
+  return `${readout.brandLabel}, ${readout.directiveTitle}: ${readout.statusLabel}. ${note}`;
+}
