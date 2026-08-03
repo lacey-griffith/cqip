@@ -3377,6 +3377,75 @@ deleted in the same commit that writes the §16 shipped entry.
 (The Convert reconciliation backfill is NOT here — it lives in §16: it is BUILT
 and reviewed, awaiting only Lacey's run, so it is not in-flight work.)
 
+### Coverage metric honesty — threshold 2 → target 4 + metric rename (IN FLIGHT)
+
+Small batch, sequenced BEFORE restyle batch 4. Render/logic only in `lib/coverage`
++ two pages: NO migration · NO route · NO mutation surface · NO new fetch · NO new
+dep → **no Jenny**. Commit 1 = docs (this entry). Commit 2 = code + atomic CLAUDE.md
+per §13 r23. **DO NOT PUSH** — Karen post-flight, findable verdict, then Lacey.
+
+**GATE 0, run before any code:**
+- **0a — "Quality Score" is user-visible in 3 places across 2 files**, so item 3 is a
+  **2-file change**, not 12: the KPI card label and the gauge `ariaLabel`
+  (`app/dashboard/coverage/page.tsx`), and the docs-hub `Field name="Quality Score %"`
+  (`app/dashboard/docs/page.tsx`). Six further hits are comments or test names.
+  `computeQualityScore`'s own docblock **already** calls it "clean-delivery rate",
+  which is the rename arriving late rather than a new idea.
+- **0b — drought copy lives in 4 places and THREE hardcode the number as a literal
+  string:** `app/dashboard/coverage/page.tsx:323` (the XLSX export highlight note,
+  `'⚠ flagged rows had ≤2 tests…'`) and `app/dashboard/docs/page.tsx:189` + `:220`
+  (`2 or fewer`, `more than 2`). Only the coverage-page subtitle (`:357`) already
+  interpolates `COVERAGE_THRESHOLD`. All three literals move onto the constant in
+  commit 2 — and note they were **not** merely stale, they were *correct* until this
+  batch, which is why nothing caught them.
+
+**LOCKED — the rename is not cosmetic.** `COVERAGE_THRESHOLD = 2` → **`COVERAGE_TARGET
+= 4`**, and `isInDrought` goes from `count <= threshold` to **`count < target`**.
+Lacey's rule is "**drought is 3, covered is 4**". Setting the OLD constant to 4 would
+make 4 tests read as drought, because `4 <= 4` — the name *invites* that off-by-one.
+Target-and-strict-less-than states the rule directly and matches how a contract is
+worded ("4 tests a month"), which matters because per-brand contracted targets are the
+next step. The single-source-of-truth discipline is preserved (both the pill and the
+Health/Covered KPIs keep routing through `isInDrought`, Batch 005.1 hard constraints
+#1/#3) and the **010.2 swap-point comment in `computeCoverageHealth` is kept verbatim**
+— that one line is about to get used.
+
+**ITEM 5 FINDING — there are THREE copies of this number, not two, and only one is
+changing.** Reported, not changed, per instruction:
+1. `lib/coverage/queries.ts` — the render-time constant. **Becomes 4.**
+2. **`alert_rules.config.threshold = 2`** — verified live in prod 2026-08-03 on the
+   `Client Coverage Drought` row (`{"scope":"brand_coverage","threshold":2,
+   "skip_paused":true,"window_days":28}`, `is_active=true`). Read by the
+   drought-evaluator cron AND rendered verbatim by
+   `components/dashboard/active-alerts-panel.tsx:226` as `Fewer than {threshold} …`.
+3. `supabase/functions/drought-evaluator/index.ts:95` — `DEFAULT_THRESHOLD = 2`
+   fallback, with `count <= threshold` at `:123`.
+
+**So after this ships, the divergence is real and user-visible:** the Coverage page
+will say brands under **4** are in drought, while the alerts panel says "Fewer than
+**2**" and the cron only opens an `alert_events` row at **≤2**. A brand with 3 tests
+will show a DROUGHT pill and have **no alert**. `queries.ts`'s own comment explains
+why live config was deliberately not read — parity with the then-hardcoded pill — and
+that reasoning is now inverted: the constant moved and config didn't. **This is a
+decision for Lacey, not a fix to smuggle in here** (changing `alert_rules` is a data
+mutation on a live cron's input, and the evaluator's `<=` would need the same
+target-and-strict-less-than treatment to stay consistent). Batch 010.1 already owns
+"define the comparison against the configured target once, correctly" — this batch
+hands it a concrete, measured instance instead of a hypothetical.
+
+**ITEM 4 — the metric break must be explicit.** Overall Health % and Brands Covered
+N/M are **NOT comparable across this change**: raising the bar from >2 to ≥4 lowers
+both by construction, so a drop afterwards is indistinguishable between "brands
+regressed" and "we raised the bar". The effective date is stamped in §16 at ship and
+in the docs-hub copy, so the discontinuity is in the record rather than inferred later
+from a graph.
+
+**EXPECTED: tests fail.** Some of the 141 pin threshold-2 behaviour and *should* break.
+**If the number changes and every test still passes, that is the finding** — it would
+mean the suite never pinned the boundary, which is worse than the bug. Reported either
+way, with the new boundary mutation-verified: 3 must read drought, 4 must read covered,
+and reverting to `<=` must fail something.
+
 ---
 
 ## 16. Shipped Features Log
