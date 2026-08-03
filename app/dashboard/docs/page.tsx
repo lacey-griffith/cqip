@@ -4,6 +4,11 @@ import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { Card } from '@/components/ui/card';
 import { supabase } from '@/lib/supabase/client';
+// Drought copy derives the number AND its effective date from the single source
+// of truth. Three literals ('2 or fewer', 'more than 2', '≤2') used to live in
+// this file and on the Coverage page; they were correct until 2026-08-03, which
+// is precisely why nothing ever caught them.
+import { COVERAGE_TARGET, COVERAGE_TARGET_EFFECTIVE } from '@/lib/coverage/queries';
 
 export default function DocsPage() {
   const [isAdmin, setIsAdmin] = useState(false);
@@ -186,9 +191,16 @@ export default function DocsPage() {
 
         <h3>Milestone drought</h3>
         <p>
-          A brand that has reached <strong>2 or fewer</strong> delivered milestones in
-          the last 28 days shows a <strong>DROUGHT</strong> pill on the Output table —
-          a flag that delivery for that brand has gone quiet.
+          A brand that has reached <strong>fewer than {COVERAGE_TARGET}</strong> delivered
+          milestones in the last 28 days shows a <strong>DROUGHT</strong> pill on the
+          Output table — a flag that delivery for that brand has gone quiet. A brand
+          sitting exactly on {COVERAGE_TARGET} is covered.
+        </p>
+        <p>
+          <strong>Changed {COVERAGE_TARGET_EFFECTIVE}:</strong> the bar was previously
+          &ldquo;2 or fewer&rdquo;. Overall Health % and Brands Covered are{' '}
+          <strong>not comparable</strong> across that date — raising the bar lowers both
+          by construction, so a drop is not evidence that delivery regressed.
         </p>
 
         <h3>The KPI row</h3>
@@ -217,10 +229,12 @@ export default function DocsPage() {
             name="Overall Health %"
             description={<>
               Of all active, non-paused brands, the percentage <strong>not</strong> in
-              drought. &ldquo;Covered&rdquo; means <strong>more than 2</strong>{' '}
-              milestones in the last 28 days — a brand sitting at exactly 2 reads as
-              uncovered, matching the DROUGHT pill on the Output table. Reads
-              &ldquo;—&rdquo; when there are no active, non-paused brands.
+              drought. &ldquo;Covered&rdquo; means <strong>{COVERAGE_TARGET} or more</strong>{' '}
+              milestones in the last 28 days — a brand sitting at exactly{' '}
+              {COVERAGE_TARGET} reads as <em>covered</em>, matching the DROUGHT pill on
+              the Output table. Reads &ldquo;—&rdquo; when there are no active,
+              non-paused brands. Not comparable across{' '}
+              {COVERAGE_TARGET_EFFECTIVE} — see Milestone drought above.
             </>}
           />
           <Field
@@ -233,7 +247,7 @@ export default function DocsPage() {
             </>}
           />
           <Field
-            name="Quality Score %"
+            name="Clean delivery rate %"
             description={<>
               Of the distinct tickets <em>delivered</em> in the last 28 days (tickets
               that first reached Dev Client Review in that window), the percentage with{' '}

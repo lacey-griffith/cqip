@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
 
 import {
-  COVERAGE_THRESHOLD,
+  COVERAGE_TARGET,
   isInDrought,
   buildCoverageRows,
   computeCoverageHealth,
@@ -83,10 +83,14 @@ function deliveries(brandId: string, n: number, ticketPrefix: string): Milestone
 // --- 1. Normal mixed case -----------------------------------------------
 
 test('normal mixed case — correct health %, N/M, and quality score', () => {
+  // Target is 4 as of 2026-08-03, so 3 is DROUGHT and 4 is covered. This
+  // fixture deliberately keeps a brand on each side of the new boundary AND
+  // one (A, 3) that flipped meaning when the target moved — the old version of
+  // this test called A "covered" at 3.
   const brands = [
-    brand({ id: 'A' }), // 3 delivered → covered
+    brand({ id: 'A' }), // 3 delivered → DROUGHT under target 4 (was covered at threshold 2)
     brand({ id: 'B' }), // 5 delivered → covered
-    brand({ id: 'C' }), // 2 delivered → drought (boundary)
+    brand({ id: 'C' }), // 2 delivered → drought
     brand({ id: 'D', is_paused: true }), // paused → excluded
     brand({ id: 'E', is_active: false }), // inactive → excluded
   ];
@@ -107,12 +111,12 @@ test('normal mixed case — correct health %, N/M, and quality score', () => {
 
   const health = computeCoverageHealth(brands, milestones, NOW);
   assert.equal(health.totalCount, 3, 'denominator = active non-paused brands');
-  assert.equal(health.coveredCount, 2, 'A and B covered; C in drought');
-  assert.equal(health.healthPct, 67, 'round(2/3*100)');
+  assert.equal(health.coveredCount, 1, 'only B (5) clears target 4; A (3) and C (2) are drought');
+  assert.equal(health.healthPct, 33, 'round(1/3*100)');
 
   const quality = computeQualityScore(milestones, logs, NOW);
   // Only A(3) + B(5) + C(2) milestones are for active brands, but Quality
-  // Score is ticket-based and type/brand-agnostic on the milestone side —
+  // rate is ticket-based and type/brand-agnostic on the milestone side —
   // it counts ALL in-window dev_client_review deliveries: 3+5+2+9+9 = 28.
   assert.equal(quality.deliveredCount, 28, 'all in-window DCR deliveries, distinct tickets');
   assert.equal(quality.dirtyCount, 2, 'TA1 + TB1 (TB1 multiplicity counts once)');
@@ -161,20 +165,33 @@ test('quality score — intersection with delivered set; out-of-window rework st
   assert.equal(quality.scorePct, 50, 'round(1/2*100)');
 });
 
-// --- 4. Exactly-THRESHOLD boundary (Jenny Critical) ----------------------
+// --- 4. Exactly-ON-TARGET boundary (Jenny Critical, re-pointed 2026-08-03) --
 
-test('exactly-THRESHOLD boundary — 2 milestones reads DROUGHT/uncovered on BOTH pill and KPI', () => {
-  assert.equal(COVERAGE_THRESHOLD, 2, 'threshold constant is 2');
+// THE POINT OF THIS TEST INVERTED when the constant became a TARGET compared
+// with strict-less-than. Under the old `<= threshold` spelling, a brand sitting
+// exactly ON the number was DROUGHT. Under `< target`, a brand exactly ON the
+// number is COVERED. Lacey's rule is "drought is 3, covered is 4", and that is
+// what is asserted here — 3 drought, 4 covered — because writing the target as
+// 4 into the OLD predicate would have made 4 read as drought (`4 <= 4`), which
+// is the off-by-one the rename exists to prevent.
+test('exactly-ON-TARGET boundary — 3 reads DROUGHT and 4 reads COVERED on BOTH pill and KPI', () => {
+  assert.equal(COVERAGE_TARGET, 4, 'target constant is 4 (effective 2026-08-03)');
 
-  // Shared predicate: exactly-threshold is drought, threshold+1 is covered.
-  assert.equal(isInDrought(2, false), true, 'count === threshold → drought');
-  assert.equal(isInDrought(3, false), false, 'count > threshold → covered');
+  // Shared predicate. target-1 is drought; exactly-target is covered.
+  assert.equal(isInDrought(3, false), true, 'count < target → drought');
+  assert.equal(isInDrought(4, false), false, 'count === target → COVERED (not drought)');
+  assert.equal(isInDrought(5, false), false, 'count > target → covered');
+  // The old boundary must no longer read as covered.
+  assert.equal(isInDrought(2, false), true, '2 was the old threshold; still drought');
+  assert.equal(isInDrought(0, false), true, 'zero deliveries → drought');
+  // Paused always short-circuits regardless of count.
+  assert.equal(isInDrought(0, true), false, 'paused → never drought');
 
   const brands = [
-    brand({ id: 'A' }), // exactly 2 → drought / uncovered
-    brand({ id: 'B' }), // 3 → covered
+    brand({ id: 'A' }), // exactly 3 → drought / uncovered
+    brand({ id: 'B' }), // exactly 4 → ON target → covered
   ];
-  const milestones = [...deliveries('A', 2, 'TA'), ...deliveries('B', 3, 'TB')];
+  const milestones = [...deliveries('A', 3, 'TA'), ...deliveries('B', 4, 'TB')];
 
   // Pill (Output table) and KPI must AGREE at the boundary. Pin NOW on the
   // pill side too — buildCoverageRows now takes an injectable clock, so the
@@ -182,14 +199,15 @@ test('exactly-THRESHOLD boundary — 2 milestones reads DROUGHT/uncovered on BOT
   const rows = buildCoverageRows(brands, milestones, [], NOW);
   const rowA = rows.find(r => r.brand.id === 'A')!;
   const rowB = rows.find(r => r.brand.id === 'B')!;
-  assert.equal(rowA.testsRolling28, 2);
-  assert.equal(rowA.droughtFlag, true, 'pill: exactly 2 → DROUGHT');
-  assert.equal(rowB.droughtFlag, false, 'pill: 3 → not drought');
+  assert.equal(rowA.testsRolling28, 3);
+  assert.equal(rowA.droughtFlag, true, 'pill: 3 (target-1) → DROUGHT');
+  assert.equal(rowB.testsRolling28, 4);
+  assert.equal(rowB.droughtFlag, false, 'pill: exactly 4 → NOT drought');
 
   const health = computeCoverageHealth(brands, milestones, NOW);
   assert.equal(health.totalCount, 2);
   assert.equal(health.coveredCount, 1, 'KPI: only B covered — boundary brand A matches its DROUGHT pill');
-  assert.equal(health.healthPct, 50);
+  assert.equal(health.healthPct, 50, 'round(1/2*100)');
 });
 
 // --- 5. Single-pass Health + Covered cannot diverge ----------------------
@@ -202,8 +220,8 @@ test('single-pass — Overall Health derives from the SAME numerator/denominator
     brand({ id: 'D' }),
   ];
   const milestones = [
-    ...deliveries('A', 4, 'TA'), // covered
-    ...deliveries('B', 3, 'TB'), // covered
+    ...deliveries('A', 4, 'TA'), // exactly on target → covered
+    ...deliveries('B', 3, 'TB'), // 3 → DROUGHT under target 4 (was covered at threshold 2)
     ...deliveries('C', 1, 'TC'), // drought
     // D: 0 deliveries → drought
   ];
@@ -211,7 +229,7 @@ test('single-pass — Overall Health derives from the SAME numerator/denominator
   const health = computeCoverageHealth(brands, milestones, NOW);
 
   // Brands Covered "N/M" is literally these two numbers...
-  assert.equal(health.coveredCount, 2);
+  assert.equal(health.coveredCount, 1, 'only A (exactly 4) clears the target');
   assert.equal(health.totalCount, 4);
 
   // ...and Overall Health is computed FROM them — no second computation,
@@ -221,5 +239,5 @@ test('single-pass — Overall Health derives from the SAME numerator/denominator
     Math.round((health.coveredCount / health.totalCount) * 100),
     'healthPct is exactly the round() of the Brands-Covered fraction',
   );
-  assert.equal(health.healthPct, 50);
+  assert.equal(health.healthPct, 25, 'round(1/4*100)');
 });

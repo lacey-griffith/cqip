@@ -100,34 +100,73 @@ export function startOfMonth(year: number, monthIndex: number): Date {
 }
 
 // -----------------------------------------------------------------------
-// Drought / coverage threshold — SINGLE SOURCE OF TRUTH.
+// Coverage TARGET — SINGLE SOURCE OF TRUTH.
 //
 // The Output-table DROUGHT pill (via buildCoverageRows) and the Overall
 // Health / Brands Covered KPIs (computeCoverageHealth) BOTH route their
 // comparison through isInDrought() so the two surfaces are physically
 // incapable of diverging (Batch 005.1 hard constraints #1 + #3). Never
-// re-spell the `<= threshold` / `> threshold` inequality at a call site.
+// re-spell the `< target` / `>= target` inequality at a call site.
 //
-// THRESHOLD is a constant, NOT a live alert_rules.config fetch: the pill
-// has always been hardcoded to <= 2, so reading live config for Health
-// while the pill stays hardcoded would let them drift the moment an admin
-// edits the rule. Parity with the pill wins this batch.
+// WHY "TARGET" AND STRICT-LESS-THAN, not "THRESHOLD" and <=. The rule is
+// "drought is 3, covered is 4". Expressed as a THRESHOLD that must be
+// exceeded, 4 would have to be written as `threshold = 3` — and the
+// obvious-looking edit, setting the old constant to 4, silently makes 4
+// tests read as DROUGHT because `4 <= 4`. The threshold name invites that
+// off-by-one every time the number moves. A TARGET with `count < target`
+// states the rule directly, and it is also how a contract is worded ("4
+// tests a month"), which matters because per-brand contracted targets are
+// the next step (010.1) — the config value will arrive already shaped like
+// a target, not like a threshold needing a mental -1.
+//
+// TARGET is a constant, NOT a live alert_rules.config fetch. Note the
+// original reason for that has now INVERTED: it was parity with a pill
+// hardcoded to <=2, and as of the 2026-08-03 change the constant moved to
+// 4 while `alert_rules.config.threshold` is still 2 (prod-verified) — so
+// the render layer and the drought-evaluator cron now genuinely disagree,
+// and a brand with 3 tests shows a DROUGHT pill with no alert_events row.
+// That is Lacey's call and Batch 010.1's scope ("define the comparison
+// against the configured target once, correctly"); it is recorded in §15,
+// deliberately NOT patched here, because editing alert_rules is a data
+// mutation on a live cron's input and the evaluator's own `<=` would need
+// the same treatment to stay consistent.
 // -----------------------------------------------------------------------
 
-export const COVERAGE_THRESHOLD = 2;
+/**
+ * Milestones a non-paused brand must reach in the rolling-28d window to be
+ * COVERED. Below this is drought. **Effective 2026-08-03**; the previous rule
+ * was a `<= 2` threshold. Overall Health % and Brands Covered are NOT
+ * comparable across that date — raising the bar lowers both by construction,
+ * so a drop afterwards is not evidence that delivery regressed. Recorded in
+ * CLAUDE.md §15.5 while this is in flight, and it moves to §16 on ship; the
+ * user-facing statement of the break lives in the docs hub, which renders
+ * COVERAGE_TARGET_EFFECTIVE below.
+ */
+export const COVERAGE_TARGET = 4;
 
 /**
- * A brand is in DROUGHT when it is not paused and reached `threshold` or
- * fewer milestones in the rolling-28d window. "Covered" is the strict
- * complement among non-paused brands (count > threshold). A brand sitting
- * exactly ON the threshold is in drought / uncovered.
+ * The date COVERAGE_TARGET last changed, as a display string.
+ *
+ * Exported so the docs hub renders the discontinuity from the SAME source as
+ * the number itself — a hardcoded date next to a derived number is how the
+ * two drift, and the whole point of item 4 is that the break in the Health %
+ * series has to be legible later. Bump this whenever the target moves.
+ */
+export const COVERAGE_TARGET_EFFECTIVE = '2026-08-03';
+
+/**
+ * A brand is in DROUGHT when it is not paused and reached FEWER than
+ * `target` milestones in the rolling-28d window. "Covered" is the strict
+ * complement among non-paused brands (count >= target). A brand sitting
+ * exactly ON the target is COVERED — that is the whole point of the
+ * target-plus-strict-less-than spelling.
  */
 export function isInDrought(
   testsRolling28: number,
   isPaused: boolean,
-  threshold: number = COVERAGE_THRESHOLD,
+  target: number = COVERAGE_TARGET,
 ): boolean {
-  return !isPaused && testsRolling28 <= threshold;
+  return !isPaused && testsRolling28 < target;
 }
 
 // -----------------------------------------------------------------------
@@ -347,7 +386,12 @@ export function computeCoverageHealth(
     // (e.g. brand.contract_milestones_per_month) instead of the flat
     // constant. The loop already reads `target` per brand, so the swap
     // is THIS ONE LINE.
-    const target = COVERAGE_THRESHOLD;
+    //
+    // And it is now a genuinely better-shaped swap than it was: the local
+    // was already named `target`, and as of 2026-08-03 the constant it
+    // reads is a TARGET compared with strict-less-than, so a contracted
+    // "4 tests a month" drops in verbatim with no mental -1.
+    const target = COVERAGE_TARGET;
     const count = counts.get(brand.id) ?? 0;
     if (!isInDrought(count, brand.is_paused, target)) coveredCount += 1;
     totalCount += 1;
@@ -374,9 +418,20 @@ export interface QualityScore {
 const DELIVERED_MILESTONE_TYPE = 'dev_client_review';
 
 /**
- * Quality Score % — clean-delivery rate. Of the distinct tickets delivered
- * (reached Dev Client Review) in the last 28 days, what % had zero rework
- * in that same window. HIGH % = GOOD.
+ * CLEAN DELIVERY RATE % — of the distinct tickets delivered (reached Dev
+ * Client Review) in the last 28 days, what % had zero rework in that same
+ * window. HIGH % = GOOD.
+ *
+ * Renamed from "Quality Score" on 2026-08-03. The measure never changed;
+ * the old label overclaimed. This is one narrow ratio — clean vs reworked
+ * among recently delivered tickets — and calling it "quality" implied a
+ * composite judgement it does not make (it says nothing about severity,
+ * root cause, or anything not delivered in-window). This docblock already
+ * said "clean-delivery rate" before the rename; the label just caught up.
+ * The FUNCTION and TYPE names are deliberately left as computeQualityScore
+ * / QualityScore — renaming exported identifiers is churn across call
+ * sites and tests for no user-visible gain, and this batch is about what
+ * the UI claims.
  *
  * - Distinct TICKETS, not rework events: a ticket bounced 3× counts once.
  * - The dirty set is INTERSECTED with the delivered set (load-bearing) so a

@@ -26,7 +26,7 @@ import {
   computeCoverageHealth,
   computeQualityScore,
   countInWindow,
-  COVERAGE_THRESHOLD,
+  COVERAGE_TARGET,
   formatReworkRatio,
   endOfLastWeek,
   startOfCurrentMonth,
@@ -320,7 +320,9 @@ export default function CoveragePage() {
         r.droughtFlag ? 'DROUGHT' : '',
       ]),
       highlightRowWhen: row => row[8] === 'DROUGHT',
-      highlightNote: '⚠ flagged rows had ≤2 tests in the last 28 days',
+      // Derived, not a literal (was '≤2' hardcoded — correct until the
+      // 2026-08-03 target change, which is exactly why nothing caught it).
+      highlightNote: `⚠ flagged rows had fewer than ${COVERAGE_TARGET} tests in the last 28 days`,
       filename: `CQIP_Client_Coverage_${dateStamp}`,
     });
   }
@@ -344,8 +346,8 @@ export default function CoveragePage() {
 
   return (
     <div className="space-y-6">
-      {/* Header — eyebrow, title, threshold subtitle (no hardcoded literal:
-          the number is sourced from COVERAGE_THRESHOLD, so Batch 010.1's
+      {/* Header — eyebrow, title, target subtitle (no hardcoded literal:
+          the number is sourced from COVERAGE_TARGET, so Batch 010.1's
           per-brand targets are a one-touch change, spec §3.3), Sync button
           (which carries its own pass/fail status pill, Batch 005.10). */}
       <div className="rounded-3xl border border-[color:var(--f92-border)] bg-white p-6 md:p-7 shadow-sm">
@@ -354,7 +356,11 @@ export default function CoveragePage() {
             <p className="text-sm uppercase tracking-[0.3em] text-[color:var(--f92-navy)]">Coverage</p>
             <h1 className="mt-2 text-3xl font-semibold text-[color:var(--f92-dark)]">Client Coverage</h1>
             <p className="mt-2 text-sm text-[color:var(--f92-gray)]">
-              {`Brands with ${COVERAGE_THRESHOLD} or fewer tests in the last 28 days are flagged. Expand a row for trend, rework & live pipeline detail.`}
+              {/* "fewer than N", NOT "N or fewer": the predicate is
+                  `count < target`, so a brand ON the target is COVERED.
+                  Keeping the old phrasing with the new number would have
+                  described a brand with 4 tests as flagged. */}
+              {`Brands with fewer than ${COVERAGE_TARGET} tests in the last 28 days are flagged. Expand a row for trend, rework & live pipeline detail.`}
             </p>
           </div>
           <SyncJiraButton />
@@ -370,7 +376,7 @@ export default function CoveragePage() {
 
       {/* KPI strip — one connected strip (gap-px reveals the border). LOCKED
           order: teal long-range pair · four rolling-window cards · Overall
-          Health gauge · Brands Covered · Quality Score gauge. All FULL-SCOPE
+          Health gauge · Brands Covered · Clean delivery rate gauge. All FULL-SCOPE
           (crossBrand / healthKpi / qualityKpi read the full state arrays —
           they never consult the filter/paused-scoped ledgerRows). */}
       <div className="overflow-hidden rounded-2xl border border-[color:var(--f92-border)]">
@@ -426,14 +432,19 @@ export default function CoveragePage() {
                   </p>
                   <p className="mt-1.5 text-[10px] text-[color:var(--f92-gray)]">Last 28 days</p>
                 </div>
-                {/* Quality Score gauge */}
+                {/* Clean delivery rate gauge */}
                 <div className="flex flex-col bg-white px-5 py-4">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--f92-gray)]">Quality Score</p>
+                  {/* Renamed from "Quality Score" 2026-08-03: it measures
+                      one ratio — delivered tickets with zero rework — and
+                      "quality" overclaimed a composite judgement it does
+                      not make. computeQualityScore's docblock already said
+                      "clean-delivery rate". */}
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--f92-gray)]">Clean delivery rate</p>
                   <div className="mt-auto flex justify-center pt-2">
                     <CoverageGauge
                       value={qualityKpi.scorePct}
                       colorVar="var(--ledger-gauge-quality)"
-                      ariaLabel={`Quality Score ${qualityKpi.scorePct === null ? 'not available' : `${qualityKpi.scorePct} percent`}`}
+                      ariaLabel={`Clean delivery rate ${qualityKpi.scorePct === null ? 'not available' : `${qualityKpi.scorePct} percent`}`}
                     />
                   </div>
                 </div>

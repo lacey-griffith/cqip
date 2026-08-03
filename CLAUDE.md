@@ -3440,11 +3440,37 @@ regressed" and "we raised the bar". The effective date is stamped in §16 at shi
 in the docs-hub copy, so the discontinuity is in the record rather than inferred later
 from a graph.
 
-**EXPECTED: tests fail.** Some of the 141 pin threshold-2 behaviour and *should* break.
-**If the number changes and every test still passes, that is the finding** — it would
-mean the suite never pinned the boundary, which is worse than the bug. Reported either
-way, with the new boundary mutation-verified: 3 must read drought, 4 must read covered,
-and reverting to `<=` must fail something.
+**⚠ METRIC BREAK — EFFECTIVE 2026-08-03. Overall Health %, Brands Covered N/M and the
+DROUGHT pill are NOT comparable across this date.** Before: drought was `count <= 2`.
+After: drought is `count < 4`, so **3 is drought and 4 is covered**. Raising the bar
+lowers Health % and Brands Covered *by construction* — a drop after this date is
+**not** evidence that delivery regressed, and the two readings must never be plotted
+as one series or diffed against a pre-08-03 export. The date is exported as
+`COVERAGE_TARGET_EFFECTIVE` from `lib/coverage/queries.ts` and **rendered in the docs
+hub**, so the discontinuity is stated to users on the surface that defines the metric,
+not only here. Bump that constant whenever the target moves again.
+
+**EXPECTED tests to fail — AND THEY DID, which is the good outcome.** 3 of the 141
+broke on the constant change (`normal mixed case`, the exactly-boundary test, and the
+single-pass Health/Covered test), so the suite **was** genuinely pinning threshold-2
+behaviour rather than merely importing the constant. All three were re-pointed to the
+new rule; two of them had fixtures whose *meaning inverted* (a brand with 3 deliveries
+was labelled "covered" and is now drought), which is exactly the kind of edit that
+would have been invisible had the tests only asserted the constant's value.
+
+**Boundary mutation-verified — 6 mutations, 6 caught:** reverting the predicate to
+`<=` fails 2 (the off-by-one the rename exists to prevent) · target back to 2 fails 3 ·
+target to the *adjacent* 3 fails 3 (so the boundary is pinned, not just the constant) ·
+inverting to `>` fails 3 · dropping the `!isPaused` short-circuit fails 1 ·
+`computeCoverageHealth` re-spelling the inequality instead of calling `isInDrought`
+fails 2, which pins the Batch 005.1 no-divergence constraint itself.
+
+**Verification:** tsc 0 · ESLint **zero findings** on all 4 touched files · **141/141**
+· build 0 with `/dashboard/coverage` and `/dashboard/docs` still `○`. Zero
+`COVERAGE_THRESHOLD` references remain anywhere in `app/ components/ lib/ tests/
+scripts/ supabase/`, and no literal drought number survives in any user-visible string
+(the only remaining textual matches are the two comments that record what the literals
+used to be).
 
 ---
 
