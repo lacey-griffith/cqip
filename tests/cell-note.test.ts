@@ -182,7 +182,59 @@ test('announcement: an absent note is spoken as "No note", never as a gap', () =
   const r = buildCellReadout({ brandLabel: 'B', directiveTitle: 'D', status: 'n_a' });
   const said = buildReadoutAnnouncement(r, { pinned: true, focusDriven: false });
   assert.ok(said.endsWith('No note'));
-  assert.ok(!said.endsWith('. '), 'never trail off into an empty note slot');
+  // NOTE: a second `!endsWith('. ')` assertion used to sit here and was DEAD —
+  // a string has one suffix per length, so it could not fail while the line
+  // above passed. Deleting it changed nothing, which is how it was found. An
+  // assertion that cannot fail while its predecessor passes is not a check
+  // (Karen LOW-D1). The full-string tests below are what actually pin the shape.
+});
+
+// ── The FULL strings ───────────────────────────────────────────────────────
+// Every other assertion in this file is a fragment matcher (`includes` /
+// `endsWith`), which pins the note and the action clause but leaves the BASE
+// unpinned. Karen mutated it: dropping `brandLabel` from either function's base
+// produced ZERO failures, and so did reordering the name and swapping the em
+// dash. On a 13-column grid "Clicks Print Offer: To do" is unusable without the
+// brand — the column header is not part of the button's accessible name, so a
+// browse-mode user would have no idea which brand they were on. These two
+// assertions pin base, separators and ordering at once (Karen MEDIUM-D3), and
+// they also close the "padding that dodges the literal substring" hole that
+// /note/i still left open (LOW-D3).
+test('aria label: the exact string, so the base cannot be silently refactored away', () => {
+  const r = buildCellReadout({
+    brandLabel: 'Aire Serv',
+    directiveTitle: 'Clicks Print Offer',
+    status: 'todo',
+    note: 'ask Xandor',
+  });
+
+  assert.equal(
+    buildCellAriaLabel(r, { canEdit: false, isExpanded: false, isPinned: false }),
+    'Clicks Print Offer — Aire Serv: To do. Note: ask Xandor (activate to pin)',
+  );
+
+  const bare = buildCellReadout({
+    brandLabel: 'Aire Serv',
+    directiveTitle: 'Clicks Print Offer',
+    status: 'done',
+  });
+  assert.equal(
+    buildCellAriaLabel(bare, { canEdit: true, isExpanded: false, isPinned: false }),
+    'Clicks Print Offer — Aire Serv: Done (edit)',
+  );
+});
+
+test('announcement: the exact string, base included', () => {
+  const r = buildCellReadout({
+    brandLabel: 'Aire Serv',
+    directiveTitle: 'Clicks Print Offer',
+    status: 'blocked',
+    note: 'ask Xandor',
+  });
+  assert.equal(
+    buildReadoutAnnouncement(r, { pinned: true, focusDriven: true }),
+    'Aire Serv, Clicks Print Offer: Blocked. Note: ask Xandor',
+  );
 });
 
 // Every declared status must produce a label — so a sixth cell status can't be

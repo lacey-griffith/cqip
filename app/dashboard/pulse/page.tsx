@@ -1048,7 +1048,17 @@ export default function ClientLibraryPage() {
                       <span className="italic">No note</span>
                     )}
                   </span>
-                  {pinned ? (
+                  {/* `isPinnedCell`, NOT `pinned` (Karen MEDIUM-D1). `pinned`
+                      answers "a pin exists"; this badge claims "the cell you are
+                      reading IS the pin", and after the HIGH-1 fallback those
+                      diverge: pin a cell, filter it out, and the bar correctly
+                      describes the HOVER cell — with a "Pinned" badge beside it.
+                      The announcement never made that claim, because it already
+                      asks isPinnedCell, so the visible badge would have
+                      contradicted the spoken text with the visible one lying.
+                      Same shape as batch 2's HIGH-2: two consumers of one fact,
+                      only one wired. */}
+                  {inspected?.isPinnedCell ? (
                     <span
                       className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-semibold uppercase text-[color:var(--pill-filter-fg)]"
                       style={{ letterSpacing: 'var(--tracking-label)', background: 'var(--pill-filter-bg)', borderRadius: 'var(--radius-full)' }}
@@ -1066,6 +1076,17 @@ export default function ClientLibraryPage() {
                   Hover, focus, or select a cell to inspect it.
                 </span>
               )}
+              {/* A pin that exists but is NOT what we resolved is off screen —
+                  filtered out, or in a hidden paused column. Say so, rather than
+                  leaving an "Unpin" control next to a readout that has nothing to
+                  do with it (Karen MEDIUM-D1). Cheap, and it explains the one
+                  state where the button and the readout are legitimately about
+                  different cells. */}
+              {pinned && !inspected?.isPinnedCell ? (
+                <span aria-hidden="true" className="italic text-[color:var(--f92-lgray)]">
+                  · pinned cell is hidden by the current filters
+                </span>
+              ) : null}
               {pinned ? (
                 /* aria-hidden (Karen LOW-6): this button sits INSIDE the
                    aria-atomic live region, so without it every pin announcement
