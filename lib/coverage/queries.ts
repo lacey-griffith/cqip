@@ -119,28 +119,34 @@ export function startOfMonth(year: number, monthIndex: number): Date {
 // the next step (010.1) — the config value will arrive already shaped like
 // a target, not like a threshold needing a mental -1.
 //
-// TARGET is a constant, NOT a live alert_rules.config fetch. Note the
-// original reason for that has now INVERTED: it was parity with a pill
-// hardcoded to <=2, and as of the 2026-08-03 change the constant moved to
-// 4 while `alert_rules.config.threshold` is still 2 (prod-verified) — so
-// the render layer and the drought-evaluator cron now genuinely disagree,
-// and a brand with 3 tests shows a DROUGHT pill with no alert_events row.
-// That is Lacey's call and Batch 010.1's scope ("define the comparison
-// against the configured target once, correctly"); it is recorded in §15
-// (the 010.1 entry) and §15.5, and deliberately NOT patched here, because
-// editing alert_rules is a data mutation on a live cron's input.
+// TARGET is a constant, NOT a live alert_rules.config fetch. The original
+// reason was parity with a pill hardcoded to <=2; that reason is gone, and
+// the two are now aligned by VALUE instead:
 //
-// CORRECTION (Karen MEDIUM-5): an earlier version of this comment also said
-// the evaluator's `<=` "would need the same treatment to stay consistent".
-// That is FALSE for integer counts — `count <= 3` is behaviourally IDENTICAL
-// to `count < 4`. So behavioural parity is reachable TODAY by a ONE-VALUE
-// config edit (threshold 2 → 3) with no code and no predicate change. The
-// data-mutation-on-a-live-cron half of the reasoning stands on its own; the
-// coupling half did not, and it made the deferral look forced rather than
-// chosen. Prerequisite: the alerts panel's prose had to stop saying "Fewer
-// than N" for a `<=` rule first, or a threshold of 3 would render as "Fewer
-// than 3" for a rule firing at ≤3 — fixed 2026-08-03 in
-// active-alerts-panel.tsx.
+//   render (here)  : count < 4   -> drought at 0,1,2,3
+//   cron (evaluator): count <= 3 -> drought at 0,1,2,3   IDENTICAL
+//
+// **PARITY IS CLOSED, NOT DEFERRED.** Lacey edited alert_rules row
+// 7cb81a7a-0571-44b1-a90a-75ef6a02ed2b on 2026-08-03, config.threshold
+// 2 -> 3, verified by RETURNING and independently re-read from prod. For
+// integer counts `count <= 3` IS `count < 4`, which is why a one-value data
+// edit was sufficient with no code and no predicate change. (An earlier
+// version of this comment claimed the evaluator's `<=` had to move too —
+// false, Karen MEDIUM-5.) The alerts panel's prose was the prerequisite and
+// landed in the same batch: it had said "Fewer than N" for a `<=` rule, so
+// a threshold of 3 would have rendered as "Fewer than 3" for a rule firing
+// at <=3.
+//
+// ⚠ THE ONE LATENT RE-DIVERGENCE, and the only reason this comment is still
+// long: the evaluator carries `DEFAULT_THRESHOLD = 2` as a fallback for
+// missing/malformed config. It is UNUSED today because config supplies 3 —
+// but if that row were deleted, deactivated, or its `threshold` key lost,
+// the cron would SILENTLY fall back to `<= 2` and disagree with this
+// constant again, with no error anywhere. What 010.1 still owns is
+// therefore not parity but the STRUCTURAL fix: read a per-brand contracted
+// target and spell the comparison as target-and-strict-less-than in ONE
+// place, so a contracted "4 a month" drops in with no mental -1 and there
+// is no second number to fall back to.
 // -----------------------------------------------------------------------
 
 /**
