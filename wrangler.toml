@@ -9,6 +9,22 @@ main = ".open-next/worker.js"
 compatibility_date = "2024-12-30"
 compatibility_flags = ["nodejs_compat"]
 
+# Do NOT delete dashboard-set plaintext vars on deploy.
+#
+# Wrangler's default is "config file is the source of truth": every deploy
+# wipes any var not declared here. This file declares none, so an unguarded
+# deploy removes all 8 plaintext vars currently set in the dashboard — which
+# is what has been breaking prod on CI deploys.
+#
+# Set here rather than as `--keep-vars` on the CLI because BOTH deploy paths
+# run the same `wrangler deploy` (`npm run deploy`): a workflow-only flag
+# would still leave a local deploy destructive. One setting covers CI and
+# local, so it stays correct whichever path becomes canonical.
+#
+# Secrets are unaffected either way — `keep_vars` governs plaintext vars only;
+# wrangler never deletes secrets on deploy.
+keep_vars = true
+
 [assets]
 directory = ".open-next/assets"
 binding = "ASSETS"
