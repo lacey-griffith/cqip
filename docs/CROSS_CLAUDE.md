@@ -183,8 +183,10 @@ Active and planned API contracts between the two projects.
   if that number climbs while **error events stays 0**, it is a payload
   shape/type problem — not a DC outage and not an AC crash.
 - **Status:** DC side **SHIPPED + deployed 2026-08-07** (prod
-  `/api/health` reports `version: 4a85869`). Migrations 026 applied; **027
-  pending** (an EXECUTE-grant tightening on the prune function; no effect
+  `/api/health` reports `version: d03f319` — the 027 commit carried a
+  `.sql` file, which `paths-ignore` does not cover, so it rebuilt; no
+  app-code change between it and `4a85869`, which is the sha the batch
+  itself deployed at). Migrations 026 applied; **027 pending** (an EXECUTE-grant tightening on the prune function; no effect
   on this contract). **Token NOT minted**, so the route answers
   `500 not_configured` — the intended inert state. AC emitter not yet
   built.

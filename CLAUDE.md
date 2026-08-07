@@ -3736,8 +3736,7 @@ redactor. Three rounds of correction on one claim, each narrower than the last �
 which is the point: the failure mode is the confident claim, not the code.
 
 **POST-PUSH — ONE FIX DIDN'T WORK, CAUGHT BY PROBING PROD (migration 027).**
-After 026 was applied and the batch deployed (prod `/api/health` reports
-`version: 4a85869`), a direct probe showed the MEDIUM-1 lockdown had **not**
+After 026 was applied and the batch deployed at `4a85869`, a direct probe showed the MEDIUM-1 lockdown had **not**
 taken: an anon-key call to `rpc/prune_ac_telemetry` still returned 200. Supabase
 grants EXECUTE on new `public` functions to `anon`/`authenticated` **explicitly**
 via default privileges, and an explicit grant to a named role is not removed by
@@ -3745,7 +3744,9 @@ via default privileges, and an explicit grant to a named role is not removed by
 was `{"telemetry_deleted":0,"rejects_deleted":0}` — which is precisely the
 behaviour Karen predicted when she raised it, so nothing leaked or was destroyed;
 what failed was the CLAIM, again. **027 is written and committed but NOT yet
-applied.**
+applied.** Note 027's commit carried a `.sql` file — not covered by
+`paths-ignore` — so it rebuilt and prod now reports `version: d03f319`
+with no app-code change from `4a85869`.
 
 **RLS verified properly, with data.** The first check was inconclusive — every
 table was empty, so "anon sees nothing" could not be distinguished from "there is
