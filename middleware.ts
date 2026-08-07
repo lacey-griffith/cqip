@@ -101,16 +101,18 @@ export const config = {
   matcher: [
     // Negative lookahead — paths that must NOT run middleware:
     //   _next/static, _next/image, favicon, static images: build artifacts
-    //   api/sharepoint, api/brands, api/monitoring: each authenticates via
-    //     its own Bearer token (CQIP_SHAREPOINT_API_TOKEN /
-    //     CQIP_BRANDS_API_TOKEN / CQIP_CONVERT_MONITORING_TOKEN) and never reads
+    //   api/sharepoint, api/brands, api/monitoring, api/telemetry: each
+    //     authenticates via its own Bearer token (CQIP_SHAREPOINT_API_TOKEN /
+    //     CQIP_BRANDS_API_TOKEN / CQIP_CONVERT_MONITORING_TOKEN /
+    //     CQIP_TELEMETRY_TOKEN) and never reads
     //     the Supabase session cookie. Without the carveout every external
     //     call paid a supabase.auth.getUser() round-trip and gained a
     //     Supabase-availability dependency on a token-gated path.
-    //     (Karen review, 2026-05-28; api/monitoring added Batch 012 Phase B.)
+    //     (Karen review, 2026-05-28; api/monitoring added Batch 012 Phase B;
+    //     api/telemetry added Batch telemetry-ac.)
     //     NOTE: only the external INGEST lives under /api/monitoring; the
     //     admin status route is /api/admin/monitoring/* and is intentionally
     //     NOT carved out — it uses the session cookie + admin gate.
-    '/((?!_next/static|_next/image|favicon.ico|api/sharepoint|api/brands|api/monitoring|.*\\.svg$|.*\\.png$|.*\\.jpg$|.*\\.jpeg$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|api/sharepoint|api/brands|api/monitoring|api/telemetry|.*\\.svg$|.*\\.png$|.*\\.jpg$|.*\\.jpeg$).*)',
   ],
 };
