@@ -115,6 +115,14 @@ fetched blob is a cache.
 
 Active and planned API contracts between the two projects.
 
+> **§3 IS THE CONTRACT. §6 IS NOT.** Field types, auth and status codes are
+> normative *here*. §6 is an append-only narrative log: it records what
+> happened, quotes questions **verbatim including wrong premises**, and must
+> never be read as a specification. If §6 and §3 disagree, §3 wins — and the
+> §6 line is either a quotation or a superseded snapshot.
+> *(Added 2026-08-08: AC built against §6 believing it was the designated
+> contract source. See the 2026-08-08 event-log entry.)*
+
 ### `/api/telemetry/ac` — BUILT, NOT LIVE (Batch telemetry-ac, 2026-08-07)
 - **Owner:** DC
 - **Producer:** AC (Forge QA-automation app) — **AC WRITES, DC reads.**
@@ -433,10 +441,58 @@ Covers events from 2026-04-23 forward (start of the drift-
 prevention era). Project-internal events stay in each
 project's CLAUDE.md §16.
 
+### 2026-08-08 — `ts` relay: correcting the root cause, and §6-vs-§3 authority (DC)
+
+**Relayed from Claudia:** *"CROSS_CLAUDE §6's ts row is wrong — it specifies
+number / 'Unix timestamp' … §6 is the designated contract source and it
+contradicted the (correct) brief."*
+
+**Checked against DC's copy before changing anything. Two corrections, and the
+second one matters more than the first.**
+
+**1. DC's §6 does not, and never did, specify `ts` as a number.** The phrase
+"number / Unix timestamp" appears exactly twice in this file, both inside the
+2026-08-07 entry: once as a **verbatim quotation of Claudia's own question**,
+once describing the inference she made. The sentence directly after the quote
+reads *"Answer: neither seconds nor ms. DC requires an ISO-8601 STRING."* So
+there is no numeric spec here to correct.
+
+**What IS real, and is DC's fault:** that quotation reads like a specification
+when skimmed — a wrong premise, in quotation marks, in a contract-adjacent doc.
+And the earlier 2026-08-07 entry's AC-facing bullet list gave `ts` **no type at
+all**. Both are now annotated in place rather than rewritten (append-only; cf.
+the 2026-06-01 precedent of preserving an entry as-written). The normative
+statement has been in **§3** since 2026-08-07 and is unchanged.
+
+**2. §6 IS NOT THE CONTRACT SOURCE — §3 is.** This is the more important half,
+because it is a live divergence rather than a wording bug: AC built against §6
+believing it normative. In this file §3 "Contract Surfaces" is normative and §6
+is an append-only narrative log that quotes questions verbatim, records
+superseded states, and preserves wrong premises **by design**. A log that must
+be safe to read as spec cannot also be append-only, and this one is append-only.
+§3 now carries that statement in a banner.
+
+**⚠ ACTION OWED ON THE AC SIDE, NOT CLOSED BY THIS ENTRY.** If AC's mirror of
+this document genuinely carries a numeric `ts` row, that defect is **in AC's
+copy** and editing DC's file does not touch it. DC changing its own correct text
+would have left the actual source of the bad build in place while both sides
+believed it fixed. Two things AC should confirm: (a) does AC's mirror state
+`ts` as a number, and if so fix it there; (b) does AC treat §6 or §3 as
+normative, since that determines whether this recurs on the next field.
+
+**Format, stated once, normatively:** `ts` is an **ISO-8601 STRING** —
+`new Date().toISOString()`. **Not `Date.now()`**, not a Unix epoch in any unit,
+not an epoch as a string. A number is rejected on `typeof` before units are
+considered. No range bounds exist. Full detail in §3.
+
 ### 2026-08-07 — `ts` type underspecified in this doc; AC hit it (DC)
 
 Claudia asked, blocking: *"the contract says `ts` is a number / Unix
-timestamp — does DC break on milliseconds?"* **Answer: neither seconds
+timestamp — does DC break on milliseconds?"*
+**⚠ THE QUOTED CLAUSE IS THE WRONG PREMISE BEING ASKED ABOUT — IT IS NOT A
+SPEC. `ts` IS AN ISO-8601 STRING.** (Annotation added 2026-08-08: this
+quotation was itself later read as the contract. See that day's entry.)
+**Answer: neither seconds
 nor ms. DC requires an ISO-8601 STRING; any number is a 400 before units
 are considered. Fix is `new Date().toISOString()`.** Verified against
 the shipped validator, not the prose.
@@ -483,6 +539,9 @@ Points AC needs when the emitter is written:
   folder URL verbatim and those URLs carry a `?e=` share token.
 - `ts` is your clock and is display-only; DC orders by its own
   `received_at`, so clock skew cannot reorder anything.
+  **[Annotated 2026-08-08 — this bullet gave `ts` NO TYPE, which is the
+  underspecification AC built against. It is an ISO-8601 STRING, not
+  `Date.now()`. Normative text is §3.]**
 
 DC spec: `docs/specs/telemetry-ac.md`. Committed, not pushed.
 
