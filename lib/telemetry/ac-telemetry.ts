@@ -159,3 +159,45 @@ export function validateAcEvent(body: unknown): ValidationResult {
 export function isErrorEvent(event: AcEvent): boolean {
   return AC_ERROR_EVENTS.includes(event);
 }
+
+// -------------------------------------------------------------------------
+// Render-side derivations (System Info AC section). Pure so the two claims
+// the panel makes on screen are pinned by tests rather than by eyeballing.
+// -------------------------------------------------------------------------
+
+export const AC_LIVENESS_DAYS = 7;
+export const AC_ERROR_WINDOW_DAYS = 7;
+
+const DAY_MS = 86_400_000;
+
+/**
+ * True when no prod event has arrived inside the liveness window — including
+ * the "never heard from AC at all" case.
+ *
+ * Computed from received_at (DC's clock), NEVER ts: a skewed Forge clock must
+ * not be able to declare AC alive or dead.
+ */
+export function isStale(latestReceivedAt: string | null, now: Date): boolean {
+  if (!latestReceivedAt) return true;
+  const t = new Date(latestReceivedAt).getTime();
+  if (Number.isNaN(t)) return true;
+  return now.getTime() - t > AC_LIVENESS_DAYS * DAY_MS;
+}
+
+/**
+ * True when the running app_version differs from the one first recorded for
+ * this commit — signal in itself: the Forge env var moved without a rebuild.
+ * False when there is nothing to compare against.
+ */
+export function versionsDisagree(
+  latestAppVersion: string | null,
+  firstSeenAppVersion: string | null,
+): boolean {
+  if (!latestAppVersion || !firstSeenAppVersion) return false;
+  return latestAppVersion !== firstSeenAppVersion;
+}
+
+/** ISO cutoff for the N-day windows, so the route and panel agree. */
+export function windowCutoffIso(days: number, now: Date): string {
+  return new Date(now.getTime() - days * DAY_MS).toISOString();
+}

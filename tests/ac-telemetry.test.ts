@@ -6,8 +6,11 @@ import {
   MAX_ERROR_DETAIL,
   REDACTED,
   isErrorEvent,
+  isStale,
   redactDetail,
   validateAcEvent,
+  versionsDisagree,
+  windowCutoffIso,
 } from '../lib/telemetry/ac-telemetry';
 
 // -------------------------------------------------------------------------
@@ -196,4 +199,36 @@ test('isErrorEvent identifies exactly the two failure events', () => {
   assert.equal(isErrorEvent('post_error'), true);
   assert.equal(isErrorEvent('draft_ok'), false);
   assert.equal(isErrorEvent('post_ok'), false);
+});
+
+// -------------------------------------------------------------------------
+// Render-side derivations
+// -------------------------------------------------------------------------
+
+test('isStale treats "never heard from AC" as stale', () => {
+  assert.equal(isStale(null, new Date('2026-08-07T00:00:00Z')), true);
+  assert.equal(isStale('not-a-date', new Date('2026-08-07T00:00:00Z')), true);
+});
+
+test('isStale flips at the 7-day boundary and reads received_at, not ts', () => {
+  const now = new Date('2026-08-07T00:00:00Z');
+  const sixDays = new Date(now.getTime() - 6 * 86400000).toISOString();
+  const eightDays = new Date(now.getTime() - 8 * 86400000).toISOString();
+  assert.equal(isStale(sixDays, now), false);
+  assert.equal(isStale(eightDays, now), true);
+});
+
+test('versionsDisagree is false when there is nothing to compare', () => {
+  assert.equal(versionsDisagree('5.2.0', null), false);
+  assert.equal(versionsDisagree(null, '5.2.0'), false);
+});
+
+test('versionsDisagree flags an env-var change without a rebuild', () => {
+  assert.equal(versionsDisagree('5.2.1', '5.2.0'), true);
+  assert.equal(versionsDisagree('5.2.0', '5.2.0'), false);
+});
+
+test('windowCutoffIso computes the N-day cutoff', () => {
+  const now = new Date('2026-08-07T00:00:00.000Z');
+  assert.equal(windowCutoffIso(7, now), '2026-07-31T00:00:00.000Z');
 });
