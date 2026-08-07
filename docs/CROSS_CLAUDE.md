@@ -123,8 +123,21 @@ Active and planned API contracts between the two projects.
 - **Why push, not poll:** Forge functions run only inside Jira, so AC
   has no pollable surface for DC to scrape.
 - **Method:** `POST`, single JSON event (not a batch).
-- **Shape:** `{ app_version, commit, event, ticket, error_kind|null,
-  error_detail|null, ts, env }`
+- **Shape** — all fields REQUIRED (`error_kind`/`error_detail` may be
+  `null`, but the keys must be present). **Types are enforced; a wrong
+  type is a 400, not a coercion:**
+  ```jsonc
+  {
+    "app_version":  "5.2.0",                    // string
+    "commit":       "43de652",                  // string
+    "event":        "draft_ok",                 // string, closed set
+    "ticket":       "NBLYCRO-2354",             // string
+    "error_kind":   "sharepoint_404" | null,    // string | null
+    "error_detail": "…" | null,                 // string | null
+    "ts":           "2026-08-07T10:00:00.000Z", // ISO-8601 STRING
+    "env":          "prod"                      // "dev" | "prod"
+  }
+  ```
   - `event` ∈ `draft_ok|draft_error|post_ok|post_error` (CHECKed DC-side)
   - `env` ∈ `dev|prod` — **REQUIRED.** DC renders prod only. Without it
     dev traffic would keep the liveness line quiet and a dead prod
@@ -136,8 +149,23 @@ Active and planned API contracts between the two projects.
     not by the sender. AC should still avoid sending credentials, but DC
     does not trust it: DC's own SharePoint error envelope echoes caller
     URLs verbatim, and CRO share URLs carry a `?e=` token.
-  - `ts` is AC's clock and is **display only**; DC stamps `received_at`
-    and orders everything by it.
+  - **`ts` is an ISO-8601 STRING — NOT `Date.now()`, and not a Unix epoch
+    in any unit.** Use `new Date().toISOString()`. DC checks
+    `typeof ts === 'string'` first, so a NUMBER is rejected before units
+    are ever considered: `Date.now()` → **400 `ts required (ISO-8601)`**,
+    seconds → the same 400, and `"1786000000000"` (epoch as a string) →
+    **400 `ts must be a parseable ISO-8601 timestamp`**. Both
+    `2026-08-07T10:00:00.000Z` and `2026-08-07T10:00:00Z` are accepted;
+    DC normalizes to the millisecond form so two spellings of one instant
+    dedupe to one row.
+    **No range or plausibility bounds exist** — any parseable ISO string
+    is accepted, including 1970 or 2099. That is deliberate: `ts` is
+    display-only, and DC stamps `received_at` and orders everything
+    (retention, latest-event, first-seen, liveness) by its own clock, so
+    AC clock skew cannot reorder anything.
+    *(Added 2026-08-07 after Claudia hit this: the earlier wording gave
+    `ts` no type at all, and "number / Unix timestamp" was a reasonable
+    inference from it. The underspecification was DC's.)*
 - **Auth:** Bearer `CQIP_TELEMETRY_TOKEN` — a NEW dedicated secret,
   separate from brands/sharepoint per DC §13 r27. Rotating it cannot
   break drafting or config reads.
@@ -147,10 +175,23 @@ Active and planned API contracts between the two projects.
   never block or delay a draft/post. Note a `400` is invisible to a
   swallowing sender, so DC records every rejection and renders a count;
   if that count is non-zero, AC's payload shape has drifted.
-- **Status:** DC side BUILT, committed, **not pushed and token NOT
-  minted** — the route currently answers `500 not_configured`, which is
-  the intended inert pre-mint state. AC emitter not yet built.
-- **Last verified:** 2026-08-07 (built + gated; no live traffic)
+  **How a type error looks from the outside:** every event 400s, AC
+  swallows all of them, and System Info reads *"no activity in 7 days —
+  AC may be idle or unreachable"*, i.e. indistinguishable from a dead
+  app. The ONE thing that separates them is the
+  **"Rejected payloads (7d · all envs)"** counter. On a dev-side send,
+  if that number climbs while **error events stays 0**, it is a payload
+  shape/type problem — not a DC outage and not an AC crash.
+- **Status:** DC side **SHIPPED + deployed 2026-08-07** (prod
+  `/api/health` reports `version: 4a85869`). Migrations 026 applied; **027
+  pending** (an EXECUTE-grant tightening on the prune function; no effect
+  on this contract). **Token NOT minted**, so the route answers
+  `500 not_configured` — the intended inert state. AC emitter not yet
+  built.
+- **Last verified:** 2026-08-07 — route live and returning `500
+  not_configured` pre-mint; RLS verified with a probe row (anon read
+  `[]`, anon write refused `42501`); `ts` handling verified against the
+  shipped validator across five input forms.
 
 ### `/api/brands/[projectKey]/[brandCode]` — LIVE
 - **Owner:** DC
@@ -389,6 +430,32 @@ Cross-project events worth durable record. Newest at top.
 Covers events from 2026-04-23 forward (start of the drift-
 prevention era). Project-internal events stay in each
 project's CLAUDE.md §16.
+
+### 2026-08-07 — `ts` type underspecified in this doc; AC hit it (DC)
+
+Claudia asked, blocking: *"the contract says `ts` is a number / Unix
+timestamp — does DC break on milliseconds?"* **Answer: neither seconds
+nor ms. DC requires an ISO-8601 STRING; any number is a 400 before units
+are considered. Fix is `new Date().toISOString()`.** Verified against
+the shipped validator, not the prose.
+
+**The underspecification was DC's, and it was real.** §3 listed `ts` in
+the payload shape and said "AC's clock, display only" — and never stated
+the type. The ISO-8601 requirement lived only in the DC-internal spec.
+"Number / Unix timestamp" was a reasonable inference from what AC could
+actually read. §3 now carries explicit types for every field, names
+`Date.now()` as the wrong thing, and records that no range bounds exist.
+
+**Decision (Lacey, 2026-08-07): the validator stays strict — ISO-8601
+only, fix is AC-side.** Accepting a numeric epoch was considered and
+rejected; loosening a validated boundary is not a doc fix.
+
+Worth keeping: had this reached prod, every event would have 400'd, AC
+would have swallowed all of them, and System Info would have read "idle
+or unreachable" — indistinguishable from a dead app. The only
+discriminator is the **Rejected payloads** counter, which exists for
+exactly this. It was the right thing to have built, and this is the
+first time it earned its place.
 
 ### 2026-08-07 — AC→DC telemetry contract built, token NOT minted (DC)
 
