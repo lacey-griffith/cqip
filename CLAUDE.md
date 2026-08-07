@@ -1318,6 +1318,15 @@ so without a SELECT policy the AC section renders empty with no error.
 `/api/monitoring/findings` sets the external-feed precedent.
 `audit_log_target_shape_chk` needs no extension.
 
+**Migration 027 — `prune_ac_telemetry()` EXECUTE grant.** 026's
+`REVOKE … FROM PUBLIC` was **insufficient and was proven so against production**
+right after it was applied: an anon-key RPC still returned 200. Supabase's
+`ALTER DEFAULT PRIVILEGES` grants EXECUTE on new `public` functions to `anon` and
+`authenticated` **explicitly**, and an explicit grant to a named role survives a
+revoke from PUBLIC. 027 revokes from `anon` and `authenticated` by name. Harmless
+while it lasted — invoker rights + RLS + no DELETE policy meant the call returned
+`(0,0)`, exactly as predicted — but 026 claimed a lockdown it had not achieved.
+
 ### quality_log_taxonomy (migration 020 — Batch 005.28)
 Canonical option list for the 4 multi-select taxonomy fields on
 `quality_logs`. The edit dialog and the server-side validator in
@@ -3725,6 +3734,25 @@ truncation alone removes the secret in both its cases: a truncation test wearing
 redaction test's name. Renamed, and a bare-hex case added that genuinely needs the
 redactor. Three rounds of correction on one claim, each narrower than the last —
 which is the point: the failure mode is the confident claim, not the code.
+
+**POST-PUSH — ONE FIX DIDN'T WORK, CAUGHT BY PROBING PROD (migration 027).**
+After 026 was applied and the batch deployed (prod `/api/health` reports
+`version: 4a85869`), a direct probe showed the MEDIUM-1 lockdown had **not**
+taken: an anon-key call to `rpc/prune_ac_telemetry` still returned 200. Supabase
+grants EXECUTE on new `public` functions to `anon`/`authenticated` **explicitly**
+via default privileges, and an explicit grant to a named role is not removed by
+`REVOKE … FROM PUBLIC`. Migration **027** revokes by name. The observed result
+was `{"telemetry_deleted":0,"rejects_deleted":0}` — which is precisely the
+behaviour Karen predicted when she raised it, so nothing leaked or was destroyed;
+what failed was the CLAIM, again. **027 is written and committed but NOT yet
+applied.**
+
+**RLS verified properly, with data.** The first check was inconclusive — every
+table was empty, so "anon sees nothing" could not be distinguished from "there is
+nothing to see". Re-run with a probe row inserted via the service role: service
+role saw it, **anon read returned `[]`**, **anon write was refused with 42501
+`new row violates row-level security policy`**, and the probe row was deleted
+(tables back to empty). That is the check that actually proves the posture.
 
 **NOT YET DONE, and deliberately so:** the token is **not minted**. Until it is,
 the route answers **500 `not_configured`** — deployable and inert, which is the
