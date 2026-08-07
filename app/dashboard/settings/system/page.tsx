@@ -38,9 +38,14 @@ interface AcPanel {
   latest: AcLatest | null;
   firstSeenAt: string | null;
   firstSeenVersion: string | null;
-  errorCount: number;
+  // null means THE QUERY FAILED, not zero. supabase-js resolves with
+  // { error, count: null } rather than throwing, so `?? 0` would render a
+  // failed count as a reassuring "0" on a health panel — the same
+  // fails-toward-everything's-fine direction this batch guarded against for
+  // truncation, reintroduced by a different cause.
+  errorCount: number | null;
   lastError: AcLastError | null;
-  rejectCount: number;
+  rejectCount: number | null;
 }
 
 function formatBuildTime(iso: string | undefined): string {
@@ -99,10 +104,15 @@ export default function SystemInfoPage() {
     async function loadAc() {
       const now = new Date();
       const cutoff = windowCutoffIso(AC_ERROR_WINDOW_DAYS, now);
-      // Everything below is env='prod'-scoped. Dev events exist in the same
-      // table (the token is provisioned to Forge dev and prod), and without
-      // this scoping dev traffic would keep the liveness line quiet — a dead
-      // prod would read as alive.
+      // The three ac_telemetry reads are env='prod'-scoped. Dev events exist in
+      // the same table (the token is provisioned to Forge dev and prod), and
+      // without this scoping dev traffic would keep the liveness line quiet —
+      // a dead prod would read as alive.
+      //
+      // The rejects read is the ONE exception and is labelled as such in the
+      // render: ac_telemetry_rejects has no env column, because a payload DC
+      // could not parse often has no recoverable env. Scoping it would hide
+      // prod rejects whose env was unreadable — the wrong way to fail.
       try {
         // Counts use { count: 'exact', head: true } so NO rows are fetched:
         // immune by construction to the unranged-select truncation documented
@@ -135,6 +145,12 @@ export default function SystemInfoPage() {
         ]);
 
         if (latestRes.error) throw latestRes.error;
+        // The other three are NOT fatal — a working panel with one figure
+        // marked unavailable beats an error card — but each must be READ, or
+        // its failure silently becomes a healthy-looking number.
+        if (errCountRes.error) console.error('[system-info] error count failed', errCountRes.error);
+        if (lastErrRes.error) console.error('[system-info] last error failed', lastErrRes.error);
+        if (rejectRes.error) console.error('[system-info] reject count failed', rejectRes.error);
 
         const latest = (latestRes.data?.[0] as AcLatest | undefined) ?? null;
 
@@ -150,6 +166,9 @@ export default function SystemInfoPage() {
             .eq('env', 'prod')
             .eq('commit', latest.commit)
             .range(0, 0);
+          if (seenRes.error) {
+            console.error('[system-info] version_seen lookup failed', seenRes.error);
+          }
           const row = seenRes.data?.[0] as
             | { app_version: string; first_seen_at: string }
             | undefined;
@@ -162,9 +181,9 @@ export default function SystemInfoPage() {
           latest,
           firstSeenAt,
           firstSeenVersion,
-          errorCount: errCountRes.count ?? 0,
+          errorCount: errCountRes.error ? null : (errCountRes.count ?? 0),
           lastError: (lastErrRes.data?.[0] as AcLastError | undefined) ?? null,
-          rejectCount: rejectRes.count ?? 0,
+          rejectCount: rejectRes.error ? null : (rejectRes.count ?? 0),
         });
       } catch (err) {
         if (cancelled) return;
@@ -256,7 +275,8 @@ export default function SystemInfoPage() {
           Jira QA Automation (AC)
         </p>
         <p className="mt-1 text-xs text-[color:var(--f92-gray)]">
-          AC runs inside Jira and cannot be polled, so it pushes events here. Production only.
+          AC runs inside Jira and cannot be polled, so it pushes events here. Event figures are
+          production-only; rejected payloads span all environments (see below).
         </p>
 
         {acLoading && (
@@ -315,15 +335,20 @@ export default function SystemInfoPage() {
                   Error events ({AC_ERROR_WINDOW_DAYS}d)
                 </dt>
                 <dd className="mt-1 text-lg font-semibold text-[color:var(--f92-dark)]">
-                  {ac.errorCount}
+                  {ac.errorCount ?? 'unavailable'}
                 </dd>
               </div>
               <div>
+                {/* NOT prod-scoped, and deliberately labelled so: a rejected
+                    payload is one DC could not parse, so its `env` is often
+                    unrecoverable — ac_telemetry_rejects has no env column by
+                    design. Scoping it to prod would HIDE prod rejects whose env
+                    could not be read, which is the wrong direction to fail. */}
                 <dt className="text-[10px] uppercase tracking-widest text-[color:var(--f92-gray)]">
-                  Rejected payloads ({AC_ERROR_WINDOW_DAYS}d)
+                  Rejected payloads ({AC_ERROR_WINDOW_DAYS}d · all envs)
                 </dt>
                 <dd className="mt-1 text-lg font-semibold text-[color:var(--f92-dark)]">
-                  {ac.rejectCount}
+                  {ac.rejectCount ?? 'unavailable'}
                 </dd>
               </div>
             </dl>
@@ -343,10 +368,11 @@ export default function SystemInfoPage() {
               </p>
             )}
 
-            {ac.rejectCount > 0 && (
+            {ac.rejectCount !== null && ac.rejectCount > 0 && (
               <p className="mt-2 text-xs text-[color:var(--f92-gray)]">
                 AC sent {ac.rejectCount} payload(s) DC could not accept — likely a payload-shape change.
-                That is a different problem from silence.
+                That is a different problem from silence. Counts dev and prod together, so during
+                dev-side bring-up check which environment sent them before treating it as a prod fault.
               </p>
             )}
 

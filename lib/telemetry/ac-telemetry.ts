@@ -56,6 +56,12 @@ const DENY_PATTERNS: readonly { readonly re: RegExp; readonly replace: string }[
     re: /([?&])(e|sig|sv|se|access_token)=[^&\s"']*/gi,
     replace: `$1$2=${REDACTED}`,
   },
+  // Bare 64-char hex. Every CQIP_* shared secret is exactly this shape
+  // (`openssl rand -hex 32`), and an upstream auth error can echo one with no
+  // `Bearer ` prefix to catch it. Deliberately accepts the false-positive risk
+  // on a legitimate sha256 in an error string: an unreadable hash costs
+  // nothing, a leaked token costs a rotation across three surfaces.
+  { re: /\b[0-9a-f]{64}\b/gi, replace: REDACTED },
 ];
 
 /**
@@ -68,8 +74,15 @@ const DENY_PATTERNS: readonly { readonly re: RegExp; readonly replace: string }[
  * patterns above are prefix-anchored and we truncate from the END, so a cut
  * that splits a secret still leaves the marker (`Bearer `, `eyJ`, `?e=`)
  * ahead of the surviving fragment, and a redact-after-truncate pass matches it
- * anyway. Swapping the order today changes no security outcome, and the test
- * suite provably cannot tell the two orders apart (verified by mutation).
+ * anyway. Swapping the order today changes no SECURITY outcome.
+ *
+ * Precise statement of what the tests can and cannot see (Karen re-mutated
+ * this and the earlier wording was still too strong): a naive swap that drops
+ * the final clamp IS caught — redaction can lengthen the string past 200, so
+ * the length assertion fails. What no test catches is a CONTRACT-PRESERVING
+ * reorder (truncate → redact → clamp), which passes 25/25. So: no test
+ * distinguishes the orders on security, and none distinguishes a
+ * contract-preserving reorder at all.
  *
  * ACTUALLY true, and why it stays this way:
  *  1. Defensive against future patterns. The moment someone adds a rule that

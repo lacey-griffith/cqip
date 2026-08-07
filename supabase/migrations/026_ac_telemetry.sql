@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS ac_telemetry (
   -- exists to avoid.
   error_kind    TEXT,
   -- Redacted + hard-truncated to 200 chars at the DC boundary before insert
-  -- (lib/telemetry/redact.ts). The column is not the enforcement point; the
+  -- (lib/telemetry/ac-telemetry.ts). The column is not the enforcement point; the
   -- route is. See spec §3.2 for the traceable leak path this closes.
   error_detail  TEXT,
   env           TEXT NOT NULL CHECK (env IN ('dev', 'prod')),
@@ -111,8 +111,12 @@ CREATE INDEX IF NOT EXISTS idx_ac_telemetry_rejects_received_at
 -- rather than from cron. Rationale (spec §5.1): no ops step for anyone to
 -- forget, no new cron surface and therefore no new silent-failure class, no
 -- edge function ⇒ no verify_jwt (§13 r21) and no fifth shared secret
--- (§13 r27). Volume is a handful of events per QA draft against a ≤~500-row
--- table.
+-- (§13 r27). NOTE on table size: 500 is the row FLOOR, not a cap. Retention
+-- keeps everything within 90 days, so steady state is 90 days of volume
+-- (thousands of rows) and the delete removes nothing at all until day 90. The
+-- per-ingest cost is a COUNT(*) plus a top-500 sort and anti-join — still
+-- negligible at this scale, but the earlier "≤~500-row table" phrasing that
+-- justified this choice was simply wrong.
 --
 -- SECURITY INVOKER: called with the service role, which bypasses RLS anyway.
 -- Deliberately NOT SECURITY DEFINER — nothing here needs to escalate.
@@ -155,6 +159,21 @@ BEGIN
   RETURN NEXT;
 END;
 $$;
+
+-- Lock down EXECUTE. Postgres defaults it to PUBLIC, which in Supabase means
+-- the function is an exposed PostgREST RPC reachable by anon. Every other
+-- function in this migration set revokes first (005:26-27, 006:81, 008:46-47)
+-- and this one must too.
+--
+-- Not exploitable as written — SECURITY INVOKER + RLS on + no DELETE policy
+-- means a rogue caller deletes 0 rows and gets an RLS-filtered (0,0). But that
+-- safety rests ENTIRELY on "no DELETE policy exists", which is one future
+-- admin-cleanup migration away from being false, at which point a public
+-- "wipe telemetry" endpoint appears with nothing flagging it. Privilege LEVEL
+-- (invoker vs definer) and WHO MAY CALL IT are separate questions; the comment
+-- above answers only the first.
+REVOKE ALL ON FUNCTION public.prune_ac_telemetry() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.prune_ac_telemetry() TO service_role;
 
 -- -------------------------------------------------------------------------
 -- 5. RLS — admin-only SELECT, service-role write.

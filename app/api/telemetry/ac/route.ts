@@ -36,10 +36,25 @@ const JSON_NO_STORE = { 'Cache-Control': 'no-store' } as const;
  */
 async function recordReject(reason: string, rawExcerpt: string | null): Promise<void> {
   try {
-    await supabaseAdmin.from('ac_telemetry_rejects').insert({
+    // supabase-js RESOLVES with { error } rather than throwing, so the
+    // try/catch alone only covers network-level faults. Without destructuring
+    // it, a persistent failure here (RLS drift, migration not applied,
+    // constraint violation) would be recorded nowhere and logged nowhere —
+    // i.e. the one write whose entire job is making rejection impossible to
+    // miss would itself fail silently. Every other write in this file already
+    // checks `error`; this one did not.
+    const { error } = await supabaseAdmin.from('ac_telemetry_rejects').insert({
       reason,
+      // Redact the FULL body, then let redactDetail truncate. Slicing first
+      // would be truncate-then-redact — the exact order redactDetail's own
+      // docblock argues against for future non-prefix-anchored patterns. No
+      // leak either way today, but applying the argument in one path and
+      // violating it in the other is how the argument stops being followed.
       detail: redactDetail(rawExcerpt),
     });
+    if (error) {
+      console.error('[telemetry-api] failed to record reject', error);
+    }
   } catch (err) {
     console.error('[telemetry-api] failed to record reject', err);
   }
@@ -59,9 +74,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: message }, { status: auth.status, headers: JSON_NO_STORE });
   }
 
-  // Body-size bound BEFORE parsing — the Worker-memory guard that MAX_BATCH
-  // provides on the monitoring route. This route takes one event, so it
-  // bounds bytes instead of array length.
+  // Body-size bound BEFORE parsing. Precisely: this bounds what JSON.parse
+  // sees and what can reach a row — it is NOT a memory guard, because
+  // req.text() has already buffered the whole body by the time we measure and
+  // Content-Length is never consulted. It also bounds bytes per row, not rows
+  // per token: retention is what bounds volume, and only past 90 days.
   const raw = await req.text();
   const bytes = new TextEncoder().encode(raw).length;
   if (bytes > MAX_BODY_BYTES) {
@@ -73,13 +90,13 @@ export async function POST(req: NextRequest) {
   try {
     body = JSON.parse(raw);
   } catch {
-    await recordReject('invalid_json', raw.slice(0, 200));
+    await recordReject('invalid_json', raw);
     return badRequest('Invalid JSON body');
   }
 
   const parsed = validateAcEvent(body);
   if (!parsed.ok) {
-    await recordReject(`shape:${parsed.reason}`, raw.slice(0, 200));
+    await recordReject(`shape:${parsed.reason}`, raw);
     return badRequest(parsed.reason);
   }
   const evt = parsed.value;

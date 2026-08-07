@@ -57,7 +57,19 @@ test('redactDetail destroys Azure SAS parameter values', () => {
   assert.ok(!out.includes('2026-01-01'), 'se value survived');
 });
 
-test('a credential is destroyed wherever it sits, including past the 200-char cut', () => {
+test('a bare 64-hex secret is redacted even with no Bearer prefix', () => {
+  const token = 'a'.repeat(64);
+  const out = redactDetail(`auth failed for token ${token}`)!;
+  assert.ok(!out.includes(token), 'bare hex secret survived');
+  assert.ok(out.includes(REDACTED));
+});
+
+// KAREN LOW-2, recorded rather than quietly fixed: this test passes under a
+// PROVABLY BROKEN (marker-only) redactor, because truncation alone removes the
+// secret in both cases below. It is a truncation test, not a redaction test,
+// and its name says so now. Real redaction coverage lives in the four tests
+// above it — those are the ones that fail when the redactor breaks.
+test('truncation holds at 200 chars with a credential at or past the cut', () => {
   // Straddling the boundary: the marker starts before 200 and the value runs
   // past it.
   const straddle = 'x'.repeat(MAX_ERROR_DETAIL - 6) + '?e=TOPSECRETTOKEN';
@@ -69,16 +81,13 @@ test('a credential is destroyed wherever it sits, including past the 200-char cu
   const beyond = 'x'.repeat(MAX_ERROR_DETAIL + 40) + '?e=TOPSECRETTOKEN';
   assert.ok(!redactDetail(beyond)!.includes('TOPSECRETTOKEN'));
 
-  // HONEST LIMIT, recorded so nobody mistakes this for an ordering guarantee:
-  // this test passes under BOTH orders (redact-then-truncate and
-  // truncate-then-redact), verified by mutation. It cannot pin the order, and
-  // no test can, because with end-truncation and prefix-anchored patterns the
-  // two orders are behaviourally identical. The order is kept for the reasons
-  // in redactDetail's docblock — future non-prefix-anchored patterns, and
-  // context quality — and those are review-level invariants, not testable
-  // ones. An earlier version of this test claimed to prove the ordering and
-  // did not; it padded the secret entirely past the cut, where truncation
-  // alone removes it.
+  // HONEST LIMIT. The length assertion above DOES catch a naive order swap
+  // that drops the final clamp (redaction can lengthen the string past 200).
+  // It does NOT catch a contract-preserving reorder — truncate, redact, clamp
+  // — which passes the whole suite. So this pins the length contract, not the
+  // order. The order is kept for reasons in redactDetail's docblock (future
+  // non-prefix-anchored patterns, context quality) that are review-level
+  // invariants, not testable ones.
 });
 
 test('redactDetail hard-truncates to 200 chars', () => {

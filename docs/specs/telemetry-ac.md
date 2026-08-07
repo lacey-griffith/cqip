@@ -5,7 +5,9 @@ required revisions incorporated below. This document is the canonical spec and i
 committed BEFORE the build session opens, per CLAUDE.md §15 PROCESS.
 
 **Batch:** telemetry-ac · **Migration:** 026 · **Gates:** Jenny pre-flight DONE
-(new route + new table + new mutation surface). Karen post-flight owed.
+(new route + new table + new mutation surface). Karen post-flight DONE
+2026-08-07 — PASS-WITH-FINDINGS (2 HIGH · 4 MEDIUM · 8 LOW, no CRITICAL); all
+fix-before-push findings folded, and the corrections are marked inline below.
 
 ---
 
@@ -147,8 +149,11 @@ var moved without a rebuild.
 | **400** | shape violation only | `{ error: <reason> }` |
 
 **Body-size bound:** the raw body is length-checked *before* `JSON.parse`. Over the
-bound → 400. This is the Worker-memory guard `MAX_BATCH = 500` provides on
-`/api/monitoring/findings`; this route takes a single event, so it bounds bytes.
+bound → 400. **Correction (Karen LOW-4):** this is NOT a memory guard — `req.text()`
+has already buffered the whole body by the time we measure, and `Content-Length` is
+never consulted. What it actually bounds is what `JSON.parse` sees and what can
+reach a row. It bounds bytes *per row*, not rows *per token*; retention bounds
+volume, and only past 90 days.
 
 **202 rather than 200** diverges from `/api/monitoring/findings` (implicit 200 with
 a summary). Deliberate: DC accepts the event and does downstream work (dedupe,
@@ -198,9 +203,11 @@ Rationale over plain-SQL pg_cron (the review's preference, also acceptable):
   and the 2026-05-01→05-07 drought incident).
 - No edge function ⇒ no `verify_jwt` (§13 r21) and **no fifth shared secret**
   (§13 r27) — the same win pg_cron-with-plain-SQL gets, without the ops step.
-- Volume is a handful of events per QA draft against a ≤~500-row table, so the
-  delete is negligible. The function early-returns when the table is under the
-  row floor.
+- Volume is a handful of events per QA draft. **Correction (Karen MEDIUM-4): 500
+  is the row FLOOR, not a cap.** Retention keeps everything inside 90 days, so
+  steady state is 90 days of volume (thousands of rows) and the delete removes
+  nothing until day 90. Still negligible at this scale, but the "≤~500-row table"
+  phrasing that partly justified this choice was false.
 
 Prune failure is swallowed and logged: it must never fail an ingest. Failure is
 benign (the table grows) and observable as row count.
@@ -226,6 +233,12 @@ function on the same rule. Feeds §4.1.
 
 ### 5.4 RLS — REVISION 2 / finding H1
 
+`prune_ac_telemetry()` additionally carries `REVOKE ALL … FROM PUBLIC` +
+`GRANT EXECUTE … TO service_role` (Karen MEDIUM-1) — Postgres defaults EXECUTE to
+PUBLIC, which in Supabase means an exposed PostgREST RPC, and migrations 005/006/008
+all revoke first. Not exploitable as written (invoker rights + RLS + no DELETE
+policy ⇒ 0 rows), but that safety rested entirely on "no DELETE policy exists".
+
 **Admin-only SELECT via `public.is_admin()`** on all three tables (the
 `login_events` posture, migration 023). **No INSERT/UPDATE/DELETE policy** for
 `authenticated` — service-role writes bypass RLS, matching the append-only
@@ -246,11 +259,22 @@ external fire-and-forget feeds. `audit_log_target_shape_chk` needs **no** extens
 
 ## 6. Render — System Info, "Jira QA Automation (AC)"
 
-All reads are `.range()`-bounded. A fetch-then-filter 7-day count is the
+All reads are `.range()`-bounded, and counts use `{ count: 'exact', head: true }`
+so no rows are fetched at all. A fetch-then-filter 7-day count is the
 silent-truncation shape documented in `lib/client-library/paged-fetch.ts` — and it
 **fails toward "everything's fine"**, which is the worst direction for a health panel.
 
-Scoped to `env = 'prod'` throughout.
+**A failed count renders `unavailable`, never `0` (Karen HIGH-2).** supabase-js
+resolves with `{ error, count: null }` rather than throwing, so `?? 0` would have
+reintroduced the same fails-toward-fine direction by a different cause.
+
+**Scoped to `env = 'prod'` — with ONE labelled exception (Karen HIGH-1).** The
+`ac_telemetry` reads are prod-scoped. The **rejects count is not, and cannot be**:
+`ac_telemetry_rejects` has no `env` column, because a payload DC could not parse
+often has no recoverable `env`. Scoping it would hide prod rejects whose env was
+unreadable — the wrong direction to fail. It is therefore rendered as
+"Rejected payloads (7d · all envs)" and the card subtitle says so, rather than
+claiming a prod-scoping the query does not do.
 
 | Line | Source | Note |
 |---|---|---|
@@ -303,7 +327,7 @@ There is no truthful machine source for the DC version today.
 
 This batch adds a *truthful, derived* AC version display directly beside it, so the
 lie becomes conspicuous. Fix in the same pass: `package.json` becomes the single
-source (`2.7.0`), `scripts/gen-build-info.js` stamps it as
+source (`2.8.0`), `scripts/gen-build-info.js` stamps it as
 `NEXT_PUBLIC_APP_VERSION` alongside the existing commit/time stamps, and the page
 renders the stamped value. Converts a hardcoded literal into a derived one — the
 same move the coverage-honesty batch made when it derived drought copy from the
