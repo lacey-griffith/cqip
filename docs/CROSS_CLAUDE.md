@@ -115,6 +115,43 @@ fetched blob is a cache.
 
 Active and planned API contracts between the two projects.
 
+### `/api/telemetry/ac` — BUILT, NOT LIVE (Batch telemetry-ac, 2026-08-07)
+- **Owner:** DC
+- **Producer:** AC (Forge QA-automation app) — **AC WRITES, DC reads.**
+  This is the FIRST reverse-direction surface: every other contract
+  here is AC reading DC. A leaked token here creates rows.
+- **Why push, not poll:** Forge functions run only inside Jira, so AC
+  has no pollable surface for DC to scrape.
+- **Method:** `POST`, single JSON event (not a batch).
+- **Shape:** `{ app_version, commit, event, ticket, error_kind|null,
+  error_detail|null, ts, env }`
+  - `event` ∈ `draft_ok|draft_error|post_ok|post_error` (CHECKed DC-side)
+  - `env` ∈ `dev|prod` — **REQUIRED.** DC renders prod only. Without it
+    dev traffic would keep the liveness line quiet and a dead prod
+    would read as alive.
+  - `error_kind` is **NOT** constrained DC-side — AC owns that taxonomy,
+    and an allowlist would make an AC taxonomy addition a DC migration
+    plus a hard ingest failure.
+  - `error_detail` is **redacted + truncated to 200 at the DC boundary**,
+    not by the sender. AC should still avoid sending credentials, but DC
+    does not trust it: DC's own SharePoint error envelope echoes caller
+    URLs verbatim, and CRO share URLs carry a `?e=` token.
+  - `ts` is AC's clock and is **display only**; DC stamps `received_at`
+    and orders everything by it.
+- **Auth:** Bearer `CQIP_TELEMETRY_TOKEN` — a NEW dedicated secret,
+  separate from brands/sharepoint per DC §13 r27. Rotating it cannot
+  break drafting or config reads.
+- **Responses:** `202` accepted · `401` bad bearer · `400` shape only ·
+  `500` when the DC-side token is unset.
+- **AC-side contract notes:** fire-and-forget — telemetry failure must
+  never block or delay a draft/post. Note a `400` is invisible to a
+  swallowing sender, so DC records every rejection and renders a count;
+  if that count is non-zero, AC's payload shape has drifted.
+- **Status:** DC side BUILT, committed, **not pushed and token NOT
+  minted** — the route currently answers `500 not_configured`, which is
+  the intended inert pre-mint state. AC emitter not yet built.
+- **Last verified:** 2026-08-07 (built + gated; no live traffic)
+
 ### `/api/brands/[projectKey]/[brandCode]` — LIVE
 - **Owner:** DC
 - **Consumer:** AC (Forge consumer integration)
@@ -176,6 +213,17 @@ Active and planned API contracts between the two projects.
 
 Mirrored from DC §15 + AC §15. Status here is authoritative for
 both sides.
+
+- [ ] **Mint + seed `CQIP_TELEMETRY_TOKEN`** — NEW token, not yet
+      minted (Batch telemetry-ac, DC side built 2026-08-07). Lives on
+      THREE surfaces and must be set atomically per DC §13 r27:
+        - Worker secret (`wrangler secret put`)
+        - Forge dev variable (`forge variables set --encrypt`)
+        - Forge prod variable (`forge variables set --encrypt`)
+      Generate `openssl rand -hex 32`; store in Keeper. Until it exists
+      the DC route answers 500 `not_configured` and stores nothing, so
+      there is no half-live state to race. Sequence: Lacey mints/seeds →
+      Claudia builds the AC emitter → dev-side proof → AC prod.
 
 - [ ] **Rotate Azure client secret** —
       **Status (2026-06-01):** rotated by Carl 2026-06-01. The
@@ -341,6 +389,33 @@ Cross-project events worth durable record. Newest at top.
 Covers events from 2026-04-23 forward (start of the drift-
 prevention era). Project-internal events stay in each
 project's CLAUDE.md §16.
+
+### 2026-08-07 — AC→DC telemetry contract built, token NOT minted (DC)
+
+DC built the telemetry ingest and the System Info "Jira QA Automation
+(AC)" section. **AC action is owed, but not yet:** the token does not
+exist, so nothing to install. Sequence is Lacey mints/seeds across the
+three surfaces → Claudia builds the AC emitter → dev-side proof → AC
+prod deploy.
+
+Points AC needs when the emitter is written:
+- `env` is REQUIRED (`dev`|`prod`). Dev events are stored but excluded
+  from the render; sending the wrong value would make dev traffic mask
+  a dead prod.
+- Send events fire-and-forget, wrapped and swallowed. A `400` is
+  invisible to you by design — DC records rejections and renders a
+  count, so a non-zero "Rejected payloads" figure means the payload
+  shape drifted, not that DC is down.
+- `error_kind` is unconstrained DC-side on purpose: add taxonomy values
+  freely, no DC migration needed.
+- Do not put credentials in `error_detail`. DC redacts and truncates
+  anyway (it does not trust the sender), but the cheapest leak is the
+  one never sent — note DC's own SharePoint error envelope echoes the
+  folder URL verbatim and those URLs carry a `?e=` share token.
+- `ts` is your clock and is display-only; DC orders by its own
+  `received_at`, so clock skew cannot reorder anything.
+
+DC spec: `docs/specs/telemetry-ac.md`. Committed, not pushed.
 
 ### 2026-07-17 — Batch 012 Phase B (monitoring ingest) shipped + pushed (DC)
 
