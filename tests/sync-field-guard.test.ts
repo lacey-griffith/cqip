@@ -29,8 +29,11 @@ import { join } from 'node:path';
 
 import {
   SYNC_GUARDED_FIELDS,
+  SYNC_AUDIT_CHANGED_BY,
   isEmptyForSync,
   addGuardedSyncFields,
+  serializeForAudit,
+  buildSyncAuditRows,
 } from '../lib/sync/sync-field-guard';
 
 // Resolved from cwd, matching the repo convention of running tests from the
@@ -161,6 +164,115 @@ test('the guarded set is exactly the six human-editable sync-written columns', (
 });
 
 // ---------------------------------------------------------------------------
+// buildSyncAuditRows — cases 6, 7, 3, 8
+//
+// The sync emitted NO audit row for these columns, which is the only reason the
+// data loss ran undetected for ten weeks. These tests pin the trail.
+// ---------------------------------------------------------------------------
+
+test('serializeForAudit: arrays are JSON, scalars are strings, absent is null', () => {
+  // JSON for arrays so a sync-written row reads identically to a human-written
+  // one for the same column (the edit dialog already sends `["Client Request"]`).
+  assert.equal(serializeForAudit(['Client Request']), '["Client Request"]');
+  assert.equal(serializeForAudit([]), '[]');
+  assert.equal(serializeForAudit('Low'), 'Low');
+  assert.equal(serializeForAudit(null), null);
+  assert.equal(serializeForAudit(undefined), null);
+});
+
+test('case 6: a changed guarded field produces exactly one correct audit row', () => {
+  const rows = buildSyncAuditRows(
+    'log-1',
+    { severity: 'Low', issue_category: [] },
+    { severity: 'High', issue_category: ['Client Request'] },
+  );
+
+  assert.equal(rows.length, 2);
+  const severity = rows.find((r) => r.field_name === 'severity')!;
+  assert.deepEqual(severity, {
+    log_entry_id: 'log-1',
+    target_type: 'quality_log',
+    target_id: 'log-1',
+    action: 'UPDATE',
+    field_name: 'severity',
+    old_value: 'Low',
+    new_value: 'High',
+    changed_by: SYNC_AUDIT_CHANGED_BY,
+    notes: 'Updated via Jira sync',
+  });
+
+  const category = rows.find((r) => r.field_name === 'issue_category')!;
+  assert.equal(category.old_value, '[]');
+  assert.equal(category.new_value, '["Client Request"]');
+});
+
+test('case 7: an unchanged guarded field produces NO audit row', () => {
+  // A quiet sync must stay quiet. audit_log is already over the PostgREST
+  // 1,000-row cap; emitting a row per field per run would be noise with a cost.
+  const rows = buildSyncAuditRows(
+    'log-1',
+    { severity: 'Low', issue_category: ['Client Request'] },
+    { severity: 'Low', issue_category: ['Client Request'] },
+  );
+  assert.deepEqual(rows, []);
+});
+
+test('case 3: a field the guard OMITTED produces no audit row', () => {
+  // The guard skipped it, so nothing was written and nothing changed. A row
+  // here would claim a write that never happened.
+  const previous = { severity: 'Low', issue_category: ['Client Request'] };
+  const updateData: Record<string, unknown> = { updated_at: 'now' };
+  addGuardedSyncFields(updateData, { severity: null, issue_category: [] });
+
+  assert.deepEqual(buildSyncAuditRows('log-1', previous, updateData), []);
+});
+
+test('case 8: unguarded columns are never audited, even when they change', () => {
+  // Deliberate: §13 r2 is NARROWED (6 of 16), not closed. Full closure lands
+  // with the audit_log pagination fix. Pinned so the scope is a decision, not
+  // an accident.
+  const rows = buildSyncAuditRows(
+    'log-1',
+    { client_brand: 'MRA - Mr Appliance', jira_summary: 'old' },
+    { client_brand: 'MRR - Mr Rooter Plumbing', jira_summary: 'new' },
+  );
+  assert.deepEqual(rows, []);
+});
+
+test('audit: a null -> value transition is recorded, not skipped', () => {
+  // The recovery case. A row whose value the old sync destroyed gets a real
+  // trail the next time Jira supplies a value.
+  const rows = buildSyncAuditRows('log-1', { who_owns_fix: null }, { who_owns_fix: 'VN Team' });
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].old_value, null);
+  assert.equal(rows[0].new_value, 'VN Team');
+});
+
+test('audit: changed_by follows §13 r20 system:<name>', () => {
+  assert.equal(SYNC_AUDIT_CHANGED_BY, 'system:jira-sync');
+});
+
+test('audit: rows satisfy the audit_log CHECK constraints', () => {
+  // audit_log_target_shape_chk needs target_type='quality_log' AND a non-null
+  // log_entry_id; the action CHECK admits only CREATE/UPDATE/DELETE/
+  // STATUS_CHANGE/AI_SUGGESTION. An insert violating either throws at runtime,
+  // where the edge function has no type-checking to catch it.
+  const ACTIONS = ['CREATE', 'UPDATE', 'DELETE', 'STATUS_CHANGE', 'AI_SUGGESTION'];
+  const rows = buildSyncAuditRows(
+    'log-1',
+    { severity: 'Low', who_owns_fix: 'CRO Dev', issue_subtype: [] },
+    { severity: 'High', who_owns_fix: 'VN Team', issue_subtype: ['CSS/ Styling Issue'] },
+  );
+  assert.equal(rows.length, 3);
+  for (const row of rows) {
+    assert.equal(row.target_type, 'quality_log');
+    assert.ok(row.log_entry_id, 'log_entry_id must be non-null for the quality_log branch');
+    assert.ok(ACTIONS.includes(row.action), `${row.action} is not in the action CHECK`);
+    assert.ok(row.changed_by, 'changed_by is NOT NULL');
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Drift test — the only gate that reaches the deployed code
 // ---------------------------------------------------------------------------
 
@@ -212,7 +324,40 @@ test('DRIFT: the extracted block is substantial, not accidentally empty', () => 
   const fnBlock = extractBlock(readOrFail(FN_PATH), FN_PATH);
   assert.ok(fnBlock.includes('function isEmptyForSync'), 'block must carry isEmptyForSync');
   assert.ok(fnBlock.includes('function addGuardedSyncFields'), 'block must carry addGuardedSyncFields');
+  assert.ok(fnBlock.includes('function buildSyncAuditRows'), 'block must carry buildSyncAuditRows');
   assert.ok(fnBlock.includes('SYNC_GUARDED_FIELDS'), 'block must carry the field list');
+});
+
+test('DRIFT: the edge function checks the update error before auditing', () => {
+  // Without this the update can fail silently (supabase-js resolves with
+  // { error }) and we would write audit rows for changes that never landed.
+  const fn = readOrFail(FN_PATH);
+  assert.ok(
+    /const \{ error: updateError \} = await supabase[\s\S]{0,200}?\.update\(updateData\)/.test(fn),
+    'the quality_logs update must destructure its error',
+  );
+  assert.ok(/if \(updateError\)/.test(fn), 'the update error must be acted on');
+
+  // Order matters: the error check must precede the audit write.
+  assert.ok(
+    fn.indexOf('if (updateError)') < fn.indexOf('buildSyncAuditRows(log.id'),
+    'the update error must be checked BEFORE audit rows are built',
+  );
+});
+
+test('DRIFT: the edge function writes the audit rows it builds', () => {
+  const fn = readOrFail(FN_PATH);
+  assert.ok(
+    /buildSyncAuditRows\(log\.id, log, updateData\)/.test(fn),
+    'jira-sync must build audit rows from the pre-update snapshot',
+  );
+  assert.ok(
+    /from\('audit_log'\)\s*\.insert\(auditRows\)/.test(fn),
+    'jira-sync must insert the built audit rows',
+  );
+  // A failed audit write must be surfaced, not swallowed — that silence is the
+  // reason this defect ran for ten weeks.
+  assert.ok(/auditRowsFailed/.test(fn), 'audit write failures must be counted and surfaced');
 });
 
 test('DRIFT: the edge function actually CALLS the guard', () => {

@@ -219,6 +219,71 @@ function addGuardedSyncFields(
   }
   return target;
 }
+
+// §13 r20: cron-context writers use `system:<name>` because there is no
+// auth.uid() here. Names the WRITER, not the trigger — per-run attribution
+// already lives in sync_runs.triggered_by, and this function serves both the
+// cron and the manual proxy. Matches the `system:drought-evaluator` precedent,
+// which is likewise the function name rather than the pg_cron job name.
+const SYNC_AUDIT_CHANGED_BY = 'system:jira-sync';
+
+interface SyncAuditRow {
+  log_entry_id: string;
+  target_type: 'quality_log';
+  target_id: string;
+  action: 'UPDATE';
+  field_name: string;
+  old_value: string | null;
+  new_value: string | null;
+  changed_by: string;
+  notes: string;
+}
+
+// audit_log.old_value / new_value are TEXT. Arrays are JSON-stringified to
+// match what the edit dialog already sends (`["Client Request"]`), so a
+// sync-written row and a human-written row for the same column read the same.
+function serializeForAudit(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  if (Array.isArray(value)) return JSON.stringify(value);
+  return String(value);
+}
+
+// One row per GUARDED field whose stored value actually changed.
+//
+// Only fields present in `updateData` are considered — a field the guard
+// omitted was never written, so it cannot have changed and must not produce a
+// row (that is case 3: no write, no audit).
+//
+// `previous` is the pre-update row. In the sync that snapshot is read once at
+// the top of the loop, before a per-log Jira round-trip, so old_value is
+// "the value as of loop start", not as of the write. A human editing the same
+// row mid-run would therefore be recorded against a slightly stale old_value.
+// Narrow window, but stated rather than claimed exact.
+function buildSyncAuditRows(
+  logId: string,
+  previous: Record<string, unknown>,
+  updateData: Record<string, unknown>,
+): SyncAuditRow[] {
+  const rows: SyncAuditRow[] = [];
+  for (const field of SYNC_GUARDED_FIELDS) {
+    if (!(field in updateData)) continue;
+    const oldValue = serializeForAudit(previous[field]);
+    const newValue = serializeForAudit(updateData[field]);
+    if (oldValue === newValue) continue;
+    rows.push({
+      log_entry_id: logId,
+      target_type: 'quality_log',
+      target_id: logId,
+      action: 'UPDATE',
+      field_name: field,
+      old_value: oldValue,
+      new_value: newValue,
+      changed_by: SYNC_AUDIT_CHANGED_BY,
+      notes: 'Updated via Jira sync',
+    });
+  }
+  return rows;
+}
 // --- SYNC-FIELD-GUARD:END ---
 
 // -------------------------------------------------------------------------
@@ -469,6 +534,10 @@ Deno.serve(async (request: Request) => {
 
   let logsUpdated = 0;
   let logsFailed = 0;
+  // Audit rows that failed to write. Tracked separately from logsFailed
+  // because the DATA landed correctly in those cases — only the trail is
+  // missing. Surfaced on the run record so it can never pass silently.
+  let auditRowsFailed = 0;
 
   // Cache project configs across the loop. Cardinality is small
   // (~1-3 projects) so the cache is bounded; lazy-populates on first
@@ -532,10 +601,43 @@ Deno.serve(async (request: Request) => {
         };
         addGuardedSyncFields(updateData, mappedFields);
 
-        await supabase
+        // The error MUST be destructured. supabase-js resolves with { error }
+        // rather than throwing, so before this the update could fail silently
+        // AND still count as logsUpdated below. Auditing on top of an unchecked
+        // write would record changes that never happened, so this check is a
+        // prerequisite for the audit rows, not an extra.
+        const { error: updateError } = await supabase
           .from('quality_logs')
           .update(updateData)
           .eq('id', log.id);
+
+        if (updateError) {
+          throw new Error(
+            `quality_logs update failed for ${log.jira_ticket_id}: ${updateError.message}`,
+          );
+        }
+
+        // §13 r2. `log` is the pre-update snapshot from the select('*') at the
+        // top of this run, so it carries the old values.
+        //
+        // A failed audit write is logged and counted, NOT thrown. Throwing
+        // would be worse than useless here: the quality_logs update has
+        // already succeeded, so the next run recomputes the same updateData,
+        // finds nothing changed, and emits no row — the audit row would be
+        // permanently lost AND the log misreported as failed. Instead the
+        // count is surfaced on the run record so it cannot pass silently,
+        // which is the failure this whole batch exists to end.
+        const auditRows = buildSyncAuditRows(log.id, log, updateData);
+        if (auditRows.length > 0) {
+          const { error: auditError } = await supabase.from('audit_log').insert(auditRows);
+          if (auditError) {
+            auditRowsFailed += auditRows.length;
+            console.error(
+              `[jira-sync] audit write failed for ${log.jira_ticket_id} (${auditRows.length} row(s)):`,
+              auditError,
+            );
+          }
+        }
 
         const currentStatus = issue.fields.status?.name;
         if (
@@ -584,7 +686,21 @@ Deno.serve(async (request: Request) => {
       }
     }
 
-    await recordRunEnd(runId, startedAtMs, 'success', logsUpdated, logsFailed, null, null);
+    // The run genuinely succeeded — the data landed — so status stays
+    // 'success'. But a missing audit trail must be visible somewhere, and the
+    // pill renders error_message in its detail dialog, so it goes there rather
+    // than being swallowed into a console line nobody reads.
+    await recordRunEnd(
+      runId,
+      startedAtMs,
+      'success',
+      logsUpdated,
+      logsFailed,
+      null,
+      auditRowsFailed > 0
+        ? `Data synced, but ${auditRowsFailed} audit row(s) failed to write — the trail for those changes is missing.`
+        : null,
+    );
     return new Response('Sync completed', { status: 200 });
   } catch (error) {
     console.error('Sync error:', error);

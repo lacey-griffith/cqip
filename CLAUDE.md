@@ -3590,6 +3590,68 @@ off-by-one) into one coherent build.
 - Effort: MED. PM consult on contract verbiage / monthly-vs-28d window
   semantics still owed (Lacey).
 
+### Sync-guard deferred follow-ons (from the 2026-08-08 batch — see §15.5 / §16)
+
+Eight items the skip-if-empty batch deliberately did NOT do. Each is recorded with
+its reason so nobody re-derives the analysis.
+
+- [ ] **Recover the 5 damaged rows.** `b77c1d57` · `a6111337` · `a57c357c` ·
+      `bf5fc1d7` · `67079106` each lost `issue_category`, `issue_subtype`,
+      `root_cause_final`, `resolution_type`, `severity`, `who_owns_fix`. **The prior
+      values are all recoverable from `audit_log`** (each has a human `UPDATE` row
+      carrying the old value). Not bundled into the code fix — restoring them is a
+      production data write and Lacey's call; it would be its own reviewed,
+      dry-run-first script like the Convert reconciliation. Note the guard does NOT
+      restore them: it only stops future loss.
+- [ ] **§13 r3's root-cause snapshot is structurally a no-op.**
+      `root_cause_initial` is written once, by the webhook at log creation — but the
+      Jira QA tab is *already cleared* at sendback time by the Jira automation (§6),
+      so the "snapshot" captures nothing. Measured 2026-08-08: **74 of 83**
+      webhook-created logs have it empty, versus **0 of 38** CSV-imported. The only
+      writer of a `root_cause_initial` audit row in the entire table is
+      `system:normalize-quality-log-fields` (36 rows). Fixing this means changing
+      *when* the snapshot is taken — a Jira-workflow decision, not a code guard, so
+      it needs Lacey + a workflow call rather than a batch.
+- [ ] **Full §13 r2 closure for the sync.** The batch audits **6 of 16** written
+      columns (up from 0 of 16). `client_brand`, `jira_summary`, `detected_by`,
+      `reproducibility`, `root_cause_description` and the four booleans still change
+      with no audit row. Deferred *with a reason, not overlooked*: `audit_log` is at
+      **1,557 rows (2026-08-08)**, already over the PostgREST 1,000 cap, and
+      `/dashboard/logs` reads it **unranged** for the sendback badge. Land this with
+      that pagination fix, not before.
+- [ ] **`supabase/functions/_shared/`.** `mapJiraFields` and `resolveBrandForSync`
+      are duplicated between `jira-sync` and `jira-webhook`, held together only by a
+      comment (`jira-sync/index.ts:218`). The guard block is now a *third* such copy,
+      but it is at least drift-tested. `_shared/` is the real structural fix and is
+      officially supported by Supabase; it was not done in a data-loss fix because no
+      such directory exists yet and it cannot be bundle-tested locally (no Deno,
+      `supabase functions serve` needs Docker). Do it as its own batch, where a
+      deploy failure is diagnosable.
+- [ ] **The webhook has the same `?? []` coercion**
+      (`jira-webhook/index.ts:333–344`). Harmless *today* only because the webhook
+      runs at row creation, where there is no prior value to destroy. It is the same
+      shape as the defect that cost five rows; do not assume it stays harmless if the
+      webhook ever updates an existing row.
+- [ ] **`root_cause_description` is unguarded and carries a latent ADF hazard.**
+      `mapJiraFields` does `fields[customfield_12909] ?? null` with **no ADF
+      extraction**, while §7 documents that field as a Jira **Paragraph** — API v3
+      returns an ADF *object* — into a `TEXT` column. Probed 2026-08-08: **all 33
+      working-set tickets return `null`**, so it is latent, not live. Now that the
+      update error is checked, a future non-empty value turns a silent corruption
+      into a loud `logs_failed` — the better direction, and why it was recorded
+      rather than pre-emptively fixed.
+- [ ] **§13 r29 — the sync writes taxonomy values unvalidated.** The edit route
+      validates every value against `quality_log_taxonomy`
+      (`app/api/logs/edit/route.ts:86–137`); the sync validates none. Post-guard a
+      non-empty Jira value still overwrites a validated human value with an
+      unvalidated one. r29 says "constrained at every write surface" — this surface
+      is not. Left alone deliberately.
+- [ ] **The auto-advance audit row still uses bare `'system'`**
+      (`jira-sync/index.ts`, predates §13 r20, and r20 explicitly carves it out).
+      Left as-is on purpose: changing it would split one event type across two
+      `changed_by` values, so an operator filtering `'system'` would silently stop
+      catching new auto-advance rows. Only worth changing alongside a backfill.
+
 ### Ops / deferred
 - [ ] **Confirm `test_milestones` backfill (§13 r18) runs on a cadence**
       (from Brand Wellness follow-up, 2026-07-07). Null-`brand_id`
@@ -3687,11 +3749,37 @@ never type-checks the deployed file**; and ESLint "clean" is unachievable —
 on the exact lines this batch edits, so the gate is *zero NEW findings*. This is
 what makes the drift test load-bearing rather than decorative.
 
-**Phase status:** commit 1 (spec + guard + `lib/sync/sync-field-guard.ts` +
-13 tests + these docs) BUILT — 181/181 suite, tsc clean, zero new ESLint
-findings, **5 of 5 mutations caught** (unconditional write · falsy-test ·
-write-null-instead-of-omit · lib-edited-without-inline-copy · guard-never-called).
-Commit 2 (audit rows + the unchecked-update fix) NEXT.
+**Phase status: BOTH COMMITS BUILT. Karen post-flight next, then Lacey.**
+
+- **Commit 1** `ae3e2f3` — spec + guard + `lib/sync/sync-field-guard.ts` + 13 tests
+  + §13 r7 amendment + new §13 r37.
+- **Commit 2** — audit rows (§13 r2, `changed_by='system:jira-sync'` per r20) +
+  the §4.5 unchecked-update fix + 10 further tests + the eight §15 deferred items.
+
+**Commit 2 also fixed a latent bug it depended on:** the `quality_logs` update
+never destructured its `error`, so a failed write was silent **and** still counted
+as `logsUpdated`. Auditing on top of that would have recorded changes that never
+happened — the same "fails toward everything's fine" shape as the telemetry batch's
+HIGH-2. A failed audit write is counted and surfaced on the run record but does
+**NOT** throw: the data has already landed, so throwing would mark the log failed
+*and* permanently lose the audit row, because the next run would recompute the same
+`updateData`, find nothing changed, and emit nothing.
+
+**Verification:** tsc clean · ESLint zero NEW findings (edge fn still exactly its
+8-error/1-warning baseline; new lib + test files clean) · **191/191** tests
+(168 pre-existing + 23 new) · `npm run build` green · **11 of 11 mutations caught**
+— commit 1: unconditional write · falsy-test on `false`/`0` ·
+write-null-instead-of-omit · lib-edited-without-inline-copy · guard-never-called;
+commit 2: no-change-comparison · auditing guard-omitted fields · invalid `action`
+value · `changed_by` reverted to bare `'system'` · update-error-unchecked ·
+rows-built-but-never-inserted.
+
+**NOT verified here, and cannot be from this machine:** the function has never been
+bundled or run. There is no Deno locally and `supabase functions serve` needs
+Docker, so nothing in this batch proves the edge function *deploys*. The drift test
+proves the inlined block matches a module that is tsc-checked and unit-tested — it
+does not compile the function. **A real sync run against Jira is the outstanding
+gate**, and it is Lacey's.
 
 ---
 
