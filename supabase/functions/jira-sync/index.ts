@@ -158,6 +158,70 @@ function mapJiraFields(fields: any) {
 }
 
 // -------------------------------------------------------------------------
+// Inlined: lib/sync/sync-field-guard.ts
+//
+// VERBATIM COPY. `tests/sync-field-guard.test.ts` asserts the block between
+// the SYNC-FIELD-GUARD markers is identical to the module (modulo the leading
+// `export ` keyword, which a module has and an inlined copy cannot). Change
+// both together or that test fails.
+//
+// This is inlined rather than imported because this function declares itself
+// self-contained (see line 2) and no `_shared/` directory exists yet; adding
+// one is the right structural fix but is unverifiable locally (no Deno, and
+// `supabase functions serve` needs Docker), and introducing an untestable
+// deploy-time resolution change inside a data-loss fix on a production write
+// path is the wrong risk. See docs/batch-sync-guard-spec.md §5.1.
+// -------------------------------------------------------------------------
+// --- SYNC-FIELD-GUARD:BEGIN ---
+// Fields the Jira sync writes that a human can also edit in CQIP, i.e.
+// exactly `ALLOWED_FIELDS` (app/api/logs/edit/route.ts) INTERSECT the sync's
+// `updateData`. These are the only columns where an empty Jira value can
+// destroy human work, so these are the only ones guarded.
+//
+// Everything else the sync writes (jira_summary, client_brand, detected_by,
+// reproducibility, root_cause_description, the four booleans, updated_at) is
+// Jira-authoritative with no human-entered value to protect, and keeps its
+// unconditional write. client_brand in particular MUST stay unconditional —
+// §13 r28 depends on it.
+const SYNC_GUARDED_FIELDS = [
+  'issue_category',
+  'issue_subtype',
+  'root_cause_final',
+  'resolution_type',
+  'severity',
+  'who_owns_fix',
+] as const;
+
+// "Empty" = Jira has nothing here. Deliberately NOT falsy-testing: `false` is
+// a real boolean value, and 0 would be a real number, so neither counts as
+// empty. Strings are trimmed for the TEST ONLY — a non-empty value is stored
+// verbatim by the caller, so no stored value changes shape.
+function isEmptyForSync(value: unknown): boolean {
+  if (value === null || value === undefined) return true;
+  if (Array.isArray(value)) return value.length === 0;
+  if (typeof value === 'string') return value.trim() === '';
+  return false;
+}
+
+// Copy the guarded fields onto `target` ONLY where Jira supplied a real value.
+//
+// The key is OMITTED, not set to null/[]. That distinction is the whole fix:
+// writing null would still destroy the stored value while looking like a
+// no-op to a naive "did the value change" assertion.
+function addGuardedSyncFields(
+  target: Record<string, unknown>,
+  incoming: Record<string, unknown>,
+): Record<string, unknown> {
+  for (const field of SYNC_GUARDED_FIELDS) {
+    const value = incoming[field];
+    if (isEmptyForSync(value)) continue;
+    target[field] = value;
+  }
+  return target;
+}
+// --- SYNC-FIELD-GUARD:END ---
+
+// -------------------------------------------------------------------------
 // API-key validation — accepts the Supabase anon or service-role key as a
 // query parameter (?apikey=...), an `apikey` header, or a Bearer token.
 // Mirrors the query-param-first / header-fallback pattern used in
@@ -444,24 +508,29 @@ Deno.serve(async (request: Request) => {
           config,
         );
 
-        const updateData = {
+        // Unguarded columns: Jira-authoritative, no human-entered value to
+        // protect, written unconditionally exactly as before. The six guarded
+        // columns are added below ONLY when Jira supplied a real value —
+        // before this guard, an empty Jira QA tab (the NORMAL state, since
+        // Jira automation clears those fields on entry to Dev QA / Dev Client
+        // Review per §6) silently overwrote human classifications with
+        // []/null. See docs/batch-sync-guard-spec.md.
+        //
+        // updated_at is unguarded, so updateData can never be empty and there
+        // is no degenerate zero-column update to defend against.
+        const updateData: Record<string, unknown> = {
           jira_summary: issue.fields.summary,
           client_brand: resolvedBrand.clientBrandString,
           detected_by: mappedFields.detected_by,
           experiment_paused: mappedFields.experiment_paused,
-          issue_category: mappedFields.issue_category,
-          issue_subtype: mappedFields.issue_subtype,
           reproducibility: mappedFields.reproducibility,
-          severity: mappedFields.severity,
-          resolution_type: mappedFields.resolution_type,
-          root_cause_final: mappedFields.root_cause_final,
           root_cause_description: mappedFields.root_cause_description,
-          who_owns_fix: mappedFields.who_owns_fix,
           preventable: mappedFields.preventable,
           documentation_updated: mappedFields.documentation_updated,
           process_improvement_needed: mappedFields.process_improvement_needed,
           updated_at: new Date().toISOString(),
         };
+        addGuardedSyncFields(updateData, mappedFields);
 
         await supabase
           .from('quality_logs')

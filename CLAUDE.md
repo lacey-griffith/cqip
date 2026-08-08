@@ -1746,9 +1746,12 @@ Resolved             → green-500
 
 7. **Periodic sync frequency.** Every 6 hours (cron). Syncs all logs WHERE
    log_status NOT IN ('Resolved') AND is_deleted = FALSE.
-   Re-fetches full Jira ticket and updates all QA tab fields. Admins can also
-   run an on-demand sync from the "Sync with Jira" button on Dashboard, Logs,
-   and Reports pages.
+   Re-fetches the full Jira ticket and updates the QA tab fields —
+   **except that the six human-editable columns are only written when Jira
+   supplies a non-empty value (see rule 37).** This sentence used to read
+   "updates all QA tab fields"; that was true until Batch sync-guard
+   (2026-08-08) and is now false. Admins can also run an on-demand sync from
+   the "Sync with Jira" button on Dashboard, Logs, and Reports pages.
 
 8. **Log number is per-ticket.** Count non-deleted logs for the same
    jira_ticket_id to determine the next log_number.
@@ -2240,6 +2243,41 @@ Resolved             → green-500
     days of volume. For genuinely large tables, or a rule needing a global view
     that a single statement cannot express, prefer plain-SQL pg_cron (still no
     edge function, still no new secret).
+
+37. **An empty Jira value NEVER overwrites a human-entered CQIP value; a
+    non-empty Jira value always wins.** (Batch sync-guard, 2026-08-08.) The
+    guarded set is defined structurally, not by taste: it is
+    **`ALLOWED_FIELDS` (`app/api/logs/edit/route.ts`) INTERSECT the sync's
+    `updateData`** — today `issue_category`, `issue_subtype`,
+    `root_cause_final`, `resolution_type`, `severity`, `who_owns_fix`. For
+    those six, `supabase/functions/jira-sync/index.ts` **omits the key from
+    the update** when Jira supplies `null` / `[]` / an empty string. It does
+    not write `null` — omitting and null-writing look identical to a naive
+    "did the value change" check, and only one of them preserves the data.
+    Everything else the sync writes stays unconditional; `client_brand` in
+    particular MUST, because §13 r28 depends on it.
+
+    **Why:** the Jira QA tab is empty for most synced tickets *by design* —
+    the Jira-side automation clears those fields on entry to `Dev QA` /
+    `Dev Client Review` (§6). So the sync's unconditional write meant the
+    normal path silently erased human classifications. Five production rows
+    lost all six fields between 2026-05-26 and 2026-08-08. It went unnoticed
+    for ten weeks because the sync wrote them with **no `audit_log` row**: the
+    trail showed the human's write and nothing after it, which reads as "the
+    value is still there."
+
+    **How to apply:** if you add a column to the sync's `updateData`, decide
+    whether a human can also edit it — if it is in `ALLOWED_FIELDS`, it is
+    guarded, full stop. Do not reintroduce an unconditional write for a
+    human-editable column. The guard body is inlined verbatim into the Deno
+    function from `lib/sync/sync-field-guard.ts` because that function is
+    self-contained and `tsconfig.json` excludes `supabase/functions` (so it is
+    never type-checked and cannot import); `tests/sync-field-guard.test.ts`
+    asserts the two copies are identical, and **that drift assertion is the
+    only gate reaching the deployed code** — if you edit one copy, edit both.
+    Note the same `?? []` coercion exists in `jira-webhook/index.ts:333–344`;
+    it is harmless there only because the webhook runs at row creation, where
+    there is no prior value to destroy. Do not assume it stays harmless.
 
 ---
 
@@ -3596,6 +3634,64 @@ deleted in the same commit that writes the §16 shipped entry.
 
 (The Convert reconciliation backfill is NOT here — it lives in §16: it is BUILT
 and reviewed, awaiting only Lacey's run, so it is not in-flight work.)
+
+### Batch sync-guard — skip-if-empty guard + sync audit rows (IN FLIGHT, 2026-08-08)
+
+Defect fix on a production write path. **No migration, no schema change, no new
+route**, but a behaviour change to an existing prod writer whose failure mode is
+silent data loss → **Jenny pre-flight YES (done, APPROVE-WITH-FINDINGS, all
+findings folded into the spec before the build)**. Karen post-flight owed.
+Spec: `docs/batch-sync-guard-spec.md` (rev 2, canonical). **DO NOT PUSH.**
+
+**The defect.** `jira-sync` wrote the QA-tab block into `quality_logs`
+unconditionally, so an empty Jira QA tab overwrote human-entered CQIP values
+with `[]` / `null`. The empty tab is the NORMAL state (Jira automation clears
+those fields on entry to Dev QA / Dev Client Review, §6). **Five rows confirmed
+damaged**, `b77c1d57` · `a6111337` · `a57c357c` · `bf5fc1d7` · `67079106`, each
+losing all six guarded fields. Undetected for ten weeks because the sync emitted
+**no audit row** for those writes.
+
+**LOCKED DECISIONS (do not relitigate):**
+- **Six guarded fields, not four** (Lacey, 2026-08-08). The brief said
+  taxonomy-only; `severity` + `who_owns_fix` were then proven to suffer the
+  identical loss on the identical rows (10 further field losses), so the guard
+  covers `ALLOWED_FIELDS ∩ updateData` — a structural rule, not a list.
+- **Omit the key, never write `null`.** The two are indistinguishable to a naive
+  change-check and only one preserves data.
+- **Inline + drift-test, not `_shared/`.** `_shared/` is the right long-term fix
+  and is filed; it is not done here because there is no such directory today and
+  it cannot be bundle-tested locally (no Deno, `supabase functions serve` needs
+  Docker) — an unverifiable deploy-time resolution change does not belong inside
+  a data-loss fix on a prod write path.
+- **§13 r2 is NARROWED, not closed** — 6 of 16 written columns audited, up from
+  0 of 16. Full closure is deferred to land with the `audit_log` pagination work
+  (that table is at 1,557 rows, already over the PostgREST cap, with an unranged
+  consumer).
+
+**THREE CORRECTIONS TO THE ORIGINAL BRIEF, each proven against prod:**
+1. **`root_cause_initial` was never blanked by the sync — the sync does not
+   write it at all.** It is empty because §13 r3 snapshots at creation and the
+   QA tab is empty at sendback time. Measured: 74 of 83 webhook-created logs
+   have it empty vs 0 of 38 CSV-imported. That makes r3's snapshot structurally
+   a no-op — a real finding, filed, NOT fixed here.
+2. **The loss is 5 rows, not 6.** A sixth (`f44754df`) was a *human* clear,
+   correctly audited, on a `Resolved` row outside the sync's working set.
+3. **No pending loss.** All 33 rows in the working set are already empty on all
+   six fields, so the guard protects future entries; recovery of the 5 is a
+   separate Lacey decision.
+
+**Gate reality (Jenny MEDIUM-2), because two of three gates cannot do what their
+names suggest:** `tsconfig.json:33` excludes `supabase/functions`, so **`tsc`
+never type-checks the deployed file**; and ESLint "clean" is unachievable —
+`jira-sync/index.ts` carries a **baseline of 8 errors + 1 warning**, four of them
+on the exact lines this batch edits, so the gate is *zero NEW findings*. This is
+what makes the drift test load-bearing rather than decorative.
+
+**Phase status:** commit 1 (spec + guard + `lib/sync/sync-field-guard.ts` +
+13 tests + these docs) BUILT — 181/181 suite, tsc clean, zero new ESLint
+findings, **5 of 5 mutations caught** (unconditional write · falsy-test ·
+write-null-instead-of-omit · lib-edited-without-inline-copy · guard-never-called).
+Commit 2 (audit rows + the unchecked-update fix) NEXT.
 
 ---
 
