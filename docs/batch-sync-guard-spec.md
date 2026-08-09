@@ -211,9 +211,13 @@ zero-column update.
 > authored-by-import (one). Anyone adding a column to `updateData` must apply the second
 > test too, not just check `ALLOWED_FIELDS`.
 
-> `root_cause_description` is the one judgement call: Jira-sourced free text, not
+> ~~`root_cause_description` is the one judgement call: Jira-sourced free text, not
 > human-editable in CQIP, so it stays unguarded per the brief's "do not change behaviour for
-> non-taxonomy fields." See §6.3 and §4.5 — it carries a separate latent hazard.
+> non-taxonomy fields."~~ **SUPERSEDED by commit `4ec827c` — it is now GUARDED.** Struck
+> through rather than deleted, so the reasoning that produced the wrong call stays visible:
+> "not human-editable" was treated as "holds no human work", and those are different things.
+> See the correction block above, and §4.5 for the ADF hazard, which the widening does NOT
+> address.
 
 ### 3.4 What this does NOT do — and the residual divergence
 
@@ -330,18 +334,21 @@ Two consequences, stated so a later failure is diagnosed rather than blamed on t
 
 r2 requires *every* UPDATE to `quality_logs` to write an `audit_log` row. This batch audits
 **7 of the 16** written columns. `client_brand`, `jira_summary`, `detected_by`,
-`reproducibility`, `root_cause_description` and the four booleans can still change with no
-audit row.
+`reproducibility`, the four booleans and `updated_at` can still change with no audit row.
 
 Stated plainly so neither this spec nor §4.1 reads as full coverage: **r2 was already
-violated — the sync audited nothing at all. This batch moves it from 0/16 to 6/16.** The 6
-are exactly the human-editable set, i.e. the ones where an unrecorded change destroys work,
-which is the documented harm.
+violated — the sync audited nothing at all. This batch moves it from 0/16 to 7/16.** Those
+7 are the columns that can hold human work — where an unrecorded change destroys something,
+which is the documented harm. (Rev 2 read "6/16… exactly the human-editable set"; commit
+`4ec827c` added `root_cause_description`, which is *not* editable, so both the figure and
+the characterisation moved.)
 
 Full closure is deliberately deferred, not overlooked, because it is not free:
 `audit_log` is **already over the PostgREST 1,000-row cap at 1,557 rows**, and
 `/dashboard/logs` reads it **unranged** for the sendback-count badge (§15). Auditing 15
-columns instead of 6 pushes a known-silent-truncation consumer closer to firing. Filed to
+columns instead of 7 pushes a known-silent-truncation consumer closer to firing. (The 6→7
+widening itself adds ~nothing: 0 of 33 working-set tickets carry a non-empty
+`customfield_12909`, so that column will essentially never emit a row.) Filed to
 §15 to land with that pagination fix.
 
 ---
@@ -442,13 +449,16 @@ A test that passes against the broken code is not a test. Each must be run and s
 **Commit 1** — this spec + skip-if-empty guard + `lib/sync/sync-field-guard.ts` + tests +
 CLAUDE.md:
 - **§13 r7 must be amended (Jenny HIGH-1).** r7 currently says sync *"updates all QA tab
-  fields."* After this guard that is **false** — it updates all except six, conditionally.
+  fields."* After this guard that is **false** — it updates all except seven,
+  conditionally.
   r7 is the rule a future session reads to understand sync behaviour; leaving it stale
   invites a later batch to reinstate unconditional writes with every test still green,
   because no test pins r7's prose. Amend in the same commit per r23.
 - **New §13 rule** stating the guard's contract (empty Jira never overwrites; non-empty
-  always wins; the guarded set is `ALLOWED_FIELDS ∩ updateData`). This is business
-  behaviour now, not an implementation detail.
+  always wins). ~~the guarded set is `ALLOWED_FIELDS ∩ updateData`~~ — **superseded by
+  `4ec827c`**: that rule missed `root_cause_description`, so r37 now reads "can this column
+  hold human work the sync can destroy", with editable and authored-by-import as its two
+  sources. This is business behaviour, not an implementation detail.
 - **§15.5 in-flight entry** per r34.
 
 **Commit 2** — audit rows + the §4.5 error check + tests + CLAUDE.md §15 entries for the

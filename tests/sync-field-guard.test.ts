@@ -429,8 +429,17 @@ test('DRIFT: no guarded column is assigned onto updateData anywhere', () => {
   // exact reinstatement path the spec worries about ("invites a later batch to
   // reinstate unconditional writes with every test still green").
   //
-  // Assignment through the object is the only way to bypass the guard, so it
-  // is banned outright for guarded columns regardless of position in the file.
+  // SCOPE OF THIS TEST, stated precisely because an earlier version of this
+  // comment claimed named assignment was "the only way to bypass the guard"
+  // and that was FALSE — Karen re-check found three bypasses that passed the
+  // whole suite: Object.assign(updateData, mappedFields), spreading
+  // ...mappedFields into the literal, and a second quality_logs update. All
+  // three reinstate the original data loss verbatim.
+  //
+  // The three checks below now cover those. They are still a DENYLIST, not a
+  // proof: they catch the shapes we know reinstate the bug, and a sufficiently
+  // creative write path could evade them. Do not read a pass here as "the
+  // guard cannot be bypassed".
   const fn = readOrFail(FN_PATH);
   for (const field of SYNC_GUARDED_FIELDS) {
     const dot = new RegExp(`updateData\\.${field}\\s*=`);
@@ -441,4 +450,41 @@ test('DRIFT: no guarded column is assigned onto updateData anywhere', () => {
         `Let addGuardedSyncFields decide, or the empty-Jira data loss returns.`,
     );
   }
+});
+
+test('DRIFT: updateData is not bulk-populated from mappedFields', () => {
+  // Object.assign or a spread copies EVERY mapped field, guarded ones included,
+  // straight past addGuardedSyncFields. Both passed 27/27 before this test.
+  // The spread is the likelier of the two: a later "simplification" of a
+  // nine-key literal into `{ ...mappedFields, updated_at }` silently restores
+  // the exact defect this batch exists to fix.
+  const fn = readOrFail(FN_PATH);
+  assert.ok(
+    !/Object\.assign\(\s*updateData/.test(fn),
+    'Object.assign onto updateData bypasses the guard — assign fields explicitly',
+  );
+  const literal = fn.slice(fn.indexOf('const updateData'), fn.indexOf('addGuardedSyncFields(updateData'));
+  assert.ok(
+    !/\.\.\.\s*mappedFields/.test(literal),
+    'spreading mappedFields into updateData bypasses the guard for every guarded column',
+  );
+});
+
+test('DRIFT: quality_logs is updated in exactly the two known places', () => {
+  // A THIRD update is the remaining realistic bypass, and it is realistic
+  // *specifically here*: this function already runs a second quality_logs
+  // update in the same loop (the auto-advance log_status write), so adding a
+  // field beside it is a natural edit that no other test in this file sees.
+  //
+  // The two legitimate sites are the guarded main write and the auto-advance
+  // status write. If you add a third, decide deliberately whether it touches a
+  // guarded column — then update this count.
+  const fn = readOrFail(FN_PATH);
+  const updates = fn.match(/\.update\(/g) ?? [];
+  assert.equal(
+    updates.length,
+    3,
+    `expected exactly 3 .update( calls (quality_logs main + auto-advance, and sync_runs), ` +
+      `found ${updates.length}. A new update path may bypass the guard — see this test's comment.`,
+  );
 });

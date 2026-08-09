@@ -58,6 +58,19 @@ export const SYNC_GUARDED_FIELDS = [
 // a real boolean value, and 0 would be a real number, so neither counts as
 // empty. Strings are trimmed for the TEST ONLY — a non-empty value is stored
 // verbatim by the caller, so no stored value changes shape.
+//
+// KNOWN GAP, and it bounds what the guard promises for
+// `root_cause_description`: a non-array OBJECT is never empty here. Jira may
+// return a CLEARED Paragraph field not as `null` but as an empty ADF document
+// (`{type:'doc',version:1,content:[]}`), which this would treat as a real
+// value. So "an empty customfield_12909 cannot null the imported prose" holds
+// only while Jira sends literal `null` — true of all 33 working-set tickets
+// probed 2026-08-08/09, hence latent rather than live.
+// It also fails SAFE: an object written into a TEXT column errors, the caller
+// throws, the log counts as failed, and the prose is left untouched. That is
+// why this is documented rather than patched with a speculative ADF-shape
+// heuristic — teaching this function about ADF would improve sync throughput,
+// not data safety. Tracked with the rest of the ADF hazard in §15.
 export function isEmptyForSync(value: unknown): boolean {
   if (value === null || value === undefined) return true;
   if (Array.isArray(value)) return value.length === 0;

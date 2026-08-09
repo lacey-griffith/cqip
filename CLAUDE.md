@@ -3648,8 +3648,9 @@ its reason so nobody re-derives the analysis.
       webhook ever updates an existing row.
 - [x] **`root_cause_description` — GUARDED as of 2026-08-09 (Lacey's call).** The
       guard was widened to seven fields rather than only correcting the prose, so
-      an empty Jira `customfield_12909` can no longer null the CSV-imported
-      "Issue Details" text, and any real change to it now writes an audit row
+      a `null` Jira `customfield_12909` can no longer null the CSV-imported
+      "Issue Details" text — **contingent on Jira sending literal `null`; see the
+      empty-ADF gap in the still-open half below** — and any real change to it now writes an audit row
       where there was none. **The decision rule changed with it** — see §13 r37:
       it is no longer `ALLOWED_FIELDS ∩ updateData` but "can this column hold
       human work the sync can destroy", because editability turned out to be an
@@ -3669,7 +3670,17 @@ its reason so nobody re-derives the analysis.
       and which was false (Karen post-flight MEDIUM-2). **Nothing is owed here now;
       the guard covers it.**
       **STILL OPEN — the latent ADF hazard**, which widening the guard does NOT
-      address: `mapJiraFields` does
+      address, and which has TWO faces. **(i) The write:** an ADF object into a
+      `TEXT` column. **(ii) The guard's blind spot (Karen re-check):**
+      `isEmptyForSync` treats any non-array object as non-empty, so a field
+      *cleared in Jira* that comes back as an empty ADF doc
+      (`{type:'doc',version:1,content:[]}`) rather than `null` is read as a real
+      value and written — which is why the protection above is contingent. Both
+      fail SAFE (the TEXT write errors, the log counts failed, the prose
+      survives) and both are latent: 0 of 33 working-set tickets return a
+      non-empty `customfield_12909`. Deliberately not patched with a speculative
+      ADF-shape heuristic — that would buy sync throughput, not data safety.
+      Mechanically: `mapJiraFields` does
       `fields[customfield_12909] ?? null` with **no ADF extraction**, while §7
       documents that field as a Jira **Paragraph** (API v3 returns an ADF *object*)
       into a `TEXT` column. Probed 2026-08-08: all 33 working-set tickets return
@@ -3751,10 +3762,15 @@ CSV-imported population). Undetected for ten weeks because the sync emitted
 **no audit row** for those writes.
 
 **LOCKED DECISIONS (do not relitigate):**
-- **Six guarded fields, not four** (Lacey, 2026-08-08). The brief said
-  taxonomy-only; `severity` + `who_owns_fix` were then proven to suffer the
-  identical loss on the identical rows (10 further field losses), so the guard
-  covers `ALLOWED_FIELDS ∩ updateData` — a structural rule, not a list.
+- **SEVEN guarded fields** (six as of Lacey 2026-08-08, seven as of 2026-08-09).
+  The brief said taxonomy-only; `severity` + `who_owns_fix` were proven to suffer
+  the identical loss on the identical rows (10 further field losses), and
+  `root_cause_description` was added after Karen post-flight MEDIUM-2.
+  ~~the guard covers `ALLOWED_FIELDS ∩ updateData` — a structural rule, not a
+  list.~~ **SUPERSEDED:** that rule is what MISSED `root_cause_description`.
+  The rule is now *"can this column hold human work the sync can destroy"*, with
+  two sources — editable (six) and authored-by-import (one). See §13 r37, and do
+  not reduce it back to the intersection.
 - **Omit the key, never write `null`.** The two are indistinguishable to a naive
   change-check and only one preserves data.
 - **Inline + drift-test, not `_shared/`.** `_shared/` is the right long-term fix
@@ -3852,10 +3868,12 @@ shape as the defect the batch exists to fix.**
   **32 non-deleted rows hold human prose in `root_cause_description`** from the CSV
   "Issue Details" import, kept out of the working set *only* by being `Resolved` —
   and `log_status` is in `ALLOWED_FIELDS`, so reopening one pulls it in and the next
-  sync nulls that prose unguarded and unaudited. The guarded set stays correct
-  (`ALLOWED_FIELDS ∩ updateData` is about what a human can *edit*); the
-  justification was wrong, and the §15 deferred entry now carries the real reason
-  plus an explicit **decision owed to Lacey**.
+  sync nulls that prose unguarded and unaudited. ~~The guarded set stays correct
+  (`ALLOWED_FIELDS ∩ updateData` is about what a human can *edit*); only the
+  justification was wrong.~~ **SUPERSEDED ~24h later by commit `4ec827c` (see
+  COMMIT 4 below): Lacey widened the guard rather than only fixing the prose, and
+  the RULE changed with it** — `ALLOWED_FIELDS ∩ updateData` is exactly what missed
+  this column. The decision that was owed here has been taken.
 - **LOW-1** — "four baseline ESLint findings sit on the exact lines this batch
   edits" was false; every one precedes the first diff hunk and `mapJiraFields` is
   untouched. Corrected in both places.
@@ -3877,6 +3895,13 @@ destroy"*, with two sources: editable (six) and authored-by-import (one). §13 r
 carries it; the partition is now **7 guarded + 9 unguarded = 16**, and §13 r2 goes
 6/16 → **7/16** because the guarded set is also the audited set — so that prose now
 gets a trail where it had none.
+
+**What the widening does NOT buy, stated because the claim is easy to over-read:**
+the protection holds while Jira sends literal `null` for a cleared field. An empty
+ADF document is an object, and `isEmptyForSync` treats objects as non-empty — so
+that case still writes, still fails on the TEXT column, and still leaves the prose
+intact (safe direction, failed log). Latent today at 0 of 33 tickets; recorded at
+the function and in §15 rather than papered over.
 
 Two things the widening dragged in that were worth having: `root_cause_description`
 had to move OUT of the unguarded `updateData` literal (a test catches it if it
