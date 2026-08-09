@@ -251,17 +251,32 @@ export function SyncStatusPill({ refreshKey = 0, className }: SyncStatusPillProp
             <DetailRow label="Logs updated" value={latest.logs_updated == null ? '—' : String(latest.logs_updated)} />
             <DetailRow label="Logs failed" value={latest.logs_failed == null ? '—' : String(latest.logs_failed)} />
             {latest.status === 'failed' && (
-              <>
-                <DetailRow label="Error category" value={describeErrorCategory(latest.error_category)} />
-                {latest.error_message && (
-                  <div>
-                    <p className="text-xs uppercase tracking-widest text-[color:var(--f92-gray)]">Error message</p>
-                    <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md border border-[color:var(--f92-border)] bg-[color:var(--f92-tint)] p-2 text-xs">
-                      {latest.error_message}
-                    </pre>
-                  </div>
-                )}
-              </>
+              <DetailRow label="Error category" value={describeErrorCategory(latest.error_category)} />
+            )}
+            {/*
+              error_message renders whenever it is present, NOT only on a
+              'failed' run. A run can succeed — the data lands — and still
+              carry a message: jira-sync reports audit-row write failures that
+              way, because throwing there would permanently lose the audit row
+              (the next run recomputes the same updateData, finds no change,
+              and emits nothing) and misreport a successful log as failed.
+
+              This used to be nested inside the `status === 'failed'` branch,
+              which made that message unreachable: the run showed green with
+              no indication the audit trail was missing — the exact silent
+              failure the sync-guard batch exists to end, reproduced inside
+              its own mitigation. Karen post-flight HIGH-1, 2026-08-08.
+              Do not re-nest this.
+            */}
+            {latest.error_message && (
+              <div>
+                <p className="text-xs uppercase tracking-widest text-[color:var(--f92-gray)]">
+                  {latest.status === 'failed' ? 'Error message' : 'Warning'}
+                </p>
+                <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md border border-[color:var(--f92-border)] bg-[color:var(--f92-tint)] p-2 text-xs">
+                  {latest.error_message}
+                </pre>
+              </div>
             )}
           </div>
         ) : (

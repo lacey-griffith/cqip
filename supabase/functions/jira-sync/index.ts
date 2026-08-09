@@ -179,10 +179,19 @@ function mapJiraFields(fields: any) {
 // destroy human work, so these are the only ones guarded.
 //
 // Everything else the sync writes (jira_summary, client_brand, detected_by,
-// reproducibility, root_cause_description, the four booleans, updated_at) is
-// Jira-authoritative with no human-entered value to protect, and keeps its
-// unconditional write. client_brand in particular MUST stay unconditional —
-// §13 r28 depends on it.
+// reproducibility, root_cause_description, the four booleans, updated_at)
+// keeps its unconditional write. client_brand in particular MUST stay
+// unconditional — §13 r28 depends on it.
+//
+// CAVEAT, because an earlier version of this comment claimed these columns
+// hold "no human-entered value to protect" and that is FALSE (Karen
+// post-flight MEDIUM-2): 32 non-deleted rows hold human-authored prose in
+// root_cause_description, imported from the CSV's "Issue Details" column
+// (§11). They are excluded from the sync's working set only by being
+// Resolved — and log_status IS in ALLOWED_FIELDS, so an admin reopening one
+// pulls it in, after which an empty Jira customfield_12909 nulls that prose
+// silently and WITHOUT an audit row. It is unguarded because it is not
+// human-editable in CQIP, not because it is empty of human work. See §15.
 const SYNC_GUARDED_FIELDS = [
   'issue_category',
   'issue_subtype',

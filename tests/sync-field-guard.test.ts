@@ -378,3 +378,29 @@ test('DRIFT: the edge function actually CALLS the guard', () => {
     );
   }
 });
+
+test('DRIFT: no guarded column is assigned onto updateData anywhere', () => {
+  // Karen post-flight MEDIUM-1. The literal check above slices only up to the
+  // guard call, so it is blind to anything AFTER it — and
+  //
+  //     addGuardedSyncFields(updateData, mappedFields);
+  //     updateData.severity = mappedFields.severity;   // bug fully reinstated
+  //
+  // passed every other test in this file. That is the more natural shape of a
+  // later batch adding a field write than guard-never-called, and it is the
+  // exact reinstatement path the spec worries about ("invites a later batch to
+  // reinstate unconditional writes with every test still green").
+  //
+  // Assignment through the object is the only way to bypass the guard, so it
+  // is banned outright for guarded columns regardless of position in the file.
+  const fn = readOrFail(FN_PATH);
+  for (const field of SYNC_GUARDED_FIELDS) {
+    const dot = new RegExp(`updateData\\.${field}\\s*=`);
+    const bracket = new RegExp(`updateData\\[\\s*['"\`]${field}['"\`]\\s*\\]\\s*=`);
+    assert.ok(
+      !dot.test(fn) && !bracket.test(fn),
+      `${field} must not be assigned onto updateData — that bypasses the guard. ` +
+        `Let addGuardedSyncFields decide, or the empty-Jira data loss returns.`,
+    );
+  }
+});

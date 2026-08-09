@@ -3632,14 +3632,27 @@ its reason so nobody re-derives the analysis.
       runs at row creation, where there is no prior value to destroy. It is the same
       shape as the defect that cost five rows; do not assume it stays harmless if the
       webhook ever updates an existing row.
-- [ ] **`root_cause_description` is unguarded and carries a latent ADF hazard.**
-      `mapJiraFields` does `fields[customfield_12909] ?? null` with **no ADF
-      extraction**, while §7 documents that field as a Jira **Paragraph** — API v3
-      returns an ADF *object* — into a `TEXT` column. Probed 2026-08-08: **all 33
-      working-set tickets return `null`**, so it is latent, not live. Now that the
-      update error is checked, a future non-empty value turns a silent corruption
-      into a loud `logs_failed` — the better direction, and why it was recorded
-      rather than pre-emptively fixed.
+- [ ] **`root_cause_description` is unguarded and holds real human prose — the
+      strongest remaining item on this list, and it needs a Lacey decision.**
+      **32 non-deleted rows hold human-authored text** there, imported from the
+      CSV's "Issue Details" column (§11) — e.g. `92111cdb` / NBLYCRO-101. All 38
+      CSV-imported rows are `Resolved`, and that is the **only** thing keeping them
+      out of the sync's working set. **`log_status` IS in `ALLOWED_FIELDS`**, so an
+      admin reopening a resolved log — supported, and something the `f44754df` trail
+      shows Lacey doing in both directions — pulls the row in; the next sync then
+      writes `root_cause_description: null` **unguarded and unaudited**. Silent, and
+      the same shape as the defect this batch fixed.
+      It is unguarded because it is not human-*editable* in CQIP (so it fails the
+      `ALLOWED_FIELDS ∩ updateData` rule), **not** because it is empty of human work
+      — an earlier draft of this entry and of the code comments claimed the latter,
+      which was false (Karen post-flight MEDIUM-2). **Decision owed: either widen the
+      guard to cover it, or accept the reopen risk explicitly.**
+      Separately it carries a **latent ADF hazard**: `mapJiraFields` does
+      `fields[customfield_12909] ?? null` with **no ADF extraction**, while §7
+      documents that field as a Jira **Paragraph** (API v3 returns an ADF *object*)
+      into a `TEXT` column. Probed 2026-08-08: all 33 working-set tickets return
+      `null`, so that half is latent. Now that the update error is checked, a future
+      non-empty value fails loudly instead of corrupting silently.
 - [ ] **§13 r29 — the sync writes taxonomy values unvalidated.** The edit route
       validates every value against `quality_log_taxonomy`
       (`app/api/logs/edit/route.ts:86–137`); the sync validates none. Post-guard a
@@ -3745,8 +3758,10 @@ losing all six guarded fields. Undetected for ten weeks because the sync emitted
 **Gate reality (Jenny MEDIUM-2), because two of three gates cannot do what their
 names suggest:** `tsconfig.json:33` excludes `supabase/functions`, so **`tsc`
 never type-checks the deployed file**; and ESLint "clean" is unachievable —
-`jira-sync/index.ts` carries a **baseline of 8 errors + 1 warning**, four of them
-on the exact lines this batch edits, so the gate is *zero NEW findings*. This is
+`jira-sync/index.ts` carries a **baseline of 8 errors + 1 warning**, so the gate is
+*zero NEW findings*, not absence. (An earlier draft added "four of them on the exact
+lines this batch edits" — false, Karen LOW-1: every baseline finding precedes the
+first diff hunk and `mapJiraFields` is untouched.) This is
 what makes the drift test load-bearing rather than decorative.
 
 **Phase status: BOTH COMMITS BUILT. Karen post-flight next, then Lacey.**
@@ -3780,6 +3795,52 @@ Docker, so nothing in this batch proves the edge function *deploys*. The drift t
 proves the inlined block matches a module that is tsc-checked and unit-tested — it
 does not compile the function. **A real sync run against Jira is the outstanding
 gate**, and it is Lacey's.
+
+**KAREN POST-FLIGHT — PASS-WITH-FINDINGS (1 HIGH · 2 MEDIUM · 1 LOW, no CRITICAL);
+all folded in commit 3.** She re-ran every gate independently (all held), verified
+the 6+10=16 partition and the `ALLOWED_FIELDS ∩ updateData` intersection herself,
+re-ran 10 mutations, checked the audit row shape against migrations 025/001 rather
+than my summary, and independently confirmed all three corrections to the brief.
+She also ran a check I had not claimed — zero duplicate top-level identifiers
+across 27 declarations in the Deno file, so the inlined block cannot collide and
+fail to load, which was the main untested load risk.
+
+**The code was correct; the weak part was again a CLAIM — and the HIGH is the same
+shape as the defect the batch exists to fix.**
+- **HIGH-1 — my stated mitigation did not exist.** The code comment, the spec and
+  the commit message all said the audit-failure count is surfaced because "the pill
+  renders `error_message` in its detail dialog." It does not:
+  `sync-status-pill.tsx` gated that entire block on `status === 'failed'`, and it
+  is the column's only renderer. So an audit-write failure would have landed the
+  data, populated `sync_runs.error_message`, and rendered the pill **green with no
+  indication** — the ten-week silence this batch exists to end, reproduced inside
+  its own mitigation. Fixed by un-nesting the render (labelled "Warning" on a
+  successful run). Karen split the verdict correctly: the *reasoning for not
+  throwing* is sound and stays; only the surfacing half was asserted rather than
+  built.
+- **MEDIUM-1 — a drift-test blind spot she found by mutation, not reading.** The
+  literal check sliced only up to the guard call, so
+  `addGuardedSyncFields(...)` followed by `updateData.severity = ...` reinstated
+  the bug **in full with 23/23 passing**. That is a likelier shape than
+  guard-never-called, and exactly the reinstatement path the spec worries about.
+  Now banned outright, dot- and bracket-notation, anywhere in the file.
+- **MEDIUM-2 — "nothing unguarded can hold a human-entered value" was FALSE.**
+  **32 non-deleted rows hold human prose in `root_cause_description`** from the CSV
+  "Issue Details" import, kept out of the working set *only* by being `Resolved` —
+  and `log_status` is in `ALLOWED_FIELDS`, so reopening one pulls it in and the next
+  sync nulls that prose unguarded and unaudited. The guarded set stays correct
+  (`ALLOWED_FIELDS ∩ updateData` is about what a human can *edit*); the
+  justification was wrong, and the §15 deferred entry now carries the real reason
+  plus an explicit **decision owed to Lacey**.
+- **LOW-1** — "four baseline ESLint findings sit on the exact lines this batch
+  edits" was false; every one precedes the first diff hunk and `mapJiraFields` is
+  untouched. Corrected in both places.
+
+**Gates re-run after the fold, not inherited:** tsc clean · **192/192** · edge fn
+still exactly 8 errors + 1 warning · `sync-status-pill.tsx` unchanged at its own
+1-error baseline (verified by stashing, not assumed) · build green · **13 of 13
+mutations caught**, the two new ones being Karen's guard-called-then-overridden in
+both dot and bracket form.
 
 ---
 

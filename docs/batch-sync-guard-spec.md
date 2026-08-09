@@ -27,8 +27,11 @@ silent data loss. No migration, no schema change, no new route. **Jenny pre-flig
      report tsc as evidence the deployed file is sound.
    - **ESLint — zero *new* findings on touched files.** "Clean" is unachievable:
      `jira-sync/index.ts` carries a **baseline of 8 errors + 1 warning** (`no-explicit-any`
-     at 72×2, 129, 130, 142, 143, 144, 151; unused `anonKey` at 12). Four of those sit on
-     the exact lines this batch edits. Baseline captured 2026-08-08; assert the delta.
+     at 72×2, 129, 130, 142, 143, 144, 151; unused `anonKey` at 12). Baseline captured
+     2026-08-08; assert the delta, not absence. (Rev 1 added "four of those sit on the exact
+     lines this batch edits" — **false**, Karen LOW-1: the first hunk starts at old line 157
+     and `mapJiraFields` is untouched, so every baseline finding precedes the diff. The gate
+     result is unaffected; the claim overstated entanglement.)
    - **Test suite green**, including the drift test — which per §5 is the *only* gate that
      reaches the deployed code path at all.
 
@@ -170,10 +173,28 @@ The decision rule is `ALLOWED_FIELDS ∩ updateData`, and it yields precisely th
 477–480). No other automated writer touches these columns: only `jira-sync` (recurring) and
 `jira-webhook` (creation only); everything else is a one-shot script.
 
-Nothing unguarded can hold a human-entered value to protect. `client_brand` in particular
-**must** keep writing unconditionally — §13 r28 depends on it. The four booleans are genuine
-`false`, not absent, and `false` is not "empty". `updated_at` being unguarded also means
-`updateData` can never become empty, so there is no degenerate zero-column update.
+`client_brand` in particular **must** keep writing unconditionally — §13 r28 depends on it.
+The four booleans are genuine `false`, not absent, and `false` is not "empty". `updated_at`
+being unguarded also means `updateData` can never become empty, so there is no degenerate
+zero-column update.
+
+> **CORRECTION (Karen post-flight MEDIUM-2).** Rev 1 of this section claimed *"nothing
+> unguarded can hold a human-entered value to protect."* **That is false.** **32 non-deleted
+> rows hold human-authored prose in `root_cause_description`**, imported from the CSV's
+> "Issue Details" column (§11) — e.g. `92111cdb` / NBLYCRO-101, *"Images provided by client
+> are low quality and grainy…"*. All 38 CSV-imported rows are `Resolved`, and that status is
+> the **only** thing keeping them out of the sync's working set. `log_status` **is** in
+> `ALLOWED_FIELDS`, so an admin reopening a resolved log — a supported action, and one the
+> `f44754df` audit trail shows Lacey performing in both directions — pulls the row in. The
+> next sync then writes `root_cause_description: null` (probed: all working-set tickets
+> return `null` for `customfield_12909`), **unguarded and therefore unaudited**: silent, and
+> identical in shape to the defect this batch fixes.
+>
+> The guarded set is still correct as `ALLOWED_FIELDS ∩ updateData` — that rule is about
+> what a human can *edit in CQIP*. What was wrong was the *justification*, which asserted
+> the unguarded columns are empty of human work. Recorded so whoever picks up §6.3 does not
+> read "ADF hazard, latent, 0/33" and deprioritize it while 32 rows of human prose sit one
+> status change away.
 
 > `root_cause_description` is the one judgement call: Jira-sourced free text, not
 > human-editable in CQIP, so it stays unguarded per the brief's "do not change behaviour for
