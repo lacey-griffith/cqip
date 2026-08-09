@@ -118,7 +118,9 @@ audited. It is also `Resolved`, hence outside the sync's working set. The brief'
 is right; my first sweep's heuristic over-counted.
 
 **(c) There is no pending loss.** All 33 rows currently in the sync working set are already
-empty on all six guarded fields. Nothing further is at risk on the next run. The guard
+empty on all seven guarded fields (re-measured after the widening: 0 working-set rows
+carry a non-empty `root_cause_description` either). Nothing further is at risk on the next
+run. The guard
 protects **future** human entries; recovery of the 5 damaged rows is a separate decision
 (§6.1).
 
@@ -130,7 +132,8 @@ protects **future** human entries; recovery of the 5 damaged rows is a separate 
 `ALLOWED_FIELDS`. The brief scoped the fix to taxonomy fields only; shown this evidence,
 Lacey extended it.
 
-**Guarded set is therefore six fields, not four.**
+**Guarded set is therefore six fields, not four** — and became **seven** after Karen
+post-flight MEDIUM-2 added `root_cause_description` (§3.2).
 
 ---
 
@@ -146,7 +149,7 @@ values overwrite as today.
 string. Scalars are trimmed **for the emptiness test only** — a non-empty value is stored
 verbatim, so no stored value changes shape.
 
-### 3.2 Guarded fields (6)
+### 3.2 Guarded fields (7)
 
 | field | type | why guarded |
 |---|---|---|
@@ -156,18 +159,21 @@ verbatim, so no stored value changes shape.
 | `resolution_type` | `TEXT[]` | taxonomy, human-editable |
 | `severity` | `TEXT` | human-editable (§2.2) |
 | `who_owns_fix` | `TEXT` | human-editable (§2.2) |
+| `root_cause_description` | `TEXT` | human-**authored**, not editable (§3.3 correction) |
 
-### 3.3 Explicitly NOT guarded (10) — and why the set is provably complete
+### 3.3 Explicitly NOT guarded (9) — and why the set is provably complete
 
-`jira_summary`, `client_brand`, `detected_by`, `reproducibility`, `root_cause_description`,
-`experiment_paused`, `preventable`, `documentation_updated`, `process_improvement_needed`,
-`updated_at`.
+`jira_summary`, `client_brand`, `detected_by`, `reproducibility`, `experiment_paused`,
+`preventable`, `documentation_updated`, `process_improvement_needed`, `updated_at`.
 
-**`updateData` has exactly 16 keys. 6 guarded + 10 unguarded = 16.** This is a complete
+**`updateData` has exactly 16 keys. 7 guarded + 9 unguarded = 16.** This is a complete
 partition of what the sync writes, not a sample — which converts "did I miss a field?" from
 a judgement call into a checkable claim (Jenny §2).
 
-The decision rule is `ALLOWED_FIELDS ∩ updateData`, and it yields precisely the guarded six.
+The decision rule is **"can this column hold human work the sync can destroy"**, which has
+two sources: `ALLOWED_FIELDS ∩ updateData` yields the six human-EDITABLE columns, and
+`root_cause_description` is added because it is human-**authored** via the CSV import even
+though it is not editable (see the correction below).
 `log_status`, `resolution_notes` and `notes` are human-editable but absent from `updateData`
 (`log_status` is written only by the separate, already-audited auto-advance block at
 477–480). No other automated writer touches these columns: only `jira-sync` (recurring) and
@@ -190,11 +196,20 @@ zero-column update.
 > return `null` for `customfield_12909`), **unguarded and therefore unaudited**: silent, and
 > identical in shape to the defect this batch fixes.
 >
-> The guarded set is still correct as `ALLOWED_FIELDS ∩ updateData` — that rule is about
-> what a human can *edit in CQIP*. What was wrong was the *justification*, which asserted
-> the unguarded columns are empty of human work. Recorded so whoever picks up §6.3 does not
-> read "ADF hazard, latent, 0/33" and deprioritize it while 32 rows of human prose sit one
-> status change away.
+> **RESOLVED, by widening the guard rather than only fixing the prose (Lacey,
+> 2026-08-09).** Karen's recommendation was a documentation correction; Lacey chose the
+> stronger fix. `root_cause_description` is now guarded, so an empty
+> `customfield_12909` can no longer null that prose, and — because the guarded set is also
+> the audited set — any real change to it now writes an `audit_log` row where previously
+> there was none.
+>
+> **This means the decision rule changed, and that is the durable part.** It was
+> `ALLOWED_FIELDS ∩ updateData` — *"can a human edit this in CQIP"*. Editability turned out
+> to be a **proxy** for the thing actually being protected, and an incomplete one: this
+> column is not editable and holds real human work anyway. The rule is now *"can this column
+> hold human work the sync can destroy"*, which has two sources — editable (six) and
+> authored-by-import (one). Anyone adding a column to `updateData` must apply the second
+> test too, not just check `ALLOWED_FIELDS`.
 
 > `root_cause_description` is the one judgement call: Jira-sourced free text, not
 > human-editable in CQIP, so it stays unguarded per the brief's "do not change behaviour for
@@ -314,7 +329,7 @@ Two consequences, stated so a later failure is diagnosed rather than blamed on t
 ### 4.6 §13 r2 is NARROWED, not satisfied — recorded deliberately (Jenny HIGH-2)
 
 r2 requires *every* UPDATE to `quality_logs` to write an `audit_log` row. This batch audits
-**6 of the 16** written columns. `client_brand`, `jira_summary`, `detected_by`,
+**7 of the 16** written columns. `client_brand`, `jira_summary`, `detected_by`,
 `reproducibility`, `root_cause_description` and the four booleans can still change with no
 audit row.
 

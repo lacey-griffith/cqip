@@ -149,10 +149,15 @@ test('case 8: unguarded fields are untouched by the guard', () => {
   assert.equal('jira_summary' in target, false, 'guard must not add unguarded keys');
 });
 
-test('the guarded set is exactly the six human-editable sync-written columns', () => {
-  // Pinned as a literal. The set is ALLOWED_FIELDS (app/api/logs/edit) INTERSECT
-  // the sync updateData; widening or narrowing it is a deliberate decision that
-  // should break a test, not slip through.
+test('the guarded set is exactly the seven columns that can hold human work', () => {
+  // Pinned as a literal. Widening or narrowing it is a deliberate decision that
+  // must break a test rather than slip through — and it has already earned its
+  // keep twice: once when severity/who_owns_fix were added, once when
+  // root_cause_description was.
+  //
+  // NOT simply ALLOWED_FIELDS INTERSECT updateData. That rule covers the first
+  // six (human-EDITABLE). root_cause_description is not editable in CQIP and is
+  // guarded anyway because it holds human-AUTHORED prose from the CSV import.
   assert.deepEqual([...SYNC_GUARDED_FIELDS], [
     'issue_category',
     'issue_subtype',
@@ -160,7 +165,29 @@ test('the guarded set is exactly the six human-editable sync-written columns', (
     'resolution_type',
     'severity',
     'who_owns_fix',
+    'root_cause_description',
   ]);
+});
+
+test('root_cause_description: CSV-imported prose survives an empty Jira field', () => {
+  // The concrete case. 32 non-deleted rows hold this prose (CSV "Issue Details",
+  // §11), all Resolved and therefore outside the sync's working set — but
+  // log_status IS in ALLOWED_FIELDS, so reopening one pulls it in. Before the
+  // widening, the next sync nulled it silently and unaudited.
+  const target: Record<string, unknown> = { updated_at: 'now' };
+  addGuardedSyncFields(target, { root_cause_description: null });
+
+  assert.equal(
+    'root_cause_description' in target,
+    false,
+    'an empty Jira customfield_12909 must not null the imported prose',
+  );
+});
+
+test('root_cause_description: a real Jira value still wins', () => {
+  const target: Record<string, unknown> = {};
+  addGuardedSyncFields(target, { root_cause_description: 'Client changed the brief.' });
+  assert.equal(target.root_cause_description, 'Client changed the brief.');
 });
 
 // ---------------------------------------------------------------------------
@@ -178,6 +205,17 @@ test('serializeForAudit: arrays are JSON, scalars are strings, absent is null', 
   assert.equal(serializeForAudit('Low'), 'Low');
   assert.equal(serializeForAudit(null), null);
   assert.equal(serializeForAudit(undefined), null);
+});
+
+test('serializeForAudit: an ADF object is JSON, never "[object Object]"', () => {
+  // root_cause_description maps to Jira customfield_12909, a Paragraph — and
+  // API v3 returns Paragraph fields as ADF objects. String() would record the
+  // literal "[object Object]", which is worse than useless in a trail whose
+  // job is showing what changed.
+  const adf = { type: 'doc', version: 1, content: [{ type: 'paragraph' }] };
+  const out = serializeForAudit(adf);
+  assert.ok(!String(out).includes('[object Object]'), 'must not stringify to [object Object]');
+  assert.deepEqual(JSON.parse(String(out)), adf, 'must round-trip as JSON');
 });
 
 test('case 6: a changed guarded field produces exactly one correct audit row', () => {
@@ -228,7 +266,7 @@ test('case 3: a field the guard OMITTED produces no audit row', () => {
 });
 
 test('case 8: unguarded columns are never audited, even when they change', () => {
-  // Deliberate: §13 r2 is NARROWED (6 of 16), not closed. Full closure lands
+  // Deliberate: §13 r2 is NARROWED (7 of 16), not closed. Full closure lands
   // with the audit_log pagination fix. Pinned so the scope is a decision, not
   // an accident.
   const rows = buildSyncAuditRows(

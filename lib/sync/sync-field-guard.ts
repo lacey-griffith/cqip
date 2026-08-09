@@ -20,32 +20,38 @@
 // Spec: docs/batch-sync-guard-spec.md §3, §5.
 
 // --- SYNC-FIELD-GUARD:BEGIN ---
-// Fields the Jira sync writes that a human can also edit in CQIP, i.e.
-// exactly `ALLOWED_FIELDS` (app/api/logs/edit/route.ts) INTERSECT the sync's
-// `updateData`. These are the only columns where an empty Jira value can
-// destroy human work, so these are the only ones guarded.
+// Columns where an empty Jira value can destroy human work.
+//
+// The test is "can this hold human work the sync can destroy", NOT "is this
+// editable in CQIP". Those are different sets, and an earlier version of this
+// guard used the narrower one — see source 2 (Karen post-flight MEDIUM-2).
+//
+//  1. HUMAN-EDITABLE — `ALLOWED_FIELDS` (app/api/logs/edit/route.ts) INTERSECT
+//     the sync's `updateData`. That is the six through `who_owns_fix` below.
+//
+//  2. HUMAN-AUTHORED but NOT editable — `root_cause_description`, which holds
+//     prose imported from the CSV's "Issue Details" column (§11). Measured
+//     2026-08-08: 32 non-deleted rows carry it, every one `Resolved` and
+//     `created_by='csv_import'`. Being Resolved is the ONLY thing keeping them
+//     out of the sync's working set — and `log_status` IS in ALLOWED_FIELDS,
+//     so an admin reopening one (a supported action) pulls it in, after which
+//     an empty Jira customfield_12909 would null that prose. Editability was
+//     the wrong test; this column is not editable and still holds real work.
 //
 // Everything else the sync writes (jira_summary, client_brand, detected_by,
-// reproducibility, root_cause_description, the four booleans, updated_at)
-// keeps its unconditional write. client_brand in particular MUST stay
-// unconditional — §13 r28 depends on it.
-//
-// CAVEAT, because an earlier version of this comment claimed these columns
-// hold "no human-entered value to protect" and that is FALSE (Karen
-// post-flight MEDIUM-2): 32 non-deleted rows hold human-authored prose in
-// root_cause_description, imported from the CSV's "Issue Details" column
-// (§11). They are excluded from the sync's working set only by being
-// Resolved — and log_status IS in ALLOWED_FIELDS, so an admin reopening one
-// pulls it in, after which an empty Jira customfield_12909 nulls that prose
-// silently and WITHOUT an audit row. It is unguarded because it is not
-// human-editable in CQIP, not because it is empty of human work. See §15.
+// reproducibility, the four booleans, updated_at) keeps its unconditional
+// write. client_brand in particular MUST stay unconditional — §13 r28 depends
+// on it.
 export const SYNC_GUARDED_FIELDS = [
+  // 1. human-editable
   'issue_category',
   'issue_subtype',
   'root_cause_final',
   'resolution_type',
   'severity',
   'who_owns_fix',
+  // 2. human-authored, not editable
+  'root_cause_description',
 ] as const;
 
 // "Empty" = Jira has nothing here. Deliberately NOT falsy-testing: `false` is
@@ -98,9 +104,18 @@ export interface SyncAuditRow {
 // audit_log.old_value / new_value are TEXT. Arrays are JSON-stringified to
 // match what the edit dialog already sends (`["Client Request"]`), so a
 // sync-written row and a human-written row for the same column read the same.
+//
+// Objects are JSON-stringified for a specific reason, not for symmetry:
+// `root_cause_description` maps to Jira's customfield_12909, documented in §7
+// as a Paragraph — and API v3 returns Paragraph fields as ADF OBJECTS. Under a
+// bare String() that would record the literal text "[object Object]" as the
+// value, which is worse than useless in a trail whose whole job is showing what
+// changed. (The write itself would normally fail first, since the column is
+// TEXT, and that failure is now loud rather than silent — but the audit path
+// must not depend on that ordering to be honest.)
 export function serializeForAudit(value: unknown): string | null {
   if (value === null || value === undefined) return null;
-  if (Array.isArray(value)) return JSON.stringify(value);
+  if (typeof value === 'object') return JSON.stringify(value);
   return String(value);
 }
 

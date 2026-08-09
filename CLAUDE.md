@@ -1747,8 +1747,8 @@ Resolved             → green-500
 7. **Periodic sync frequency.** Every 6 hours (cron). Syncs all logs WHERE
    log_status NOT IN ('Resolved') AND is_deleted = FALSE.
    Re-fetches the full Jira ticket and updates the QA tab fields —
-   **except that the six human-editable columns are only written when Jira
-   supplies a non-empty value (see rule 37).** This sentence used to read
+   **except that seven columns capable of holding human work are only written
+   when Jira supplies a non-empty value (see rule 37).** This sentence used to read
    "updates all QA tab fields"; that was true until Batch sync-guard
    (2026-08-08) and is now false. Admins can also run an on-demand sync from
    the "Sync with Jira" button on Dashboard, Logs, and Reports pages.
@@ -2246,11 +2246,23 @@ Resolved             → green-500
 
 37. **An empty Jira value NEVER overwrites a human-entered CQIP value; a
     non-empty Jira value always wins.** (Batch sync-guard, 2026-08-08.) The
-    guarded set is defined structurally, not by taste: it is
-    **`ALLOWED_FIELDS` (`app/api/logs/edit/route.ts`) INTERSECT the sync's
-    `updateData`** — today `issue_category`, `issue_subtype`,
-    `root_cause_final`, `resolution_type`, `severity`, `who_owns_fix`. For
-    those six, `supabase/functions/jira-sync/index.ts` **omits the key from
+    guarded set is defined structurally, not by taste. The test is **"can this
+    column hold human work the sync can destroy"**, and it has TWO sources:
+
+    1. **Human-EDITABLE** — `ALLOWED_FIELDS` (`app/api/logs/edit/route.ts`)
+       INTERSECT the sync's `updateData`: `issue_category`, `issue_subtype`,
+       `root_cause_final`, `resolution_type`, `severity`, `who_owns_fix`.
+    2. **Human-AUTHORED but not editable** — `root_cause_description`, which
+       holds prose imported from the CSV's "Issue Details" column (§11).
+
+    **Do not reduce this to source 1.** It was originally written as
+    `ALLOWED_FIELDS ∩ updateData` alone, and that missed 32 non-deleted rows of
+    human prose: editability is a *proxy* for "holds human work", and an
+    incomplete one. Those rows sit outside the sync's working set only because
+    they are `Resolved` — and `log_status` is itself in `ALLOWED_FIELDS`, so
+    reopening one (a supported action) pulls it straight in.
+
+    For all seven, `supabase/functions/jira-sync/index.ts` **omits the key from
     the update** when Jira supplies `null` / `[]` / an empty string. It does
     not write `null` — omitting and null-writing look identical to a naive
     "did the value change" check, and only one of them preserves the data.
@@ -2266,10 +2278,13 @@ Resolved             → green-500
     trail showed the human's write and nothing after it, which reads as "the
     value is still there."
 
-    **How to apply:** if you add a column to the sync's `updateData`, decide
-    whether a human can also edit it — if it is in `ALLOWED_FIELDS`, it is
-    guarded, full stop. Do not reintroduce an unconditional write for a
-    human-editable column. The guard body is inlined verbatim into the Deno
+    **How to apply:** if you add a column to the sync's `updateData`, apply
+    BOTH tests — is it in `ALLOWED_FIELDS`, *and* can it hold content a human
+    authored by any other route (import, backfill, a future ingest)? Either one
+    means guarded. Do not reintroduce an unconditional write for such a column,
+    and note that assigning onto `updateData` after the guard call bypasses it
+    entirely — a test bans that outright for guarded columns, in both dot and
+    bracket notation, because it silently reinstates the whole defect. The guard body is inlined verbatim into the Deno
     function from `lib/sync/sync-field-guard.ts` because that function is
     self-contained and `tsconfig.json` excludes `supabase/functions` (so it is
     never type-checked and cannot import); `tests/sync-field-guard.test.ts`
@@ -3612,10 +3627,9 @@ its reason so nobody re-derives the analysis.
       `system:normalize-quality-log-fields` (36 rows). Fixing this means changing
       *when* the snapshot is taken — a Jira-workflow decision, not a code guard, so
       it needs Lacey + a workflow call rather than a batch.
-- [ ] **Full §13 r2 closure for the sync.** The batch audits **6 of 16** written
+- [ ] **Full §13 r2 closure for the sync.** The batch audits **7 of 16** written
       columns (up from 0 of 16). `client_brand`, `jira_summary`, `detected_by`,
-      `reproducibility`, `root_cause_description` and the four booleans still change
-      with no audit row. Deferred *with a reason, not overlooked*: `audit_log` is at
+      `reproducibility` and the four booleans still change with no audit row. Deferred *with a reason, not overlooked*: `audit_log` is at
       **1,557 rows (2026-08-08)**, already over the PostgREST 1,000 cap, and
       `/dashboard/logs` reads it **unranged** for the sendback badge. Land this with
       that pagination fix, not before.
@@ -3632,22 +3646,30 @@ its reason so nobody re-derives the analysis.
       runs at row creation, where there is no prior value to destroy. It is the same
       shape as the defect that cost five rows; do not assume it stays harmless if the
       webhook ever updates an existing row.
-- [ ] **`root_cause_description` is unguarded and holds real human prose — the
-      strongest remaining item on this list, and it needs a Lacey decision.**
+- [x] **`root_cause_description` — GUARDED as of 2026-08-09 (Lacey's call).** The
+      guard was widened to seven fields rather than only correcting the prose, so
+      an empty Jira `customfield_12909` can no longer null the CSV-imported
+      "Issue Details" text, and any real change to it now writes an audit row
+      where there was none. **The decision rule changed with it** — see §13 r37:
+      it is no longer `ALLOWED_FIELDS ∩ updateData` but "can this column hold
+      human work the sync can destroy", because editability turned out to be an
+      incomplete proxy for that. **Still open below: the ADF hazard only.**
+      Original finding, kept for the reasoning:
       **32 non-deleted rows hold human-authored text** there, imported from the
       CSV's "Issue Details" column (§11) — e.g. `92111cdb` / NBLYCRO-101. All 38
       CSV-imported rows are `Resolved`, and that is the **only** thing keeping them
       out of the sync's working set. **`log_status` IS in `ALLOWED_FIELDS`**, so an
       admin reopening a resolved log — supported, and something the `f44754df` trail
-      shows Lacey doing in both directions — pulls the row in; the next sync then
-      writes `root_cause_description: null` **unguarded and unaudited**. Silent, and
-      the same shape as the defect this batch fixed.
-      It is unguarded because it is not human-*editable* in CQIP (so it fails the
-      `ALLOWED_FIELDS ∩ updateData` rule), **not** because it is empty of human work
-      — an earlier draft of this entry and of the code comments claimed the latter,
-      which was false (Karen post-flight MEDIUM-2). **Decision owed: either widen the
-      guard to cover it, or accept the reopen risk explicitly.**
-      Separately it carries a **latent ADF hazard**: `mapJiraFields` does
+      shows Lacey doing in both directions — pulled the row in; the sync then
+      wrote `root_cause_description: null` **unguarded and unaudited**. Silent, and
+      the same shape as the defect this batch fixed. It escaped the original guard
+      because it is not human-*editable* in CQIP and so failed the
+      `ALLOWED_FIELDS ∩ updateData` rule — **not** because it was empty of human
+      work, which an earlier draft of this entry and of the code comments claimed
+      and which was false (Karen post-flight MEDIUM-2). **Nothing is owed here now;
+      the guard covers it.**
+      **STILL OPEN — the latent ADF hazard**, which widening the guard does NOT
+      address: `mapJiraFields` does
       `fields[customfield_12909] ?? null` with **no ADF extraction**, while §7
       documents that field as a Jira **Paragraph** (API v3 returns an ADF *object*)
       into a `TEXT` column. Probed 2026-08-08: all 33 working-set tickets return
@@ -3723,7 +3745,9 @@ unconditionally, so an empty Jira QA tab overwrote human-entered CQIP values
 with `[]` / `null`. The empty tab is the NORMAL state (Jira automation clears
 those fields on entry to Dev QA / Dev Client Review, §6). **Five rows confirmed
 damaged**, `b77c1d57` · `a6111337` · `a57c357c` · `bf5fc1d7` · `67079106`, each
-losing all six guarded fields. Undetected for ten weeks because the sync emitted
+losing all six of the human-editable guarded fields (they carry no
+`root_cause_description`; that column's 32 at-risk rows are a separate,
+CSV-imported population). Undetected for ten weeks because the sync emitted
 **no audit row** for those writes.
 
 **LOCKED DECISIONS (do not relitigate):**
@@ -3738,7 +3762,7 @@ losing all six guarded fields. Undetected for ten weeks because the sync emitted
   it cannot be bundle-tested locally (no Deno, `supabase functions serve` needs
   Docker) — an unverifiable deploy-time resolution change does not belong inside
   a data-loss fix on a prod write path.
-- **§13 r2 is NARROWED, not closed** — 6 of 16 written columns audited, up from
+- **§13 r2 is NARROWED, not closed** — 7 of 16 written columns audited, up from
   0 of 16. Full closure is deferred to land with the `audit_log` pagination work
   (that table is at 1,557 rows, already over the PostgREST cap, with an unranged
   consumer).
@@ -3841,6 +3865,31 @@ still exactly 8 errors + 1 warning · `sync-status-pill.tsx` unchanged at its ow
 1-error baseline (verified by stashing, not assumed) · build green · **13 of 13
 mutations caught**, the two new ones being Karen's guard-called-then-overridden in
 both dot and bracket form.
+
+**COMMIT 4 — guard widened to SEVEN fields (Lacey, 2026-08-09).** Karen's MEDIUM-2
+recommendation was a documentation correction; Lacey took the stronger fix and had
+`root_cause_description` guarded. **The decision rule changed with it, and that is
+the durable part:** it was `ALLOWED_FIELDS ∩ updateData` — *"can a human edit this
+in CQIP"* — and editability proved to be an **incomplete proxy** for what was
+actually being protected. This column is not editable and holds 32 rows of human
+prose regardless. The rule is now *"can this column hold human work the sync can
+destroy"*, with two sources: editable (six) and authored-by-import (one). §13 r37
+carries it; the partition is now **7 guarded + 9 unguarded = 16**, and §13 r2 goes
+6/16 → **7/16** because the guarded set is also the audited set — so that prose now
+gets a trail where it had none.
+
+Two things the widening dragged in that were worth having: `root_cause_description`
+had to move OUT of the unguarded `updateData` literal (a test catches it if it
+returns), and `serializeForAudit` now JSON-stringifies **objects**, not just arrays
+— Jira returns `customfield_12909` as an **ADF object**, which a bare `String()`
+would have recorded in the audit trail as the literal text `[object Object]`.
+
+**Gates re-run again, not inherited:** tsc clean · **195/195** · edge fn still
+exactly its 8+1 baseline · build green · **15 of 15 mutations caught** (the 13
+above plus dropping `root_cause_description` from the guarded set, and reverting
+`serializeForAudit` to array-only). **The ADF hazard itself is NOT fixed** — the
+guard stops the null-overwrite, not the object-into-TEXT write; that remains the
+one open half of the §15 item.
 
 ---
 
