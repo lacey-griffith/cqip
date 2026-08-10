@@ -794,8 +794,12 @@ CREATE TABLE quality_logs (
   resolved_at                 TIMESTAMPTZ,
   created_by                  TEXT NOT NULL DEFAULT 'system',
   updated_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  ai_suggested_root_cause     TEXT[],    -- reserved for future AI classification
-  ai_confidence_score         NUMERIC,   -- reserved for future AI classification
+  ai_suggested_root_cause     TEXT[],    -- AI suggestion (Batch classifier-1)
+  ai_confidence_score         NUMERIC,   -- UNUSED in Phase 1 — see ai_confidence_band
+  ai_confidence_band          TEXT       -- migration 028: high|medium|low, CHECK-constrained
+                                CHECK (ai_confidence_band IS NULL OR
+                                       ai_confidence_band IN ('high','medium','low')),
+  ai_review_pending           BOOLEAN NOT NULL DEFAULT FALSE  -- migration 028
   notes                       TEXT,
   is_deleted                  BOOLEAN NOT NULL DEFAULT FALSE,
   needs_review                BOOLEAN NOT NULL DEFAULT FALSE  -- migration 020 (Batch 005.28)
@@ -2299,7 +2303,12 @@ Resolved             → green-500
 ## 14. What Is NOT In Scope for V1
 
 - Email notifications (Teams + in-app only)
-- AI root cause classification (data model is ready; feature is not built)
+- ~~AI root cause classification (data model is ready; feature is not built)~~ —
+  **SUPERSEDED 2026-08-10: Phase 1 is IN FLIGHT as Batch classifier-1 (see §15.5).**
+  Note what is and is not in scope: the classifier *suggests* into separate AI
+  columns and **never writes `root_cause_final`** — a human confirm is the only
+  path into the canonical field. Rovo, Copilot, auto-confirm-above-a-threshold,
+  cron, and classifying the other three taxonomy fields all remain out of scope.
 - Cost analysis
 - Jira write operations
 - Self-registration (admin creates all accounts)
@@ -3742,6 +3751,103 @@ deleted in the same commit that writes the §16 shipped entry.
 
 (The Convert reconciliation backfill is NOT here — it lives in §16: it is BUILT
 and reviewed, awaiting only Lacey's run, so it is not in-flight work.)
+
+### Batch classifier-1 — AI root-cause classifier, Phase 1 (IN FLIGHT, 2026-08-10)
+
+A suggester that proposes `root_cause_final` values into **separate AI columns** with
+its own review-pending flag and a review queue under Reports. **It never writes the
+canonical field** — a human confirm is the only path. Phase 1 uses only data CQIP
+already holds: no Rovo, no Copilot, no new external integration.
+Spec: `docs/HANDOFF-root-cause-classifier.md` — **rev 2 governs; §13 is normative.**
+**Migration + new mutation route → Jenny pre-flight DONE.** Karen post-flight owed.
+**DO NOT PUSH.**
+
+**Why it exists (§1, forward-framed):** the taxonomy fields are populated on a small,
+self-selected slice of logs, so every metric derived from them describes that slice.
+The gap is not a backlog — the Jira QA tab is not yet team habit, which is human
+behaviour outside the platform's control. Automation is the only lever. The case is
+every log **from here on**, not the ~33 unclassified rows behind us.
+
+**Why it unparked (§2):** the batch was parked for lack of a validation answer key.
+The reframe: the classifier suggests, Lacey confirms or corrects on rows she was
+already touching, and **the correction rate IS the validation** — it builds its own
+answer key as it runs. Do **not** reintroduce a score-against-history step; at the
+available n it cannot distinguish a good classifier from a lucky one.
+
+**LOCKED by Lacey (§11 — do not relitigate):** Worker route, not an edge function
+(Worker code is locally testable — the preceding sync batch shipped unverifiable for
+want of Deno/Docker, and admin auth already lives in the Worker; Phase 1 is
+manual-trigger so scheduling, the edge function's only advantage, is unused) ·
+confidence is a **derived band high/medium/low, never a raw float** · batch cap **25**
+per trigger · review queue under **Reports**, not the logs page (which has a
+render-only batch queued and would collide).
+
+**Non-negotiables, in Lacey's priority order:** never writes `root_cause_final` ·
+blinding enforced at the **query layer** with a test asserting the outgoing payload ·
+`ai_review_pending` clears **only** on explicit confirm/reject — a general row save
+leaves it untouched, and that is a test, not a comment · out-of-vocabulary output
+dropped and logged, never stored, and the vocabulary is **never widened** to
+accommodate model output.
+
+**JENNY PRE-FLIGHT: DO-NOT-BUILD-YET — 2 CRITICAL · 5 HIGH · 4 MEDIUM · 5 LOW, all
+folded into spec §13 BEFORE the build opened** (the §15 PROCESS note). The two that
+changed what gets built:
+- **CRITICAL-1 — `Confirm` as specced would silently destroy human classifications on
+  58 of 91 non-deleted rows.** §3 blinds the classifier from `root_cause_final`, so it
+  cannot know a value is there; §8 COMMIT 3's queue listed suggestion + confidence +
+  prose and **not the existing value**, so the reviewer could not see it either. Same
+  column, same direction, same invisibility as the defect **§13 r37** was written to
+  close two days earlier. Fixed by excluding non-empty rows **at selection** (making
+  the common case unconstructable), plus a write-time re-check that 409s — because
+  r37 records that a *non-empty* Jira value still wins on sync, so a row can gain a
+  value between classify and confirm — plus rendering the current value in the queue.
+  It also **raises** the batch's value: the 33 eligible rows are exactly the
+  unclassified population §1 exists for.
+- **CRITICAL-2 — §4 and §8 COMMIT 3 demanded mutually exclusive behaviour from one
+  route**, so §10 item 3 (named "a test, not a comment") was unwritable. There is
+  exactly one edit surface and a general save is byte-identical to a correction.
+  Fixed with a separate `POST /api/logs/ai-review` owning confirm/reject/correct;
+  `/api/logs/edit` never touches the flag and the column is deliberately **absent from
+  `ALLOWED_FIELDS`**, so §4's requirement now holds by construction rather than by
+  discipline.
+
+**Also folded:** the vocabulary is **14, not the spec's 13** — the document §7 cites
+says 14, migration 020 seeds 14, prod has 14 active — so the number is **deleted, not
+corrected**, and read from `quality_log_taxonomy` at request time (which also
+satisfies r29 by construction) · `ai_confidence_score` is NUMERIC and cannot hold a
+band, so migration 028 adds a **CHECK-constrained TEXT `ai_confidence_band`** and the
+migration is **two columns, not one** — encoding the band as 1/2/3 would recreate the
+orderable number §11.2 exists to eliminate · the §6 outcome shape had **no storage
+home named anywhere**, now an `audit_log` row with `field_name='ai_review_outcome'`
+and a bare literal in `new_value` so the correction rate is `GROUP BY`-able · batch
+selection was **entirely unspecified** (no filter, no ordering, no idempotency) ·
+`system:classifier` renamed `system:root-cause-classifier` to match its three
+siblings.
+
+**Phase status:** **COMMIT 1 BUILT** — migration 028 (two columns + CHECK + partial
+index) + spec rev 2 + these docs. Commits 2 (classifier module + route), 3 (review
+queue), 4 (Karen fold) NEXT.
+
+**⚠ NO MODEL CREDENTIAL EXISTS.** Verified: no AI SDK in `package.json`, no
+`ANTHROPIC_*` in `.env.local` or `.env.example`, no `ant` CLI, and none of the **16**
+Worker secrets is a model key. Per spec §13.7 the route therefore ships answering
+**500 `not_configured`** — deployable and inert, the Batch telemetry-ac precedent.
+Model is `claude-opus-5` as a named constant; transport is plain `fetch`, **no new
+dependency** (every external call here already works that way, and "add the SDK" is
+the wrong default for one endpoint); secret is `CQIP_ANTHROPIC_API_KEY`, **Worker-only**
+rotation surface per r27.
+
+**Prod figures, stamped 2026-08-10** (they move — §16 records that repeatedly):
+58/91 non-deleted rows carry non-empty `root_cause_final` · **33 eligible** under the
+§13.6 filter, draining in **two** runs at cap 25 · `ai_suggested_root_cause` non-null
+on **0/122**, so §8 COMMIT 1's precondition is confirmed and no backfill is possible
+to need · 14 active `root_cause` taxonomy rows · **0** rows lack prose feedstock ·
+`audit_log` **1,597** rows with **0** `AI_SUGGESTION`, so that verb is free.
+**Two of Jenny's figures were corrected here**: `audit_log` is 1,597 (she wrote
+1,557 — 08-08's reading) and bare-`system` rows number **149** (she wrote 141). Both
+of her reads, and my own first pass, had hit PostgREST's silent 1,000-row cap; only a
+`count:'exact', head:true` probe plus a paged read caught it. **The §15
+unranged-select lesson applies to verification queries, not just app code.**
 
 ### Batch sync-guard — skip-if-empty guard + sync audit rows (IN FLIGHT, 2026-08-08)
 
