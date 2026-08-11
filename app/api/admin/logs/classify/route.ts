@@ -179,7 +179,7 @@ export async function POST(req: NextRequest) {
       // Karen HIGH was precisely an audit failure that exited 0.
       const { error: auditError } = await supabaseAdmin
         .from('audit_log')
-        .insert(buildSuggestionAuditRow(row.id, accepted, band, triggeredBy));
+        .insert(buildSuggestionAuditRow(row.id, accepted, band, triggeredBy, raw.served_model));
       if (auditError) {
         console.error('[admin/logs/classify] audit write failed', {
           log_id: row.id,

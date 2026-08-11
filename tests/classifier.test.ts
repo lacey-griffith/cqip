@@ -45,7 +45,13 @@ import {
   buildSuggestionAuditRow,
   buildReviewOutcomeAuditRow,
 } from '../lib/classifier/suggestion';
-import { parseModelText, CLASSIFIER_MODEL, ClassifierModelError } from '../lib/classifier/model';
+import {
+  parseModelText,
+  CLASSIFIER_MODEL,
+  ClassifierModelError,
+  requestClassification,
+  CLASSIFIER_API_KEY_ENV,
+} from '../lib/classifier/model';
 
 const REPO = process.cwd();
 function readOrFail(path: string): string {
@@ -107,6 +113,30 @@ test('NN1: the classify ROUTE never mentions root_cause_final as a write target'
     /buildClassifierUpdate\(/.test(src),
     'classify route must build its update via buildClassifierUpdate',
   );
+
+  // Karen HIGH-1. The object-literal ban above was the ONLY ban, and it does not
+  // see ASSIGNMENT — so `update.root_cause_final = accepted` immediately after the
+  // builder returns passed tsc and the whole suite while writing the canonical
+  // field on every classified row. That is not a hypothetical: §13 r37 records the
+  // identical bypass on the sync guard two days earlier, and states the ban must
+  // cover "both dot and bracket notation". It was not ported. It is now.
+  //
+  // Worded to match the sync guard's own test on purpose, so the two read alike.
+  assert.ok(
+    !/\.\s*root_cause_final\s*=/.test(src),
+    'classify route must not assign onto root_cause_final in dot notation (r37 bypass shape)',
+  );
+  assert.ok(
+    !/\[\s*['"`]root_cause_final['"`]\s*\]\s*=/.test(src),
+    'classify route must not assign onto root_cause_final in bracket notation (r37 bypass shape)',
+  );
+  // root_cause_initial is frozen at creation by §13 r3 and belongs to nobody here.
+  assert.ok(
+    !/\.\s*root_cause_initial\s*=|\[\s*['"`]root_cause_initial['"`]\s*\]\s*=|root_cause_initial\s*:/.test(
+      src,
+    ),
+    'classify route must not write root_cause_initial in any form',
+  );
 });
 
 test('NN1: ai_confidence_score is never written by the classifier', () => {
@@ -121,6 +151,30 @@ test('NN1: ai_confidence_score is never written by the classifier', () => {
 // ---------------------------------------------------------------------------
 // NON-NEGOTIABLE 2 — blinding, asserted on the real outgoing payload
 // ---------------------------------------------------------------------------
+
+// The eight readable fields, written out as LITERALS rather than imported.
+//
+// Karen MEDIUM-1. This assertion previously compared the payload keys against
+// CLASSIFIER_READ_FIELDS — the very array buildClassifierPayload iterates to build
+// them. The expectation moved with the value, so deleting a field from the
+// whitelist passed the suite: the shared-ancestor pattern §15 records four times,
+// where the oracle is not independent of the artifact under test. §13.10 names
+// "drop one field from the payload whitelist" as a mutation that MUST fail, and it
+// did not.
+//
+// Blinding itself was never broken — a narrowed feedstock silently degrades
+// suggestion quality with no error, which is the failure this now catches.
+// Duplicating the list is the point: it must be edited twice, deliberately.
+const EXPECTED_PAYLOAD_KEYS = [
+  'jira_summary',
+  'resolution_notes',
+  'notes',
+  'issue_details',
+  'trigger_from_status',
+  'trigger_to_status',
+  'client_brand',
+  'test_type',
+].sort();
 
 test('NN2: the payload key set is EXACTLY the eight readable fields (whitelist)', () => {
   // A whitelist, not a denylist of the six excluded names. A denylist passes
@@ -144,7 +198,15 @@ test('NN2: the payload key set is EXACTLY the eight readable fields (whitelist)'
     resolution_type: ['CRO Code Fix'],
   };
   const payload = buildClassifierPayload(row);
-  assert.deepEqual(Object.keys(payload).sort(), [...CLASSIFIER_READ_FIELDS].sort());
+  // Anchored to EXPECTED_PAYLOAD_KEYS, not to CLASSIFIER_READ_FIELDS — see the note
+  // on that constant. Also assert the two agree, so a whitelist edit fails HERE
+  // with a clear message rather than only in the sparse-row test below.
+  assert.deepEqual(Object.keys(payload).sort(), EXPECTED_PAYLOAD_KEYS);
+  assert.deepEqual(
+    [...CLASSIFIER_READ_FIELDS].sort(),
+    EXPECTED_PAYLOAD_KEYS,
+    'CLASSIFIER_READ_FIELDS drifted from the eight fields the spec blinds around',
+  );
 });
 
 test('NN2: no blinded field appears in the payload, by key or by value', () => {
@@ -174,7 +236,7 @@ test('NN2: the payload shape is stable when fields are missing', () => {
   // for sparse rows too. Prod 2026-08-10: 0 of 91 non-deleted rows have no prose,
   // but 35 lack `notes` and 54 lack `issue_details`.
   const payload = buildClassifierPayload({ jira_summary: 'only this' });
-  assert.deepEqual(Object.keys(payload).sort(), [...CLASSIFIER_READ_FIELDS].sort());
+  assert.deepEqual(Object.keys(payload).sort(), EXPECTED_PAYLOAD_KEYS);
   assert.equal(payload.notes, null);
   assert.equal(payload.jira_summary, 'only this');
 });
@@ -339,6 +401,55 @@ test('NN4: the taxonomy field is root_cause, not root_cause_final', () => {
   }
 });
 
+test('NN4: both routes SCOPE the taxonomy read to field_name — widening is banned', () => {
+  // Karen MEDIUM-1 (M6). Deleting `.eq('field_name', ROOT_CAUSE_TAXONOMY_FIELD)`
+  // widens the vocabulary from the 14 active root_cause rows to all 78 across four
+  // fields, and the suite passed. That is not a cosmetic scope error: the model's
+  // enum AND the r29 re-validation on confirm both widen together, so an
+  // issue_subtype like 'CSS/ Styling Issue' becomes an acceptable ROOT CAUSE and
+  // confirm writes it into root_cause_final — re-creating exactly the cross-field
+  // pollution Batch 005.28's normalizer existed to clean up, while passing r29 on
+  // both surfaces because both surfaces got the same wrong list.
+  for (const file of [
+    'app/api/admin/logs/classify/route.ts',
+    'app/api/admin/logs/ai-review/route.ts',
+  ]) {
+    const src = readOrFail(file);
+    assert.ok(
+      /\.eq\(\s*['"]field_name['"]\s*,\s*ROOT_CAUSE_TAXONOMY_FIELD\s*\)/.test(src),
+      `${file} must scope its quality_log_taxonomy read to field_name = ROOT_CAUSE_TAXONOMY_FIELD`,
+    );
+  }
+});
+
+test('NN4: a value from ANOTHER taxonomy field is dropped, not accepted', () => {
+  // The behavioural half of the check above. A source assertion proves the filter
+  // is written; this proves what the filter is FOR — that the vocabulary gate is a
+  // pure function of the list it is handed, so a widened list is the only way these
+  // values could ever be accepted. Values below are real rows from
+  // quality_log_taxonomy under issue_subtype / issue_category / resolution_type
+  // (prod, 2026-08-10) — never valid root causes.
+  const foreign = [
+    'CSS/ Styling Issue', // issue_subtype
+    'Client Request', // issue_category — note the collision, see below
+    'CRO Code Fix', // resolution_type
+    'Incorrect Traffic Allocation', // issue_subtype
+  ];
+  const { accepted, dropped } = checkVocabulary(foreign, VOCAB);
+
+  // 'Client Request' is deliberately in this list: it exists BOTH as an
+  // issue_category and as a root_cause (migration 021 added the category; the root
+  // cause predates it). So it is legitimately accepted here, and that is the point
+  // — the gate is scoped by the LIST, not by the string, which is precisely why the
+  // field_name filter is the thing doing the work.
+  assert.deepEqual(accepted, ['Client Request']);
+  assert.deepEqual(dropped.sort(), [
+    'CRO Code Fix',
+    'CSS/ Styling Issue',
+    'Incorrect Traffic Allocation',
+  ]);
+});
+
 // ---------------------------------------------------------------------------
 // Confidence band (§11.2 / §13.4)
 // ---------------------------------------------------------------------------
@@ -367,6 +478,75 @@ test('confidence: the band is one of exactly three literals, spelled out', () =>
   // abbreviating one of three values costs a migration later.
   assert.equal(isConfidenceBand('med'), false);
   assert.equal(isConfidenceBand('HIGH'), false);
+});
+
+test('audit: the suggestion row records the SERVED model, not the model we asked for', async () => {
+  // Karen MEDIUM-3. `fallbacks: 'default'` means a refusal is answered by a
+  // DIFFERENT model at HTTP 200, so CLASSIFIER_MODEL is only the request. §2 makes
+  // the correction rate the batch's entire validation, and an aggregate that
+  // silently mixes two models is not separable afterward. Tested rather than
+  // asserted in prose, because a comment claiming this is exactly the
+  // claim-outruns-mechanism shape Karen keeps finding.
+  const served = 'claude-opus-4-8-fallback';
+  const fakeFetch = (async () =>
+    new Response(
+      JSON.stringify({
+        model: served,
+        stop_reason: 'end_turn',
+        content: [{ type: 'text', text: JSON.stringify({ root_causes: ['QA Gap'], confidence: 0.9 }) }],
+      }),
+      { status: 200 },
+    )) as unknown as typeof fetch;
+
+  process.env[CLASSIFIER_API_KEY_ENV] = 'test-key';
+  const raw = await requestClassification(
+    buildClassifierPayload({ jira_summary: 's' }),
+    VOCAB,
+    fakeFetch,
+  );
+  assert.equal(raw.served_model, served);
+
+  const row = buildSuggestionAuditRow('log-1', ['QA Gap'], 'high', 'lacey@fusion92.com', raw.served_model);
+  assert.ok(
+    row.notes?.includes(served),
+    'the served model must reach the audit trail, or a fallback answer is indistinguishable',
+  );
+  // And when the API does not report one, say so rather than guessing the constant.
+  const noModel = buildSuggestionAuditRow('log-1', ['QA Gap'], 'high', 'lacey@fusion92.com', undefined);
+  assert.ok(noModel.notes?.includes('unreported'));
+  assert.ok(!noModel.notes?.includes(CLASSIFIER_MODEL));
+});
+
+test('model: a max_tokens truncation is diagnosed as a budget problem, not bad output', async () => {
+  // Karen LOW-1. Adaptive thinking shares max_tokens with the answer, so a long
+  // thinking pass truncates the JSON. Without this the failure reads "Model
+  // returned unparseable JSON" and sends the next reader to the prompt when the fix
+  // is the budget. Both paths fail safe; only the diagnosis differs.
+  process.env[CLASSIFIER_API_KEY_ENV] = 'test-key';
+  const truncated = (async () =>
+    new Response(
+      JSON.stringify({
+        model: CLASSIFIER_MODEL,
+        stop_reason: 'max_tokens',
+        content: [{ type: 'text', text: '{"root_causes":["QA Ga' }],
+      }),
+      { status: 200 },
+    )) as unknown as typeof fetch;
+
+  await assert.rejects(
+    () =>
+      requestClassification(
+        buildClassifierPayload({ jira_summary: 's' }),
+        VOCAB,
+        truncated,
+      ),
+    (err: unknown) => {
+      assert.ok(err instanceof ClassifierModelError);
+      assert.match(err.message, /max_tokens/);
+      assert.doesNotMatch(err.message, /unparseable/);
+      return true;
+    },
+  );
 });
 
 test('confidence: the raw model number is never persisted anywhere', () => {

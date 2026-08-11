@@ -46,6 +46,20 @@ export interface RawSuggestion {
   root_causes: unknown;
   /** Straight from the model — never persisted; see confidence.ts. */
   confidence: unknown;
+  /**
+   * The model that actually SERVED the response, from the API's own `model`
+   * field — not `CLASSIFIER_MODEL`, which is only what we asked for.
+   *
+   * Karen MEDIUM-3. `fallbacks: 'default'` routes a safety refusal to a
+   * different model server-side and returns its answer as a normal 200, so the
+   * pinned constant stops describing what answered. §2 makes the correction rate
+   * the batch's ENTIRE validation mechanism, and an aggregate that silently
+   * mixes two models cannot be separated after the fact. Recorded in the audit
+   * `notes` so it is recoverable per row.
+   *
+   * Undefined only when `parseModelText` is called directly (its own tests do).
+   */
+  served_model?: string;
 }
 
 const SYSTEM_PROMPT = [
@@ -157,12 +171,30 @@ export async function requestClassification(
     );
   }
 
+  // Karen LOW-1. Adaptive thinking and the answer share this max_tokens budget, so
+  // a long thinking pass can truncate the JSON mid-string. Without this check the
+  // truncation surfaces from parseModelText as "Model returned unparseable JSON" —
+  // which reads as a MODEL problem and sends the next reader looking at the prompt,
+  // when the actual fix is the token budget. Same failure either way (the row is
+  // counted failed and nothing is written); only the diagnosis differs, and a
+  // misleading diagnosis is what costs the time.
+  if (body?.stop_reason === 'max_tokens') {
+    throw new ClassifierModelError(
+      'Model response hit the max_tokens budget and was truncated — raise max_tokens or lower thinking effort, this is not a model-output problem',
+    );
+  }
+
   const text = (body?.content ?? [])
     .filter((b: { type?: string }) => b?.type === 'text')
     .map((b: { text?: string }) => b.text ?? '')
     .join('');
 
-  return parseModelText(text);
+  // `body.model` is what ANSWERED, which is not necessarily CLASSIFIER_MODEL —
+  // see RawSuggestion.served_model.
+  return {
+    ...parseModelText(text),
+    ...(typeof body?.model === 'string' ? { served_model: body.model } : {}),
+  };
 }
 
 // Pure, exported, and separately tested: the parse is where malformed model

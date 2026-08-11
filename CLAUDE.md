@@ -3870,11 +3870,114 @@ the one line the new import adds · all 17 CSS tokens the component references a
 declared in `globals.css`, **twice each** (light + dark) per r25 — checked because
 that is the one failure class tsc cannot see.
 
+> ### ⚠ MIGRATION 028 MUST BE APPLIED BEFORE THIS CODE DEPLOYS
+>
+> **Not applied as of 2026-08-11** — probed: `column quality_logs.ai_review_pending
+> does not exist` (42703). The queue reads that column, so until the migration runs
+> the card renders **`Could not load the queue: column quality_logs.ai_review_pending
+> does not exist`** — and `/dashboard/reports` has **no middleware admin gate**
+> (r24 covers `/dashboard/settings/*` only), so every user including the five
+> read-only accounts would see a raw Postgres string on a page that otherwise works.
+> Apply 028 in the Supabase SQL editor **first**, then push. The precedent is Batch
+> login-events, which carried this same line for migration 023.
+
 **NOT verified, and not verifiable from here:** the queue has never been rendered.
-With no model credential minted, `ai_review_pending` is `false` on every row, so the
-queue's only reachable state today is its empty state — the row card, the band pill,
-the correct/reject flow and the §13.1 amber block are all **unexercised**. That is
-Lacey's, after the mint.
+Pre-migration its reachable state is the **error state above**, and post-migration —
+with no credential minted, so `ai_review_pending` is `false` on every row — its only
+reachable state is the **empty state**. Either way the row card, the band pill, the
+correct/reject flow and the §13.1 amber block are all **unexercised**. That is
+Lacey's, after the migration and the mint.
+
+**Karen post-flight — PASS-WITH-FINDINGS on the 1–3 chain (2 HIGH · 3 MEDIUM · 2 LOW,
+no CRITICAL); all folded in COMMIT 4.** She re-ran every gate independently (all
+held), verified all four non-negotiables correct in the shipped code, and ran **17
+mutations, 14 caught / 3 survived** — verifying each patch was actually applied before
+calling it a survivor. **The code was right on every non-negotiable; all seven findings
+were a CLAIM or a CHECK weaker than stated, which is the fourth consecutive review of
+that shape.**
+- **HIGH-1 — the r37 bypass ban was never ported, so "enforced structurally rather
+  than by review" was FALSE for the one bypass this project has already paid for.**
+  The route test banned `/root_cause_final\s*:/` — object-literal syntax only — so
+  `update.root_cause_final = accepted` one line after `buildClassifierUpdate()`
+  returns wrote the canonical field on **every** classified row with **tsc clean and
+  44/44 passing**. §13 r37, written two days earlier by the immediately preceding
+  batch, states the ban must cover "**both dot and bracket notation**"; it was not
+  carried over. Now banned in both, plus `root_cause_initial` (frozen by r3).
+- **HIGH-2 — my "only reachable state is the empty state" claim was false**, because
+  migration 028 is unapplied: the reachable state is the error box above, and COMMIT
+  2's own message already said the migration had not run, so the two commits
+  contradicted each other. **The claim was the defect**; the ordering block above is
+  the fix.
+- **MEDIUM-1 — two of the three mutations §13.10 EXPLICITLY REQUIRES did not fail.**
+  (a) The blinding whitelist was asserted against `CLASSIFIER_READ_FIELDS`, the very
+  array `buildClassifierPayload` iterates — the oracle moved with the value, so
+  dropping a field passed. **Blinding itself was never broken**; the check was
+  vacuous, and a silently-narrowed feedstock degrades suggestions with no error. Now
+  anchored to eight literals. (b) Deleting the `field_name` filter widened the
+  vocabulary from 14 root-cause rows to all 78 across four fields — and because the
+  model's enum **and** the r29 re-validation widen together, an `issue_subtype` would
+  be accepted as a root cause and written to `root_cause_final`, passing r29 on both
+  surfaces. Now asserted in both routes **plus** a behavioural test.
+- **MEDIUM-2 — the UI offered `Correct…` in exactly the state the route refuses.**
+  The §13.1 re-check is `action !== 'reject'`, so `correct` 409s too, but only
+  Confirm was disabled — under an amber block that said "confirming is blocked".
+  Disabled. **⚠ Open for Lacey:** the other reading is that a human explicitly
+  choosing values may overwrite, which means loosening the route instead; recorded at
+  the call site rather than decided silently.
+- **MEDIUM-3 (Karen filed as defer; folded anyway — 3 lines, and it protects the
+  batch's whole validation premise).** `fallbacks: 'default'` routes a refusal to a
+  different model server-side and returns its answer at HTTP 200, so the pinned
+  `CLASSIFIER_MODEL` stops describing what answered — while §2 makes the correction
+  rate the batch's **entire** validation. The audit row now records the **served**
+  model from `body.model`, so a mixed aggregate is separable per row instead of
+  silently blended.
+- **LOW-1 folded** — a `max_tokens` truncation surfaced as "Model returned
+  unparseable JSON", misdiagnosing a budget problem as bad model output (adaptive
+  thinking shares the 16k budget with the answer). Now its own message. Fails safe
+  either way; only the diagnosis was wrong. **LOW-2 recorded, not a defect** — "one
+  route clears `ai_review_pending`" is verified by checking two routes, and
+  `quality_logs_admin_write` is `FOR ALL` to admins anyway, so the guarantee is about
+  the app's routes, not the column (same posture as `needs_review`).
+
+**Four claims Karen found STRONGER than argued:** the `.or('root_cause_final.is.null,
+root_cause_final.eq.{}')` filter was verified **live against prod** — 200, 25/25 rows,
+**zero** non-empty `root_cause_final` leaked, and an uncapped `count=exact` of **33
+eligible**, matching §13.6 exactly (PostgREST's `eq.{}` array-literal form is exactly
+the thing that silently matches nothing — it works); the §13.3 `root_cause` vs
+`root_cause_final` trap is real and one identifier away (prod: 14 active vs **0**);
+`AI_SUGGESTION` is in the migration-001 action CHECK with 0 prod rows, so no CHECK
+violation on first write; and the unranged-select hazard is **absent, not merely
+unlikely** — the classify select is `.limit(25)`, the queue adds **no** `audit_log`
+read at all, and that table is now at **1,600** rows (up from the 1,597 stamped
+08-10, which is the stamping discipline working).
+
+**Gates re-run after the fold, not inherited:** tsc 0 · **245/245** tests (241 at
+COMMIT 3 + 2 for the new checks + 2 pinning the MEDIUM-3 / LOW-1 folds themselves) ·
+ESLint **zero findings** on all six touched files · `npm run build` exit 0 with
+`/dashboard/reports` still `○` and no new route entries. **Mutations: 8 run, 8
+caught** — both r37 bypass notations, the payload-whitelist drop, the `field_name`
+widening in each route separately, dropping the served model from the audit notes,
+returning `CLASSIFIER_MODEL` instead of `body.model`, and removing the `max_tokens`
+check. **The battery asserts a clean baseline before AND after**, and each patch is
+verified applied before its verdict counts — the first attempt at this run silently
+measured every mutation against a corrupted tree (a backup keyed by basename
+collapsed the two `route.ts` files into one), so all seven of its verdicts were void
+and were thrown away. That is the §15 lesson landing on the verification harness
+itself: a battery whose baseline is not asserted is not a battery.
+
+**ONE FOLD IS NOT TEST-PINNED, stated rather than implied:** MEDIUM-2 is a `disabled`
+prop on a React control, and this batch adds no component test infrastructure. It is
+review-level, like the `TERMINAL_CELL_STATUSES` invariant recorded on the Batch 012
+brand-page batch. The route-side 409 it aligns with **is** covered.
+
+**What Karen could NOT check:** any live model call (no credential — she validated the
+request shape against the current Claude API reference instead: model id, `effort` /
+`format` nesting inside `output_config`, the `json_schema` subset, and
+`fallbacks:'default'` correctly paired with `server-side-fallback-2026-07-01`, noting
+the array form takes `-2026-06-01` and crossing them 400s); the rendered queue in
+either theme; the non-admin inert-span path; and migration 028 applied — read as SQL
+it is idempotent by inspection, its CHECK literals match `CONFIDENCE_BANDS` exactly,
+and the partial-index predicate matches the queue's only access pattern.
 
 **⚠ NO MODEL CREDENTIAL EXISTS.** Verified: no AI SDK in `package.json`, no
 `ANTHROPIC_*` in `.env.local` or `.env.example`, no `ant` CLI, and none of the **16**

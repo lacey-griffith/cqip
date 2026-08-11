@@ -130,6 +130,7 @@ export function buildSuggestionAuditRow(
   accepted: readonly string[],
   band: ConfidenceBand,
   triggeredBy: string,
+  servedModel?: string,
 ): AuditRow {
   return {
     log_entry_id: logId,
@@ -143,7 +144,17 @@ export function buildSuggestionAuditRow(
     // Band and trigger attribution live in notes rather than in their own
     // columns. The band is already on the row; what the trail needs is WHO ran
     // the batch, which r20's system-identity convention otherwise loses.
-    notes: `Confidence band: ${band}. Triggered by ${triggeredBy}.`,
+    //
+    // The SERVED model is here for the same reason (Karen MEDIUM-3): `fallbacks:
+    // 'default'` means a refusal is answered by a different model at HTTP 200, so
+    // CLASSIFIER_MODEL records what we ASKED for and this records what ANSWERED.
+    // §2 makes the correction rate the batch's whole validation, and an aggregate
+    // that silently mixes models is not separable later. 'unreported' rather than
+    // a guess of the constant — claiming a model we did not observe is the
+    // mechanism-weaker-than-claim failure this project keeps re-learning.
+    notes:
+      `Confidence band: ${band}. Triggered by ${triggeredBy}. ` +
+      `Served model: ${servedModel ?? 'unreported'}.`,
   };
 }
 

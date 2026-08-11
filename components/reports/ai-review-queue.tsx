@@ -271,8 +271,9 @@ export function AiReviewQueue() {
                         Already classified
                       </p>
                       <p className="mt-0.5 text-xs text-[color:var(--pill-amber-fg)]">
-                        {existing.join(' · ')} — confirming is blocked so this is not overwritten.
-                        Use the edit dialog on the log if it needs changing.
+                        {existing.join(' · ')} — confirm and correct are both blocked so this is
+                        not overwritten. Reject still works. Use the edit dialog on the log if it
+                        needs changing.
                       </p>
                     </div>
                   )}
@@ -316,10 +317,26 @@ export function AiReviewQueue() {
                         >
                           Confirm
                         </Button>
+                        {/*
+                          Karen MEDIUM-2. This was enabled while Confirm was
+                          disabled, but the route's §13.1 re-check is
+                          `action !== 'reject'` — so `correct` 409s in this state
+                          too. The amber block directly above said "confirming is
+                          blocked" with an enabled Correct… underneath it, and the
+                          reviewer only found out after picking values and hitting
+                          Save. Now the UI cannot offer an action the route refuses.
+
+                          ⚠ OPEN FOR LACEY, not a code decision: the other reading
+                          is that a human EXPLICITLY choosing values should be
+                          allowed to overwrite, in which case the fix is to drop
+                          `correct` from the route's re-check instead of disabling
+                          here. That loosens §13.1's data-safety guarantee, so it is
+                          hers to take. Reject stays available either way.
+                        */}
                         <Button
                           size="sm"
                           variant="outline"
-                          disabled={busy}
+                          disabled={busy || existing.length > 0}
                           onClick={() => {
                             setCorrecting(row.id);
                             setCorrectedValues(suggested);
