@@ -3826,9 +3826,55 @@ selection was **entirely unspecified** (no filter, no ordering, no idempotency) 
 `system:classifier` renamed `system:root-cause-classifier` to match its three
 siblings.
 
-**Phase status:** **COMMIT 1 BUILT** — migration 028 (two columns + CHECK + partial
-index) + spec rev 2 + these docs. Commits 2 (classifier module + route), 3 (review
-queue), 4 (Karen fold) NEXT.
+**Phase status: COMMITS 1–3 BUILT. Karen post-flight on the whole chain NEXT, then
+COMMIT 4 (fold), then Lacey.**
+
+- **COMMIT 1** `1c4939e` — migration 028 (two columns + CHECK + partial index) + spec
+  rev 2 + the §15.5 entry.
+- **COMMIT 2** `f229c5d` — `lib/classifier/*` (payload · vocabulary · confidence ·
+  suggestion · model) + `POST /api/admin/logs/classify` +
+  `POST /api/admin/logs/ai-review` + 647 lines of tests + the §4 entry for
+  `CQIP_ANTHROPIC_API_KEY`.
+- **COMMIT 3** — the review queue: `components/reports/ai-review-queue.tsx` mounted on
+  `/dashboard/reports` per §11.4 (LOCKED — **not** the logs page, which has a
+  render-only batch queued and would collide). Self-contained like
+  `BrandWellnessReport`: its own fetch and state, deliberately outside the
+  `ReportKind` union and the shared from/to controls, because its controls differ from
+  every other report's and that separation is exactly what made Brand Wellness cheap
+  to re-home.
+
+**Two decisions in COMMIT 3 are load-bearing and should not be "tidied" later.**
+(a) **There is NO bulk or select-all action** (§13.11): bulk confirm is auto-confirm
+with a human's finger resting on it, and auto-confirm is the failure mode §9 forbids —
+one row, one decision. Adding throughput is a decision to take explicitly, not a
+checkbox column. (b) **`root_cause_final` is read at RENDER time, never snapshotted at
+classify time** (§13.1), and rendered whenever non-empty. §13.6 selection already
+excludes non-empty rows, so it should normally be absent — if it appears, **r37's
+"a non-empty Jira value still wins on sync" moved the value between suggestion and
+review**, and the route 409s rather than letting the confirm overwrite a human
+classification. It is a data-safety affordance, **not** a scoring device; §2 forbids
+grading the suggestion against history.
+
+**⚠ THE PROSE PANEL IS NOT BLINDED, AND MUST NOT BE READ AS A BLINDING BREACH.** §5
+blinds the *classifier* from `root_cause_final`; the *reviewer* is shown the prose the
+suggestion was derived from plus the existing value, which is the opposite
+requirement. Blinding is enforced at the query layer in `buildClassifierPayload`
+(COMMIT 2), and this component never feeds that path.
+
+**Gates on the COMMIT 3 tree** (re-run, not inherited from COMMIT 2): tsc 0 ·
+**241/241** tests · `npm run build` exit 0 with `/dashboard/reports` still `○` and no
+new route entries · ESLint **zero findings** on `ai-review-queue.tsx`, and
+`reports/page.tsx` holds **exactly** its pre-existing 4 findings (2 errors + 2
+warnings), verified by linting the stashed baseline and confirming they only shift by
+the one line the new import adds · all 17 CSS tokens the component references are
+declared in `globals.css`, **twice each** (light + dark) per r25 — checked because
+that is the one failure class tsc cannot see.
+
+**NOT verified, and not verifiable from here:** the queue has never been rendered.
+With no model credential minted, `ai_review_pending` is `false` on every row, so the
+queue's only reachable state today is its empty state — the row card, the band pill,
+the correct/reject flow and the §13.1 amber block are all **unexercised**. That is
+Lacey's, after the mint.
 
 **⚠ NO MODEL CREDENTIAL EXISTS.** Verified: no AI SDK in `package.json`, no
 `ANTHROPIC_*` in `.env.local` or `.env.example`, no `ant` CLI, and none of the **16**
