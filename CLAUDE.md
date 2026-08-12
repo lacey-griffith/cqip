@@ -3754,6 +3754,99 @@ deleted in the same commit that writes the §16 shipped entry.
 (The Convert reconciliation backfill is NOT here — it lives in §16: it is BUILT
 and reviewed, awaiting only Lacey's run, so it is not in-flight work.)
 
+### Batch logs-page — dismiss guard + filter bar + AI suggestion strip (IN FLIGHT, 2026-08-12)
+
+Three changes to `/dashboard/logs`, in ONE batch because they touch one file. **No
+migration · no new route · no new mutation surface · no schema change → no Jenny.**
+Karen post-flight owed. **DO NOT PUSH.** Spec:
+`docs/HANDOFF-logs-page-batch.md` — **REVISION 1 governs**, committed as commit 1
+BEFORE the build opened per the §15 PROCESS note.
+
+**⚠ THIS BATCH SUPERSEDES classifier-1 COMMIT 3.** The standalone AI review queue
+(`components/reports/ai-review-queue.tsx`, mounted on `/dashboard/reports`) is
+**deleted**, and the suggestion moves INSIDE the existing edit-log modal, directly
+below Root cause (final). One place a log is ever classified. **The reason is
+Karen's classifier HIGH-2:** `/dashboard/reports` has no middleware admin gate (r24
+covers `/dashboard/settings/*` only). **The fix is to leave that page, NOT to gate
+it** — spec §4 forbids adding a gate to Reports.
+
+**Build order is load-bearing and specified: A → B → C.** The dismiss guard changes
+dismiss behaviour the suggestion strip then inherits, so building the strip first
+means reworking it.
+
+- **Part A — dirty-state dismiss guard on the edit modal.** Outside-click and Esc
+  currently discard unsaved edits silently. Lacey's locked choice is
+  **confirm-on-ANY-dismiss when dirty** — Esc, outside-click, X and Cancel all route
+  through one "discard or keep editing" prompt, default focus on keep editing. Dirty
+  = differs from the OPENING SNAPSHOT, not a submitted flag. **1-minute autosave is
+  explicitly rejected** (spec §1) for three recorded reasons: partial writes become
+  real prod data; audit noise in the trail the sync-guard batch just made
+  load-bearing; and it would clear `needs_review` per r29 on a half-filled row.
+- **Part B — filter bar.** Search (client-side, over loaded rows, Pulse
+  matrix-controls pattern) · a brand-dropdown defect · vertical-space reduction ·
+  usability pass. **Two items are investigate-and-propose, not build** — see the
+  gates below.
+- **Part C — retire the queue · "AI suggested" chip · suggestion strip.** Strip
+  renders suggested values, a confidence **BAND** (never a float — a float invites a
+  threshold and a threshold invites auto-confirm, classifier §9), the source prose,
+  and Confirm / Reject. **C4's semantics table is the contract**, and its last row —
+  a general save leaves `ai_review_pending` UNTOUCHED — is a test, not a comment.
+  That is the entire reason it is a separate column from `needs_review`.
+
+> **TWO LACEY GATES ARE OPEN. Neither may be decided alone.**
+>
+> - **B2 — the brand dropdown defect is UNCHARACTERISED.** The spec says the defect
+>   is real and observed but deliberately does not specify it. Read the component and
+>   the live UI, report findings + a proposal, then fix. Blocks the B2 fix in commit 3.
+> - **B5 — two empty review chips.** Blocks **C2, therefore commit 4**. C1 and C3 are
+>   unblocked, so commit 4 may split if the answer lags.
+
+**PROSE PROVENANCE — the spec asks for something the data does not carry, resolved
+with Lacey.** §3 C3 wants the source prose named *"From resolution notes: …"*. But
+`lib/classifier/model.ts:144` locks the model response to
+`required: ['root_causes', 'confidence']` — **no provenance field exists**, and
+`buildClassifierPayload` sends all eight §3 fields without recording which one the
+answer came from. Adding it means a model-schema change plus a column, which breaks
+"surface change only" and pulls Jenny back in. **Lacey's call: render EVERY non-empty
+prose field, each labelled, as what the classifier READ** — honest, no schema change,
+commits 1–4 untouched. A single field chosen by precedence was rejected outright: it
+would read as attribution while being a guess, which is a claim the mechanism cannot
+support.
+
+> ### ⚠ THE SUGGESTION STRIP SHIPS UNEXERCISED — SAY SO, DO NOT CALL IT VERIFIED
+>
+> Measured against prod **2026-08-12**: `ai_review_pending = true` on **0 of 122**
+> rows, `ai_suggested_root_cause` non-null on **0 of 122**, and **no model credential
+> is minted**, so the classifier has never run and cannot. **The strip's only
+> reachable state today is ABSENT.** The strip, band pill, prose block and
+> Confirm / Reject therefore ship **UNEXERCISED**. Exercising them is Lacey's, after
+> the mint and a classify run.
+>
+> What IS verifiable: that the strip does not render on `false` (the live case), the
+> C4 table as unit tests over pure functions, and structural assertions that a general
+> save leaves the flag untouched.
+
+**Prod figures, stamped 2026-08-12 — and every one of them MOVED since the classifier
+spec was written two days earlier, which is the usual lesson:** non-deleted
+`quality_logs` **93** (was 91) · eligible under classifier §13.6 **35** (was 33) ·
+`ai_review_pending` true **0** · `needs_review` true **0**.
+
+**Pre-batch baselines, captured BEFORE any edit** because they stop being measurable
+afterwards and this project has twice turned on a baseline that was assumed rather
+than stashed-and-measured: `tsc` 0 · **245/245** tests ·
+`app/dashboard/logs/page.tsx` **4 errors / 0 warnings** (`react-hooks/static-components`
+on `SortableHeader`/`SortIcon`, pre-existing) · `components/logs/edit-log-dialog.tsx`
+**0 / 1** · `app/dashboard/reports/page.tsx` **2 errors / 2 warnings** — that last one
+is the one to re-check at review, since deleting the queue import and mount must leave
+it at exactly 2+2, shifted only by the removed lines.
+
+**One correctness fix riding along, unrelated to the three parts:**
+`app/dashboard/logs/page.tsx:137` does `const { data: logsData } = await supabase…`
+and **never destructures `error`**, so any failure of that select silently yields
+`logsData = null` → `setLogs([])` → *"No logs found for the selected filters."* on the
+page every admin uses. Harmless today, but Part C adds three columns to that select,
+and a column error would have read as an empty table rather than a fault. Now surfaced.
+
 ### Batch classifier-1 — AI root-cause classifier, Phase 1 (IN FLIGHT, 2026-08-10)
 
 A suggester that proposes `root_cause_final` values into **separate AI columns** with
@@ -3835,7 +3928,12 @@ COMMIT 4 (fold), then Lacey.**
   suggestion · model) + `POST /api/admin/logs/classify` +
   `POST /api/admin/logs/ai-review` + 647 lines of tests + the §4 entry for
   `CQIP_ANTHROPIC_API_KEY`.
-- **COMMIT 3** — the review queue: `components/reports/ai-review-queue.tsx` mounted on
+- **COMMIT 3** — **[SUPERSEDED 2026-08-12 by Batch logs-page, which DELETES this
+  component and rebuilds the surface inside the edit-log modal. Everything below is
+  the record of what shipped and why, and the §11.4 "under Reports, LOCKED" decision
+  it rests on has been reversed by Lacey — kept because the two load-bearing
+  decisions in it, no-bulk-action and read-at-render, carry over verbatim.]**
+  the review queue: `components/reports/ai-review-queue.tsx` mounted on
   `/dashboard/reports` per §11.4 (LOCKED — **not** the logs page, which has a
   render-only batch queued and would collide). Self-contained like
   `BrandWellnessReport`: its own fetch and state, deliberately outside the
@@ -3870,23 +3968,30 @@ the one line the new import adds · all 17 CSS tokens the component references a
 declared in `globals.css`, **twice each** (light + dark) per r25 — checked because
 that is the one failure class tsc cannot see.
 
-> ### ⚠ MIGRATION 028 MUST BE APPLIED BEFORE THIS CODE DEPLOYS
+> ### ✅ MIGRATION 028 IS APPLIED — ordering block RETIRED 2026-08-12
 >
-> **Not applied as of 2026-08-11** — probed: `column quality_logs.ai_review_pending
-> does not exist` (42703). The queue reads that column, so until the migration runs
-> the card renders **`Could not load the queue: column quality_logs.ai_review_pending
-> does not exist`** — and `/dashboard/reports` has **no middleware admin gate**
-> (r24 covers `/dashboard/settings/*` only), so every user including the five
-> read-only accounts would see a raw Postgres string on a page that otherwise works.
-> Apply 028 in the Supabase SQL editor **first**, then push. The precedent is Batch
-> login-events, which carried this same line for migration 023.
+> **Superseded.** This block read *"Not applied as of 2026-08-11 — probed: `column
+> quality_logs.ai_review_pending does not exist` (42703)"* and made applying 028
+> before the push a hard gate. **Re-probed 2026-08-12 (§13 r32 / R21 — a blocker
+> older than a day gets re-verified, never inherited): all three columns return 200**
+> — `ai_review_pending`, `ai_confidence_band`, `ai_suggested_root_cause`. Lacey
+> applied it between the two probes. The deploy gate is gone.
+>
+> **What the retired block got RIGHT and what survives it:** `/dashboard/reports` has
+> **no middleware admin gate** (r24 covers `/dashboard/settings/*` only). That is not
+> a migration problem and did not go away — it is the reason the Logs-page batch
+> moves this surface off Reports entirely rather than gating that page
+> (`docs/HANDOFF-logs-page-batch.md` §3 C1). **Do not read this retirement as
+> retiring HIGH-2**; only its migration half is stale.
 
 **NOT verified, and not verifiable from here:** the queue has never been rendered.
-Pre-migration its reachable state is the **error state above**, and post-migration —
-with no credential minted, so `ai_review_pending` is `false` on every row — its only
-reachable state is the **empty state**. Either way the row card, the band pill, the
-correct/reject flow and the §13.1 amber block are all **unexercised**. That is
-Lacey's, after the migration and the mint.
+With 028 applied and no credential minted, `ai_review_pending` is `false` on every
+row — measured 2026-08-12, **0 of 122** — so its only reachable state is the **empty
+state**, and the row card, the band pill, the correct/reject flow and the §13.1 amber
+block are all **unexercised**. That is Lacey's, after the mint. **Moot for the queue
+specifically:** the Logs-page batch deletes this component (§3 C1) and rebuilds the
+surface inside the edit modal, where the same unexercised-ness carries over —
+recorded there as a ship condition rather than discovered again.
 
 **Karen post-flight — PASS-WITH-FINDINGS on the 1–3 chain (2 HIGH · 3 MEDIUM · 2 LOW,
 no CRITICAL); all folded in COMMIT 4.** She re-ran every gate independently (all
@@ -3907,7 +4012,10 @@ that shape.**
   migration 028 is unapplied: the reachable state is the error box above, and COMMIT
   2's own message already said the migration had not run, so the two commits
   contradicted each other. **The claim was the defect**; the ordering block above is
-  the fix.
+  the fix. **[SUPERSEDED 2026-08-12 — 028 is now applied, so the empty state IS the
+  reachable one and the original claim has become true after the fact. Marked, not
+  deleted: the finding was correct when written, and the lesson — a claim outrunning
+  its precondition — is the point, not the transient fact.]**
 - **MEDIUM-1 — two of the three mutations §13.10 EXPLICITLY REQUIRES did not fail.**
   (a) The blinding whitelist was asserted against `CLASSIFIER_READ_FIELDS`, the very
   array `buildClassifierPayload` iterates — the oracle moved with the value, so
