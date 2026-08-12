@@ -22,6 +22,23 @@ import {
   snapshotFromLog,
   type EditFormSnapshot,
 } from '@/lib/logs/edit-dirty';
+import {
+  CONFIDENCE_BAND_LABEL,
+  isRulingBlocked,
+  proseBlocks,
+  suggestionAction,
+} from '@/lib/logs/ai-suggestion';
+import { type ConfidenceBand } from '@/lib/classifier/confidence';
+import { cn } from '@/lib/utils';
+
+// Per-theme tokens, never inline hex (§13 r25). All nine referenced values are
+// declared twice in globals.css — once under :root and once under
+// :root[data-theme="dark"] — which is the one failure class tsc cannot see.
+const BAND_STYLE: Record<ConfidenceBand, string> = {
+  high: 'bg-[color:var(--pill-green-bg)] border-[color:var(--pill-green-border)] text-[color:var(--pill-green-fg)]',
+  medium: 'bg-[color:var(--pill-amber-bg)] border-[color:var(--pill-amber-border)] text-[color:var(--pill-amber-fg)]',
+  low: 'bg-[color:var(--pill-filter-bg)] border-[color:var(--f92-border)] text-[color:var(--pill-filter-fg)]',
+};
 
 export interface EditableLog {
   id: string;
@@ -36,11 +53,24 @@ export interface EditableLog {
   resolution_type: string[] | null;
   resolution_notes: string | null;
   needs_review: boolean;
+  // Part C. The AI suggestion and the prose it was derived from.
+  issue_details: string | null;
+  ai_suggested_root_cause: string[] | null;
+  ai_confidence_band: ConfidenceBand | null;
+  ai_review_pending: boolean;
 }
 
 interface EditLogDialogProps {
   log: EditableLog | null;
   open: boolean;
+  /**
+   * Gates the suggestion strip's actions. The route enforces admin server-side
+   * regardless (r6) — this only decides whether the affordance renders. Non-admins
+   * get an inert line, never a disabled button, per §13.8 and the Batch 012 Pulse
+   * precedent: a disabled control announces "unavailable" for something that is
+   * not a control for this user at all.
+   */
+  isAdmin: boolean;
   onOpenChange: (open: boolean) => void;
   onSaved: (updated: EditableLog) => void;
 }
@@ -71,7 +101,7 @@ function normalizeArrayValue(v: string[]): string[] | null {
   return v.length === 0 ? null : v;
 }
 
-export function EditLogDialog({ log, open, onOpenChange, onSaved }: EditLogDialogProps) {
+export function EditLogDialog({ log, open, isAdmin, onOpenChange, onSaved }: EditLogDialogProps) {
   const [logStatus, setLogStatus] = useState('Open');
   const [severity, setSeverity] = useState<string>('');
   const [whoOwnsFix, setWhoOwnsFix] = useState('');
@@ -91,6 +121,12 @@ export function EditLogDialog({ log, open, onOpenChange, onSaved }: EditLogDialo
   const [snapshot, setSnapshot] = useState<EditFormSnapshot>(() => snapshotFromLog(null));
   const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
   const keepEditingRef = useRef<HTMLButtonElement>(null);
+
+  // Part C — the suggestion strip's own in-flight/error state, kept separate from
+  // the form's `saving`/`error`. They are two different writes to two different
+  // routes: a failed ruling must not present as a failed row save, and vice versa.
+  const [rulingBusy, setRulingBusy] = useState(false);
+  const [rulingError, setRulingError] = useState<string | null>(null);
 
   // Single shared taxonomy fetch — populated once on dialog open and
   // cached for the dialog's lifetime. All 4 multi-selects read from
@@ -144,6 +180,7 @@ export function EditLogDialog({ log, open, onOpenChange, onSaved }: EditLogDialo
     // A stale confirm must never survive into a different log. Without this, the
     // prompt from a dismissed row reappears over the next row the admin opens.
     setConfirmDiscardOpen(false);
+    setRulingError(null);
   }, [log]);
 
   const isDirty = useMemo(
@@ -172,6 +209,18 @@ export function EditLogDialog({ log, open, onOpenChange, onSaved }: EditLogDialo
       notes,
     ],
   );
+
+  // Part C derived state. `suggestion` is null unless a ruling is actually
+  // pending, which is what keeps the strip out of the DOM on the overwhelming
+  // majority of rows (measured 2026-08-12: 0 of 122 pending).
+  const suggestion = log?.ai_review_pending ? log.ai_suggested_root_cause ?? [] : null;
+  // Reads the PERSISTED value, not the form state — the route's §13.1 re-check
+  // reads the row, so mirroring the form here would disable the buttons for a user
+  // who merely typed into the dropdown, and enable them in the one case the server
+  // refuses.
+  const rulingBlocked = isRulingBlocked(log?.root_cause_final ?? null);
+  const primaryRuling = suggestion ? suggestionAction(suggestion, rootCauseFinal) : 'confirm';
+  const prose = log ? proseBlocks(log) : [];
 
   const optionsByField = useMemo(() => {
     const map: Record<TaxonomyField, MultiComboboxOption[]> = {
@@ -222,6 +271,77 @@ export function EditLogDialog({ log, open, onOpenChange, onSaved }: EditLogDialo
   function discardAndClose() {
     setConfirmDiscardOpen(false);
     onOpenChange(false);
+  }
+
+  // ─── Part C — file a ruling on the AI suggestion ───
+  //
+  // Posts to /api/admin/logs/ai-review, which per classifier §13.2 is the ONLY
+  // writer of ai_review_pending = false. /api/logs/edit must never touch that
+  // column, and the column is deliberately absent from its ALLOWED_FIELDS — which
+  // is what makes C4's last row ("general row save → untouched") true by
+  // construction rather than by discipline.
+  //
+  // The modal is NOT closed on success. The ruling settles one field; the admin is
+  // usually here to fill in the others, and closing would throw away the rest of
+  // their edits.
+  async function handleRuling(action: 'confirm' | 'reject' | 'correct') {
+    if (!log) return;
+    setRulingBusy(true);
+    setRulingError(null);
+    try {
+      const res = await fetch('/api/admin/logs/ai-review', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          log_id: log.id,
+          action,
+          // Only `correct` carries values, and they are the modal's own dropdown
+          // selection — the constrained, taxonomy-validated control. The route
+          // re-validates against the active taxonomy anyway (r29).
+          ...(action === 'correct' ? { values: rootCauseFinal } : {}),
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        // The §13.1 409 is the interesting failure: the row gained a root cause
+        // after the suggestion was made, so `detail` names the edit dialog as the
+        // path — which is where the user already is. Surfaced verbatim rather than
+        // flattened into a generic message.
+        setRulingError(body?.detail ?? body?.error ?? `Could not record the review (${res.status}).`);
+        return;
+      }
+
+      // What the ROUTE actually wrote — reject leaves root_cause_final untouched
+      // and clears the suggestion; confirm/correct write the canonical field and
+      // retain the suggestion (C4's table).
+      const persistedRootCause = action === 'reject' ? log.root_cause_final : rootCauseFinal;
+
+      // Reflect the write locally. The canonical field is now saved, so the
+      // SNAPSHOT moves with it — otherwise the dismiss guard would count a value
+      // the server already holds as an unsaved edit and prompt on close.
+      //
+      // ONLY root cause is patched. Any other unsaved edits stay dirty, because
+      // they genuinely are: this route wrote one column, not the row.
+      if (action !== 'reject') {
+        setRootCauseFinal(rootCauseFinal);
+        setSnapshot(prev => ({ ...prev, rootCauseFinal }));
+      }
+
+      // Spread `log`, NOT the form state. `log` is the last-known-PERSISTED row,
+      // so the parent's table row picks up exactly what the route wrote and none
+      // of the admin's still-unsaved edits to other fields.
+      onSaved({
+        ...log,
+        root_cause_final: persistedRootCause,
+        ai_review_pending: false,
+        ai_suggested_root_cause: action === 'reject' ? null : log.ai_suggested_root_cause,
+        ai_confidence_band: action === 'reject' ? null : log.ai_confidence_band,
+      });
+    } catch (err) {
+      setRulingError(err instanceof Error ? err.message : 'Could not record the review.');
+    } finally {
+      setRulingBusy(false);
+    }
   }
 
   async function handleSave() {
@@ -410,6 +530,146 @@ export function EditLogDialog({ log, open, onOpenChange, onSaved }: EditLogDialo
             <p className="mt-1 text-xs text-[color:var(--f92-gray)]">
               Root Cause - Initial is captured once at log creation per §13 r3 and is not edited here.
             </p>
+
+            {/*
+              ─── C3 — the AI suggestion strip ───
+              Rendered DIRECTLY BELOW Root cause (final), because the field it
+              proposes a value for is the thing to compare it against. This is the
+              whole reason the surface moved off /dashboard/reports: one place a log
+              is ever classified, and that page has no middleware admin gate.
+            */}
+            {suggestion ? (
+              <div className="mt-3 rounded-lg border border-[color:var(--f92-border)] bg-[color:var(--f92-tint)] p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-[color:var(--f92-navy)]">
+                    AI suggested root cause
+                  </p>
+                  {/*
+                    A BAND, never a number. classifier §11.2 is locked: a float
+                    invites a threshold and a threshold invites auto-confirm, the
+                    failure mode §9 forbids. The raw model confidence is never
+                    persisted, so there is nothing here to sort or filter on.
+                  */}
+                  {log?.ai_confidence_band ? (
+                    <span
+                      className={cn(
+                        'rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide',
+                        BAND_STYLE[log.ai_confidence_band],
+                      )}
+                    >
+                      {CONFIDENCE_BAND_LABEL[log.ai_confidence_band]}
+                    </span>
+                  ) : null}
+                </div>
+
+                <p className="mt-1 text-sm font-medium text-[color:var(--f92-dark)]">
+                  {suggestion.length > 0 ? suggestion.join(' · ') : '—'}
+                </p>
+
+                {/*
+                  The prose the classifier READ — deliberately not "the field it
+                  came from". No provenance is captured anywhere (the model returns
+                  only root_causes + confidence), so naming one field would be a
+                  guess wearing attribution's clothes. Resolved with Lacey.
+                */}
+                {prose.length > 0 ? (
+                  <div className="mt-2 space-y-1.5 border-t border-[color:var(--f92-border)] pt-2">
+                    <p className="text-[10px] uppercase tracking-widest text-[color:var(--f92-gray)]">
+                      Prose the classifier read
+                    </p>
+                    {prose.map(block => (
+                      <div key={block.label}>
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--f92-gray)]">
+                          {block.label}
+                        </p>
+                        <p className="whitespace-pre-wrap text-xs text-[color:var(--f92-dark)]">
+                          {block.value}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-2 text-xs italic text-[color:var(--f92-gray)]">
+                    This log has no prose beyond its summary.
+                  </p>
+                )}
+
+                {/*
+                  §13.1 — should normally be absent, because selection excludes
+                  rows that already carry a root cause. If it appears, r37's "a
+                  non-empty Jira value still wins on sync" moved a value in between
+                  classification and review, and the route will refuse both confirm
+                  and correct (its re-check is `action !== 'reject'`). The UI must
+                  not offer what the server refuses — the classifier batch's Karen
+                  MEDIUM-2 shipped with Confirm disabled under a message saying
+                  confirming was blocked, and Correct… enabled beside it.
+                */}
+                {rulingBlocked ? (
+                  <div className="mt-2 rounded-md border border-[color:var(--pill-amber-border)] bg-[color:var(--pill-amber-bg)] p-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-[color:var(--pill-amber-fg)]">
+                      Already classified
+                    </p>
+                    <p className="mt-0.5 text-xs text-[color:var(--pill-amber-fg)]">
+                      This log already has a saved root cause ({(log?.root_cause_final ?? []).join(' · ')}).
+                      Confirming would overwrite it, so it is blocked. Reject still works, or edit the
+                      field above and save the row normally.
+                    </p>
+                  </div>
+                ) : null}
+
+                {rulingError ? (
+                  <p className="mt-2 text-xs text-red-600">{rulingError}</p>
+                ) : null}
+
+                {isAdmin ? (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    {/*
+                      ONE primary button whose meaning follows the dropdown. If the
+                      selection still matches the suggestion this is `confirm`; edit
+                      the field above and it becomes `correct`, carrying the human's
+                      values. §3 C3 asks for two actions and §3 C4 lists three
+                      outcomes — this is how both hold without a second value-picker
+                      competing with the constrained dropdown.
+
+                      The label changes with the action because the two record
+                      DIFFERENT outcome shapes (§6), and the correction rate is this
+                      batch's only validation — a correction filed as a confirm
+                      would report the classifier as exactly right on a row where
+                      the human changed the answer.
+                    */}
+                    <Button
+                      size="sm"
+                      disabled={rulingBusy || saving || rulingBlocked || suggestion.length === 0}
+                      onClick={() => handleRuling(primaryRuling)}
+                    >
+                      {rulingBusy
+                        ? 'Saving…'
+                        : primaryRuling === 'confirm'
+                          ? 'Confirm suggestion'
+                          : 'Save correction'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={rulingBusy || saving}
+                      onClick={() => handleRuling('reject')}
+                    >
+                      Reject
+                    </Button>
+                    <span className="text-[10px] text-[color:var(--f92-gray)]">
+                      {primaryRuling === 'confirm'
+                        ? 'Confirm writes the suggestion into Root cause (final).'
+                        : 'Your edit above will be saved as a correction.'}
+                    </span>
+                  </div>
+                ) : (
+                  /* Inert, never a disabled button (§13.8 / Pulse precedent). */
+                  <p className="mt-2 text-xs italic text-[color:var(--f92-gray)]">
+                    Reviewing AI suggestions is admin-only.
+                  </p>
+                )}
+              </div>
+            ) : null}
           </div>
 
           <div className="sm:col-span-2">

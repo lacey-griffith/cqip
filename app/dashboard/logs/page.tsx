@@ -19,6 +19,7 @@ import { LogDetailDrawer } from '@/components/logs/log-detail-drawer';
 import { SyncJiraButton } from '@/components/dashboard/sync-jira-button';
 import { getSeverityVariant, getStatusVariant } from '@/components/logs/badge-variants';
 import { matchesLogSearch, shouldShowReviewChip } from '@/lib/logs/log-search';
+import type { ConfidenceBand } from '@/lib/classifier/confidence';
 import { cn } from '@/lib/utils';
 
 const ALL = '__all__';
@@ -41,6 +42,13 @@ interface LogEntry {
   notes: string | null;
   resolution_notes: string | null;
   needs_review: boolean;
+  // Part C. issue_details is fetched ONLY as suggestion-strip feedstock — it is
+  // not rendered in the table. The other three drive the AI-suggested chip and
+  // the strip inside the edit modal.
+  issue_details: string | null;
+  ai_suggested_root_cause: string[] | null;
+  ai_confidence_band: ConfidenceBand | null;
+  ai_review_pending: boolean;
 }
 
 interface UserProfile {
@@ -107,6 +115,14 @@ export default function LogsPage() {
   // from local state so it stays accurate as edits clear the flag (no
   // separate query: loadData already fetches every non-deleted row).
   const [needsReviewFilter, setNeedsReviewFilter] = useState(false);
+  // C2 — the AI-suggested worklist. Defaults OFF for the same reason Needs review
+  // does: an admin opts in to reviewing suggestions rather than having the table
+  // silently scoped to them.
+  //
+  // ⚠ ai_review_pending is NOT log_status 'Pending Verification'. One means an AI
+  // proposed a root cause and no human has ruled; the other is a Jira workflow
+  // state. Similar words, unrelated concepts (spec §3 C2).
+  const [aiReviewFilter, setAiReviewFilter] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(true);
 
   // B1 — free-text search. Two pieces of state on purpose: `search` is what the
@@ -150,7 +166,7 @@ export default function LogsPage() {
       // page needs real pagination, not a higher cap.
       const { data: logsData, error: logsError } = await supabase
         .from('quality_logs')
-        .select('id, triggered_at, jira_ticket_id, jira_ticket_url, jira_summary, client_brand, severity, log_status, issue_category, issue_subtype, root_cause_final, resolution_type, who_owns_fix, log_number, notes, resolution_notes, needs_review')
+        .select('id, triggered_at, jira_ticket_id, jira_ticket_url, jira_summary, client_brand, severity, log_status, issue_category, issue_subtype, root_cause_final, resolution_type, who_owns_fix, log_number, notes, resolution_notes, needs_review, issue_details, ai_suggested_root_cause, ai_confidence_band, ai_review_pending')
         .eq('is_deleted', false)
         .order('triggered_at', { ascending: false })
         .range(0, 9999);
@@ -205,10 +221,16 @@ export default function LogsPage() {
     [logs],
   );
 
+  const aiReviewCount = useMemo(
+    () => logs.reduce((acc, l) => acc + (l.ai_review_pending ? 1 : 0), 0),
+    [logs],
+  );
+
   const filteredLogs = useMemo(() => {
     return logs.filter(log => {
       if (!matchesLogSearch(log, debouncedSearch)) return false;
       if (needsReviewFilter && !log.needs_review) return false;
+      if (aiReviewFilter && !log.ai_review_pending) return false;
       if (clientBrand && log.client_brand !== clientBrand) return false;
       if (severity && log.severity !== severity) return false;
       if (status && log.log_status !== status) return false;
@@ -216,7 +238,7 @@ export default function LogsPage() {
       if (endDate && new Date(log.triggered_at) > new Date(endDate)) return false;
       return true;
     });
-  }, [logs, debouncedSearch, needsReviewFilter, clientBrand, severity, status, startDate, endDate]);
+  }, [logs, debouncedSearch, needsReviewFilter, aiReviewFilter, clientBrand, severity, status, startDate, endDate]);
 
   const groupedTickets = useMemo<TicketGroup[]>(() => {
     const map = new Map<string, LogEntry[]>();
@@ -297,6 +319,7 @@ export default function LogsPage() {
     setSeverity('');
     setStatus('');
     setNeedsReviewFilter(false);
+    setAiReviewFilter(false);
     setActivePill('all');
     // Both, or Reset leaves the table filtered by a box it just emptied for 200ms
     // — and worse, leaves `debouncedSearch` set if the component re-renders first.
@@ -310,6 +333,7 @@ export default function LogsPage() {
     (severity ? 1 : 0) +
     (status ? 1 : 0) +
     (needsReviewFilter ? 1 : 0) +
+    (aiReviewFilter ? 1 : 0) +
     // Counts the DEBOUNCED value, matching what the table is actually filtered by.
     // Counting the raw input would tick the badge to "1 active" on the first
     // keystroke while the table still shows everything.
@@ -351,6 +375,10 @@ export default function LogsPage() {
       resolution_notes: log.resolution_notes,
       notes: log.notes,
       needs_review: log.needs_review,
+      issue_details: log.issue_details,
+      ai_suggested_root_cause: log.ai_suggested_root_cause,
+      ai_confidence_band: log.ai_confidence_band,
+      ai_review_pending: log.ai_review_pending,
     });
     setEditOpen(true);
   }
@@ -452,6 +480,13 @@ export default function LogsPage() {
               resolution_notes: updated.resolution_notes,
               notes: updated.notes,
               needs_review: updated.needs_review,
+              // Part C. The strip's confirm/reject writes server-side through
+              // /api/admin/logs/ai-review, so these mirror that write locally —
+              // which is what drops the row out of the AI-suggested filter and
+              // decrements the chip without a refetch.
+              ai_suggested_root_cause: updated.ai_suggested_root_cause,
+              ai_confidence_band: updated.ai_confidence_band,
+              ai_review_pending: updated.ai_review_pending,
             }
           : l,
       ),
@@ -557,7 +592,13 @@ export default function LogsPage() {
                 a one-click reset since a typical 0 result means filters
                 are too narrow, not that the dashboard is broken. */}
             {loading ? null : filteredLogs.length === 0 ? (
-              needsReviewFilter && needsReviewCount === 0 ? (
+              // "All caught up" now covers EITHER review filter. Without the AI
+              // clause, turning on AI suggested with nothing pending would render
+              // the generic "0 logs · clear filters to see all" — which reads as a
+              // filter mistake rather than as an empty queue, and offers a Reset
+              // the user does not need.
+              (needsReviewFilter && needsReviewCount === 0) ||
+              (aiReviewFilter && aiReviewCount === 0) ? (
                 <span
                   className="text-xs font-medium text-[color:var(--f92-gray)]"
                   aria-live="polite"
@@ -667,6 +708,36 @@ export default function LogsPage() {
                       )}
                     >
                       Needs review ({needsReviewCount})
+                    </button>
+                  </>
+                ) : null}
+
+                {/*
+                  C2 — the AI-suggested chip. SAME visibility rule as its sibling
+                  (B5): shown when it has work, or while it is the active filter.
+                  One shared rule, so two review chips cannot drift into looking
+                  like they mean different things.
+
+                  Measured 2026-08-12: 0 pending, and no model credential exists,
+                  so this chip does not render today. That is the correct live
+                  state, not a fault.
+                */}
+                {shouldShowReviewChip(aiReviewCount, aiReviewFilter) ? (
+                  <>
+                    <span aria-hidden className="mx-1 h-4 w-px bg-[color:var(--f92-border)]" />
+                    <button
+                      type="button"
+                      onClick={() => setAiReviewFilter(v => !v)}
+                      aria-pressed={aiReviewFilter}
+                      title="An AI suggested a root cause and no human has ruled on it yet. Confirm or reject it in the edit dialog."
+                      className={cn(
+                        'rounded-full border px-3 py-1 text-xs font-medium transition',
+                        aiReviewFilter
+                          ? 'border-[color:var(--f92-orange)] bg-[color:var(--f92-orange)] text-white'
+                          : 'border-[color:var(--pill-filter-paused-border)] bg-[color:var(--pill-filter-bg)] text-[color:var(--pill-filter-fg)] hover:bg-[color:var(--pill-filter-bg-hover)]',
+                      )}
+                    >
+                      AI suggested ({aiReviewCount})
                     </button>
                   </>
                 ) : null}
@@ -1055,6 +1126,11 @@ export default function LogsPage() {
 
       <EditLogDialog
         log={editingLog}
+        // Explicit rather than incidental: the row-actions menu already renders
+        // only for admins, so today this is always true. Passing it means the
+        // strip's gate is stated at the boundary instead of resting on the caller
+        // happening to be admin-only (r6 — the route enforces it regardless).
+        isAdmin={isAdmin}
         open={editOpen}
         onOpenChange={setEditOpen}
         onSaved={applyEditedLog}
