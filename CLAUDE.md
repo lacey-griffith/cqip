@@ -3838,7 +3838,7 @@ means reworking it.
 > - **B5 — two empty review chips.** Blocks **C2, therefore commit 4**. C1 and C3 are
 >   unblocked, so commit 4 may split if the answer lags.
 
-**Phase status: COMMITS 1–5 BUILT. Lacey smoke + push NEXT. DO NOT PUSH.**
+**Phase status: COMMITS 1–6 BUILT. Lacey smoke + push NEXT. DO NOT PUSH.**
 Version **v2.8 → v2.9**.
 
 - **COMMIT 1** `f2f9511` — spec + REVISION 1 + the CLAUDE.md folds.
@@ -3847,8 +3847,10 @@ Version **v2.8 → v2.9**.
   `lib/filters/brand-option.ts`, `lib/ui/combobox-filter.ts` + 17 tests.
 - **COMMIT 4** `c91c5f0` — Part C. `components/reports/ai-review-queue.tsx` **DELETED**;
   new pure `lib/logs/ai-suggestion.ts` + 21 tests.
-- **COMMIT 5** — Karen fold (1 CRITICAL · 1 HIGH · 2 MEDIUM · 2 LOW) + the
-  `BrandSelector` `id` fix.
+- **COMMIT 5** `3af03e0` — Karen fold round 1 (1 CRITICAL · 1 HIGH · 2 MEDIUM ·
+  2 LOW) + the `BrandSelector` `id` fix.
+- **COMMIT 6** — Karen re-confirm fold: CRITICAL-2, which the CRITICAL-1 fix
+  uncovered.
 
 **PART C — the surface moved, and the reason is the finding it closes.** The
 standalone queue is gone and the suggestion now renders inside the edit modal
@@ -4117,6 +4119,64 @@ restored rather than assuming it.
 `setRuledOutcome` insertion hit both `handleRuling` and `handleSave`, which would have
 claimed a review outcome for an ordinary row save. Found by reading the grep output
 rather than trusting "applied"; a test now pins exactly one writer.
+
+**KAREN RE-CONFIRM — FAIL AGAIN, on a NEW CRITICAL that the CRITICAL-1 fix
+UNCOVERED. Folded in COMMIT 6.** She confirmed CRITICAL-1's decision half is
+genuinely closed (including the fourth trace row I asked her to check) and that both
+her round-one survivors are now dead — then found the defect that had been hiding
+behind it.
+
+- **CRITICAL-2 — `confirm` wrote the suggestion server-side, mirrored `[]` locally,
+  and the status line I had just added INSTRUCTED the user to erase it, unaudited.**
+  The route writes `confirmedValues = suggested` on confirm; the dialog's mirror was
+  hardcoded `action === 'reject' ? persisted : rootCauseFinal`, which is right for
+  `correct` and **wrong for `confirm`** — and confirm only became reachable when
+  CRITICAL-1 was fixed, so the two defects were **stacked**. On the live path that
+  left the database holding the suggestion while the dropdown, the snapshot and the
+  table row all held `[]`, surviving close/reopen because `openEdit` reads from
+  `logs` state. Then HIGH-1's new *"use Save changes below"* line leads to a save
+  that sends `root_cause_final: null`, which `/api/logs/edit` writes **wholesale**
+  while its diff guard compares `null` against a stale `null`, emits **no diff**,
+  and therefore **no audit row** — that route audits only from `diffs`. **A
+  confirmed classification erased with the trail showing nothing after it: §13 r37's
+  exact shape.** Verified link by link before fixing.
+- **FIXED with a pure `rulingWriteValues(action, suggested, selection, persisted)`**
+  that mirrors the route's three branches in ONE tested place, and all three local
+  writes — `onSaved`, the dropdown and the snapshot — now derive from it. Fixing
+  only `persistedRootCause` would have left Part A's guard prompting on close for a
+  value the server already holds.
+- **⚠ AND MY TEST LOCKED THIS ONE IN TOO — SECOND TIME IN TWO ROUNDS.** The
+  regression test `reject does not write root_cause_final locally` pinned the
+  **whole ternary**, so it froze the wrong confirm branch alongside the right reject
+  branch; applying the fix failed it. **The durable lesson, sharper than round one's:
+  a regex over source cannot distinguish the part you meant to protect from the part
+  that is broken beside it.** Both times the repair was the same — test BEHAVIOUR
+  through a pure function instead of matching the source that produces it.
+- **Two of my own claims were overstated and are corrected here.** COMMIT 5's message
+  says *"one such alias exists deliberately (`persistedRootCause` IS
+  `rootCauseFinal`)"* — presenting as considered-and-correct **the exact expression
+  that was wrong** on the path that commit made reachable. And my four-path trace
+  read *"confirm … writes `['Client Request']`"*, which was true of the **database**
+  and false of the **dropdown and the table row**: I traced the route, not the
+  round-trip, which is precisely why the divergence survived my own end-to-end check.
+  The re-run trace now asserts route and mirror **agree**, and that a later Save
+  preserves rather than erases.
+- **Karen's rulings on the three honest limits:** the unreachable guard is accurate
+  and should be **kept, not deleted** — and she supplied a reason I had missed
+  (`isRulingBlocked` reads the `log` prop while pristine reads the patched snapshot,
+  so they diverge after a ruling; that state is unreachable only because
+  `ruledOutcome` replaces the buttons). The MEDIUM-1 alias note is right to document
+  rather than close, but was **understated**, because the alias it names is where
+  CRITICAL-2 lived. LOW-1 accurate.
+- **Verified unchanged and safe:** the `ruledOutcome` reset path, exactly one writer,
+  the `handleSave` contamination genuinely gone, and the render branch order — a
+  non-admin can never reach the status line, since only the admin-gated buttons call
+  `handleRuling` (safe by reachability, not construction; not worth changing).
+
+**Gates for COMMIT 6:** tsc 0 · **311/311** · ESLint every touched file at exactly
+its baseline · build 0, both pages still `○` · **5 of 5 mutations caught**, including
+the CRITICAL-2 regression itself and both the dropdown and snapshot mirrors
+individually.
 
 **Part A's one structural decision, which should not be "tidied" later:
 `snapshotFromLog` is the SINGLE producer of both the snapshot and the form's initial

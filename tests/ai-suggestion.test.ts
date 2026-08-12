@@ -7,6 +7,7 @@ import {
   isPrimaryRulingDisabled,
   isRulingBlocked,
   proseBlocks,
+  rulingWriteValues,
   suggestionAction,
 } from '../lib/logs/ai-suggestion';
 
@@ -181,20 +182,60 @@ test('only the correct action carries values', () => {
   );
 });
 
-test('reject does not write root_cause_final locally', () => {
-  // Mirrors the route, which omits the key entirely on reject so it cannot be
-  // written by accident. If this local mirror diverged, the table row would show a
-  // value the database does not hold.
+// ── Karen CRITICAL-2 — the local mirror must equal what the ROUTE writes ──
+//
+// ⚠ THIS REPLACES A REGEX THAT PINNED THE WHOLE EXPRESSION
+// (`action === 'reject' ? log.root_cause_final : rootCauseFinal`) AND SO LOCKED IN
+// A DEFECT. It was written to protect the REJECT branch, and it did — but by
+// asserting the entire ternary it also froze the CONFIRM branch, which was wrong.
+// A regex over source cannot distinguish the part you meant to protect from the
+// part that is broken beside it. **Second time in two rounds** that a test of mine
+// pinned a defect; both times the fix was to test BEHAVIOUR through a pure
+// function instead of matching the source that produces it.
+
+test('confirm writes the SUGGESTION, not the dropdown selection', () => {
+  // The live path: selection is empty (§13.6 guarantees it) and the route writes
+  // `confirmedValues = suggested`. Mirroring the selection here is what erased
+  // confirmed data with no audit row.
+  assert.deepEqual(rulingWriteValues('confirm', ['Client Request'], [], null), ['Client Request']);
+  // Even when the dropdown holds something else, confirm still files the suggestion
+  // — the route does not look at the selection on this action.
+  assert.deepEqual(rulingWriteValues('confirm', ['A'], ['B'], null), ['A']);
+});
+
+test('correct writes the human selection', () => {
+  assert.deepEqual(rulingWriteValues('correct', ['A'], ['B'], null), ['B']);
+});
+
+test('reject leaves the persisted value untouched', () => {
+  assert.deepEqual(rulingWriteValues('reject', ['A'], ['B'], null), null);
+  assert.deepEqual(rulingWriteValues('reject', ['A'], ['B'], ['C']), ['C']);
+});
+
+test('the dialog derives all three local writes from rulingWriteValues', () => {
+  assert.ok(/const persistedRootCause = rulingWriteValues\(/.test(DIALOG));
+  // The snapshot and the dropdown must move to the SAME value, or Part A's guard
+  // prompts on close for a value the server already holds.
+  assert.ok(/const written = persistedRootCause \?\? \[\];/.test(DIALOG));
+  assert.ok(/setRootCauseFinal\(written\)/.test(DIALOG));
+  assert.ok(/setSnapshot\(prev => \(\{ \.\.\.prev, rootCauseFinal: written \}\)\)/.test(DIALOG));
+  // The hardcoded mirror must not come back.
   assert.ok(
-    /action === 'reject' \? log\.root_cause_final : rootCauseFinal/.test(DIALOG),
-    'reject must leave root_cause_final at its persisted value',
+    !/action === 'reject' \? log\.root_cause_final : rootCauseFinal/.test(DIALOG),
+    'the hardcoded mirror is CRITICAL-2',
   );
 });
 
-test('the snapshot moves with a confirmed root cause, and only that field', () => {
+test('the snapshot moves with the ruling, and ONLY that field', () => {
   // Otherwise the dismiss guard counts a value the server already holds as an
   // unsaved edit and prompts on every close after a ruling.
-  assert.ok(/setSnapshot\(prev => \(\{ \.\.\.prev, rootCauseFinal \}\)\)/.test(DIALOG));
+  //
+  // Asserted as a spread-plus-one-key shape rather than an exact expression: the
+  // value it carries is pinned behaviourally by the rulingWriteValues tests above,
+  // and pinning the whole expression here is what froze the CRITICAL-2 defect.
+  const patch = /setSnapshot\(prev => \(\{ \.\.\.prev, rootCauseFinal: (\w+) \}\)\)/.exec(DIALOG);
+  assert.ok(patch, 'the snapshot patch must spread prev and set exactly rootCauseFinal');
+  assert.equal(patch[1], 'written', 'it must carry what the route wrote, not the raw selection');
 });
 
 test('onSaved spreads the persisted log and leaks NO form state', () => {

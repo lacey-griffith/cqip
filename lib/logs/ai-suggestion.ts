@@ -94,6 +94,49 @@ export function isPrimaryRulingDisabled(
 }
 
 // ---------------------------------------------------------------------------
+// What the ROUTE writes to root_cause_final — mirrored in one tested place
+// ---------------------------------------------------------------------------
+//
+// ⚠ THIS EXISTS BECAUSE THE UI'S LOCAL MIRROR SILENTLY DISAGREED WITH THE ROUTE,
+// AND THE DISAGREEMENT ERASED CONFIRMED DATA WITH NO AUDIT ROW (Karen CRITICAL-2).
+//
+// The route (`app/api/admin/logs/ai-review/route.ts`) writes:
+//   confirm → the STORED SUGGESTION      (`confirmedValues = suggested`, :114)
+//   correct → the human's values         (`confirmedValues = body.values`, :123)
+//   reject  → nothing; the key is absent (:198-200)
+//
+// The dialog had hardcoded `action === 'reject' ? persisted : rootCauseFinal`,
+// which is right for `correct` and WRONG for `confirm` — and `confirm` only became
+// reachable when CRITICAL-1 was fixed, so the two defects were stacked. On the live
+// path `rootCauseFinal` is `[]`, so confirm wrote the suggestion to the database
+// while the dropdown, the snapshot and the table row all kept `[]`. Then the
+// post-ruling status line says "use Save changes below", and that save sends
+// `root_cause_final: null` — which `/api/logs/edit` writes wholesale while its diff
+// guard sees `null` vs stale `null`, emits NO diff, and therefore NO audit row.
+// A confirmed classification, gone, with the trail showing nothing after it: §13
+// r37's exact shape.
+//
+// Returning it from one pure function means the mirror cannot drift from the route
+// without a test failing, instead of being pinned by a regex over source — which
+// is what failed here. See the note on the tests.
+//
+// HONEST LIMIT: `suggested` comes from the dialog's `log` prop, while the route
+// re-reads it from the row at write time. They can only diverge if the suggestion
+// changed between render and click, and `ai_review_pending` makes that a 409
+// rather than a silent mismatch. Closing it properly means the route returning the
+// values it wrote, which is a route change — out of scope per spec §4.
+export function rulingWriteValues(
+  action: 'confirm' | 'reject' | 'correct',
+  suggested: readonly string[],
+  currentSelection: readonly string[],
+  persistedRootCause: readonly string[] | null,
+): string[] | null {
+  if (action === 'reject') return persistedRootCause === null ? null : [...persistedRootCause];
+  if (action === 'confirm') return [...suggested];
+  return [...currentSelection];
+}
+
+// ---------------------------------------------------------------------------
 // §13.1 — whether a ruling can be filed at all
 // ---------------------------------------------------------------------------
 //

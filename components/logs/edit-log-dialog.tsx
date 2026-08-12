@@ -27,6 +27,7 @@ import {
   isPrimaryRulingDisabled,
   isRulingBlocked,
   proseBlocks,
+  rulingWriteValues,
   suggestionAction,
 } from '@/lib/logs/ai-suggestion';
 import { type ConfidenceBand } from '@/lib/classifier/confidence';
@@ -330,7 +331,18 @@ export function EditLogDialog({ log, open, isAdmin, onOpenChange, onSaved }: Edi
       // What the ROUTE actually wrote — reject leaves root_cause_final untouched
       // and clears the suggestion; confirm/correct write the canonical field and
       // retain the suggestion (C4's table).
-      const persistedRootCause = action === 'reject' ? log.root_cause_final : rootCauseFinal;
+      // ⚠ ALL THREE LOCAL WRITES BELOW MUST USE THIS ONE VALUE (Karen CRITICAL-2).
+      // The route writes the stored SUGGESTION on confirm and the human's values on
+      // correct; the previous mirror hardcoded `rootCauseFinal`, which is right for
+      // correct and wrong for confirm. On the live path that left the DB holding the
+      // suggestion while the dropdown, the snapshot and the table row all held [] —
+      // and the next Save then erased the confirmed value with NO audit row.
+      const persistedRootCause = rulingWriteValues(
+        action,
+        log.ai_suggested_root_cause ?? [],
+        rootCauseFinal,
+        log.root_cause_final,
+      );
 
       // Reflect the write locally. The canonical field is now saved, so the
       // SNAPSHOT moves with it — otherwise the dismiss guard would count a value
@@ -339,8 +351,9 @@ export function EditLogDialog({ log, open, isAdmin, onOpenChange, onSaved }: Edi
       // ONLY root cause is patched. Any other unsaved edits stay dirty, because
       // they genuinely are: this route wrote one column, not the row.
       if (action !== 'reject') {
-        setRootCauseFinal(rootCauseFinal);
-        setSnapshot(prev => ({ ...prev, rootCauseFinal }));
+        const written = persistedRootCause ?? [];
+        setRootCauseFinal(written);
+        setSnapshot(prev => ({ ...prev, rootCauseFinal: written }));
       }
 
       // Spread `log`, NOT the form state. `log` is the last-known-PERSISTED row,
