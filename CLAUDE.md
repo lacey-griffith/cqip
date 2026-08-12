@@ -3801,6 +3801,54 @@ means reworking it.
 > - **B5 — two empty review chips.** Blocks **C2, therefore commit 4**. C1 and C3 are
 >   unblocked, so commit 4 may split if the answer lags.
 
+**Phase status: COMMIT 1 (spec) + COMMIT 2 (Part A) BUILT. Commits 3–4 gated — see
+the B2/B5 findings reported to Lacey.**
+
+- **COMMIT 1** `f2f9511` — spec + REVISION 1 + the CLAUDE.md folds.
+- **COMMIT 2** — Part A. New pure `lib/logs/edit-dirty.ts` + 18 tests.
+
+**Part A's one structural decision, which should not be "tidied" later:
+`snapshotFromLog` is the SINGLE producer of both the snapshot and the form's initial
+values** — the dialog seeds its nine controls FROM the snapshot it stores. The
+obvious alternative (seed nine `useState`s from `log`, build a snapshot separately
+from `log`) is two transcriptions of one mapping, and they drift the moment a tenth
+field is added — after which the form opens permanently dirty, or opens clean and
+never notices a change, with tsc clean and every test passing. Note this is the §15
+shared-ancestor shape **inverted deliberately**: sharing the ancestor is the
+correctness guarantee here, because there is only one mapping to be right about.
+
+**The confirm is a NESTED Dialog (r26), and that buys the hardest case for free.**
+Radix's dismissable-layer stack routes Esc to the TOPMOST layer only, so Esc at the
+prompt closes the prompt and leaves the edit modal open — which is exactly "keep
+editing". An inline block inside the modal would have needed that hand-written, and
+getting it wrong means **Esc-at-the-prompt discards the work the prompt exists to
+protect**. Default focus is set via `onOpenAutoFocus` + a ref rather than DOM order,
+because `DialogFooter` is `flex-col-reverse` on mobile so "the first button" is not
+a stable target across breakpoints.
+
+**Cancel routes through the same guard as Esc / outside-click / X** — one
+`requestClose`, not four handlers. An unguarded Cancel would have been the single
+remaining path that loses work, and it is the one a user reaches for deliberately.
+Mid-save dismissal is **refused outright rather than confirmed** (the write is
+already in flight, so "discard" would be a lie) — the `ConfirmDeleteDialog`
+`if (busy) return` posture.
+
+**Gates for COMMIT 2, re-run not inherited:** tsc 0 · **263/263** (245 baseline + 18)
+· ESLint `edit-log-dialog.tsx` at **exactly its 0-error/1-warning baseline** (the
+pre-existing `TAXONOMY_COLUMNS` type-only warning, verified unchanged), both new
+files **0/0** · build 0 with `/dashboard/logs` still `○` and no new route entries ·
+**7 of 7 mutations caught** — dropping `rootCauseFinal` or `notes` from the dirty
+chain, a snapshot that keeps `null` severity (the null-vs-`''` trap that would make
+every all-null row open dirty), an order-insensitive `arraysEqual`, a `requestClose`
+that always closes, a Cancel that bypasses the guard, and the Dialog wired straight
+to the prop. Each patch was verified applied before its verdict counted, and the
+baseline asserted before AND after the run.
+
+**NOT verified:** the prompt has not been rendered. No React test infrastructure
+exists here, so focus order, the stacked overlay and the Esc-closes-topmost
+behaviour are **reasoned from Radix's documented layer stack, not observed** —
+review-level, the `TERMINAL_CELL_STATUSES` precedent. Lacey's smoke covers it.
+
 **PROSE PROVENANCE — the spec asks for something the data does not carry, resolved
 with Lacey.** §3 C3 wants the source prose named *"From resolution notes: …"*. But
 `lib/classifier/model.ts:144` locks the model response to

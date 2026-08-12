@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -16,6 +16,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MultiCombobox, type MultiComboboxOption } from '@/components/ui/multi-combobox';
 import { supabase } from '@/lib/supabase/client';
+import {
+  arraysEqual,
+  isFormDirty,
+  snapshotFromLog,
+  type EditFormSnapshot,
+} from '@/lib/logs/edit-dirty';
 
 export interface EditableLog {
   id: string;
@@ -61,14 +67,6 @@ interface TaxonomyRow {
   sort_order: number;
 }
 
-function arraysEqual(a: string[] | null | undefined, b: string[] | null | undefined): boolean {
-  const aa = a ?? [];
-  const bb = b ?? [];
-  if (aa.length !== bb.length) return false;
-  for (let i = 0; i < aa.length; i++) if (aa[i] !== bb[i]) return false;
-  return true;
-}
-
 function normalizeArrayValue(v: string[]): string[] | null {
   return v.length === 0 ? null : v;
 }
@@ -85,6 +83,14 @@ export function EditLogDialog({ log, open, onOpenChange, onSaved }: EditLogDialo
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Part A — the values the modal opened with. Stored, not recomputed from `log`
+  // on the fly: `log` is a prop the parent may re-create, and comparing against a
+  // moving reference would make "dirty" mean "differs from whatever the parent
+  // last rendered" rather than "differs from what I opened".
+  const [snapshot, setSnapshot] = useState<EditFormSnapshot>(() => snapshotFromLog(null));
+  const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
+  const keepEditingRef = useRef<HTMLButtonElement>(null);
 
   // Single shared taxonomy fetch — populated once on dialog open and
   // cached for the dialog's lifetime. All 4 multi-selects read from
@@ -117,19 +123,55 @@ export function EditLogDialog({ log, open, onOpenChange, onSaved }: EditLogDialo
     return () => { cancelled = true; };
   }, [open, taxonomy.length]);
 
+  // ONE mapping produces both the snapshot and the form's initial values — see the
+  // docblock on lib/logs/edit-dirty.ts. Seeding the fields from `log` while
+  // building the snapshot separately would be two transcriptions of the same
+  // mapping, and they drift the moment a tenth field is added.
   useEffect(() => {
     if (!log) return;
-    setLogStatus(log.log_status);
-    setSeverity(log.severity || '');
-    setWhoOwnsFix(log.who_owns_fix || '');
-    setIssueCategory(log.issue_category ?? []);
-    setIssueSubtype(log.issue_subtype ?? []);
-    setRootCauseFinal(log.root_cause_final ?? []);
-    setResolutionType(log.resolution_type ?? []);
-    setResolutionNotes(log.resolution_notes || '');
-    setNotes(log.notes || '');
+    const snap = snapshotFromLog(log);
+    setSnapshot(snap);
+    setLogStatus(snap.logStatus);
+    setSeverity(snap.severity);
+    setWhoOwnsFix(snap.whoOwnsFix);
+    setIssueCategory(snap.issueCategory);
+    setIssueSubtype(snap.issueSubtype);
+    setRootCauseFinal(snap.rootCauseFinal);
+    setResolutionType(snap.resolutionType);
+    setResolutionNotes(snap.resolutionNotes);
+    setNotes(snap.notes);
     setError(null);
+    // A stale confirm must never survive into a different log. Without this, the
+    // prompt from a dismissed row reappears over the next row the admin opens.
+    setConfirmDiscardOpen(false);
   }, [log]);
+
+  const isDirty = useMemo(
+    () =>
+      isFormDirty(snapshot, {
+        logStatus,
+        severity,
+        whoOwnsFix,
+        issueCategory,
+        issueSubtype,
+        rootCauseFinal,
+        resolutionType,
+        resolutionNotes,
+        notes,
+      }),
+    [
+      snapshot,
+      logStatus,
+      severity,
+      whoOwnsFix,
+      issueCategory,
+      issueSubtype,
+      rootCauseFinal,
+      resolutionType,
+      resolutionNotes,
+      notes,
+    ],
+  );
 
   const optionsByField = useMemo(() => {
     const map: Record<TaxonomyField, MultiComboboxOption[]> = {
@@ -149,6 +191,38 @@ export function EditLogDialog({ log, open, onOpenChange, onSaved }: EditLogDialo
     }
     return map;
   }, [taxonomy]);
+
+  // ─── Part A — the dismiss guard ───
+  //
+  // Radix routes Esc, outside-click AND the built-in X (DialogPrimitive.Close in
+  // components/ui/dialog.tsx:43) through a single onOpenChange(false). Intercepting
+  // there covers three of the spec's four triggers with one branch; Cancel is wired
+  // to the same requestClose below, so all four behave identically — which is what
+  // "confirm on ANY dismiss when dirty" means and why this is not four handlers.
+  function requestClose() {
+    if (!isDirty) {
+      onOpenChange(false);
+      return;
+    }
+    setConfirmDiscardOpen(true);
+  }
+
+  function handleOpenChange(next: boolean) {
+    if (next) {
+      onOpenChange(true);
+      return;
+    }
+    // Mid-save dismissal is refused outright rather than confirmed. The request is
+    // already in flight, so "discard" would be a lie — the write lands either way.
+    // Same posture as ConfirmDeleteDialog's `if (busy) return`.
+    if (saving) return;
+    requestClose();
+  }
+
+  function discardAndClose() {
+    setConfirmDiscardOpen(false);
+    onOpenChange(false);
+  }
 
   async function handleSave() {
     if (!log) return;
@@ -238,7 +312,8 @@ export function EditLogDialog({ log, open, onOpenChange, onSaved }: EditLogDialo
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Edit log{log ? ` — ${log.jira_ticket_id}` : ''}</DialogTitle>
@@ -378,7 +453,10 @@ export function EditLogDialog({ log, open, onOpenChange, onSaved }: EditLogDialo
         ) : null}
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+          {/* Cancel routes through the SAME guard as Esc / outside-click / X.
+              An unguarded Cancel would be the one path that still loses work,
+              and it is the path a user reaches for deliberately. */}
+          <Button variant="outline" onClick={requestClose} disabled={saving}>
             Cancel
           </Button>
           <Button onClick={handleSave} disabled={saving || taxonomyLoading}>
@@ -387,5 +465,50 @@ export function EditLogDialog({ log, open, onOpenChange, onSaved }: EditLogDialo
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    {/*
+      Discard confirmation — a NESTED Dialog, stacked over the edit modal per
+      §13 r26 (drawer/dialog-on-dialog is supported and intentional; Radix owns
+      the overlay z-index and focus trap).
+
+      Nesting rather than an inline block inside the edit modal buys the Esc
+      behaviour for free: Radix's dismissable-layer stack routes Esc to the
+      TOPMOST layer only, so Esc here closes the confirm and leaves the edit
+      modal open — which is exactly "keep editing". An inline block would have
+      needed that case hand-written, and getting it wrong means Esc-at-the-prompt
+      discards the work the prompt exists to protect.
+    */}
+    <Dialog open={confirmDiscardOpen} onOpenChange={next => { if (!next) setConfirmDiscardOpen(false); }}>
+      <DialogContent
+        className="max-w-md"
+        // §1: "default focus on keep editing". Radix would otherwise focus the
+        // first tabbable node, and DialogFooter is flex-col-reverse on mobile —
+        // so DOM order and visual order disagree and "the first button" is not a
+        // stable target. Focusing the ref makes the safe choice the default on
+        // every breakpoint, rather than on the ones that happen to line up.
+        onOpenAutoFocus={e => {
+          e.preventDefault();
+          keepEditingRef.current?.focus();
+        }}
+      >
+        <DialogHeader>
+          <DialogTitle>Discard unsaved changes?</DialogTitle>
+          <DialogDescription>
+            This log has edits that have not been saved. Discarding closes the dialog and loses
+            them.
+          </DialogDescription>
+        </DialogHeader>
+
+        <DialogFooter>
+          <Button ref={keepEditingRef} variant="outline" onClick={() => setConfirmDiscardOpen(false)}>
+            Keep editing
+          </Button>
+          <Button onClick={discardAndClose} className="bg-red-600 text-white hover:bg-red-700">
+            Discard changes
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
