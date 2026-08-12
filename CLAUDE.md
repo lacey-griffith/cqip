@@ -3709,6 +3709,32 @@ its reason so nobody re-derives the analysis.
       `changed_by` values, so an operator filtering `'system'` would silently stop
       catching new auto-advance rows. Only worth changing alongside a backfill.
 
+### Logs-page deferred follow-ons (from the 2026-08-12 batch, Lacey's scope call)
+
+Both were FOUND and CHARACTERISED during the B2 investigation and deliberately left
+open — recorded so they are not re-discovered from scratch.
+
+- [ ] **The brand dropdown's `<Label>` is orphaned on TWO pages.**
+      `app/dashboard/logs/page.tsx` and `app/dashboard/reports/page.tsx` both render
+      `<Label htmlFor="clientBrand">`, but `BrandSelector` accepts no `id` prop and
+      renders none, so the label points at a non-existent element: clicking it does
+      nothing, and a screen reader gets an unlabelled button. Severity and Status
+      both receive real ids, so **Brand is the only control in that filter row with
+      a broken label**. Fix is small — thread an optional `id` through
+      `BrandSelector` → `Combobox` onto the trigger button — but it touches a shared
+      component used by two pages, and both call sites reuse the SAME id string
+      (`clientBrand`), which would additionally be a duplicate-id if those controls
+      ever landed on one page. A11y defect, not cosmetic.
+- [ ] **Paused brands are listed in the dropdown with no indication.** Measured
+      2026-08-12: MRR-CA, SHG and WDG are `is_paused`, and **MRR-CA and WDG have
+      ZERO non-deleted logs**, so selecting either yields a bare "No logs found for
+      the selected filters" with nothing explaining why. `BrandSelector` already
+      fetches `is_paused`. Deferred as a **design** change rather than a fix: the
+      Coverage page has an explicit `showPaused` toggle and Pulse hides paused
+      columns by default, so a third treatment here should match one of them rather
+      than invent a fourth. Decide alongside Batch 005.22 Phase 4 (project-aware
+      logs dropdown), which touches the same component.
+
 ### Ops / deferred
 - [ ] **Confirm `test_milestones` backfill (§13 r18) runs on a cadence**
       (from Brand Wellness follow-up, 2026-07-07). Null-`brand_id`
@@ -3801,11 +3827,114 @@ means reworking it.
 > - **B5 — two empty review chips.** Blocks **C2, therefore commit 4**. C1 and C3 are
 >   unblocked, so commit 4 may split if the answer lags.
 
-**Phase status: COMMIT 1 (spec) + COMMIT 2 (Part A) BUILT. Commits 3–4 gated — see
-the B2/B5 findings reported to Lacey.**
+**Phase status: COMMITS 1–3 BUILT. Commit 4 (Part C) is next; C2 is now unblocked
+because B5 is settled.**
 
 - **COMMIT 1** `f2f9511` — spec + REVISION 1 + the CLAUDE.md folds.
-- **COMMIT 2** — Part A. New pure `lib/logs/edit-dirty.ts` + 18 tests.
+- **COMMIT 2** `a89d2bc` — Part A. New pure `lib/logs/edit-dirty.ts` + 18 tests.
+- **COMMIT 3** — Part B. New pure `lib/logs/log-search.ts`, `lib/filters/brand-option.ts`,
+  `lib/ui/combobox-filter.ts` + 17 tests.
+
+**BOTH LACEY GATES ARE RESOLVED (2026-08-12).**
+
+**B2 — three of the spec's four candidates were RULED OUT by evidence, not by
+inspection**, and recording that matters more than the fix, because the spec's
+"likely candidates" list would otherwise send the next reader down the same paths:
+- **Paging / the 1,000-row cap: NOT the defect.** 17 active brands, and all 15
+  distinct `client_brand` values on non-deleted logs resolve to one. `fetchAllPaged()`
+  is not needed here.
+- **Dark-mode theming: NOT the defect**, though it looked like a strong one — the
+  `Combobox` trigger is `bg-white` while its own panel is `var(--f92-surface)`, which
+  in dark would be near-white `--f92-dark` text (#E2E8F0) on white. `globals.css:407`
+  has `:root[data-theme="dark"] .bg-white { background-color: var(--f92-surface) }`
+  and globals.css is unlayered, so `bg-white` is theme-aware app-wide. **Checking the
+  compiled override beat reading the class list**, the method that has now caught
+  something in four consecutive batches.
+- **Not reflecting the selection: NOT the defect.** `combobox.tsx` renders
+  `selected.label` plus `aria-selected` and a Check.
+
+**What was actually wrong — and only two of four are fixed, by Lacey's scope call:**
+- **FIXED — labels rendered the raw `jira_value` while `display_name` was fetched and
+  discarded.** The list read `MRA - Mr Appliance` for a brand whose own display name
+  is `Mr. Appliance`; jira_value is Jira's internal string and drops the periods. Now
+  `MRA · Mr. Appliance` via the pure `brandOptionLabel`. **The middot is deliberate,
+  not decoration** — it distinguishes the rendered label from the raw value at a
+  glance, so a regression is visible in a screenshot instead of needing a
+  character-level diff.
+- **FIXED — in-dropdown search matched the label only.** With a code-first label,
+  typing the brand as JIRA spells it (`Mr Appliance`, no period — which is what is
+  printed on the ticket the user is reading) returned "No matching brand". New
+  opt-in `keywords` field on `ComboboxOption` carries `jira_value`. **Deliberately
+  not "also match `value`"**: the All-brands sentinel is `__all__`, so that would
+  make a query of "all" hit a string no user typed.
+- **DEFERRED (Lacey's scope call, §15 backlog) — `<Label htmlFor="clientBrand">` is
+  ORPHANED on both `/dashboard/logs` and `/dashboard/reports`.** `BrandSelector`
+  accepts no `id` and renders none, so the label points at nothing: clicking it does
+  nothing and screen readers get an unlabelled button. Severity and Status both get
+  real ids — Brand is the only control in that row that does not. **This is a live
+  a11y defect on two pages, left open on purpose.**
+- **DEFERRED (same call) — 3 paused brands (MRR-CA, SHG, WDG) are listed unmarked**,
+  and MRR-CA and WDG have ZERO logs, so selecting them yields a bare "No logs found
+  for the selected filters." Treated as a design change rather than a fix, since the
+  Coverage page has its own `showPaused` concept this would sit beside without
+  matching.
+
+**B5 — resolved as `count > 0 || isActive`, ONE rule shared by both chips** (pure
+`shouldShowReviewChip`). **Merging was ruled out on structure, not taste:**
+`needs_review` clears on ANY save (r29) while `ai_review_pending` clears ONLY on an
+explicit ruling — and that difference is the entire reason classifier §4 made it a
+separate column, so a merged chip would show one population under two incompatible
+clearing rules. **The `|| isActive` half is the load-bearing half:** clearing the last
+flagged row while filtered by it would otherwise remove the only control that can
+switch the filter off, stranding the user on an empty table — and it keeps the
+existing "All caught up — no reviews pending" state reachable, which is written for
+exactly that moment. The count is now unconditional when the chip shows, because the
+only case that used to hide it no longer renders.
+
+**Part B judgement calls, flagged per B4 so they can be reviewed as intent:**
+**search lives in the always-visible header row, not the collapsible body** — it costs
+zero vertical height (a sixth control in the body row would have wrapped a line on
+most widths, defeating B3) and stays reachable with Filters collapsed, which is the
+state someone hunting one ticket is in. `type="text"` not `"search"`, per the Pulse
+precedent (webkit's native cancel button overlays the field). No visible `<Label>`,
+since one would reintroduce the height B3 removes — the accessible name is an
+`aria-label`. **B3 is spacing only**: `pt-3`→`pt-2`, `mt-3`→`mt-2`, labels pulled onto
+their inputs with `leading-none`. No control removed or hidden.
+
+**Search is substring, NOT tokenised, and that is a recorded contract** — `MRA copy`
+does not match. The same query must behave the same way on the Pulse matrix, which is
+single-substring; multi-term later is a deliberate change to one function with its
+own tests, not an accident.
+
+**The undestructured-error fix landed here.** `logs/page.tsx` now reads
+`{ data, error }` and renders the failure. Previously any failure — RLS change,
+renamed column, transient 5xx — yielded `null` → `setLogs([])` → "No logs found for
+the selected filters.", indistinguishable from a too-narrow filter and failing toward
+"everything is fine" on the page every admin uses.
+
+**Two pure helpers had to MOVE to `lib/` mid-build, and the reason is worth keeping:**
+`brandOptionLabel` was first exported from `brand-selector.tsx`, and the test could
+not import it — that component imports `lib/supabase/client`, which **throws at module
+scope** without env vars. Same reason `lib/jira/client.ts` is called out in §3. Pure
+logic goes in `lib/`; components import it. `matchesComboboxQuery` + `ComboboxOption`
+moved to `lib/ui/combobox-filter.ts` for the same reason, with the type re-exported
+from the component so existing imports are unchanged.
+
+**Gates for COMMIT 3, re-run not inherited:** tsc 0 · **276/276** (263 + 13, then +4
+structural) · ESLint — `logs/page.tsx` at **exactly its 4-error/0-warning baseline**
+(so the debounce did NOT add a `set-state-in-effect` finding: setState is in the timer
+callback, not the effect body), and `combobox.tsx` / `brand-selector.tsx` measured
+against **their HEAD versions** rather than assumed clean (0e/0w before and after),
+all four new files 0/0 · build 0 with `/dashboard/logs` still `○` · **10 of 10
+mutations caught** — empty query matching nothing, dropping the brand field, dropping
+the title field, dropping `|| isActive`, an always-rendered chip, ignoring `keywords`,
+a label without the code, search not wired into the page filter, the chip rule not
+applied on the page, and the logs query reverting to an undestructured error. Each
+patch verified applied before its verdict; baseline asserted before AND after.
+
+**NOT verified:** nothing in Part B has been rendered. The tightened spacing, the
+header-row search placement in both themes, and the chip appearing/disappearing are
+Lacey's.
 
 **Part A's one structural decision, which should not be "tidied" later:
 `snapshotFromLog` is the SINGLE producer of both the snapshot and the form's initial

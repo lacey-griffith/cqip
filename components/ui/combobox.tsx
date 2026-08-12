@@ -4,10 +4,12 @@ import * as React from 'react';
 import { Check, ChevronDown, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-export interface ComboboxOption {
-  value: string;
-  label: string;
-}
+// The option shape and the filter both live in lib/ui/combobox-filter.ts so they
+// can be tested without loading the component tree. Re-exported here so existing
+// consumers keep importing ComboboxOption from the component they use.
+import { matchesComboboxQuery, type ComboboxOption } from '@/lib/ui/combobox-filter';
+
+export type { ComboboxOption };
 
 interface ComboboxProps {
   value: string;
@@ -34,11 +36,10 @@ export function Combobox({
 
   const selected = options.find(o => o.value === value);
 
-  const filtered = React.useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return options;
-    return options.filter(o => o.label.toLowerCase().includes(q));
-  }, [options, query]);
+  const filtered = React.useMemo(
+    () => options.filter(o => matchesComboboxQuery(o, query)),
+    [options, query],
+  );
 
   React.useEffect(() => {
     if (!open) return;

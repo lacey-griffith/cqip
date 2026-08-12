@@ -18,6 +18,7 @@ import { RowActionsMenu } from '@/components/logs/row-actions-menu';
 import { LogDetailDrawer } from '@/components/logs/log-detail-drawer';
 import { SyncJiraButton } from '@/components/dashboard/sync-jira-button';
 import { getSeverityVariant, getStatusVariant } from '@/components/logs/badge-variants';
+import { matchesLogSearch, shouldShowReviewChip } from '@/lib/logs/log-search';
 import { cn } from '@/lib/utils';
 
 const ALL = '__all__';
@@ -108,6 +109,19 @@ export default function LogsPage() {
   const [needsReviewFilter, setNeedsReviewFilter] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(true);
 
+  // B1 — free-text search. Two pieces of state on purpose: `search` is what the
+  // input shows (updates on every keystroke, so typing never lags), `debounced`
+  // is what the table filters on. Filtering the full log set on every keystroke
+  // re-runs four chained memos and re-renders every row group.
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  // Surfaces a failed log fetch. Before this the select's error was never
+  // destructured, so ANY failure yielded logsData = null → setLogs([]) → the
+  // page rendered "No logs found for the selected filters." Indistinguishable
+  // from a too-narrow filter, on the page every admin uses.
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   const [editingLog, setEditingLog] = useState<EditableLog | null>(null);
@@ -134,12 +148,17 @@ export default function LogsPage() {
       // mis-report once the table crosses 1000 non-deleted logs (CSV
       // history + ongoing webhook traffic). If we ever cross 10k, this
       // page needs real pagination, not a higher cap.
-      const { data: logsData } = await supabase
+      const { data: logsData, error: logsError } = await supabase
         .from('quality_logs')
         .select('id, triggered_at, jira_ticket_id, jira_ticket_url, jira_summary, client_brand, severity, log_status, issue_category, issue_subtype, root_cause_final, resolution_type, who_owns_fix, log_number, notes, resolution_notes, needs_review')
         .eq('is_deleted', false)
         .order('triggered_at', { ascending: false })
         .range(0, 9999);
+
+      if (logsError) {
+        console.error('[LogsPage] failed to load logs', logsError);
+        setLoadError(logsError.message);
+      }
 
       const { data: sessionData } = await supabase.auth.getSession();
       const userId = sessionData?.session?.user?.id;
@@ -172,6 +191,15 @@ export default function LogsPage() {
     loadData();
   }, []);
 
+  // 200ms: long enough that a typed word is one filter pass, short enough that the
+  // table does not feel detached from the keyboard. setState happens in the timer
+  // callback, not during the effect body, so this does not trip
+  // react-hooks/set-state-in-effect.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 200);
+    return () => clearTimeout(t);
+  }, [search]);
+
   const needsReviewCount = useMemo(
     () => logs.reduce((acc, l) => acc + (l.needs_review ? 1 : 0), 0),
     [logs],
@@ -179,6 +207,7 @@ export default function LogsPage() {
 
   const filteredLogs = useMemo(() => {
     return logs.filter(log => {
+      if (!matchesLogSearch(log, debouncedSearch)) return false;
       if (needsReviewFilter && !log.needs_review) return false;
       if (clientBrand && log.client_brand !== clientBrand) return false;
       if (severity && log.severity !== severity) return false;
@@ -187,7 +216,7 @@ export default function LogsPage() {
       if (endDate && new Date(log.triggered_at) > new Date(endDate)) return false;
       return true;
     });
-  }, [logs, needsReviewFilter, clientBrand, severity, status, startDate, endDate]);
+  }, [logs, debouncedSearch, needsReviewFilter, clientBrand, severity, status, startDate, endDate]);
 
   const groupedTickets = useMemo<TicketGroup[]>(() => {
     const map = new Map<string, LogEntry[]>();
@@ -269,6 +298,10 @@ export default function LogsPage() {
     setStatus('');
     setNeedsReviewFilter(false);
     setActivePill('all');
+    // Both, or Reset leaves the table filtered by a box it just emptied for 200ms
+    // — and worse, leaves `debouncedSearch` set if the component re-renders first.
+    setSearch('');
+    setDebouncedSearch('');
   }
 
   const activeFilterCount =
@@ -276,7 +309,11 @@ export default function LogsPage() {
     (clientBrand ? 1 : 0) +
     (severity ? 1 : 0) +
     (status ? 1 : 0) +
-    (needsReviewFilter ? 1 : 0);
+    (needsReviewFilter ? 1 : 0) +
+    // Counts the DEBOUNCED value, matching what the table is actually filtered by.
+    // Counting the raw input would tick the badge to "1 active" on the first
+    // keystroke while the table still shows everything.
+    (debouncedSearch.trim() ? 1 : 0);
 
   // Row count of the FILTERED log set — reflects whatever the user is
   // currently looking at (so toggling a pill, picking a brand, or
@@ -491,7 +528,30 @@ export default function LogsPage() {
               </span>
             ) : null}
           </button>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-1 items-center justify-end gap-3">
+            {/*
+              B1 — search lives in the ALWAYS-VISIBLE header row, not inside the
+              collapsible body. Two reasons, both B3/B4 judgement calls worth
+              reviewing as intent rather than diff:
+                · it costs ZERO additional vertical height, which is the whole
+                  point of B3 — a sixth control in the body row would have added
+                  a wrapped line on most widths;
+                · it stays reachable with Filters collapsed, which is the state a
+                  user who just wants to find one ticket will be in.
+              type="text" not "search", following the Pulse matrix-controls
+              precedent: webkit's native cancel button overlays the field.
+              No visible <Label> — one would reintroduce the height B3 removes —
+              so the accessible name comes from aria-label.
+            */}
+            <Input
+              id="logSearch"
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search ticket, title, or brand"
+              aria-label="Search logs by ticket key, title, or brand"
+              className="h-8 w-full min-w-[9rem] max-w-[18rem] text-sm"
+            />
             {/* Reactive row count — updates in lockstep with filter
                 changes (no debounce / no async fetch). The 0-state offers
                 a one-click reset since a typical 0 result means filters
@@ -548,7 +608,11 @@ export default function LogsPage() {
           aria-hidden={!filtersOpen}
         >
           <div className="overflow-hidden">
-            <div className="pt-3">
+            {/* B3 — spacing only. Every control stays; the block is tightened by
+                reducing the gaps between its three bands (pt-3→pt-2, mt-3→mt-2)
+                and pulling the 10px labels onto their inputs with leading-none.
+                Nothing here removes or hides a filter. */}
+            <div className="pt-2">
               {/* Quick filter pills */}
               <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Quick filters">
                 {PILL_OPTIONS.map(opt => {
@@ -570,27 +634,48 @@ export default function LogsPage() {
                     </button>
                   );
                 })}
-                <span aria-hidden className="mx-1 h-4 w-px bg-[color:var(--f92-border)]" />
-                <button
-                  type="button"
-                  onClick={() => setNeedsReviewFilter(v => !v)}
-                  aria-pressed={needsReviewFilter}
-                  title="Auto-mapped during taxonomy normalization. Confirm or update the values via the edit dialog."
-                  className={cn(
-                    'rounded-full border px-3 py-1 text-xs font-medium transition',
-                    needsReviewFilter
-                      ? 'border-[color:var(--f92-orange)] bg-[color:var(--f92-orange)] text-white'
-                      : 'border-[color:var(--pill-filter-paused-border)] bg-[color:var(--pill-filter-bg)] text-[color:var(--pill-filter-fg)] hover:bg-[color:var(--pill-filter-bg-hover)]',
-                  )}
-                >
-                  Needs review{needsReviewCount > 0 ? ` (${needsReviewCount})` : ''}
-                </button>
+                {/*
+                  B5 — a review chip renders only when it has work, OR while it is
+                  the active filter. Measured 2026-08-12, `needs_review` matched
+                  ZERO rows, so without this the bar carried a permanently-empty
+                  control that could never do anything.
+
+                  The `|| isActive` half is the load-bearing half: clearing the
+                  last flagged row WHILE FILTERED BY IT would otherwise remove the
+                  only control that can switch the filter off, stranding the user
+                  on an empty table. It also keeps the existing "All caught up —
+                  no reviews pending" state below reachable, which is written for
+                  exactly that moment.
+
+                  Count is now unconditional when shown — a chip that is visible
+                  BECAUSE it has work should say how much, and the only case that
+                  used to hide it (zero) no longer renders.
+                */}
+                {shouldShowReviewChip(needsReviewCount, needsReviewFilter) ? (
+                  <>
+                    <span aria-hidden className="mx-1 h-4 w-px bg-[color:var(--f92-border)]" />
+                    <button
+                      type="button"
+                      onClick={() => setNeedsReviewFilter(v => !v)}
+                      aria-pressed={needsReviewFilter}
+                      title="Auto-mapped during taxonomy normalization. Confirm or update the values via the edit dialog."
+                      className={cn(
+                        'rounded-full border px-3 py-1 text-xs font-medium transition',
+                        needsReviewFilter
+                          ? 'border-[color:var(--f92-orange)] bg-[color:var(--f92-orange)] text-white'
+                          : 'border-[color:var(--pill-filter-paused-border)] bg-[color:var(--pill-filter-bg)] text-[color:var(--pill-filter-fg)] hover:bg-[color:var(--pill-filter-bg-hover)]',
+                      )}
+                    >
+                      Needs review ({needsReviewCount})
+                    </button>
+                  </>
+                ) : null}
               </div>
 
               {/* Compact filter row */}
-              <div className="mt-3 flex flex-wrap items-end gap-2">
+              <div className="mt-2 flex flex-wrap items-end gap-2">
                 <div className="min-w-[9rem] flex-1">
-                  <Label htmlFor="startDate" className="text-[10px] uppercase tracking-widest text-[color:var(--f92-gray)]">From</Label>
+                  <Label htmlFor="startDate" className="mb-0.5 block text-[10px] uppercase leading-none tracking-widest text-[color:var(--f92-gray)]">From</Label>
                   <Input
                     id="startDate"
                     type="date"
@@ -600,7 +685,7 @@ export default function LogsPage() {
                   />
                 </div>
                 <div className="min-w-[9rem] flex-1">
-                  <Label htmlFor="endDate" className="text-[10px] uppercase tracking-widest text-[color:var(--f92-gray)]">To</Label>
+                  <Label htmlFor="endDate" className="mb-0.5 block text-[10px] uppercase leading-none tracking-widest text-[color:var(--f92-gray)]">To</Label>
                   <Input
                     id="endDate"
                     type="date"
@@ -610,14 +695,14 @@ export default function LogsPage() {
                   />
                 </div>
                 <div className="min-w-[10rem] flex-1">
-                  <Label htmlFor="clientBrand" className="text-[10px] uppercase tracking-widest text-[color:var(--f92-gray)]">Brand</Label>
+                  <Label htmlFor="clientBrand" className="mb-0.5 block text-[10px] uppercase leading-none tracking-widest text-[color:var(--f92-gray)]">Brand</Label>
                   <BrandSelector
                     value={clientBrand || BRAND_SELECTOR_ALL}
                     onChange={v => setClientBrand(v === BRAND_SELECTOR_ALL ? '' : v)}
                   />
                 </div>
                 <div className="min-w-[9rem] flex-1">
-                  <Label htmlFor="severity" className="text-[10px] uppercase tracking-widest text-[color:var(--f92-gray)]">Severity</Label>
+                  <Label htmlFor="severity" className="mb-0.5 block text-[10px] uppercase leading-none tracking-widest text-[color:var(--f92-gray)]">Severity</Label>
                   <Select value={severity || ALL} onValueChange={value => setSeverity(value === ALL ? '' : value)}>
                     <SelectTrigger id="severity" className="h-9 text-sm">
                       <SelectValue placeholder="All severities" />
@@ -632,7 +717,7 @@ export default function LogsPage() {
                   </Select>
                 </div>
                 <div className="min-w-[10rem] flex-1">
-                  <Label htmlFor="status" className="text-[10px] uppercase tracking-widest text-[color:var(--f92-gray)]">Status</Label>
+                  <Label htmlFor="status" className="mb-0.5 block text-[10px] uppercase leading-none tracking-widest text-[color:var(--f92-gray)]">Status</Label>
                   <Select value={status || ALL} onValueChange={value => setStatus(value === ALL ? '' : value)}>
                     <SelectTrigger id="status" className="h-9 text-sm">
                       <SelectValue placeholder="All statuses" />
@@ -675,6 +760,20 @@ export default function LogsPage() {
             </Button>
           </div>
         </div>
+      ) : null}
+
+      {/*
+        A failed log fetch is now VISIBLE. Previously the select's error was never
+        destructured, so any failure — an RLS change, a renamed column, a transient
+        5xx — produced an empty array and the table said "No logs found for the
+        selected filters." That is indistinguishable from a filter that is simply
+        too narrow, and it fails toward "everything is fine" on the page every
+        admin uses.
+      */}
+      {loadError ? (
+        <p className="rounded-md border border-[color:var(--pill-red-border)] bg-[color:var(--pill-red-bg)] p-3 text-xs text-[color:var(--pill-red-fg)]">
+          Could not load logs: {loadError}
+        </p>
       ) : null}
 
       <Card>

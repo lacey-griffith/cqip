@@ -24,13 +24,21 @@
 // for Batch 005.22 Phase 4 (project-aware logs dropdown).
 
 import { useEffect, useMemo, useState } from 'react';
-import { Combobox, type ComboboxOption } from '@/components/ui/combobox';
+import { Combobox } from '@/components/ui/combobox';
+import { brandOptionLabel } from '@/lib/filters/brand-option';
+import type { ComboboxOption } from '@/lib/ui/combobox-filter';
 import { supabase } from '@/lib/supabase/client';
 
 // Canonical sentinel for "no brand filter applied."
 // Exported so consumers import this instead of defining
 // local ALL constants — single source of truth.
 export const BRAND_SELECTOR_ALL = '__all__';
+
+// ⚠ THE LABEL AND THE VALUE ARE NOW DIFFERENT STRINGS. The emitted VALUE is still
+// brands.jira_value verbatim — that contract is load-bearing (§13 r28: callers
+// compare it to quality_logs.client_brand by literal string equality, and Batch
+// 005.25 normalised historical rows to match). Only the DISPLAY changed; the
+// format lives in lib/filters/brand-option.ts.
 
 interface BrandRow {
   brand_code: string;
@@ -87,7 +95,15 @@ export function BrandSelector({
   const options = useMemo<ComboboxOption[]>(
     () => [
       { value: BRAND_SELECTOR_ALL, label: allLabel },
-      ...brands.map(b => ({ value: b.jira_value, label: b.jira_value })),
+      ...brands.map(b => ({
+        value: b.jira_value,
+        label: brandOptionLabel(b),
+        // Jira's own spelling, which is what the user is reading off the ticket
+        // and is NOT the label — jira_value drops the periods the display name
+        // carries ("Mr Appliance" vs "Mr. Appliance"). Without this, typing the
+        // brand exactly as Jira renders it returns "No matching brand".
+        keywords: b.jira_value,
+      })),
     ],
     [brands, allLabel],
   );
