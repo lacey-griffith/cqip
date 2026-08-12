@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   CONFIDENCE_BAND_LABEL,
+  isPrimaryRulingDisabled,
   isRulingBlocked,
   proseBlocks,
   suggestionAction,
@@ -26,23 +27,65 @@ const PAGE = src('app/dashboard/logs/page.tsx');
 // validation, so a correction filed as a confirm reports the classifier as exactly
 // right on a row where the human changed the answer.
 
-test('an untouched selection files confirm', () => {
-  assert.equal(suggestionAction(['QA Gap'], ['QA Gap']), 'confirm');
+// ⚠ THE COMPARAND IS THE PRISTINE SNAPSHOT, NOT THE SUGGESTION.
+//
+// The first version of these tests asserted `suggestionAction(['QA Gap'], [])` is
+// 'correct' — "clearing the field is a correction" — which is true in the abstract
+// and FALSE for the only reachable state, where `[]` is the row's PRISTINE value
+// and nothing has been cleared. That test locked in Karen CRITICAL-1: applying the
+// fix made it fail. A test that has to be deleted to make the code correct was
+// never testing the right question.
+
+test('an UNTOUCHED selection files confirm — the only reachable opening state', () => {
+  // §13.6 selection admits only rows whose root_cause_final is null or '{}', so
+  // the dropdown opens EMPTY on every eligible row. This is the case the whole
+  // feature runs through.
   assert.equal(suggestionAction([], []), 'confirm');
+  // And the sync-moved case, where the row already carries a value.
+  assert.equal(suggestionAction(['QA Gap'], ['QA Gap']), 'confirm');
 });
 
-test('any difference files correct', () => {
-  assert.equal(suggestionAction(['QA Gap'], ['Late Assets/ Info']), 'correct');
-  assert.equal(suggestionAction(['QA Gap'], []), 'correct', 'clearing the field is a correction');
-  assert.equal(suggestionAction(['QA Gap'], ['QA Gap', 'Late Assets/ Info']), 'correct', 'adding');
-  assert.equal(suggestionAction(['QA Gap', 'Late Assets/ Info'], ['QA Gap']), 'correct', 'removing');
+test('any edit away from the pristine value files correct', () => {
+  assert.equal(suggestionAction(['QA Gap'], []), 'correct', 'picking a value on an empty row');
+  assert.equal(suggestionAction([], ['QA Gap']), 'correct', 'clearing a populated row');
+  assert.equal(suggestionAction(['A', 'B'], ['A']), 'correct', 'adding');
+  assert.equal(suggestionAction(['A'], ['A', 'B']), 'correct', 'removing');
 });
 
 test('reordering files correct — array order persists in Postgres', () => {
-  assert.equal(
-    suggestionAction(['QA Gap', 'Late Assets/ Info'], ['Late Assets/ Info', 'QA Gap']),
-    'correct',
-  );
+  assert.equal(suggestionAction(['A', 'B'], ['B', 'A']), 'correct');
+});
+
+test('the suggestion is NOT a comparand — the signature cannot see it', () => {
+  // Regression pin for CRITICAL-1. The decision is "has the human touched the
+  // field", and only the pristine value answers it. If a future edit reintroduces
+  // the suggestion as an argument, this arity check fails first.
+  assert.equal(suggestionAction.length, 2, 'suggestionAction takes (current, pristine) only');
+});
+
+// ── The other half of CRITICAL-1: an empty correction is a rejection ──
+
+test('the primary button is disabled when there is no suggestion to act on', () => {
+  assert.equal(isPrimaryRulingDisabled('confirm', [], []), true);
+  assert.equal(isPrimaryRulingDisabled('correct', ['QA Gap'], []), true);
+});
+
+test('a correction that clears the field is BLOCKED, not filed as a correction', () => {
+  // classifyReviewOutcome checks `confirmed.length === 0` FIRST and returns
+  // 'rejected', so a button reading "Save correction" would file a rejection.
+  //
+  // ⚠ HONEST LIMIT: this branch is NOT reachable in the shipped UI. With the
+  // pristine snapshot as comparand, an empty selection can only be a `correct`
+  // when the pristine value was non-empty — and `isRulingBlocked` already disables
+  // the button in that state. Tested as a contingent guard, not a live one: it
+  // becomes the sole protection if the route's §13.1 re-check is ever loosened to
+  // permit `correct` on a populated row, which is an open Lacey decision.
+  assert.equal(isPrimaryRulingDisabled('correct', [], ['QA Gap']), true);
+});
+
+test('a real confirm or a real correction is enabled', () => {
+  assert.equal(isPrimaryRulingDisabled('confirm', [], ['QA Gap']), false, 'untouched confirm');
+  assert.equal(isPrimaryRulingDisabled('correct', ['Late Assets/ Info'], ['QA Gap']), false);
 });
 
 // ── §13.1 — when a ruling is blocked ──
@@ -95,8 +138,12 @@ test('nothing references the retired review queue', () => {
     assert.ok(!/AiReviewQueue/.test(s), `${rel} still references AiReviewQueue`);
     assert.ok(!/ai-review-queue/.test(s), `${rel} still imports ai-review-queue`);
   }
-  assert.throws(
-    () => src('components/reports/ai-review-queue.tsx'),
+  // LOW-2 (Karen): assert.throws(fn, string) treats the string as `message`, not
+  // a matcher, so it only asserted that SOMETHING threw. An explicit existence
+  // check says what is actually meant.
+  assert.equal(
+    existsSync(join(process.cwd(), 'components/reports/ai-review-queue.tsx')),
+    false,
     'the queue component must be deleted, not merely unmounted',
   );
 });
@@ -154,12 +201,17 @@ test('onSaved spreads the persisted log and leaks NO form state', () => {
   // Spreading form state would push the admin's still-unsaved edits to other
   // fields into the parent table as though they had been written.
   //
-  // ⚠ ASSERTED AS AN ABSENCE, NOT A PRESENCE. The first version of this test
-  // checked only that `...log,` appeared — and a mutation that KEPT the spread and
-  // appended `...{ notes: notes }` beside it passed. Presence of the right thing
-  // does not exclude the wrong thing sitting next to it; this is the weak-oracle
-  // shape CLAUDE.md §15 records repeatedly, found here by mutation rather than by
-  // reading.
+  // ⚠ ASSERTED AS AN ABSENCE, NOT A PRESENCE. The first version checked only that
+  // `...log,` appeared — and a mutation that KEPT the spread and appended
+  // `...{ notes: notes }` beside it passed. Presence of the right thing does not
+  // exclude the wrong thing sitting next to it.
+  //
+  // ⚠ HONEST LIMIT (Karen MEDIUM-1): this bans the nine variable NAMES appearing
+  // literally in the call. It cannot see a value laundered through an alias —
+  // `const x = notes;` then `notes: x` survives it, proven by mutation. One such
+  // alias exists deliberately (`persistedRootCause`, which IS `rootCauseFinal`)
+  // and is asserted separately below. So this narrows the hole rather than closing
+  // it; closing it needs dataflow analysis this repo has no harness for.
   const start = DIALOG.indexOf('onSaved({');
   assert.ok(start > 0);
   const call = DIALOG.slice(start, DIALOG.indexOf('});', start));
@@ -202,4 +254,93 @@ test('the strip is gated on a pending review, not merely on a suggestion existin
 test('the strip renders a band label, never the raw confidence score', () => {
   assert.ok(!/ai_confidence_score/.test(DIALOG), 'the raw score must never reach the UI');
   assert.ok(/CONFIDENCE_BAND_LABEL\[log\.ai_confidence_band\]/.test(DIALOG));
+});
+
+// ── Karen MEDIUM-2 — nothing pinned the wiring or the label, which is what let
+// CRITICAL-1 through. suggestionAction was well tested in isolation; its USE was
+// not, so a hardcoded `primaryRuling` and a hardcoded label both survived mutation.
+
+test('primaryRuling is computed from the PRISTINE snapshot, not hardcoded', () => {
+  assert.ok(
+    /const primaryRuling = suggestionAction\(rootCauseFinal, snapshot\.rootCauseFinal\)/.test(DIALOG),
+    'the action must be derived from the selection vs the snapshot',
+  );
+  // The CRITICAL-1 shape specifically: the suggestion must not be the comparand.
+  assert.ok(
+    !/suggestionAction\(suggestion/.test(DIALOG),
+    'comparing against the suggestion is the CRITICAL-1 defect',
+  );
+});
+
+test('the button label is derived from primaryRuling, both branches present', () => {
+  assert.ok(/primaryRuling === 'confirm'\s*\?\s*'Confirm suggestion'/.test(DIALOG));
+  assert.ok(/:\s*'Save correction'/.test(DIALOG));
+});
+
+test('the primary button consults isPrimaryRulingDisabled', () => {
+  // Without this the empty-correction path is clickable and files a rejection
+  // under a button reading "Save correction".
+  assert.ok(/const primaryDisabled = /.test(DIALOG));
+  assert.ok(/isPrimaryRulingDisabled\(primaryRuling, rootCauseFinal, suggestion\)/.test(DIALOG));
+  assert.ok(/disabled=\{rulingBusy \|\| saving \|\| rulingBlocked \|\| primaryDisabled\}/.test(DIALOG));
+});
+
+test('a successful ruling records an outcome, and only in handleRuling', () => {
+  // Karen HIGH-1. Also pins that handleSave does NOT set it — an earlier edit of
+  // mine matched both onSaved call sites and wired this into the general save,
+  // where it would have claimed a review outcome for an ordinary row edit.
+  assert.equal(
+    (DIALOG.match(/setRuledOutcome\(typeof body\?\.outcome/g) ?? []).length,
+    1,
+    'exactly one writer, in handleRuling',
+  );
+  const saveStart = DIALOG.indexOf('async function handleSave');
+  const saveFn = DIALOG.slice(saveStart);
+  assert.ok(
+    !/setRuledOutcome\(typeof/.test(saveFn.slice(0, saveFn.indexOf('\n  return'))),
+    'handleSave must not record a ruling outcome',
+  );
+});
+
+// ── Label associations (Lacey's ask, plus the wider finding) ──
+//
+// The audit is written as a KNOWN-ORPHAN allowlist rather than a spot check, so it
+// fails three ways: a new orphaned label appears, a fixed one is not removed from
+// the list, or clientBrand regresses. It is the check that would have caught the
+// original defect.
+
+const KNOWN_ORPHANS: Record<string, string[]> = {
+  // Pre-existing, outside this batch's diff, recorded in CLAUDE.md §15. These
+  // point at <Select> blocks whose SelectTrigger carries no id.
+  'app/dashboard/reports/page.tsx': [
+    'issueCategory',
+    'rootCauseFinal',
+    'severity',
+    'status',
+    'testType',
+    'whoOwnsFix',
+  ],
+  'app/dashboard/logs/page.tsx': [],
+};
+
+for (const [rel, expected] of Object.entries(KNOWN_ORPHANS)) {
+  test(`label associations in ${rel} match the known-orphan list exactly`, () => {
+    const s = src(rel);
+    const labels = [...s.matchAll(/htmlFor="([^"]+)"/g)].map(m => m[1]);
+    const orphans = [...new Set(labels.filter(h => !s.includes(`id="${h}"`)))].sort();
+    assert.deepEqual(
+      orphans,
+      [...expected].sort(),
+      `orphaned <Label htmlFor> values changed in ${rel} — fix the label or update KNOWN_ORPHANS`,
+    );
+  });
+}
+
+test('clientBrand is associated on BOTH pages — the id threads through BrandSelector', () => {
+  for (const rel of ['app/dashboard/logs/page.tsx', 'app/dashboard/reports/page.tsx']) {
+    assert.ok(/id="clientBrand"/.test(src(rel)), `${rel} must pass id to BrandSelector`);
+  }
+  assert.ok(/id\?: string;/.test(src('components/filters/brand-selector.tsx')));
+  // And it must actually reach the DOM, not merely be accepted as a prop.
+  assert.ok(/id=\{id\}/.test(src('components/ui/combobox.tsx')), 'Combobox must render the id');
 });

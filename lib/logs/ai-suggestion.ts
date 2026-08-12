@@ -32,11 +32,65 @@ export const CONFIDENCE_BAND_LABEL = {
 // §6 makes the outcome shape (exact/partial/miss/rejected) the batch's only
 // validation. A correction filed as a confirm would report the classifier as
 // exactly right on a row where the human changed the answer.
+//
+// ⚠ COMPARE THE SELECTION AGAINST THE ROW'S PRISTINE VALUE, NEVER AGAINST THE
+// SUGGESTION. The first version compared against the suggestion, and it inverted
+// the feature on the ONLY reachable path — Karen post-flight CRITICAL-1:
+//
+//   Classifier §13.6 selection admits a row only when root_cause_final is null or
+//   '{}', so snapshotFromLog seeds the dropdown EMPTY on every eligible row. An
+//   untouched form therefore never equalled the suggestion, the button always read
+//   "Save correction" with nothing edited, and clicking it POSTed `values: []` —
+//   which classifyReviewOutcome scores as 'rejected'. Every accepted suggestion
+//   was discarded and filed as a human rejection, and "Confirm suggestion" was
+//   unreachable unless the admin first retyped the suggestion by hand.
+//
+// The question this answers is "has the human touched the field", and only the
+// pristine value can answer it. The suggestion is not a parameter at all now —
+// which is the point: it was never the right comparand.
+//
+// Note an admin who types the suggestion's exact values by hand files `correct`,
+// and the route then scores the outcome `exact`. That is honest on both axes:
+// they DID edit the field, and they DID arrive at the same answer.
 export function suggestionAction(
-  suggested: readonly string[],
   currentSelection: readonly string[],
+  pristineSelection: readonly string[],
 ): 'confirm' | 'correct' {
-  return arraysEqual([...suggested], [...currentSelection]) ? 'confirm' : 'correct';
+  return arraysEqual([...currentSelection], [...pristineSelection]) ? 'confirm' : 'correct';
+}
+
+// Whether the primary button can be clicked at all.
+//
+// Reason 1 — no suggestion to act on — is live: a row can reach the strip with an
+// empty `ai_suggested_root_cause`.
+//
+// Reason 2 — a `correct` carrying an EMPTY selection — is scored 'rejected' by
+// classifyReviewOutcome (`confirmed.length === 0` is checked FIRST, deliberately,
+// so rejections are not swallowed as misses), so a button reading "Save
+// correction" would file a rejection. Clearing the field IS a rejection and
+// belongs on the control that says so. The retired queue had exactly this guard
+// (`disabled={correctedValues.length === 0}`) and it was dropped in the collapse
+// to one button.
+//
+// ⚠ BUT REASON 2 IS NOT REACHABLE TODAY, and saying otherwise would overstate it.
+// Now that the comparand is the pristine snapshot, an empty selection can only be
+// a `correct` when the PRISTINE value was non-empty — and in that state
+// `isRulingBlocked` is already true, so the button is disabled by that instead.
+// The two guards overlap completely at present.
+//
+// It is kept because the overlap is contingent on a decision that is explicitly
+// open: the classifier batch left "should a human explicitly choosing values be
+// allowed to overwrite" as Lacey's call (recorded at the route's §13.1 re-check).
+// If that re-check is ever loosened to permit `correct` on a populated row,
+// `isRulingBlocked` stops gating and this becomes the ONLY thing standing between
+// a cleared field and a rejection filed under a correction's label.
+export function isPrimaryRulingDisabled(
+  action: 'confirm' | 'correct',
+  currentSelection: readonly string[],
+  suggested: readonly string[],
+): boolean {
+  if (suggested.length === 0) return true;
+  return action === 'correct' && currentSelection.length === 0;
 }
 
 // ---------------------------------------------------------------------------

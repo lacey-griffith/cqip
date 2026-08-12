@@ -3714,17 +3714,28 @@ its reason so nobody re-derives the analysis.
 Both were FOUND and CHARACTERISED during the B2 investigation and deliberately left
 open — recorded so they are not re-discovered from scratch.
 
-- [ ] **The brand dropdown's `<Label>` is orphaned on TWO pages.**
-      `app/dashboard/logs/page.tsx` and `app/dashboard/reports/page.tsx` both render
-      `<Label htmlFor="clientBrand">`, but `BrandSelector` accepts no `id` prop and
-      renders none, so the label points at a non-existent element: clicking it does
-      nothing, and a screen reader gets an unlabelled button. Severity and Status
-      both receive real ids, so **Brand is the only control in that filter row with
-      a broken label**. Fix is small — thread an optional `id` through
-      `BrandSelector` → `Combobox` onto the trigger button — but it touches a shared
-      component used by two pages, and both call sites reuse the SAME id string
-      (`clientBrand`), which would additionally be a duplicate-id if those controls
-      ever landed on one page. A11y defect, not cosmetic.
+- [x] **The brand dropdown's `<Label>` was orphaned on both pages — FIXED
+      2026-08-12** in the Karen fold, at Lacey's direction. An optional `id` is
+      threaded `BrandSelector` → `Combobox` onto the trigger button, and both call
+      sites pass `id="clientBrand"`. **Note it does NOT change the accessible name:**
+      a `<button>` names itself from its content, so the trigger still announces the
+      selected value — exactly as `SelectTrigger` does for Severity and Status. What
+      the fix buys is the association itself (click-to-focus) and parity across the
+      row. An earlier note here said screen readers got "an unlabelled button";
+      that was **wrong** and is corrected rather than deleted, because the
+      overstatement is what made the defect sound like a different problem.
+- [ ] **SIX MORE orphaned labels on `/dashboard/reports`** — `severity`, `status`,
+      `issueCategory`, `rootCauseFinal`, `testType`, `whoOwnsFix`. Found while
+      investigating the brand one, **verified independently by Karen**. All six
+      render `<Label htmlFor="…">` above a `<Select>` whose `SelectTrigger` carries
+      no `id`, so each label points at nothing. **Pre-existing, unrelated to
+      `BrandSelector`, and one word each to fix** (`<SelectTrigger id="severity">`,
+      matching what the logs page already does). Left out of the fold deliberately —
+      it would widen a Karen-fold commit onto a page this batch otherwise only
+      deletes from. **`tests/ai-suggestion.test.ts` now pins them in a
+      `KNOWN_ORPHANS` allowlist**, so the audit fails three ways: a NEW orphan
+      appears, one of these six is fixed without updating the list, or `clientBrand`
+      regresses. That test is the thing that would have caught the original defect.
 - [ ] **Paused brands are listed in the dropdown with no indication.** Measured
       2026-08-12: MRR-CA, SHG and WDG are `is_paused`, and **MRR-CA and WDG have
       ZERO non-deleted logs**, so selecting either yields a bare "No logs found for
@@ -3827,15 +3838,17 @@ means reworking it.
 > - **B5 — two empty review chips.** Blocks **C2, therefore commit 4**. C1 and C3 are
 >   unblocked, so commit 4 may split if the answer lags.
 
-**Phase status: COMMITS 1–4 BUILT. Karen post-flight NEXT, then COMMIT 5 (fold),
-then Lacey. DO NOT PUSH.** Version **v2.8 → v2.9**.
+**Phase status: COMMITS 1–5 BUILT. Lacey smoke + push NEXT. DO NOT PUSH.**
+Version **v2.8 → v2.9**.
 
 - **COMMIT 1** `f2f9511` — spec + REVISION 1 + the CLAUDE.md folds.
 - **COMMIT 2** `a89d2bc` — Part A. New pure `lib/logs/edit-dirty.ts` + 18 tests.
 - **COMMIT 3** `c7431f4` — Part B. New pure `lib/logs/log-search.ts`,
   `lib/filters/brand-option.ts`, `lib/ui/combobox-filter.ts` + 17 tests.
-- **COMMIT 4** — Part C. `components/reports/ai-review-queue.tsx` **DELETED**; new pure
-  `lib/logs/ai-suggestion.ts` + 21 tests.
+- **COMMIT 4** `c91c5f0` — Part C. `components/reports/ai-review-queue.tsx` **DELETED**;
+  new pure `lib/logs/ai-suggestion.ts` + 21 tests.
+- **COMMIT 5** — Karen fold (1 CRITICAL · 1 HIGH · 2 MEDIUM · 2 LOW) + the
+  `BrandSelector` `id` fix.
 
 **PART C — the surface moved, and the reason is the finding it closes.** The
 standalone queue is gone and the suggestion now renders inside the edit modal
@@ -3845,10 +3858,12 @@ admin gate** (r24 covers `/dashboard/settings/*` only), and spec §4 forbids sol
 that by gating Reports: the surface leaves the page instead.
 
 **ONE PRIMARY BUTTON WHOSE MEANING FOLLOWS THE DROPDOWN.** §3 C3 asks for two actions
-while §3 C4 lists three outcomes; `suggestionAction` reconciles them — if the
-selection still equals the suggestion the button is **Confirm suggestion**, and the
-moment the admin edits the field above it becomes **Save correction** and carries
-their values. **A second value-picker inside the strip was deliberately NOT built:**
+while §3 C4 lists three outcomes; `suggestionAction` reconciles them — an **untouched**
+field (selection still equal to the row's PRISTINE value) means **Confirm suggestion**,
+and the moment the admin edits it the button becomes **Save correction** and carries
+their values. **[CORRECTED in the Karen fold — this originally read "if the selection
+still equals the SUGGESTION", which described a state that could never occur and was
+Karen CRITICAL-1. See the post-flight section below.]** **A second value-picker inside the strip was deliberately NOT built:**
 the retired queue needed its own `MultiCombobox` because it had no other way to pick
 values, and the whole point of moving into the modal is that the constrained,
 taxonomy-validated dropdown is already there. Two pickers for one column is how one
@@ -4015,6 +4030,93 @@ patch verified applied before its verdict; baseline asserted before AND after.
 **NOT verified:** nothing in Part B has been rendered. The tightened spacing, the
 header-row search placement in both themes, and the chip appearing/disappearing are
 Lacey's.
+
+**KAREN POST-FLIGHT — FAIL, scoped to Part C. 1 CRITICAL · 1 HIGH · 2 MEDIUM · 3 LOW;
+all fix-before-push findings folded in COMMIT 5.** Parts A and B passed under attack,
+two claims **more strongly than argued**. She re-ran every gate (all reproduced
+exactly), and her verdict was correctly FAIL rather than PASS-WITH-FINDINGS — the
+defect made the feature file the opposite of what it was for.
+
+- **CRITICAL-1 — "Confirm suggestion" was UNREACHABLE, and every accepted suggestion
+  would have been discarded and filed as a human rejection.** `suggestionAction`
+  compared the dropdown against the SUGGESTION. But classifier §13.6 selection admits
+  a row only when `root_cause_final` is null or `{}`, so `snapshotFromLog` seeds the
+  dropdown **empty on every eligible row** — an untouched form therefore never
+  equalled the suggestion, the button always read **"Save correction"** with nothing
+  edited, and clicking it POSTed `values: []`, which `classifyReviewOutcome` scores
+  **`rejected`** (it checks `confirmed.length === 0` first, deliberately). The
+  suggestion was never written. Reproduced end-to-end before fixing.
+  **Three things make this worse than a mislabelled button:** §6 makes the outcome
+  shape the batch's ONLY validation, so the record would have said the classifier
+  produced nothing usable; it is the exact mirror of the failure `ai-suggestion.ts`'s
+  own docblock claims the split prevents; and it is a **regression against the code
+  it replaced** — the retired queue had an explicit `confirm` button AND
+  `disabled={correctedValues.length === 0}`, both dropped in the collapse to one
+  button. **FIXED:** the comparand is now the **pristine snapshot** — the question is
+  "has the human touched the field", and only the pristine value answers it. The
+  suggestion is no longer a parameter at all, pinned by an arity assertion.
+- **⚠ MY OWN TEST LOCKED THE DEFECT IN.** `assert.equal(suggestionAction(['QA Gap'], []),
+  'correct')` — rationale *"clearing the field is a correction"* — is true in the
+  abstract and **false for the only reachable state**, where `[]` is the PRISTINE
+  value and nothing was cleared. Applying the fix made that test FAIL. **A test that
+  must be deleted to make the code correct was never testing the right question**,
+  and this is the sharpest instance yet of the shape §15 keeps recording.
+- **HIGH-1 — a successful ruling gave no feedback, and a second click showed an
+  ERROR for an action that had succeeded.** `applyEditedLog` deliberately does not
+  touch `editingLog` (that is what stops the seeding effect re-firing and clobbering
+  unsaved edits — Karen verified this and it is **stronger** than I argued), so the
+  dialog's own `log` still carried `ai_review_pending: true` and the strip stayed
+  live and unchanged. A second click hit the route's 409. **FIXED** with local
+  `ruledOutcome` state rendering a `role="status"` confirmation — local precisely
+  because updating `editingLog` would re-fire the effect and destroy the edits.
+- **MEDIUM-2 — nothing pinned the wiring or the label, which is what let CRITICAL-1
+  through.** `suggestionAction` was well tested in isolation; its USE was not, so
+  hardcoding `primaryRuling = 'confirm'` and hardcoding the label both **survived
+  mutation**. Now pinned; both re-run and caught.
+- **MEDIUM-1 — my rewritten `onSaved` test is still weaker than its docstring.** It
+  bans the nine form-state NAMES inside the call, but cannot see a value laundered
+  through an alias (`const x = notes; … notes: x` survives). One such alias exists
+  deliberately (`persistedRootCause` IS `rootCauseFinal`). The **claim** is corrected
+  rather than the check strengthened — closing it needs dataflow analysis this repo
+  has no harness for. Recorded as an honest limit at the test.
+- **LOW-2 folded** — `assert.throws(fn, string)` treats the string as `message`, not
+  a matcher, so it only asserted that *something* threw; replaced with `existsSync`.
+  **LOW-3 folded** — two doc claims described the unreachable state (marked above).
+  **LOW-1 recorded, not fixed** (Karen: defer): mid-save dismissal is now
+  unescapable — `if (saving) return` plus a disabled Cancel plus a `fetch` with no
+  timeout means a stalled request leaves a page-blocking modal with no in-app exit.
+  The refusal itself is right ("discard would be a lie"); the missing timeout is the
+  gap.
+
+**A GUARD I NEARLY OVERCLAIMED, caught by tracing my own fix.** `isPrimaryRulingDisabled`'s
+empty-correction branch is **not reachable today**: with the pristine snapshot as
+comparand, an empty selection can only be a `correct` when pristine was non-empty —
+and `isRulingBlocked` already disables the button in that state. Kept anyway, and
+labelled contingent rather than live, because the overlap depends on an **open Lacey
+decision** recorded on the classifier batch (whether a human explicitly choosing
+values may overwrite). If that re-check is loosened, this becomes the only thing
+between a cleared field and a rejection filed under a correction's label.
+
+**RIDE-ALONG at Lacey's direction — the `BrandSelector` `id` fix.** An optional `id`
+threads `BrandSelector` → `Combobox` onto the trigger button; both pages pass
+`id="clientBrand"`. `/dashboard/logs` now has **zero** orphaned labels. **Six remain
+on `/dashboard/reports`** (§15), pinned by a `KNOWN_ORPHANS` allowlist test that fails
+if a new orphan appears, if one of the six is fixed without updating the list, or if
+`clientBrand` regresses.
+
+**Gates for COMMIT 5, re-run not inherited:** tsc 0 · **308/308** (297 + 11) · ESLint
+every touched file at **exactly** its measured baseline, both new-touched files 0/0 ·
+build 0 with `/dashboard/logs` and `/dashboard/reports` both still `○` · **8 of 8
+mutations caught**, including **both of Karen's survivors** (hardcoded `primaryRuling`,
+hardcoded label) and the CRITICAL-1 regression itself. Dirty-file count asserted
+constant across every restore — Karen's own first mutation run was voided by an
+unquoted `$FILES` that made her restore silently no-op, so the harness now proves it
+restored rather than assuming it.
+
+**An edit of mine matched TWO call sites and was caught before it shipped:** the
+`setRuledOutcome` insertion hit both `handleRuling` and `handleSave`, which would have
+claimed a review outcome for an ordinary row save. Found by reading the grep output
+rather than trusting "applied"; a test now pins exactly one writer.
 
 **Part A's one structural decision, which should not be "tidied" later:
 `snapshotFromLog` is the SINGLE producer of both the snapshot and the form's initial
@@ -9922,4 +10024,4 @@ demo blocker.
 
 ---
 
-*Last updated: 2026-08-12 | CQIP v2.9 — **BATCH LOGS-PAGE BUILT (commits 1-4) — COMMITTED, NOT PUSHED; Karen post-flight next.** Three changes to `/dashboard/logs` in ONE batch because they touch one file, built in the spec's required order A -> B -> C. No migration, no new route, no new mutation surface, no schema change -> **no Jenny**. Spec `docs/HANDOFF-logs-page-batch.md`, **REVISION 1 governs**, committed as commit 1 BEFORE the build opened per the §15 PROCESS note. **This batch SUPERSEDES classifier-1 COMMIT 3:** the standalone AI review queue is DELETED and the suggestion moves inside the edit-log modal, directly below Root cause (final) — one place a log is ever classified. **The reason is Karen's classifier HIGH-2: `/dashboard/reports` has no middleware admin gate** (r24 covers `/dashboard/settings/*` only), and spec §4 forbids solving that by gating Reports — the surface leaves the page. **THE SPEC ARRIVED UNTRACKED ON DISK, which is why a first grep found nothing** — checked before reporting it missing, and it was there; committing it is what makes it citable, and this is the FOURTH time a batch has opened against an authority living outside git. **Migration 028 is APPLIED** — re-probed 2026-08-12 per r32/R21 rather than inherited, all three columns returning 200 where CLAUDE.md still recorded a 42703 dated 08-11; the ordering block is retired and Karen's HIGH-2 migration half is marked superseded, **not deleted**, because the finding was correct when written. **HIGH-2's other half survives and is load-bearing.** **Part A — the dismiss guard.** Esc, outside-click, X and Cancel all route through ONE `requestClose`; dirty means differs from the OPENING SNAPSHOT. **`snapshotFromLog` is the SINGLE producer of both the snapshot and the form's initial values** — seeding from `log` while building a snapshot separately is two transcriptions of one mapping that drift the moment a tenth field is added, after which the form opens permanently dirty (or opens clean and never notices a change) with tsc clean and every test green. This is the §15 shared-ancestor shape **inverted deliberately**: sharing the ancestor is the guarantee, because there is only one mapping to be right about. **The confirm is a NESTED Dialog (r26), which buys the hardest case free** — Radix routes Esc to the topmost layer only, so Esc at the prompt keeps editing; an inline block would have needed that hand-written, and getting it wrong means **Esc at the prompt discards the work the prompt exists to protect**. Autosave was explicitly rejected (partial writes become real data; audit noise in the trail the sync-guard batch just made load-bearing; it would clear `needs_review` per r29 on a half-filled row). **Part B — THREE of the spec's four brand-dropdown candidates were RULED OUT by evidence:** paging (17 active brands, all 15 distinct `client_brand` values reachable, nothing near the 1,000 cap), dark-mode theming (looked strong — `bg-white` trigger vs `--f92-surface` panel would be #E2E8F0 on white in dark — but `globals.css:407` maps `.bg-white` to the surface token under `data-theme="dark"` and globals.css is unlayered, so it is theme-aware app-wide), and selection-reflection (the trigger renders `selected.label` with `aria-selected`). **What was actually wrong: labels rendered the raw `jira_value` while `display_name` was fetched and thrown away** — "MRA - Mr Appliance" for a brand named "Mr. Appliance", because jira_value is Jira's internal string and drops the periods — and **in-dropdown search matched the label only**, so typing the brand as JIRA spells it returned "No matching brand". Both fixed; the middot separator is deliberate so a regression shows in a screenshot. **TWO defects were found, characterised and DEFERRED on Lacey's scope call** (§15): the `<Label htmlFor="clientBrand">` orphaned on BOTH the logs and reports pages (`BrandSelector` accepts no `id` — a live a11y defect), and 3 paused brands listed unmarked with two of them holding zero logs. **B5 — two empty review chips, resolved as `count > 0 || isActive`, one rule shared by both.** Merging was ruled out on STRUCTURE: `needs_review` clears on ANY save (r29) while `ai_review_pending` clears ONLY on an explicit ruling, and that difference is the entire reason classifier §4 made it a separate column — a merged chip would show one population under two incompatible clearing rules. **The `|| isActive` half is load-bearing:** clearing the last flagged row while filtered by it would otherwise remove the only control that can switch the filter off. **Part C — one primary button whose meaning follows the dropdown** (Confirm -> Save correction), because §3 C3 asks for two actions and §3 C4 lists three outcomes; **a second value-picker was deliberately not built**, since the modal already has the constrained one and two pickers for one column is how one ends up unvalidated. `isRulingBlocked` mirrors the ROUTE by reading the PERSISTED value, not the form — the classifier batch's MEDIUM-2 not repeated. **`onSaved` spreads the PERSISTED `log`, never form state**, and the snapshot patch is surgical (only `rootCauseFinal`) — patching all of it would silently disable Part A's guard, patching none would prompt on every close after a ruling. **Prose provenance: the strip says what the classifier READ, not where the answer came from** — `model.ts:144` stores no provenance, so naming one field would read as attribution while being a guess (Lacey's call: label every non-empty prose field). **⚠ THE STRIP SHIPS UNEXERCISED AND IS NOT DESCRIBED AS VERIFIED:** `ai_review_pending` is true on **0 of 122** rows and no model credential exists, so its only reachable state today is ABSENT — the strip, band pill, prose block and Confirm/Reject are all unrun, and exercising them is Lacey's after the mint. **A MUTATION KILLED ONE OF MY OWN TESTS:** the `onSaved` check asserted `...log,` was PRESENT, and a mutation that kept the spread and appended a leak beside it PASSED — rewritten as an ABSENCE over all nine form-state variables, after which it failed as it should have. Presence of the right thing does not exclude the wrong thing next to it. **Twice more, checking beat reporting:** a fixed-string CSS search said MISSING and a shell regex returned zero, both search artifacts (CSS escapes brackets/colons/parens) — re-checked in Python, **all 12 arbitrary-value utilities emit real declarations and all 10 tokens are declared twice** per r25. **Gates, re-run per commit not inherited:** tsc 0 · **297/297** (245 baseline + 52) · ESLint every touched file at **exactly** its measured baseline (`logs/page.tsx` 4e/0w — the debounce adds no `set-state-in-effect`, since setState is in the timer callback; `edit-log-dialog.tsx` 0e/1w; `reports/page.tsx` 2e/2w, so the deletion shifted nothing else; `combobox.tsx`/`brand-selector.tsx` measured against their HEAD versions rather than assumed clean), all six new files 0/0 · build 0 with `/dashboard/logs` and `/dashboard/reports` both still `○` · zero references to the deleted queue · **28 of 28 mutations caught across the three parts**, each patch verified applied before its verdict and the baseline asserted before AND after. **NOT VERIFIED — nothing in this batch has been rendered:** the discard prompt's focus order and stacked overlay (reasoned from Radix's documented layer stack, review-level per the `TERMINAL_CELL_STATUSES` precedent), the tightened spacing, the header-row search in both themes, the chips appearing and disappearing, and the entire strip. All Lacey's.*
+*Last updated: 2026-08-12 | CQIP v2.9 — **BATCH LOGS-PAGE — commits 1-5 BUILT, COMMITTED, NOT PUSHED. Karen post-flight returned FAIL scoped to Part C; all fix-before-push findings folded in COMMIT 5.** Three changes to `/dashboard/logs` in ONE batch, built in the spec's required order A -> B -> C. No migration, no new route, no new mutation surface, no schema change -> **no Jenny**. Spec `docs/HANDOFF-logs-page-batch.md`, **REVISION 1 governs**, committed as commit 1 BEFORE the build opened. **SUPERSEDES classifier-1 COMMIT 3:** the standalone AI review queue is DELETED and the suggestion moves inside the edit-log modal below Root cause (final) — the reason being Karen's classifier HIGH-2, that `/dashboard/reports` has no middleware admin gate, and spec §4 forbids fixing that by gating Reports. **KAREN CRITICAL-1 — THE HEADLINE, AND IT INVERTED THE FEATURE.** `suggestionAction` compared the dropdown against the SUGGESTION, but classifier §13.6 selection admits a row only when `root_cause_final` is null or `{}`, so the dropdown seeds EMPTY on every eligible row: an untouched form never equalled the suggestion, the button always read **"Save correction"** with nothing edited, and clicking POSTed `values: []`, which `classifyReviewOutcome` scores **`rejected`**. **Every accepted suggestion would have been discarded and filed as a human rejection** — and since §6 makes the outcome shape the batch's ONLY validation, the record would have said the classifier produced nothing usable. "Confirm suggestion" was unreachable unless the admin retyped the suggestion by hand. It is also a REGRESSION against the retired queue, which had an explicit confirm button AND an empty-correction guard, both lost in the collapse to one button. FIXED: the comparand is the **pristine snapshot** — the question is "has the human touched the field", and only the pristine value answers it; the suggestion is no longer a parameter, pinned by an arity assertion. **⚠ MY OWN TEST LOCKED THE DEFECT IN** — `suggestionAction(['QA Gap'], []) === 'correct'`, rationale "clearing the field is a correction", true in the abstract and FALSE for the only reachable state where `[]` is PRISTINE; applying the fix made that test FAIL. **A test that must be deleted to make the code correct was never testing the right question** — the sharpest instance yet of the shape §15 keeps recording. **HIGH-1** — a successful ruling gave no feedback and a second click returned an ERROR for an action that had succeeded, because `applyEditedLog` deliberately does not touch `editingLog` (which is what stops the seeding effect clobbering unsaved edits — Karen verified this and it is STRONGER than I argued); fixed with local `ruledOutcome` state, local precisely because updating `editingLog` would destroy the edits. **MEDIUM-2** — nothing pinned the wiring or the label, which is exactly what let CRITICAL-1 through: hardcoding `primaryRuling` and hardcoding the label both SURVIVED mutation; now pinned and both re-caught. **MEDIUM-1** — my rewritten `onSaved` test is still weaker than its docstring (it bans nine names but cannot see a value laundered through an alias); the CLAIM is corrected rather than the check strengthened, since closing it needs dataflow analysis this repo has no harness for. **LOW-2** (`assert.throws(fn, string)` treats the string as `message`, so it only asserted something threw) and **LOW-3** (two doc claims describing the unreachable state) folded; **LOW-1 recorded not fixed** — mid-save dismissal is unescapable, since `if (saving) return` plus a disabled Cancel plus a `fetch` with no timeout leaves a page-blocking modal on a stalled request. **A GUARD I NEARLY OVERCLAIMED:** `isPrimaryRulingDisabled`'s empty-correction branch is NOT reachable today — `isRulingBlocked` already covers the only state that could trigger it — so it is labelled contingent rather than live, kept because the overlap depends on an OPEN Lacey decision (whether a human explicitly choosing values may overwrite). **Parts A and B passed Karen's attack, two claims more strongly than argued:** she traced `@radix-ui/react-dismissable-layer` source and confirmed Esc-keeps-editing is real (one global stack keyed on MOUNT ORDER, not DOM nesting, so the sibling placement works), and confirmed `applyEditedLog` cannot re-fire the seeding effect at all. **Part A** — Esc, outside-click, X and Cancel all route through ONE `requestClose`; **`snapshotFromLog` is the SINGLE producer** of both the snapshot and the form's initial values, which is the §15 shared-ancestor shape inverted deliberately (sharing the ancestor is the guarantee, because there is only one mapping to be right about); the confirm is a NESTED Dialog (r26) so Esc at the prompt keeps editing for free. **Part B** — THREE of the spec's four brand-dropdown candidates were RULED OUT by evidence (paging: 17 brands, nothing near the cap; dark-mode theming: `globals.css:407` makes `bg-white` theme-aware app-wide; selection-reflection: the trigger renders `selected.label`). What was actually wrong: labels rendered the raw `jira_value` while `display_name` was fetched and thrown away, and search matched the label only so Jira's own spelling returned "No matching brand". **B5** — two empty review chips resolved as `count > 0 || isActive`, one shared rule; merging ruled out on STRUCTURE (the two flags clear under incompatible rules, which is the whole reason classifier §4 made it a separate column). **RIDE-ALONG at Lacey's direction:** the `BrandSelector` `id` fix — `/dashboard/logs` now has ZERO orphaned labels; **SIX remain on `/dashboard/reports`** (§15), pinned by a `KNOWN_ORPHANS` allowlist test. An earlier claim that screen readers got "an unlabelled button" was WRONG and is corrected in place: a button names itself from its content, so what was broken is the association, not the name. **⚠ THE STRIP STILL SHIPS UNEXERCISED:** `ai_review_pending` is true on **0 of 122** rows and no model credential exists, so its only reachable state is ABSENT — strip, band pill, prose block and Confirm/Reject all unrun. **Gates, re-run per commit not inherited:** tsc 0 · **308/308** · ESLint every touched file at **exactly** its measured baseline (`combobox.tsx`/`brand-selector.tsx` measured against their HEAD versions rather than assumed clean) · build 0 with both pages still `○` · **36 of 36 mutations caught across five commits**, including both of Karen's survivors and the CRITICAL-1 regression itself, with the dirty-file count asserted constant across every restore — Karen's own first run was voided by an unquoted `$FILES` that made her restore silently no-op. **An edit of mine matched TWO call sites and was caught before shipping:** the `setRuledOutcome` insertion hit `handleSave` as well as `handleRuling`, which would have claimed a review outcome for an ordinary row save; a test now pins exactly one writer. **NOT VERIFIED — nothing in this batch has been rendered:** the discard prompt's focus order and stacked overlay (reasoned from Radix's source, review-level), the tightened spacing, the header-row search in both themes, the chips appearing and disappearing, the post-ruling confirmation, and the entire strip. All Lacey's.*

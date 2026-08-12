@@ -54,6 +54,10 @@ interface BrandSelectorProps {
   placeholder?: string;
   allLabel?: string;
   className?: string;
+  // Threaded onto the Combobox trigger so a sibling <label htmlFor> associates.
+  // Both consumers already render <Label htmlFor="clientBrand"> and were pointing
+  // at nothing.
+  id?: string;
 }
 
 export function BrandSelector({
@@ -63,6 +67,7 @@ export function BrandSelector({
   placeholder = 'All brands',
   allLabel = 'All brands',
   className,
+  id,
 }: BrandSelectorProps) {
   const [brands, setBrands] = useState<BrandRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -110,6 +115,7 @@ export function BrandSelector({
 
   return (
     <Combobox
+      id={id}
       value={value || BRAND_SELECTOR_ALL}
       onChange={onChange}
       options={options}

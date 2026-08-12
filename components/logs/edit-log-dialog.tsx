@@ -24,6 +24,7 @@ import {
 } from '@/lib/logs/edit-dirty';
 import {
   CONFIDENCE_BAND_LABEL,
+  isPrimaryRulingDisabled,
   isRulingBlocked,
   proseBlocks,
   suggestionAction,
@@ -127,6 +128,13 @@ export function EditLogDialog({ log, open, isAdmin, onOpenChange, onSaved }: Edi
   // routes: a failed ruling must not present as a failed row save, and vice versa.
   const [rulingBusy, setRulingBusy] = useState(false);
   const [rulingError, setRulingError] = useState<string | null>(null);
+  // Karen HIGH-1. Without this a successful ruling changed nothing on screen: the
+  // strip stayed live because the dialog's own `log` prop still carries
+  // ai_review_pending=true (applyEditedLog deliberately does NOT touch
+  // editingLog — that is what keeps the seeding effect from re-firing and
+  // clobbering unsaved edits). A second click then hit the route's 409 and showed
+  // an ERROR for an action that had already succeeded.
+  const [ruledOutcome, setRuledOutcome] = useState<string | null>(null);
 
   // Single shared taxonomy fetch — populated once on dialog open and
   // cached for the dialog's lifetime. All 4 multi-selects read from
@@ -181,6 +189,7 @@ export function EditLogDialog({ log, open, isAdmin, onOpenChange, onSaved }: Edi
     // prompt from a dismissed row reappears over the next row the admin opens.
     setConfirmDiscardOpen(false);
     setRulingError(null);
+    setRuledOutcome(null);
   }, [log]);
 
   const isDirty = useMemo(
@@ -219,7 +228,14 @@ export function EditLogDialog({ log, open, isAdmin, onOpenChange, onSaved }: Edi
   // who merely typed into the dropdown, and enable them in the one case the server
   // refuses.
   const rulingBlocked = isRulingBlocked(log?.root_cause_final ?? null);
-  const primaryRuling = suggestion ? suggestionAction(suggestion, rootCauseFinal) : 'confirm';
+  // Karen CRITICAL-1. Compared against the SNAPSHOT — "has the human touched the
+  // field" — never against the suggestion. Selection guarantees the snapshot is
+  // empty on every eligible row, so comparing to the suggestion made an untouched
+  // form read as a correction and file `values: []`, which scores as 'rejected'.
+  const primaryRuling = suggestionAction(rootCauseFinal, snapshot.rootCauseFinal);
+  const primaryDisabled = suggestion
+    ? isPrimaryRulingDisabled(primaryRuling, rootCauseFinal, suggestion)
+    : true;
   const prose = log ? proseBlocks(log) : [];
 
   const optionsByField = useMemo(() => {
@@ -330,6 +346,8 @@ export function EditLogDialog({ log, open, isAdmin, onOpenChange, onSaved }: Edi
       // Spread `log`, NOT the form state. `log` is the last-known-PERSISTED row,
       // so the parent's table row picks up exactly what the route wrote and none
       // of the admin's still-unsaved edits to other fields.
+      setRuledOutcome(typeof body?.outcome === 'string' ? body.outcome : action);
+
       onSaved({
         ...log,
         root_cause_final: persistedRootCause,
@@ -621,25 +639,43 @@ export function EditLogDialog({ log, open, isAdmin, onOpenChange, onSaved }: Edi
                   <p className="mt-2 text-xs text-red-600">{rulingError}</p>
                 ) : null}
 
-                {isAdmin ? (
+                {/*
+                  Karen HIGH-1 — a successful ruling must SAY so. Previously the
+                  strip stayed live and unchanged, because the dialog's `log` prop
+                  still carries ai_review_pending=true: `applyEditedLog`
+                  deliberately does not touch `editingLog`, which is what stops the
+                  seeding effect re-firing and clobbering unsaved edits. So the
+                  only honest signal is local, and without it a second click hit the
+                  route's 409 and showed an ERROR for an action that had succeeded.
+                */}
+                {ruledOutcome ? (
+                  <p
+                    className="mt-2 rounded-md border border-[color:var(--pill-green-border)] bg-[color:var(--pill-green-bg)] px-2 py-1 text-xs text-[color:var(--pill-green-fg)]"
+                    role="status"
+                  >
+                    Review recorded ({ruledOutcome}). The other fields on this row are still
+                    unsaved — use Save changes below.
+                  </p>
+                ) : isAdmin ? (
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     {/*
-                      ONE primary button whose meaning follows the dropdown. If the
-                      selection still matches the suggestion this is `confirm`; edit
-                      the field above and it becomes `correct`, carrying the human's
-                      values. §3 C3 asks for two actions and §3 C4 lists three
-                      outcomes — this is how both hold without a second value-picker
-                      competing with the constrained dropdown.
+                      ONE primary button whose meaning follows the dropdown, decided
+                      by suggestionAction against the PRISTINE snapshot: untouched →
+                      `confirm`, edited → `correct` carrying the human's values.
+                      §3 C3 asks for two actions and §3 C4 lists three outcomes —
+                      this is how both hold without a second value-picker competing
+                      with the constrained dropdown.
 
                       The label changes with the action because the two record
                       DIFFERENT outcome shapes (§6), and the correction rate is this
                       batch's only validation — a correction filed as a confirm
                       would report the classifier as exactly right on a row where
-                      the human changed the answer.
+                      the human changed the answer, and the inverse (Karen
+                      CRITICAL-1) filed every acceptance as a rejection.
                     */}
                     <Button
                       size="sm"
-                      disabled={rulingBusy || saving || rulingBlocked || suggestion.length === 0}
+                      disabled={rulingBusy || saving || rulingBlocked || primaryDisabled}
                       onClick={() => handleRuling(primaryRuling)}
                     >
                       {rulingBusy
@@ -659,7 +695,9 @@ export function EditLogDialog({ log, open, isAdmin, onOpenChange, onSaved }: Edi
                     <span className="text-[10px] text-[color:var(--f92-gray)]">
                       {primaryRuling === 'confirm'
                         ? 'Confirm writes the suggestion into Root cause (final).'
-                        : 'Your edit above will be saved as a correction.'}
+                        : rootCauseFinal.length === 0
+                          ? 'Clearing the field is a rejection — use Reject to record it.'
+                          : 'Your edit above will be saved as a correction.'}
                     </span>
                   </div>
                 ) : (

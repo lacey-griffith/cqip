@@ -18,6 +18,19 @@ interface ComboboxProps {
   placeholder?: string;
   emptyLabel?: string;
   className?: string;
+  /**
+   * Rendered on the trigger button so a sibling `<label htmlFor>` associates.
+   * `<button>` IS a labelable element, so the association is valid and gives the
+   * label click-to-activate. Mirrors MultiCombobox (`multi-combobox.tsx:29`) and
+   * shadcn's SelectTrigger, which Severity and Status already use — before this,
+   * Brand was the only control in either filter row whose label pointed at nothing.
+   *
+   * It does NOT change the accessible NAME: a button names itself from its content,
+   * so the trigger still announces the selected value. SelectTrigger behaves the
+   * same way, so the row is consistent. This fixes the broken association, not the
+   * naming model.
+   */
+  id?: string;
 }
 
 export function Combobox({
@@ -27,6 +40,7 @@ export function Combobox({
   placeholder = 'Select...',
   emptyLabel = 'No results.',
   className,
+  id,
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState('');
@@ -87,6 +101,7 @@ export function Combobox({
     <div ref={rootRef} className={cn('relative', className)}>
       <button
         type="button"
+        id={id}
         onClick={() => setOpen(o => !o)}
         className="flex h-10 w-full items-center justify-between rounded-md border border-[color:var(--f92-border)] bg-white px-3 py-2 text-left text-sm text-[color:var(--f92-dark)] shadow-sm ring-offset-background focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)]"
         aria-haspopup="listbox"

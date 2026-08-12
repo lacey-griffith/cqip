@@ -484,6 +484,7 @@ export default function ReportsPage() {
           <div>
             <Label htmlFor="clientBrand">Client brand</Label>
             <BrandSelector
+              id="clientBrand"
               value={filters.clientBrand || BRAND_SELECTOR_ALL}
               onChange={value =>
                 handleFilterChange(

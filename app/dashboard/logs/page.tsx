@@ -768,6 +768,7 @@ export default function LogsPage() {
                 <div className="min-w-[10rem] flex-1">
                   <Label htmlFor="clientBrand" className="mb-0.5 block text-[10px] uppercase leading-none tracking-widest text-[color:var(--f92-gray)]">Brand</Label>
                   <BrandSelector
+                    id="clientBrand"
                     value={clientBrand || BRAND_SELECTOR_ALL}
                     onChange={v => setClientBrand(v === BRAND_SELECTOR_ALL ? '' : v)}
                   />
