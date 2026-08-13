@@ -193,27 +193,41 @@ test('only the correct action carries values', () => {
 // pinned a defect; both times the fix was to test BEHAVIOUR through a pure
 // function instead of matching the source that produces it.
 
+const LOG = (suggested: string[] | null, persisted: string[] | null) => ({
+  ai_suggested_root_cause: suggested,
+  root_cause_final: persisted,
+});
+
 test('confirm writes the SUGGESTION, not the dropdown selection', () => {
   // The live path: selection is empty (§13.6 guarantees it) and the route writes
   // `confirmedValues = suggested`. Mirroring the selection here is what erased
   // confirmed data with no audit row.
-  assert.deepEqual(rulingWriteValues('confirm', ['Client Request'], [], null), ['Client Request']);
+  assert.deepEqual(rulingWriteValues('confirm', LOG(['Client Request'], null), []), ['Client Request']);
   // Even when the dropdown holds something else, confirm still files the suggestion
   // — the route does not look at the selection on this action.
-  assert.deepEqual(rulingWriteValues('confirm', ['A'], ['B'], null), ['A']);
+  assert.deepEqual(rulingWriteValues('confirm', LOG(['A'], null), ['B']), ['A']);
+  // A null suggestion coerces to [] rather than throwing.
+  assert.deepEqual(rulingWriteValues('confirm', LOG(null, null), ['B']), []);
 });
 
 test('correct writes the human selection', () => {
-  assert.deepEqual(rulingWriteValues('correct', ['A'], ['B'], null), ['B']);
+  assert.deepEqual(rulingWriteValues('correct', LOG(['A'], null), ['B']), ['B']);
 });
 
 test('reject leaves the persisted value untouched', () => {
-  assert.deepEqual(rulingWriteValues('reject', ['A'], ['B'], null), null);
-  assert.deepEqual(rulingWriteValues('reject', ['A'], ['B'], ['C']), ['C']);
+  assert.deepEqual(rulingWriteValues('reject', LOG(['A'], null), ['B']), null);
+  assert.deepEqual(rulingWriteValues('reject', LOG(['A'], ['C']), ['B']), ['C']);
+});
+
+test('the three parameters have three DISTINCT types, so a swap cannot type-check', () => {
+  // Karen MEDIUM-1: the previous four-positional-parameter shape had two adjacent
+  // `readonly string[]`, and transposing them reintroduced CRITICAL-2 with every
+  // gate green. Arity is pinned here; the type distinctness is enforced by tsc.
+  assert.equal(rulingWriteValues.length, 3, 'action, log, selection — no extracted arrays');
 });
 
 test('the dialog derives all three local writes from rulingWriteValues', () => {
-  assert.ok(/const persistedRootCause = rulingWriteValues\(/.test(DIALOG));
+  assert.ok(/const persistedRootCause = rulingWriteValues\(action, log, rootCauseFinal\)/.test(DIALOG));
   // The snapshot and the dropdown must move to the SAME value, or Part A's guard
   // prompts on close for a value the server already holds.
   assert.ok(/const written = persistedRootCause \?\? \[\];/.test(DIALOG));

@@ -125,15 +125,36 @@ export function isPrimaryRulingDisabled(
 // changed between render and click, and `ai_review_pending` makes that a 409
 // rather than a silent mismatch. Closing it properly means the route returning the
 // values it wrote, which is a route change — out of scope per spec §4.
+// ⚠ THE PARAMETER SHAPE IS DELIBERATE: three arguments of three DISTINCT types, so
+// no two can be transposed without failing tsc (Karen MEDIUM-1).
+//
+// The first version took four positional parameters — `(action, suggested,
+// currentSelection, persistedRootCause)` — with arguments 2 and 3 both
+// `readonly string[]`. Swapping those two at the call site reintroduced CRITICAL-2
+// **verbatim** (confirm returning the empty selection) with **tsc 0 and the full
+// suite passing**, because two adjacent same-typed parameters transpose silently.
+// That is round one's MEDIUM-2 in a new location: the pure function was well
+// tested, its USE was not.
+//
+// Taking the LOG rather than its two extracted arrays also moves the
+// field → role mapping inside this tested function, where it is exercised, instead
+// of leaving it at an untested call site. A source assertion on argument order
+// would have been the other option, and round two's lesson is precisely that a
+// regex over source is the wrong tool — so the shape is made unconstructable
+// instead of merely watched.
+export interface RulingLog {
+  ai_suggested_root_cause: string[] | null;
+  root_cause_final: string[] | null;
+}
+
 export function rulingWriteValues(
   action: 'confirm' | 'reject' | 'correct',
-  suggested: readonly string[],
-  currentSelection: readonly string[],
-  persistedRootCause: readonly string[] | null,
+  log: RulingLog,
+  selection: readonly string[],
 ): string[] | null {
-  if (action === 'reject') return persistedRootCause === null ? null : [...persistedRootCause];
-  if (action === 'confirm') return [...suggested];
-  return [...currentSelection];
+  if (action === 'reject') return log.root_cause_final === null ? null : [...log.root_cause_final];
+  if (action === 'confirm') return [...(log.ai_suggested_root_cause ?? [])];
+  return [...selection];
 }
 
 // ---------------------------------------------------------------------------

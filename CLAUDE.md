@@ -3724,6 +3724,29 @@ open — recorded so they are not re-discovered from scratch.
       row. An earlier note here said screen readers got "an unlabelled button";
       that was **wrong** and is corrected rather than deleted, because the
       overstatement is what made the defect sound like a different problem.
+- [ ] **A ruling followed by "Save changes" writes TWO `audit_log` rows for one
+      `root_cause_final` change, the second carrying a stale `old_value`.**
+      `applyEditedLog` deliberately never updates `editingLog` — that is what keeps
+      the seeding effect from re-firing and clobbering unsaved edits — so after a
+      ruling the dialog's `log.root_cause_final` stays at its pre-ruling value while
+      the dropdown holds the confirmed one. A later Save therefore diffs against the
+      stale prop and emits a second row for a change
+      `app/api/admin/logs/ai-review/route.ts:227` has already audited.
+      **PRE-EXISTING on the `correct` path since COMMIT 4** — the Karen fold extended
+      it to `confirm`, it did not create it.
+      **Not data loss and not a `who` ambiguity** (both rows carry the same
+      server-derived `changed_by`): what is duplicated is the *transition*, and what
+      is stale is `old_value` on the second row. Neither row was false when written.
+      **Four options, each with a real cost, none free:** refresh `editingLog` (re-fires
+      the effect, destroys unsaved edits); exclude `root_cause_final` from
+      `updates`/`diffs` after a ruling (a second piece of "already persisted" state to
+      keep honest); track it via the snapshot (conflates dirty-tracking with
+      persistence); or **key the seeding effect on `log.id` rather than `log` identity**
+      (Karen's — allows a refresh without clobbering, but needs a companion reset on the
+      `open` transition or close/reopen of the same row keeps stale form state). The
+      last is the most promising and is a design change, so it belongs in its own batch.
+      Nothing accrues meanwhile: the strip is unexercised in prod (0 pending rows, no
+      credential).
 - [ ] **SIX MORE orphaned labels on `/dashboard/reports`** — `severity`, `status`,
       `issueCategory`, `rootCauseFinal`, `testType`, `whoOwnsFix`. Found while
       investigating the brand one, **verified independently by Karen**. All six
@@ -3838,7 +3861,7 @@ means reworking it.
 > - **B5 — two empty review chips.** Blocks **C2, therefore commit 4**. C1 and C3 are
 >   unblocked, so commit 4 may split if the answer lags.
 
-**Phase status: COMMITS 1–6 BUILT. Lacey smoke + push NEXT. DO NOT PUSH.**
+**Phase status: COMMITS 1–7 BUILT. Lacey smoke + push NEXT. DO NOT PUSH.**
 Version **v2.8 → v2.9**.
 
 - **COMMIT 1** `f2f9511` — spec + REVISION 1 + the CLAUDE.md folds.
@@ -3849,8 +3872,10 @@ Version **v2.8 → v2.9**.
   new pure `lib/logs/ai-suggestion.ts` + 21 tests.
 - **COMMIT 5** `3af03e0` — Karen fold round 1 (1 CRITICAL · 1 HIGH · 2 MEDIUM ·
   2 LOW) + the `BrandSelector` `id` fix.
-- **COMMIT 6** — Karen re-confirm fold: CRITICAL-2, which the CRITICAL-1 fix
-  uncovered.
+- **COMMIT 6** `0497d69` — Karen re-confirm fold: CRITICAL-2, which the CRITICAL-1
+  fix uncovered.
+- **COMMIT 7** — Karen third-pass fold (**PASS-WITH-FINDINGS**, no CRITICAL):
+  MEDIUM-1 call-site shape, MEDIUM-2 recording gap, LOW-1 framing.
 
 **PART C — the surface moved, and the reason is the finding it closes.** The
 standalone queue is gone and the suggestion now renders inside the edit modal
@@ -4177,6 +4202,55 @@ behind it.
 its baseline · build 0, both pages still `○` · **5 of 5 mutations caught**, including
 the CRITICAL-2 regression itself and both the dropdown and snapshot mirrors
 individually.
+
+**KAREN THIRD PASS — PASS-WITH-FINDINGS, no CRITICAL. Folded in COMMIT 7.**
+CRITICAL-2 confirmed genuinely closed on the now-live confirm path, and Part A's
+guard after a ruling is now **structurally** guaranteed rather than incidentally
+true (the dropdown and the snapshot take the same const, so `arraysEqual` cannot be
+false on that field).
+
+- **MEDIUM-1 — the call site was unpinned, and a two-argument swap reintroduced
+  CRITICAL-2 verbatim with tsc 0 and 311/311 green.** `rulingWriteValues` took four
+  positional parameters with arguments 2 and 3 both `readonly string[]`, so
+  transposing them silently type-checked. **This is round one's MEDIUM-2 in a new
+  location — the pure function well tested, its USE not — and worse, because the
+  types could not object.** FIXED by changing the shape rather than watching it: the
+  signature is now `(action, log, selection)` — **three arguments of three distinct
+  types**, so no two can be transposed without failing tsc, and the field → role
+  mapping moved INSIDE the tested function. **Verified by attempting Karen's exact
+  swap: `TS2345`.** A source assertion on argument order was the alternative and was
+  rejected, because round two's lesson is that a regex over source is the wrong tool.
+- **MEDIUM-2 — the double-audit follow-on existed only in a message to Karen**, not
+  in `CLAUDE.md`. Now recorded in the §15 "Logs-page deferred follow-ons" section
+  that exists to stop exactly that.
+- **LOW-1 — my framing of the double-audit was wrong in two ways, and both are
+  corrected:** it is **NOT** a consequence of the CRITICAL-2 fix — it is
+  **pre-existing on the `correct` path since COMMIT 4**, since `applyEditedLog` never
+  updated `editingLog` then either; COMMIT 6 merely extends it to `confirm`. And
+  *"makes who set this root cause ambiguous"* **overstates it**: both rows carry the
+  same server-derived `changed_by`, so *who* is unambiguous — what is duplicated is
+  the transition, and what is stale is `old_value` on the second row.
+- **She corrected two of my own reads, and one was actively unsafe.** `?? []` at the
+  snapshot patch is **not** merely defensive: it is **load-bearing for tsc**
+  (`rulingWriteValues` returns `string[] | null`, both setters take non-null), so
+  removing it is two `TS2345` errors. My "dead for non-reject — should it go?" was
+  right about runtime reachability and wrong about whether it compiles, and it
+  invited deleting something that cannot be deleted. Accurate wording:
+  **unreachable at runtime for non-reject, required by the type system.** Separately,
+  the `suggested`-from-prop limit I recorded **understates its own safety**: the
+  classify route filters `.eq('ai_review_pending', false)` AND
+  `.is('ai_suggested_root_cause', null)`, so no writer can change the suggestion
+  while a review is pending — the divergence is **unconstructable**, not merely
+  409-guarded.
+- **Her verdict on the record:** COMMIT 6's message and the §15.5 block are "the most
+  accurate of the three rounds", with both self-corrections landing and the
+  regex-over-source lesson correctly generalised. The weak spots were a recording gap
+  and an overstatement, **not a false claim about what the code does** — which is the
+  first round of three where that was true.
+
+**Gates for COMMIT 7:** tsc 0 · **312/312** · ESLint every touched file at exactly
+its baseline · build 0, both pages still `○` · the MEDIUM-1 swap **proven
+unconstructable** by applying it and reading `TS2345`.
 
 **Part A's one structural decision, which should not be "tidied" later:
 `snapshotFromLog` is the SINGLE producer of both the snapshot and the form's initial

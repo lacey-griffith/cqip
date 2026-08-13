@@ -337,12 +337,7 @@ export function EditLogDialog({ log, open, isAdmin, onOpenChange, onSaved }: Edi
       // correct and wrong for confirm. On the live path that left the DB holding the
       // suggestion while the dropdown, the snapshot and the table row all held [] —
       // and the next Save then erased the confirmed value with NO audit row.
-      const persistedRootCause = rulingWriteValues(
-        action,
-        log.ai_suggested_root_cause ?? [],
-        rootCauseFinal,
-        log.root_cause_final,
-      );
+      const persistedRootCause = rulingWriteValues(action, log, rootCauseFinal);
 
       // Reflect the write locally. The canonical field is now saved, so the
       // SNAPSHOT moves with it — otherwise the dismiss guard would count a value
@@ -351,6 +346,12 @@ export function EditLogDialog({ log, open, isAdmin, onOpenChange, onSaved }: Edi
       // ONLY root cause is patched. Any other unsaved edits stay dirty, because
       // they genuinely are: this route wrote one column, not the row.
       if (action !== 'reject') {
+        // `?? []` is UNREACHABLE at runtime here — confirm and correct both return
+        // arrays, and only reject returns null, which this branch excludes — but it
+        // is LOAD-BEARING FOR tsc: rulingWriteValues is typed `string[] | null` and
+        // both setters take non-null. Removing it is two TS2345 errors, not a
+        // tidy-up (Karen: my earlier "defensive, should it go?" framing was right
+        // about reachability and wrong about whether it compiles).
         const written = persistedRootCause ?? [];
         setRootCauseFinal(written);
         setSnapshot(prev => ({ ...prev, rootCauseFinal: written }));
