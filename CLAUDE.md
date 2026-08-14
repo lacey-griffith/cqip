@@ -2993,18 +2993,27 @@ reviews. Effort: LG (multi-phase).
       69 alert_event · 16 brand · 13 test_milestone · 12 user · 8 monitoring_finding ·
       344 null = **1,438**.
 
-    **VINTAGE, AND A CORRECTION TO THE FIGURE THIS SECTION ALREADY CARRIED.** Taken
-    2026-08-03 at **83 active directives / 17 active brands / 1,313 cells** globally —
-    up from 82 / 16 / 1,312 on 07-31, i.e. **the numbers moved inside three days,
-    exactly as the LOW-D2 lesson predicted.** But the **per-project** render ceiling is
-    **unchanged**, and that is the number to use: NBLYCRO holds **82 active directives ×
-    16 active brands (3 paused → 13 visible)**, and the 83rd directive plus the 17th
-    brand are **SPLCRO's** (1 × 1 = 1 cell). So **82 × 13 = 1,066 defaults / 82 × 16 =
-    1,312 paused-shown still stands for the memo follow-on** — correct for the right
-    reason, not by luck. **A cross-project product is meaningless here** and a first
-    pass of this probe computed one, reporting "98 missing cells"; per project both
-    grids are **complete with zero gaps** (82 × 16 = 1,312, plus SPLCRO's 1). Anyone
-    re-deriving this must group by `project_key` first.
+    **VINTAGE — RE-MEASURED 2026-08-14, and the numbers moved AGAIN.** Prod now holds
+    **87 active directives GLOBALLY / 17 active brands / 1,393 cells**, up from
+    83 / 17 / 1,313 on 08-03 and 82 / 16 / 1,312 on 07-31. **The numbers have moved on
+    every single re-probe**, which is the LOW-D2 lesson holding for the third time.
+
+    **USE THE PER-PROJECT FIGURE, AND IT IS 86, NOT 87.** NBLYCRO holds **86 active
+    directives × 16 active brands (3 paused → 13 visible)**; the 87th active directive
+    is **SPLCRO's** (1 × 1 = 1 cell). So the memo follow-on is judged against
+    **86 × 13 = 1,118 under defaults / 86 × 16 = 1,376 paused-shown.**
+
+    > **⚠ "87" IS AMBIGUOUS AND MUST NOT BE PASTED INTO A PER-PROJECT LINE.** It is the
+    > GLOBAL active count (86 NBLY + 1 SPL) — and, by coincidence, also NBLY's
+    > ALL-STATUS count (86 active + 1 archived). Two different quantities, same number,
+    > neither of them the per-project active count these derivations need. **A
+    > cross-project product is meaningless here**: a first pass of the 08-03 probe
+    > computed one and reported "98 missing cells". Per project both grids are complete
+    > with zero gaps. Group by `project_key` first, and filter on `status`.
+
+    **Total cells (1,393) counts the ARCHIVED directive's 16 cells too** — 87 × 16 + 1,
+    where that 87 is NBLY's all-status count. Rendered cells are 86 × 16 + 1 = 1,377,
+    because `loadProject` loads `status='active'` only.
     Held out of the restyle deliberately; do not half-build it. **Inherits one open
     question from batch 3:** a read-only user now has ~1,300 tab stops on the matrix
     (§2.6 locks one per cell, which is what makes focus-driven inspection work), and
@@ -3020,9 +3029,9 @@ reviews. Effort: LG (multi-phase).
     the whole thing; the `role="grid"` decision stays here.
     **Also inherits the memoized-row follow-on** (batch 3 MEDIUM-4 option 1 made
     BOTH crosshair axes state-driven, so vertical crossings cost a render too).
-    Judge it against **~1,066** = 82 × 13 under defaults — **NOT 650**, which was
-    50 × 13 when prod held 69 directives and is stale. **Probe the resolved-directive
-    count; do not scale the old 50/69 ratio.** The row component was deliberately not
+    Judge it against **~1,118** = 86 × 13 under defaults (re-probed 2026-08-14) —
+    **NOT 1,066** (82 × 13, stale as of 08-12) and **NOT 650** (50 × 13, when prod held
+    69). **Probe the resolved-directive count; do not scale any of the old ratios.** The row component was deliberately not
     extracted in batch 3 to keep the sticky editor strip and the E3 seam out of a
     render-only batch; that reasoning expires once a batch is already touching them.
   - **E2 (Convert config sync)** — fills the brand-page "Convert configuration"
@@ -3709,6 +3718,60 @@ its reason so nobody re-derives the analysis.
       `changed_by` values, so an operator filtering `'system'` would silently stop
       catching new auto-advance rows. Only worth changing alongside a backfill.
 
+### ⚠ OPEN DEFECT — brand dropdown panel is CLIPPED, and it is LIVE IN PRODUCTION
+
+**Found by Lacey in smoke, 2026-08-13 (test 4). Prod is serving `cdb2cc6`, which
+contains it.** The fix is built but **NOT committed and NOT pushed** — it exists only
+as uncommitted working-tree changes (`components/ui/combobox.tsx` plus two new files),
+and its gate run was interrupted before completion. **Nothing in the pushed chain
+fixes this.**
+
+**Characterised, not assumed** — the first two hypotheses were both wrong, which is
+why this is written down rather than left as "probably the spacing":
+- **NOT B3's spacing change.** `overflow-hidden` on the collapsible filter body is
+  **pre-existing** (`f2f9511^:550`, before this batch) and is load-bearing: it is what
+  makes the `grid-rows-[0fr]→[1fr]` collapse animate instead of popping. B3 only
+  changed `pt-3→pt-2`, `mt-3→mt-2` and label classes.
+- **NOT the filtering.** Verified: an empty query returns all options, and `aire`,
+  `ASV` and `Aire Serv` all match. This is **purely a clipping/overflow defect.**
+- **NOT `/dashboard/reports`.** That page's `BrandSelector` has **zero** `overflow-*`
+  ancestors — plain Card — so only `/dashboard/logs` is affected.
+- **The actual cause:** the Combobox panel is `absolute` in-flow, so it cannot escape
+  a clipping ancestor. Its row-mates Severity and Status were never affected because
+  shadcn's Select renders through `SelectPrimitive.Portal` (`select.tsx:74`). **Brand
+  was the only control in that row that did not portal.**
+
+**Fix (built, unverified, uncommitted):** portal the panel to `document.body` with
+fixed positioning from the trigger rect, via a pure tested `computePopoverPosition`.
+**Two traps it creates and must keep handling:** the outside-click check must consult
+the PANEL ref as well as the trigger root, or every click inside the open panel closes
+it instantly; and position must be recomputed on scroll **with capture** and on resize,
+or a fixed panel detaches from its trigger. `MultiCombobox` has the identical in-flow
+pattern (`multi-combobox.tsx:149`) and is used inside the edit dialog's
+`overflow-y-auto` — degraded but scrollable there rather than hidden, so recorded, not
+bundled.
+
+### ⚠ Directive archiving is REACHABLE after all — a recorded claim is falsified
+
+§15 carried Karen's LOW-8 finding that archiving was **verified unreachable** on
+2026-07-29: no archive writer anywhere in `app/api/`, create never sets `status`, and
+directive edit/archive UI still an open TODO. **Re-probed 2026-08-14: prod contains one
+`archived` directive — `Submits Form Lead - Combined`** — alongside a replacement
+`Remove Submits Form Lead - Combined`. It was archived by **direct SQL**, a path the
+LOW-8 audit did not consider because it only looked at application routes.
+
+**The consequence LOW-8 predicted is therefore LIVE, not hypothetical.**
+`loadProject` loads `status='active'` only, so an archived directive is invisible to
+the matrix search and counts **0** toward `hiddenByStatus` — an exists-but-archived
+title reads as "found nothing", which is the duplicate-creation hazard the
+`countHiddenByStatus` mitigation was built for. It also keeps its 16 cells, which is
+why total cells (**1,393**) exceed rendered cells (86 × 16 + 1 = **1,377**).
+
+- [ ] **Give the matrix a signal for archived directives.** Either include them in the
+      duplicate-risk count, or land the `POST /api/admin/directives` duplicate-title
+      check first (already a §15 item). **A `status` filter that hides rows a user is
+      searching for needs to say so** — the same lesson as B5's hidden-count readout.
+
 ### Logs-page deferred follow-ons (from the 2026-08-12 batch, Lacey's scope call)
 
 Both were FOUND and CHARACTERISED during the B2 investigation and deliberately left
@@ -3814,969 +3877,287 @@ deleted in the same commit that writes the §16 shipped entry.
 (The Convert reconciliation backfill is NOT here — it lives in §16: it is BUILT
 and reviewed, awaiting only Lacey's run, so it is not in-flight work.)
 
-### Batch logs-page — dismiss guard + filter bar + AI suggestion strip (IN FLIGHT, 2026-08-12)
+**EMPTY as of 2026-08-14.** Batches logs-page, classifier-1 and sync-guard all moved
+to §16 in the same commit that wrote their shipped entries, per r34. The sync-guard
+move was **six days overdue** — its §15.5 entry still read "BOTH COMMITS BUILT, Karen
+post-flight next" while its own body already recorded Karen done and a COMMIT 4
+widening, and no §16 entry existed. That is exactly the drift r34 exists to prevent,
+and it happened anyway because the reconcile was never the same commit as the ship.
 
-Three changes to `/dashboard/logs`, in ONE batch because they touch one file. **No
-migration · no new route · no new mutation surface · no schema change → no Jenny.**
-Karen post-flight owed. **DO NOT PUSH.** Spec:
-`docs/HANDOFF-logs-page-batch.md` — **REVISION 1 governs**, committed as commit 1
-BEFORE the build opened per the §15 PROCESS note.
-
-**⚠ THIS BATCH SUPERSEDES classifier-1 COMMIT 3.** The standalone AI review queue
-(`components/reports/ai-review-queue.tsx`, mounted on `/dashboard/reports`) is
-**deleted**, and the suggestion moves INSIDE the existing edit-log modal, directly
-below Root cause (final). One place a log is ever classified. **The reason is
-Karen's classifier HIGH-2:** `/dashboard/reports` has no middleware admin gate (r24
-covers `/dashboard/settings/*` only). **The fix is to leave that page, NOT to gate
-it** — spec §4 forbids adding a gate to Reports.
-
-**Build order is load-bearing and specified: A → B → C.** The dismiss guard changes
-dismiss behaviour the suggestion strip then inherits, so building the strip first
-means reworking it.
-
-- **Part A — dirty-state dismiss guard on the edit modal.** Outside-click and Esc
-  currently discard unsaved edits silently. Lacey's locked choice is
-  **confirm-on-ANY-dismiss when dirty** — Esc, outside-click, X and Cancel all route
-  through one "discard or keep editing" prompt, default focus on keep editing. Dirty
-  = differs from the OPENING SNAPSHOT, not a submitted flag. **1-minute autosave is
-  explicitly rejected** (spec §1) for three recorded reasons: partial writes become
-  real prod data; audit noise in the trail the sync-guard batch just made
-  load-bearing; and it would clear `needs_review` per r29 on a half-filled row.
-- **Part B — filter bar.** Search (client-side, over loaded rows, Pulse
-  matrix-controls pattern) · a brand-dropdown defect · vertical-space reduction ·
-  usability pass. **Two items are investigate-and-propose, not build** — see the
-  gates below.
-- **Part C — retire the queue · "AI suggested" chip · suggestion strip.** Strip
-  renders suggested values, a confidence **BAND** (never a float — a float invites a
-  threshold and a threshold invites auto-confirm, classifier §9), the source prose,
-  and Confirm / Reject. **C4's semantics table is the contract**, and its last row —
-  a general save leaves `ai_review_pending` UNTOUCHED — is a test, not a comment.
-  That is the entire reason it is a separate column from `needs_review`.
-
-> **TWO LACEY GATES ARE OPEN. Neither may be decided alone.**
->
-> - **B2 — the brand dropdown defect is UNCHARACTERISED.** The spec says the defect
->   is real and observed but deliberately does not specify it. Read the component and
->   the live UI, report findings + a proposal, then fix. Blocks the B2 fix in commit 3.
-> - **B5 — two empty review chips.** Blocks **C2, therefore commit 4**. C1 and C3 are
->   unblocked, so commit 4 may split if the answer lags.
-
-**Phase status: COMMITS 1–7 BUILT. Lacey smoke + push NEXT. DO NOT PUSH.**
-Version **v2.8 → v2.9**.
-
-- **COMMIT 1** `f2f9511` — spec + REVISION 1 + the CLAUDE.md folds.
-- **COMMIT 2** `a89d2bc` — Part A. New pure `lib/logs/edit-dirty.ts` + 18 tests.
-- **COMMIT 3** `c7431f4` — Part B. New pure `lib/logs/log-search.ts`,
-  `lib/filters/brand-option.ts`, `lib/ui/combobox-filter.ts` + 17 tests.
-- **COMMIT 4** `c91c5f0` — Part C. `components/reports/ai-review-queue.tsx` **DELETED**;
-  new pure `lib/logs/ai-suggestion.ts` + 21 tests.
-- **COMMIT 5** `3af03e0` — Karen fold round 1 (1 CRITICAL · 1 HIGH · 2 MEDIUM ·
-  2 LOW) + the `BrandSelector` `id` fix.
-- **COMMIT 6** `0497d69` — Karen re-confirm fold: CRITICAL-2, which the CRITICAL-1
-  fix uncovered.
-- **COMMIT 7** — Karen third-pass fold (**PASS-WITH-FINDINGS**, no CRITICAL):
-  MEDIUM-1 call-site shape, MEDIUM-2 recording gap, LOW-1 framing.
-
-**PART C — the surface moved, and the reason is the finding it closes.** The
-standalone queue is gone and the suggestion now renders inside the edit modal
-directly below Root cause (final) — the field it proposes a value for, which is what
-makes the comparison possible at a glance. `/dashboard/reports` has **no middleware
-admin gate** (r24 covers `/dashboard/settings/*` only), and spec §4 forbids solving
-that by gating Reports: the surface leaves the page instead.
-
-**ONE PRIMARY BUTTON WHOSE MEANING FOLLOWS THE DROPDOWN.** §3 C3 asks for two actions
-while §3 C4 lists three outcomes; `suggestionAction` reconciles them — an **untouched**
-field (selection still equal to the row's PRISTINE value) means **Confirm suggestion**,
-and the moment the admin edits it the button becomes **Save correction** and carries
-their values. **[CORRECTED in the Karen fold — this originally read "if the selection
-still equals the SUGGESTION", which described a state that could never occur and was
-Karen CRITICAL-1. See the post-flight section below.]** **A second value-picker inside the strip was deliberately NOT built:**
-the retired queue needed its own `MultiCombobox` because it had no other way to pick
-values, and the whole point of moving into the modal is that the constrained,
-taxonomy-validated dropdown is already there. Two pickers for one column is how one
-of them ends up unvalidated. **The label changes because the two file DIFFERENT
-outcome shapes (§6)** — and the correction rate is this batch's only validation, so a
-correction filed as a confirm would report the classifier as exactly right on a row
-where the human changed the answer.
-
-**The §13.1 block mirrors the ROUTE, not the form.** `isRulingBlocked` reads the
-PERSISTED `root_cause_final`, because the route's re-check reads the row — mirroring
-the form state instead would disable the buttons for someone who merely typed in the
-dropdown, and enable them in the one case the server refuses. Both confirm and
-correct are blocked when a value is already saved (the route's check is
-`action !== 'reject'`); reject stays available. This is the classifier batch's Karen
-MEDIUM-2 not repeated: that shipped with Confirm disabled under a message saying
-confirming was blocked, and **Correct… enabled right beside it**.
-
-**Two state-handling decisions that are easy to get wrong and were not:**
-1. **The modal does NOT close on a ruling.** The ruling settles one field; the admin
-   is usually there to fill in the others, and closing would discard the rest.
-2. **`onSaved` spreads `log` — the last-known-PERSISTED row — never the form state**,
-   so the parent's table row picks up exactly what the route wrote and none of the
-   still-unsaved edits. And the **snapshot patch is surgical**: only
-   `rootCauseFinal` moves, because that column is now saved. Patching the whole
-   snapshot would mark every other unsaved edit clean and silently disable Part A's
-   guard; patching none would make the dismiss prompt fire on every close after a
-   ruling, for a value the server already holds.
-
-**PROSE PROVENANCE — the strip says what the classifier READ, not where the answer
-came from.** §3 C3 asks for the latter (*"From resolution notes: …"*) and the data
-cannot support it: `lib/classifier/model.ts` locks the response to
-`required: ['root_causes','confidence']`, and `buildClassifierPayload` sends all eight
-§3 fields without recording which one was used. Resolved with Lacey — every non-empty
-prose field is labelled under the heading **"Prose the classifier read"**. A single
-field chosen by precedence was rejected outright: it would read as attribution while
-being a guess.
-
-**A MUTATION KILLED ONE OF MY OWN TESTS, and it is the same shape this file records
-repeatedly.** The `onSaved` test asserted `...log,` was PRESENT. A mutation that kept
-the spread and appended `...{ notes: notes }` beside it **passed** — presence of the
-right thing does not exclude the wrong thing sitting next to it. Rewritten as an
-ABSENCE: the call must reference none of the nine form-state variables. It then
-failed, as it should have from the start. Found by mutating, not by reading.
-
-**Also caught by checking rather than assuming, twice in the CSS pass:** a
-fixed-string search for `bg-[color:var(--f92-tint)]` reported **MISSING** in the
-built chunk, and a shell regex for the escaped form returned **zero matches** — both
-were search artifacts (CSS escapes the brackets, colons and parens, so the literal is
-`bg-\[color\:var\(--f92-tint\)\]`). Re-checked in Python: **all 12 arbitrary-value
-utilities emit real declarations** and all 10 referenced tokens are declared **twice**
-(light + dark) per r25. **Reporting the first result would have been a false alarm
-about my own working code.**
-
-**Gates for COMMIT 4, re-run not inherited:** tsc 0 · **297/297** (276 + 21) · ESLint
-— `edit-log-dialog.tsx` at **exactly its 0e/1w baseline**, `logs/page.tsx` at **4e/0w**,
-`reports/page.tsx` at **exactly its 2e/2w baseline** (so deleting the import and mount
-shifted nothing else), new files 0/0 · build 0 with `/dashboard/logs` and
-`/dashboard/reports` both still `○` · **zero references to the deleted component**
-anywhere in `.ts`/`.tsx` · **11 of 11 mutations caught** — `suggestionAction` always
-confirming, `isRulingBlocked` always false, `proseBlocks` keeping whitespace-only
-prose, a band label leaking a digit, **a general save clearing `ai_review_pending`**
-(C4's last row, the "test not a comment" one), the ruling posting to the edit route,
-reject writing `root_cause_final` locally, the strip gated on a suggestion existing
-rather than on the pending flag, `onSaved` leaking form state, the chip filter
-unwired, and the queue re-mounted on Reports.
-
-**BOTH LACEY GATES ARE RESOLVED (2026-08-12).**
-
-**B2 — three of the spec's four candidates were RULED OUT by evidence, not by
-inspection**, and recording that matters more than the fix, because the spec's
-"likely candidates" list would otherwise send the next reader down the same paths:
-- **Paging / the 1,000-row cap: NOT the defect.** 17 active brands, and all 15
-  distinct `client_brand` values on non-deleted logs resolve to one. `fetchAllPaged()`
-  is not needed here.
-- **Dark-mode theming: NOT the defect**, though it looked like a strong one — the
-  `Combobox` trigger is `bg-white` while its own panel is `var(--f92-surface)`, which
-  in dark would be near-white `--f92-dark` text (#E2E8F0) on white. `globals.css:407`
-  has `:root[data-theme="dark"] .bg-white { background-color: var(--f92-surface) }`
-  and globals.css is unlayered, so `bg-white` is theme-aware app-wide. **Checking the
-  compiled override beat reading the class list**, the method that has now caught
-  something in four consecutive batches.
-- **Not reflecting the selection: NOT the defect.** `combobox.tsx` renders
-  `selected.label` plus `aria-selected` and a Check.
-
-**What was actually wrong — and only two of four are fixed, by Lacey's scope call:**
-- **FIXED — labels rendered the raw `jira_value` while `display_name` was fetched and
-  discarded.** The list read `MRA - Mr Appliance` for a brand whose own display name
-  is `Mr. Appliance`; jira_value is Jira's internal string and drops the periods. Now
-  `MRA · Mr. Appliance` via the pure `brandOptionLabel`. **The middot is deliberate,
-  not decoration** — it distinguishes the rendered label from the raw value at a
-  glance, so a regression is visible in a screenshot instead of needing a
-  character-level diff.
-- **FIXED — in-dropdown search matched the label only.** With a code-first label,
-  typing the brand as JIRA spells it (`Mr Appliance`, no period — which is what is
-  printed on the ticket the user is reading) returned "No matching brand". New
-  opt-in `keywords` field on `ComboboxOption` carries `jira_value`. **Deliberately
-  not "also match `value`"**: the All-brands sentinel is `__all__`, so that would
-  make a query of "all" hit a string no user typed.
-- **DEFERRED (Lacey's scope call, §15 backlog) — `<Label htmlFor="clientBrand">` is
-  ORPHANED on both `/dashboard/logs` and `/dashboard/reports`.** `BrandSelector`
-  accepts no `id` and renders none, so the label points at nothing: clicking it does
-  nothing and screen readers get an unlabelled button. Severity and Status both get
-  real ids — Brand is the only control in that row that does not. **This is a live
-  a11y defect on two pages, left open on purpose.**
-- **DEFERRED (same call) — 3 paused brands (MRR-CA, SHG, WDG) are listed unmarked**,
-  and MRR-CA and WDG have ZERO logs, so selecting them yields a bare "No logs found
-  for the selected filters." Treated as a design change rather than a fix, since the
-  Coverage page has its own `showPaused` concept this would sit beside without
-  matching.
-
-**B5 — resolved as `count > 0 || isActive`, ONE rule shared by both chips** (pure
-`shouldShowReviewChip`). **Merging was ruled out on structure, not taste:**
-`needs_review` clears on ANY save (r29) while `ai_review_pending` clears ONLY on an
-explicit ruling — and that difference is the entire reason classifier §4 made it a
-separate column, so a merged chip would show one population under two incompatible
-clearing rules. **The `|| isActive` half is the load-bearing half:** clearing the last
-flagged row while filtered by it would otherwise remove the only control that can
-switch the filter off, stranding the user on an empty table — and it keeps the
-existing "All caught up — no reviews pending" state reachable, which is written for
-exactly that moment. The count is now unconditional when the chip shows, because the
-only case that used to hide it no longer renders.
-
-**Part B judgement calls, flagged per B4 so they can be reviewed as intent:**
-**search lives in the always-visible header row, not the collapsible body** — it costs
-zero vertical height (a sixth control in the body row would have wrapped a line on
-most widths, defeating B3) and stays reachable with Filters collapsed, which is the
-state someone hunting one ticket is in. `type="text"` not `"search"`, per the Pulse
-precedent (webkit's native cancel button overlays the field). No visible `<Label>`,
-since one would reintroduce the height B3 removes — the accessible name is an
-`aria-label`. **B3 is spacing only**: `pt-3`→`pt-2`, `mt-3`→`mt-2`, labels pulled onto
-their inputs with `leading-none`. No control removed or hidden.
-
-**Search is substring, NOT tokenised, and that is a recorded contract** — `MRA copy`
-does not match. The same query must behave the same way on the Pulse matrix, which is
-single-substring; multi-term later is a deliberate change to one function with its
-own tests, not an accident.
-
-**The undestructured-error fix landed here.** `logs/page.tsx` now reads
-`{ data, error }` and renders the failure. Previously any failure — RLS change,
-renamed column, transient 5xx — yielded `null` → `setLogs([])` → "No logs found for
-the selected filters.", indistinguishable from a too-narrow filter and failing toward
-"everything is fine" on the page every admin uses.
-
-**Two pure helpers had to MOVE to `lib/` mid-build, and the reason is worth keeping:**
-`brandOptionLabel` was first exported from `brand-selector.tsx`, and the test could
-not import it — that component imports `lib/supabase/client`, which **throws at module
-scope** without env vars. Same reason `lib/jira/client.ts` is called out in §3. Pure
-logic goes in `lib/`; components import it. `matchesComboboxQuery` + `ComboboxOption`
-moved to `lib/ui/combobox-filter.ts` for the same reason, with the type re-exported
-from the component so existing imports are unchanged.
-
-**Gates for COMMIT 3, re-run not inherited:** tsc 0 · **276/276** (263 + 13, then +4
-structural) · ESLint — `logs/page.tsx` at **exactly its 4-error/0-warning baseline**
-(so the debounce did NOT add a `set-state-in-effect` finding: setState is in the timer
-callback, not the effect body), and `combobox.tsx` / `brand-selector.tsx` measured
-against **their HEAD versions** rather than assumed clean (0e/0w before and after),
-all four new files 0/0 · build 0 with `/dashboard/logs` still `○` · **10 of 10
-mutations caught** — empty query matching nothing, dropping the brand field, dropping
-the title field, dropping `|| isActive`, an always-rendered chip, ignoring `keywords`,
-a label without the code, search not wired into the page filter, the chip rule not
-applied on the page, and the logs query reverting to an undestructured error. Each
-patch verified applied before its verdict; baseline asserted before AND after.
-
-**NOT verified:** nothing in Part B has been rendered. The tightened spacing, the
-header-row search placement in both themes, and the chip appearing/disappearing are
-Lacey's.
-
-**KAREN POST-FLIGHT — FAIL, scoped to Part C. 1 CRITICAL · 1 HIGH · 2 MEDIUM · 3 LOW;
-all fix-before-push findings folded in COMMIT 5.** Parts A and B passed under attack,
-two claims **more strongly than argued**. She re-ran every gate (all reproduced
-exactly), and her verdict was correctly FAIL rather than PASS-WITH-FINDINGS — the
-defect made the feature file the opposite of what it was for.
-
-- **CRITICAL-1 — "Confirm suggestion" was UNREACHABLE, and every accepted suggestion
-  would have been discarded and filed as a human rejection.** `suggestionAction`
-  compared the dropdown against the SUGGESTION. But classifier §13.6 selection admits
-  a row only when `root_cause_final` is null or `{}`, so `snapshotFromLog` seeds the
-  dropdown **empty on every eligible row** — an untouched form therefore never
-  equalled the suggestion, the button always read **"Save correction"** with nothing
-  edited, and clicking it POSTed `values: []`, which `classifyReviewOutcome` scores
-  **`rejected`** (it checks `confirmed.length === 0` first, deliberately). The
-  suggestion was never written. Reproduced end-to-end before fixing.
-  **Three things make this worse than a mislabelled button:** §6 makes the outcome
-  shape the batch's ONLY validation, so the record would have said the classifier
-  produced nothing usable; it is the exact mirror of the failure `ai-suggestion.ts`'s
-  own docblock claims the split prevents; and it is a **regression against the code
-  it replaced** — the retired queue had an explicit `confirm` button AND
-  `disabled={correctedValues.length === 0}`, both dropped in the collapse to one
-  button. **FIXED:** the comparand is now the **pristine snapshot** — the question is
-  "has the human touched the field", and only the pristine value answers it. The
-  suggestion is no longer a parameter at all, pinned by an arity assertion.
-- **⚠ MY OWN TEST LOCKED THE DEFECT IN.** `assert.equal(suggestionAction(['QA Gap'], []),
-  'correct')` — rationale *"clearing the field is a correction"* — is true in the
-  abstract and **false for the only reachable state**, where `[]` is the PRISTINE
-  value and nothing was cleared. Applying the fix made that test FAIL. **A test that
-  must be deleted to make the code correct was never testing the right question**,
-  and this is the sharpest instance yet of the shape §15 keeps recording.
-- **HIGH-1 — a successful ruling gave no feedback, and a second click showed an
-  ERROR for an action that had succeeded.** `applyEditedLog` deliberately does not
-  touch `editingLog` (that is what stops the seeding effect re-firing and clobbering
-  unsaved edits — Karen verified this and it is **stronger** than I argued), so the
-  dialog's own `log` still carried `ai_review_pending: true` and the strip stayed
-  live and unchanged. A second click hit the route's 409. **FIXED** with local
-  `ruledOutcome` state rendering a `role="status"` confirmation — local precisely
-  because updating `editingLog` would re-fire the effect and destroy the edits.
-- **MEDIUM-2 — nothing pinned the wiring or the label, which is what let CRITICAL-1
-  through.** `suggestionAction` was well tested in isolation; its USE was not, so
-  hardcoding `primaryRuling = 'confirm'` and hardcoding the label both **survived
-  mutation**. Now pinned; both re-run and caught.
-- **MEDIUM-1 — my rewritten `onSaved` test is still weaker than its docstring.** It
-  bans the nine form-state NAMES inside the call, but cannot see a value laundered
-  through an alias (`const x = notes; … notes: x` survives). One such alias exists
-  deliberately (`persistedRootCause` IS `rootCauseFinal`). The **claim** is corrected
-  rather than the check strengthened — closing it needs dataflow analysis this repo
-  has no harness for. Recorded as an honest limit at the test.
-- **LOW-2 folded** — `assert.throws(fn, string)` treats the string as `message`, not
-  a matcher, so it only asserted that *something* threw; replaced with `existsSync`.
-  **LOW-3 folded** — two doc claims described the unreachable state (marked above).
-  **LOW-1 recorded, not fixed** (Karen: defer): mid-save dismissal is now
-  unescapable — `if (saving) return` plus a disabled Cancel plus a `fetch` with no
-  timeout means a stalled request leaves a page-blocking modal with no in-app exit.
-  The refusal itself is right ("discard would be a lie"); the missing timeout is the
-  gap.
-
-**A GUARD I NEARLY OVERCLAIMED, caught by tracing my own fix.** `isPrimaryRulingDisabled`'s
-empty-correction branch is **not reachable today**: with the pristine snapshot as
-comparand, an empty selection can only be a `correct` when pristine was non-empty —
-and `isRulingBlocked` already disables the button in that state. Kept anyway, and
-labelled contingent rather than live, because the overlap depends on an **open Lacey
-decision** recorded on the classifier batch (whether a human explicitly choosing
-values may overwrite). If that re-check is loosened, this becomes the only thing
-between a cleared field and a rejection filed under a correction's label.
-
-**RIDE-ALONG at Lacey's direction — the `BrandSelector` `id` fix.** An optional `id`
-threads `BrandSelector` → `Combobox` onto the trigger button; both pages pass
-`id="clientBrand"`. `/dashboard/logs` now has **zero** orphaned labels. **Six remain
-on `/dashboard/reports`** (§15), pinned by a `KNOWN_ORPHANS` allowlist test that fails
-if a new orphan appears, if one of the six is fixed without updating the list, or if
-`clientBrand` regresses.
-
-**Gates for COMMIT 5, re-run not inherited:** tsc 0 · **308/308** (297 + 11) · ESLint
-every touched file at **exactly** its measured baseline, both new-touched files 0/0 ·
-build 0 with `/dashboard/logs` and `/dashboard/reports` both still `○` · **8 of 8
-mutations caught**, including **both of Karen's survivors** (hardcoded `primaryRuling`,
-hardcoded label) and the CRITICAL-1 regression itself. Dirty-file count asserted
-constant across every restore — Karen's own first mutation run was voided by an
-unquoted `$FILES` that made her restore silently no-op, so the harness now proves it
-restored rather than assuming it.
-
-**An edit of mine matched TWO call sites and was caught before it shipped:** the
-`setRuledOutcome` insertion hit both `handleRuling` and `handleSave`, which would have
-claimed a review outcome for an ordinary row save. Found by reading the grep output
-rather than trusting "applied"; a test now pins exactly one writer.
-
-**KAREN RE-CONFIRM — FAIL AGAIN, on a NEW CRITICAL that the CRITICAL-1 fix
-UNCOVERED. Folded in COMMIT 6.** She confirmed CRITICAL-1's decision half is
-genuinely closed (including the fourth trace row I asked her to check) and that both
-her round-one survivors are now dead — then found the defect that had been hiding
-behind it.
-
-- **CRITICAL-2 — `confirm` wrote the suggestion server-side, mirrored `[]` locally,
-  and the status line I had just added INSTRUCTED the user to erase it, unaudited.**
-  The route writes `confirmedValues = suggested` on confirm; the dialog's mirror was
-  hardcoded `action === 'reject' ? persisted : rootCauseFinal`, which is right for
-  `correct` and **wrong for `confirm`** — and confirm only became reachable when
-  CRITICAL-1 was fixed, so the two defects were **stacked**. On the live path that
-  left the database holding the suggestion while the dropdown, the snapshot and the
-  table row all held `[]`, surviving close/reopen because `openEdit` reads from
-  `logs` state. Then HIGH-1's new *"use Save changes below"* line leads to a save
-  that sends `root_cause_final: null`, which `/api/logs/edit` writes **wholesale**
-  while its diff guard compares `null` against a stale `null`, emits **no diff**,
-  and therefore **no audit row** — that route audits only from `diffs`. **A
-  confirmed classification erased with the trail showing nothing after it: §13 r37's
-  exact shape.** Verified link by link before fixing.
-- **FIXED with a pure `rulingWriteValues(action, suggested, selection, persisted)`**
-  that mirrors the route's three branches in ONE tested place, and all three local
-  writes — `onSaved`, the dropdown and the snapshot — now derive from it. Fixing
-  only `persistedRootCause` would have left Part A's guard prompting on close for a
-  value the server already holds.
-- **⚠ AND MY TEST LOCKED THIS ONE IN TOO — SECOND TIME IN TWO ROUNDS.** The
-  regression test `reject does not write root_cause_final locally` pinned the
-  **whole ternary**, so it froze the wrong confirm branch alongside the right reject
-  branch; applying the fix failed it. **The durable lesson, sharper than round one's:
-  a regex over source cannot distinguish the part you meant to protect from the part
-  that is broken beside it.** Both times the repair was the same — test BEHAVIOUR
-  through a pure function instead of matching the source that produces it.
-- **Two of my own claims were overstated and are corrected here.** COMMIT 5's message
-  says *"one such alias exists deliberately (`persistedRootCause` IS
-  `rootCauseFinal`)"* — presenting as considered-and-correct **the exact expression
-  that was wrong** on the path that commit made reachable. And my four-path trace
-  read *"confirm … writes `['Client Request']`"*, which was true of the **database**
-  and false of the **dropdown and the table row**: I traced the route, not the
-  round-trip, which is precisely why the divergence survived my own end-to-end check.
-  The re-run trace now asserts route and mirror **agree**, and that a later Save
-  preserves rather than erases.
-- **Karen's rulings on the three honest limits:** the unreachable guard is accurate
-  and should be **kept, not deleted** — and she supplied a reason I had missed
-  (`isRulingBlocked` reads the `log` prop while pristine reads the patched snapshot,
-  so they diverge after a ruling; that state is unreachable only because
-  `ruledOutcome` replaces the buttons). The MEDIUM-1 alias note is right to document
-  rather than close, but was **understated**, because the alias it names is where
-  CRITICAL-2 lived. LOW-1 accurate.
-- **Verified unchanged and safe:** the `ruledOutcome` reset path, exactly one writer,
-  the `handleSave` contamination genuinely gone, and the render branch order — a
-  non-admin can never reach the status line, since only the admin-gated buttons call
-  `handleRuling` (safe by reachability, not construction; not worth changing).
-
-**Gates for COMMIT 6:** tsc 0 · **311/311** · ESLint every touched file at exactly
-its baseline · build 0, both pages still `○` · **5 of 5 mutations caught**, including
-the CRITICAL-2 regression itself and both the dropdown and snapshot mirrors
-individually.
-
-**KAREN THIRD PASS — PASS-WITH-FINDINGS, no CRITICAL. Folded in COMMIT 7.**
-CRITICAL-2 confirmed genuinely closed on the now-live confirm path, and Part A's
-guard after a ruling is now **structurally** guaranteed rather than incidentally
-true (the dropdown and the snapshot take the same const, so `arraysEqual` cannot be
-false on that field).
-
-- **MEDIUM-1 — the call site was unpinned, and a two-argument swap reintroduced
-  CRITICAL-2 verbatim with tsc 0 and 311/311 green.** `rulingWriteValues` took four
-  positional parameters with arguments 2 and 3 both `readonly string[]`, so
-  transposing them silently type-checked. **This is round one's MEDIUM-2 in a new
-  location — the pure function well tested, its USE not — and worse, because the
-  types could not object.** FIXED by changing the shape rather than watching it: the
-  signature is now `(action, log, selection)` — **three arguments of three distinct
-  types**, so no two can be transposed without failing tsc, and the field → role
-  mapping moved INSIDE the tested function. **Verified by attempting Karen's exact
-  swap: `TS2345`.** A source assertion on argument order was the alternative and was
-  rejected, because round two's lesson is that a regex over source is the wrong tool.
-- **MEDIUM-2 — the double-audit follow-on existed only in a message to Karen**, not
-  in `CLAUDE.md`. Now recorded in the §15 "Logs-page deferred follow-ons" section
-  that exists to stop exactly that.
-- **LOW-1 — my framing of the double-audit was wrong in two ways, and both are
-  corrected:** it is **NOT** a consequence of the CRITICAL-2 fix — it is
-  **pre-existing on the `correct` path since COMMIT 4**, since `applyEditedLog` never
-  updated `editingLog` then either; COMMIT 6 merely extends it to `confirm`. And
-  *"makes who set this root cause ambiguous"* **overstates it**: both rows carry the
-  same server-derived `changed_by`, so *who* is unambiguous — what is duplicated is
-  the transition, and what is stale is `old_value` on the second row.
-- **She corrected two of my own reads, and one was actively unsafe.** `?? []` at the
-  snapshot patch is **not** merely defensive: it is **load-bearing for tsc**
-  (`rulingWriteValues` returns `string[] | null`, both setters take non-null), so
-  removing it is two `TS2345` errors. My "dead for non-reject — should it go?" was
-  right about runtime reachability and wrong about whether it compiles, and it
-  invited deleting something that cannot be deleted. Accurate wording:
-  **unreachable at runtime for non-reject, required by the type system.** Separately,
-  the `suggested`-from-prop limit I recorded **understates its own safety**: the
-  classify route filters `.eq('ai_review_pending', false)` AND
-  `.is('ai_suggested_root_cause', null)`, so no writer can change the suggestion
-  while a review is pending — the divergence is **unconstructable**, not merely
-  409-guarded.
-- **Her verdict on the record:** COMMIT 6's message and the §15.5 block are "the most
-  accurate of the three rounds", with both self-corrections landing and the
-  regex-over-source lesson correctly generalised. The weak spots were a recording gap
-  and an overstatement, **not a false claim about what the code does** — which is the
-  first round of three where that was true.
-
-**Gates for COMMIT 7:** tsc 0 · **312/312** · ESLint every touched file at exactly
-its baseline · build 0, both pages still `○` · the MEDIUM-1 swap **proven
-unconstructable** by applying it and reading `TS2345`.
-
-**Part A's one structural decision, which should not be "tidied" later:
-`snapshotFromLog` is the SINGLE producer of both the snapshot and the form's initial
-values** — the dialog seeds its nine controls FROM the snapshot it stores. The
-obvious alternative (seed nine `useState`s from `log`, build a snapshot separately
-from `log`) is two transcriptions of one mapping, and they drift the moment a tenth
-field is added — after which the form opens permanently dirty, or opens clean and
-never notices a change, with tsc clean and every test passing. Note this is the §15
-shared-ancestor shape **inverted deliberately**: sharing the ancestor is the
-correctness guarantee here, because there is only one mapping to be right about.
-
-**The confirm is a NESTED Dialog (r26), and that buys the hardest case for free.**
-Radix's dismissable-layer stack routes Esc to the TOPMOST layer only, so Esc at the
-prompt closes the prompt and leaves the edit modal open — which is exactly "keep
-editing". An inline block inside the modal would have needed that hand-written, and
-getting it wrong means **Esc-at-the-prompt discards the work the prompt exists to
-protect**. Default focus is set via `onOpenAutoFocus` + a ref rather than DOM order,
-because `DialogFooter` is `flex-col-reverse` on mobile so "the first button" is not
-a stable target across breakpoints.
-
-**Cancel routes through the same guard as Esc / outside-click / X** — one
-`requestClose`, not four handlers. An unguarded Cancel would have been the single
-remaining path that loses work, and it is the one a user reaches for deliberately.
-Mid-save dismissal is **refused outright rather than confirmed** (the write is
-already in flight, so "discard" would be a lie) — the `ConfirmDeleteDialog`
-`if (busy) return` posture.
-
-**Gates for COMMIT 2, re-run not inherited:** tsc 0 · **263/263** (245 baseline + 18)
-· ESLint `edit-log-dialog.tsx` at **exactly its 0-error/1-warning baseline** (the
-pre-existing `TAXONOMY_COLUMNS` type-only warning, verified unchanged), both new
-files **0/0** · build 0 with `/dashboard/logs` still `○` and no new route entries ·
-**7 of 7 mutations caught** — dropping `rootCauseFinal` or `notes` from the dirty
-chain, a snapshot that keeps `null` severity (the null-vs-`''` trap that would make
-every all-null row open dirty), an order-insensitive `arraysEqual`, a `requestClose`
-that always closes, a Cancel that bypasses the guard, and the Dialog wired straight
-to the prop. Each patch was verified applied before its verdict counted, and the
-baseline asserted before AND after the run.
-
-**NOT verified:** the prompt has not been rendered. No React test infrastructure
-exists here, so focus order, the stacked overlay and the Esc-closes-topmost
-behaviour are **reasoned from Radix's documented layer stack, not observed** —
-review-level, the `TERMINAL_CELL_STATUSES` precedent. Lacey's smoke covers it.
-
-**PROSE PROVENANCE — the spec asks for something the data does not carry, resolved
-with Lacey.** §3 C3 wants the source prose named *"From resolution notes: …"*. But
-`lib/classifier/model.ts:144` locks the model response to
-`required: ['root_causes', 'confidence']` — **no provenance field exists**, and
-`buildClassifierPayload` sends all eight §3 fields without recording which one the
-answer came from. Adding it means a model-schema change plus a column, which breaks
-"surface change only" and pulls Jenny back in. **Lacey's call: render EVERY non-empty
-prose field, each labelled, as what the classifier READ** — honest, no schema change,
-commits 1–4 untouched. A single field chosen by precedence was rejected outright: it
-would read as attribution while being a guess, which is a claim the mechanism cannot
-support.
-
-> ### ⚠ THE SUGGESTION STRIP SHIPS UNEXERCISED — SAY SO, DO NOT CALL IT VERIFIED
->
-> Measured against prod **2026-08-12**: `ai_review_pending = true` on **0 of 122**
-> rows, `ai_suggested_root_cause` non-null on **0 of 122**, and **no model credential
-> is minted**, so the classifier has never run and cannot. **The strip's only
-> reachable state today is ABSENT.** The strip, band pill, prose block and
-> Confirm / Reject therefore ship **UNEXERCISED**. Exercising them is Lacey's, after
-> the mint and a classify run.
->
-> What IS verifiable: that the strip does not render on `false` (the live case), the
-> C4 table as unit tests over pure functions, and structural assertions that a general
-> save leaves the flag untouched.
-
-**Prod figures, stamped 2026-08-12 — and every one of them MOVED since the classifier
-spec was written two days earlier, which is the usual lesson:** non-deleted
-`quality_logs` **93** (was 91) · eligible under classifier §13.6 **35** (was 33) ·
-`ai_review_pending` true **0** · `needs_review` true **0**.
-
-**Pre-batch baselines, captured BEFORE any edit** because they stop being measurable
-afterwards and this project has twice turned on a baseline that was assumed rather
-than stashed-and-measured: `tsc` 0 · **245/245** tests ·
-`app/dashboard/logs/page.tsx` **4 errors / 0 warnings** (`react-hooks/static-components`
-on `SortableHeader`/`SortIcon`, pre-existing) · `components/logs/edit-log-dialog.tsx`
-**0 / 1** · `app/dashboard/reports/page.tsx` **2 errors / 2 warnings** — that last one
-is the one to re-check at review, since deleting the queue import and mount must leave
-it at exactly 2+2, shifted only by the removed lines.
-
-**One correctness fix riding along, unrelated to the three parts:**
-`app/dashboard/logs/page.tsx:137` does `const { data: logsData } = await supabase…`
-and **never destructures `error`**, so any failure of that select silently yields
-`logsData = null` → `setLogs([])` → *"No logs found for the selected filters."* on the
-page every admin uses. Harmless today, but Part C adds three columns to that select,
-and a column error would have read as an empty table rather than a fault. Now surfaced.
-
-### Batch classifier-1 — AI root-cause classifier, Phase 1 (IN FLIGHT, 2026-08-10)
-
-A suggester that proposes `root_cause_final` values into **separate AI columns** with
-its own review-pending flag and a review queue under Reports. **It never writes the
-canonical field** — a human confirm is the only path. Phase 1 uses only data CQIP
-already holds: no Rovo, no Copilot, no new external integration.
-Spec: `docs/HANDOFF-root-cause-classifier.md` — **rev 2 governs; §13 is normative.**
-**Migration + new mutation route → Jenny pre-flight DONE.** Karen post-flight owed.
-**DO NOT PUSH.**
-
-**Why it exists (§1, forward-framed):** the taxonomy fields are populated on a small,
-self-selected slice of logs, so every metric derived from them describes that slice.
-The gap is not a backlog — the Jira QA tab is not yet team habit, which is human
-behaviour outside the platform's control. Automation is the only lever. The case is
-every log **from here on**, not the ~33 unclassified rows behind us.
-
-**Why it unparked (§2):** the batch was parked for lack of a validation answer key.
-The reframe: the classifier suggests, Lacey confirms or corrects on rows she was
-already touching, and **the correction rate IS the validation** — it builds its own
-answer key as it runs. Do **not** reintroduce a score-against-history step; at the
-available n it cannot distinguish a good classifier from a lucky one.
-
-**LOCKED by Lacey (§11 — do not relitigate):** Worker route, not an edge function
-(Worker code is locally testable — the preceding sync batch shipped unverifiable for
-want of Deno/Docker, and admin auth already lives in the Worker; Phase 1 is
-manual-trigger so scheduling, the edge function's only advantage, is unused) ·
-confidence is a **derived band high/medium/low, never a raw float** · batch cap **25**
-per trigger · review queue under **Reports**, not the logs page (which has a
-render-only batch queued and would collide).
-
-**Non-negotiables, in Lacey's priority order:** never writes `root_cause_final` ·
-blinding enforced at the **query layer** with a test asserting the outgoing payload ·
-`ai_review_pending` clears **only** on explicit confirm/reject — a general row save
-leaves it untouched, and that is a test, not a comment · out-of-vocabulary output
-dropped and logged, never stored, and the vocabulary is **never widened** to
-accommodate model output.
-
-**JENNY PRE-FLIGHT: DO-NOT-BUILD-YET — 2 CRITICAL · 5 HIGH · 4 MEDIUM · 5 LOW, all
-folded into spec §13 BEFORE the build opened** (the §15 PROCESS note). The two that
-changed what gets built:
-- **CRITICAL-1 — `Confirm` as specced would silently destroy human classifications on
-  58 of 91 non-deleted rows.** §3 blinds the classifier from `root_cause_final`, so it
-  cannot know a value is there; §8 COMMIT 3's queue listed suggestion + confidence +
-  prose and **not the existing value**, so the reviewer could not see it either. Same
-  column, same direction, same invisibility as the defect **§13 r37** was written to
-  close two days earlier. Fixed by excluding non-empty rows **at selection** (making
-  the common case unconstructable), plus a write-time re-check that 409s — because
-  r37 records that a *non-empty* Jira value still wins on sync, so a row can gain a
-  value between classify and confirm — plus rendering the current value in the queue.
-  It also **raises** the batch's value: the 33 eligible rows are exactly the
-  unclassified population §1 exists for.
-- **CRITICAL-2 — §4 and §8 COMMIT 3 demanded mutually exclusive behaviour from one
-  route**, so §10 item 3 (named "a test, not a comment") was unwritable. There is
-  exactly one edit surface and a general save is byte-identical to a correction.
-  Fixed with a separate `POST /api/logs/ai-review` owning confirm/reject/correct;
-  `/api/logs/edit` never touches the flag and the column is deliberately **absent from
-  `ALLOWED_FIELDS`**, so §4's requirement now holds by construction rather than by
-  discipline.
-
-**Also folded:** the vocabulary is **14, not the spec's 13** — the document §7 cites
-says 14, migration 020 seeds 14, prod has 14 active — so the number is **deleted, not
-corrected**, and read from `quality_log_taxonomy` at request time (which also
-satisfies r29 by construction) · `ai_confidence_score` is NUMERIC and cannot hold a
-band, so migration 028 adds a **CHECK-constrained TEXT `ai_confidence_band`** and the
-migration is **two columns, not one** — encoding the band as 1/2/3 would recreate the
-orderable number §11.2 exists to eliminate · the §6 outcome shape had **no storage
-home named anywhere**, now an `audit_log` row with `field_name='ai_review_outcome'`
-and a bare literal in `new_value` so the correction rate is `GROUP BY`-able · batch
-selection was **entirely unspecified** (no filter, no ordering, no idempotency) ·
-`system:classifier` renamed `system:root-cause-classifier` to match its three
-siblings.
-
-**Phase status: COMMITS 1–3 BUILT. Karen post-flight on the whole chain NEXT, then
-COMMIT 4 (fold), then Lacey.**
-
-- **COMMIT 1** `1c4939e` — migration 028 (two columns + CHECK + partial index) + spec
-  rev 2 + the §15.5 entry.
-- **COMMIT 2** `f229c5d` — `lib/classifier/*` (payload · vocabulary · confidence ·
-  suggestion · model) + `POST /api/admin/logs/classify` +
-  `POST /api/admin/logs/ai-review` + 647 lines of tests + the §4 entry for
-  `CQIP_ANTHROPIC_API_KEY`.
-- **COMMIT 3** — **[SUPERSEDED 2026-08-12 by Batch logs-page, which DELETES this
-  component and rebuilds the surface inside the edit-log modal. Everything below is
-  the record of what shipped and why, and the §11.4 "under Reports, LOCKED" decision
-  it rests on has been reversed by Lacey — kept because the two load-bearing
-  decisions in it, no-bulk-action and read-at-render, carry over verbatim.]**
-  the review queue: `components/reports/ai-review-queue.tsx` mounted on
-  `/dashboard/reports` per §11.4 (LOCKED — **not** the logs page, which has a
-  render-only batch queued and would collide). Self-contained like
-  `BrandWellnessReport`: its own fetch and state, deliberately outside the
-  `ReportKind` union and the shared from/to controls, because its controls differ from
-  every other report's and that separation is exactly what made Brand Wellness cheap
-  to re-home.
-
-**Two decisions in COMMIT 3 are load-bearing and should not be "tidied" later.**
-(a) **There is NO bulk or select-all action** (§13.11): bulk confirm is auto-confirm
-with a human's finger resting on it, and auto-confirm is the failure mode §9 forbids —
-one row, one decision. Adding throughput is a decision to take explicitly, not a
-checkbox column. (b) **`root_cause_final` is read at RENDER time, never snapshotted at
-classify time** (§13.1), and rendered whenever non-empty. §13.6 selection already
-excludes non-empty rows, so it should normally be absent — if it appears, **r37's
-"a non-empty Jira value still wins on sync" moved the value between suggestion and
-review**, and the route 409s rather than letting the confirm overwrite a human
-classification. It is a data-safety affordance, **not** a scoring device; §2 forbids
-grading the suggestion against history.
-
-**⚠ THE PROSE PANEL IS NOT BLINDED, AND MUST NOT BE READ AS A BLINDING BREACH.** §5
-blinds the *classifier* from `root_cause_final`; the *reviewer* is shown the prose the
-suggestion was derived from plus the existing value, which is the opposite
-requirement. Blinding is enforced at the query layer in `buildClassifierPayload`
-(COMMIT 2), and this component never feeds that path.
-
-**Gates on the COMMIT 3 tree** (re-run, not inherited from COMMIT 2): tsc 0 ·
-**241/241** tests · `npm run build` exit 0 with `/dashboard/reports` still `○` and no
-new route entries · ESLint **zero findings** on `ai-review-queue.tsx`, and
-`reports/page.tsx` holds **exactly** its pre-existing 4 findings (2 errors + 2
-warnings), verified by linting the stashed baseline and confirming they only shift by
-the one line the new import adds · all 17 CSS tokens the component references are
-declared in `globals.css`, **twice each** (light + dark) per r25 — checked because
-that is the one failure class tsc cannot see.
-
-> ### ✅ MIGRATION 028 IS APPLIED — ordering block RETIRED 2026-08-12
->
-> **Superseded.** This block read *"Not applied as of 2026-08-11 — probed: `column
-> quality_logs.ai_review_pending does not exist` (42703)"* and made applying 028
-> before the push a hard gate. **Re-probed 2026-08-12 (§13 r32 / R21 — a blocker
-> older than a day gets re-verified, never inherited): all three columns return 200**
-> — `ai_review_pending`, `ai_confidence_band`, `ai_suggested_root_cause`. Lacey
-> applied it between the two probes. The deploy gate is gone.
->
-> **What the retired block got RIGHT and what survives it:** `/dashboard/reports` has
-> **no middleware admin gate** (r24 covers `/dashboard/settings/*` only). That is not
-> a migration problem and did not go away — it is the reason the Logs-page batch
-> moves this surface off Reports entirely rather than gating that page
-> (`docs/HANDOFF-logs-page-batch.md` §3 C1). **Do not read this retirement as
-> retiring HIGH-2**; only its migration half is stale.
-
-**NOT verified, and not verifiable from here:** the queue has never been rendered.
-With 028 applied and no credential minted, `ai_review_pending` is `false` on every
-row — measured 2026-08-12, **0 of 122** — so its only reachable state is the **empty
-state**, and the row card, the band pill, the correct/reject flow and the §13.1 amber
-block are all **unexercised**. That is Lacey's, after the mint. **Moot for the queue
-specifically:** the Logs-page batch deletes this component (§3 C1) and rebuilds the
-surface inside the edit modal, where the same unexercised-ness carries over —
-recorded there as a ship condition rather than discovered again.
-
-**Karen post-flight — PASS-WITH-FINDINGS on the 1–3 chain (2 HIGH · 3 MEDIUM · 2 LOW,
-no CRITICAL); all folded in COMMIT 4.** She re-ran every gate independently (all
-held), verified all four non-negotiables correct in the shipped code, and ran **17
-mutations, 14 caught / 3 survived** — verifying each patch was actually applied before
-calling it a survivor. **The code was right on every non-negotiable; all seven findings
-were a CLAIM or a CHECK weaker than stated, which is the fourth consecutive review of
-that shape.**
-- **HIGH-1 — the r37 bypass ban was never ported, so "enforced structurally rather
-  than by review" was FALSE for the one bypass this project has already paid for.**
-  The route test banned `/root_cause_final\s*:/` — object-literal syntax only — so
-  `update.root_cause_final = accepted` one line after `buildClassifierUpdate()`
-  returns wrote the canonical field on **every** classified row with **tsc clean and
-  44/44 passing**. §13 r37, written two days earlier by the immediately preceding
-  batch, states the ban must cover "**both dot and bracket notation**"; it was not
-  carried over. Now banned in both, plus `root_cause_initial` (frozen by r3).
-- **HIGH-2 — my "only reachable state is the empty state" claim was false**, because
-  migration 028 is unapplied: the reachable state is the error box above, and COMMIT
-  2's own message already said the migration had not run, so the two commits
-  contradicted each other. **The claim was the defect**; the ordering block above is
-  the fix. **[SUPERSEDED 2026-08-12 — 028 is now applied, so the empty state IS the
-  reachable one and the original claim has become true after the fact. Marked, not
-  deleted: the finding was correct when written, and the lesson — a claim outrunning
-  its precondition — is the point, not the transient fact.]**
-- **MEDIUM-1 — two of the three mutations §13.10 EXPLICITLY REQUIRES did not fail.**
-  (a) The blinding whitelist was asserted against `CLASSIFIER_READ_FIELDS`, the very
-  array `buildClassifierPayload` iterates — the oracle moved with the value, so
-  dropping a field passed. **Blinding itself was never broken**; the check was
-  vacuous, and a silently-narrowed feedstock degrades suggestions with no error. Now
-  anchored to eight literals. (b) Deleting the `field_name` filter widened the
-  vocabulary from 14 root-cause rows to all 78 across four fields — and because the
-  model's enum **and** the r29 re-validation widen together, an `issue_subtype` would
-  be accepted as a root cause and written to `root_cause_final`, passing r29 on both
-  surfaces. Now asserted in both routes **plus** a behavioural test.
-- **MEDIUM-2 — the UI offered `Correct…` in exactly the state the route refuses.**
-  The §13.1 re-check is `action !== 'reject'`, so `correct` 409s too, but only
-  Confirm was disabled — under an amber block that said "confirming is blocked".
-  Disabled. **⚠ Open for Lacey:** the other reading is that a human explicitly
-  choosing values may overwrite, which means loosening the route instead; recorded at
-  the call site rather than decided silently.
-- **MEDIUM-3 (Karen filed as defer; folded anyway — 3 lines, and it protects the
-  batch's whole validation premise).** `fallbacks: 'default'` routes a refusal to a
-  different model server-side and returns its answer at HTTP 200, so the pinned
-  `CLASSIFIER_MODEL` stops describing what answered — while §2 makes the correction
-  rate the batch's **entire** validation. The audit row now records the **served**
-  model from `body.model`, so a mixed aggregate is separable per row instead of
-  silently blended.
-- **LOW-1 folded** — a `max_tokens` truncation surfaced as "Model returned
-  unparseable JSON", misdiagnosing a budget problem as bad model output (adaptive
-  thinking shares the 16k budget with the answer). Now its own message. Fails safe
-  either way; only the diagnosis was wrong. **LOW-2 recorded, not a defect** — "one
-  route clears `ai_review_pending`" is verified by checking two routes, and
-  `quality_logs_admin_write` is `FOR ALL` to admins anyway, so the guarantee is about
-  the app's routes, not the column (same posture as `needs_review`).
-
-**Four claims Karen found STRONGER than argued:** the `.or('root_cause_final.is.null,
-root_cause_final.eq.{}')` filter was verified **live against prod** — 200, 25/25 rows,
-**zero** non-empty `root_cause_final` leaked, and an uncapped `count=exact` of **33
-eligible**, matching §13.6 exactly (PostgREST's `eq.{}` array-literal form is exactly
-the thing that silently matches nothing — it works); the §13.3 `root_cause` vs
-`root_cause_final` trap is real and one identifier away (prod: 14 active vs **0**);
-`AI_SUGGESTION` is in the migration-001 action CHECK with 0 prod rows, so no CHECK
-violation on first write; and the unranged-select hazard is **absent, not merely
-unlikely** — the classify select is `.limit(25)`, the queue adds **no** `audit_log`
-read at all, and that table is now at **1,600** rows (up from the 1,597 stamped
-08-10, which is the stamping discipline working).
-
-**Gates re-run after the fold, not inherited:** tsc 0 · **245/245** tests (241 at
-COMMIT 3 + 2 for the new checks + 2 pinning the MEDIUM-3 / LOW-1 folds themselves) ·
-ESLint **zero findings** on all six touched files · `npm run build` exit 0 with
-`/dashboard/reports` still `○` and no new route entries. **Mutations: 8 run, 8
-caught** — both r37 bypass notations, the payload-whitelist drop, the `field_name`
-widening in each route separately, dropping the served model from the audit notes,
-returning `CLASSIFIER_MODEL` instead of `body.model`, and removing the `max_tokens`
-check. **The battery asserts a clean baseline before AND after**, and each patch is
-verified applied before its verdict counts — the first attempt at this run silently
-measured every mutation against a corrupted tree (a backup keyed by basename
-collapsed the two `route.ts` files into one), so all seven of its verdicts were void
-and were thrown away. That is the §15 lesson landing on the verification harness
-itself: a battery whose baseline is not asserted is not a battery.
-
-**ONE FOLD IS NOT TEST-PINNED, stated rather than implied:** MEDIUM-2 is a `disabled`
-prop on a React control, and this batch adds no component test infrastructure. It is
-review-level, like the `TERMINAL_CELL_STATUSES` invariant recorded on the Batch 012
-brand-page batch. The route-side 409 it aligns with **is** covered.
-
-**What Karen could NOT check:** any live model call (no credential — she validated the
-request shape against the current Claude API reference instead: model id, `effort` /
-`format` nesting inside `output_config`, the `json_schema` subset, and
-`fallbacks:'default'` correctly paired with `server-side-fallback-2026-07-01`, noting
-the array form takes `-2026-06-01` and crossing them 400s); the rendered queue in
-either theme; the non-admin inert-span path; and migration 028 applied — read as SQL
-it is idempotent by inspection, its CHECK literals match `CONFIDENCE_BANDS` exactly,
-and the partial-index predicate matches the queue's only access pattern.
-
-**⚠ NO MODEL CREDENTIAL EXISTS.** Verified: no AI SDK in `package.json`, no
-`ANTHROPIC_*` in `.env.local` or `.env.example`, no `ant` CLI, and none of the **16**
-Worker secrets is a model key. Per spec §13.7 the route therefore ships answering
-**500 `not_configured`** — deployable and inert, the Batch telemetry-ac precedent.
-Model is `claude-opus-5` as a named constant; transport is plain `fetch`, **no new
-dependency** (every external call here already works that way, and "add the SDK" is
-the wrong default for one endpoint); secret is `CQIP_ANTHROPIC_API_KEY`, **Worker-only**
-rotation surface per r27.
-
-**Prod figures, stamped 2026-08-10** (they move — §16 records that repeatedly):
-58/91 non-deleted rows carry non-empty `root_cause_final` · **33 eligible** under the
-§13.6 filter, draining in **two** runs at cap 25 · `ai_suggested_root_cause` non-null
-on **0/122**, so §8 COMMIT 1's precondition is confirmed and no backfill is possible
-to need · 14 active `root_cause` taxonomy rows · **0** rows lack prose feedstock ·
-`audit_log` **1,597** rows with **0** `AI_SUGGESTION`, so that verb is free.
-**Two of Jenny's figures were corrected here**: `audit_log` is 1,597 (she wrote
-1,557 — 08-08's reading) and bare-`system` rows number **149** (she wrote 141). Both
-of her reads, and my own first pass, had hit PostgREST's silent 1,000-row cap; only a
-`count:'exact', head:true` probe plus a paged read caught it. **The §15
-unranged-select lesson applies to verification queries, not just app code.**
-
-### Batch sync-guard — skip-if-empty guard + sync audit rows (IN FLIGHT, 2026-08-08)
-
-Defect fix on a production write path. **No migration, no schema change, no new
-route**, but a behaviour change to an existing prod writer whose failure mode is
-silent data loss → **Jenny pre-flight YES (done, APPROVE-WITH-FINDINGS, all
-findings folded into the spec before the build)**. Karen post-flight owed.
-Spec: `docs/batch-sync-guard-spec.md` (rev 2, canonical). **DO NOT PUSH.**
-
-**The defect.** `jira-sync` wrote the QA-tab block into `quality_logs`
-unconditionally, so an empty Jira QA tab overwrote human-entered CQIP values
-with `[]` / `null`. The empty tab is the NORMAL state (Jira automation clears
-those fields on entry to Dev QA / Dev Client Review, §6). **Five rows confirmed
-damaged**, `b77c1d57` · `a6111337` · `a57c357c` · `bf5fc1d7` · `67079106`, each
-losing all six of the human-editable guarded fields (they carry no
-`root_cause_description`; that column's 32 at-risk rows are a separate,
-CSV-imported population). Undetected for ten weeks because the sync emitted
-**no audit row** for those writes.
-
-**LOCKED DECISIONS (do not relitigate):**
-- **SEVEN guarded fields** (six as of Lacey 2026-08-08, seven as of 2026-08-09).
-  The brief said taxonomy-only; `severity` + `who_owns_fix` were proven to suffer
-  the identical loss on the identical rows (10 further field losses), and
-  `root_cause_description` was added after Karen post-flight MEDIUM-2.
-  ~~the guard covers `ALLOWED_FIELDS ∩ updateData` — a structural rule, not a
-  list.~~ **SUPERSEDED:** that rule is what MISSED `root_cause_description`.
-  The rule is now *"can this column hold human work the sync can destroy"*, with
-  two sources — editable (six) and authored-by-import (one). See §13 r37, and do
-  not reduce it back to the intersection.
-- **Omit the key, never write `null`.** The two are indistinguishable to a naive
-  change-check and only one preserves data.
-- **Inline + drift-test, not `_shared/`.** `_shared/` is the right long-term fix
-  and is filed; it is not done here because there is no such directory today and
-  it cannot be bundle-tested locally (no Deno, `supabase functions serve` needs
-  Docker) — an unverifiable deploy-time resolution change does not belong inside
-  a data-loss fix on a prod write path.
-- **§13 r2 is NARROWED, not closed** — 7 of 16 written columns audited, up from
-  0 of 16. Full closure is deferred to land with the `audit_log` pagination work
-  (that table is at 1,557 rows, already over the PostgREST cap, with an unranged
-  consumer).
-
-**THREE CORRECTIONS TO THE ORIGINAL BRIEF, each proven against prod:**
-1. **`root_cause_initial` was never blanked by the sync — the sync does not
-   write it at all.** It is empty because §13 r3 snapshots at creation and the
-   QA tab is empty at sendback time. Measured: 74 of 83 webhook-created logs
-   have it empty vs 0 of 38 CSV-imported. That makes r3's snapshot structurally
-   a no-op — a real finding, filed, NOT fixed here.
-2. **The loss is 5 rows, not 6.** A sixth (`f44754df`) was a *human* clear,
-   correctly audited, on a `Resolved` row outside the sync's working set.
-3. **No pending loss.** All 33 rows in the working set are already empty on all
-   six fields, so the guard protects future entries; recovery of the 5 is a
-   separate Lacey decision.
-
-**Gate reality (Jenny MEDIUM-2), because two of three gates cannot do what their
-names suggest:** `tsconfig.json:33` excludes `supabase/functions`, so **`tsc`
-never type-checks the deployed file**; and ESLint "clean" is unachievable —
-`jira-sync/index.ts` carries a **baseline of 8 errors + 1 warning**, so the gate is
-*zero NEW findings*, not absence. (An earlier draft added "four of them on the exact
-lines this batch edits" — false, Karen LOW-1: every baseline finding precedes the
-first diff hunk and `mapJiraFields` is untouched.) This is
-what makes the drift test load-bearing rather than decorative.
-
-**Phase status: BOTH COMMITS BUILT. Karen post-flight next, then Lacey.**
-
-- **Commit 1** `ae3e2f3` — spec + guard + `lib/sync/sync-field-guard.ts` + 13 tests
-  + §13 r7 amendment + new §13 r37.
-- **Commit 2** — audit rows (§13 r2, `changed_by='system:jira-sync'` per r20) +
-  the §4.5 unchecked-update fix + 10 further tests + the eight §15 deferred items.
-
-**Commit 2 also fixed a latent bug it depended on:** the `quality_logs` update
-never destructured its `error`, so a failed write was silent **and** still counted
-as `logsUpdated`. Auditing on top of that would have recorded changes that never
-happened — the same "fails toward everything's fine" shape as the telemetry batch's
-HIGH-2. A failed audit write is counted and surfaced on the run record but does
-**NOT** throw: the data has already landed, so throwing would mark the log failed
-*and* permanently lose the audit row, because the next run would recompute the same
-`updateData`, find nothing changed, and emit nothing.
-
-**Verification:** tsc clean · ESLint zero NEW findings (edge fn still exactly its
-8-error/1-warning baseline; new lib + test files clean) · **191/191** tests
-(168 pre-existing + 23 new) · `npm run build` green · **11 of 11 mutations caught**
-— commit 1: unconditional write · falsy-test on `false`/`0` ·
-write-null-instead-of-omit · lib-edited-without-inline-copy · guard-never-called;
-commit 2: no-change-comparison · auditing guard-omitted fields · invalid `action`
-value · `changed_by` reverted to bare `'system'` · update-error-unchecked ·
-rows-built-but-never-inserted.
-
-**NOT verified here, and cannot be from this machine:** the function has never been
-bundled or run. There is no Deno locally and `supabase functions serve` needs
-Docker, so nothing in this batch proves the edge function *deploys*. The drift test
-proves the inlined block matches a module that is tsc-checked and unit-tested — it
-does not compile the function. **A real sync run against Jira is the outstanding
-gate**, and it is Lacey's.
-
-**KAREN POST-FLIGHT — PASS-WITH-FINDINGS (1 HIGH · 2 MEDIUM · 1 LOW, no CRITICAL);
-all folded in commit 3.** She re-ran every gate independently (all held), verified
-the 6+10=16 partition and the `ALLOWED_FIELDS ∩ updateData` intersection herself,
-re-ran 10 mutations, checked the audit row shape against migrations 025/001 rather
-than my summary, and independently confirmed all three corrections to the brief.
-She also ran a check I had not claimed — zero duplicate top-level identifiers
-across 27 declarations in the Deno file, so the inlined block cannot collide and
-fail to load, which was the main untested load risk.
-
-**The code was correct; the weak part was again a CLAIM — and the HIGH is the same
-shape as the defect the batch exists to fix.**
-- **HIGH-1 — my stated mitigation did not exist.** The code comment, the spec and
-  the commit message all said the audit-failure count is surfaced because "the pill
-  renders `error_message` in its detail dialog." It does not:
-  `sync-status-pill.tsx` gated that entire block on `status === 'failed'`, and it
-  is the column's only renderer. So an audit-write failure would have landed the
-  data, populated `sync_runs.error_message`, and rendered the pill **green with no
-  indication** — the ten-week silence this batch exists to end, reproduced inside
-  its own mitigation. Fixed by un-nesting the render (labelled "Warning" on a
-  successful run). Karen split the verdict correctly: the *reasoning for not
-  throwing* is sound and stays; only the surfacing half was asserted rather than
-  built.
-- **MEDIUM-1 — a drift-test blind spot she found by mutation, not reading.** The
-  literal check sliced only up to the guard call, so
-  `addGuardedSyncFields(...)` followed by `updateData.severity = ...` reinstated
-  the bug **in full with 23/23 passing**. That is a likelier shape than
-  guard-never-called, and exactly the reinstatement path the spec worries about.
-  Now banned outright, dot- and bracket-notation, anywhere in the file.
-- **MEDIUM-2 — "nothing unguarded can hold a human-entered value" was FALSE.**
-  **32 non-deleted rows hold human prose in `root_cause_description`** from the CSV
-  "Issue Details" import, kept out of the working set *only* by being `Resolved` —
-  and `log_status` is in `ALLOWED_FIELDS`, so reopening one pulls it in and the next
-  sync nulls that prose unguarded and unaudited. ~~The guarded set stays correct
-  (`ALLOWED_FIELDS ∩ updateData` is about what a human can *edit*); only the
-  justification was wrong.~~ **SUPERSEDED ~24h later by commit `4ec827c` (see
-  COMMIT 4 below): Lacey widened the guard rather than only fixing the prose, and
-  the RULE changed with it** — `ALLOWED_FIELDS ∩ updateData` is exactly what missed
-  this column. The decision that was owed here has been taken.
-- **LOW-1** — "four baseline ESLint findings sit on the exact lines this batch
-  edits" was false; every one precedes the first diff hunk and `mapJiraFields` is
-  untouched. Corrected in both places.
-
-**Gates re-run after the fold, not inherited:** tsc clean · **192/192** · edge fn
-still exactly 8 errors + 1 warning · `sync-status-pill.tsx` unchanged at its own
-1-error baseline (verified by stashing, not assumed) · build green · **13 of 13
-mutations caught**, the two new ones being Karen's guard-called-then-overridden in
-both dot and bracket form.
-
-**COMMIT 4 — guard widened to SEVEN fields (Lacey, 2026-08-09).** Karen's MEDIUM-2
-recommendation was a documentation correction; Lacey took the stronger fix and had
-`root_cause_description` guarded. **The decision rule changed with it, and that is
-the durable part:** it was `ALLOWED_FIELDS ∩ updateData` — *"can a human edit this
-in CQIP"* — and editability proved to be an **incomplete proxy** for what was
-actually being protected. This column is not editable and holds 32 rows of human
-prose regardless. The rule is now *"can this column hold human work the sync can
-destroy"*, with two sources: editable (six) and authored-by-import (one). §13 r37
-carries it; the partition is now **7 guarded + 9 unguarded = 16**, and §13 r2 goes
-6/16 → **7/16** because the guarded set is also the audited set — so that prose now
-gets a trail where it had none.
-
-**What the widening does NOT buy, stated because the claim is easy to over-read:**
-the protection holds while Jira sends literal `null` for a cleared field. An empty
-ADF document is an object, and `isEmptyForSync` treats objects as non-empty — so
-that case still writes, still fails on the TEXT column, and still leaves the prose
-intact (safe direction, failed log). Latent today at 0 of 33 tickets; recorded at
-the function and in §15 rather than papered over.
-
-Two things the widening dragged in that were worth having: `root_cause_description`
-had to move OUT of the unguarded `updateData` literal (a test catches it if it
-returns), and `serializeForAudit` now JSON-stringifies **objects**, not just arrays
-— Jira returns `customfield_12909` as an **ADF object**, which a bare `String()`
-would have recorded in the audit trail as the literal text `[object Object]`.
-
-**Gates re-run again, not inherited:** tsc clean · **195/195** · edge fn still
-exactly its 8+1 baseline · build green · **15 of 15 mutations caught** (the 13
-above plus dropping `root_cause_description` from the guarded set, and reverting
-`serializeForAudit` to array-only). **The ADF hazard itself is NOT fixed** — the
-guard stops the null-overwrite, not the object-into-TEXT write; that remains the
-one open half of the §15 item.
-
----
 
 ## 16. Shipped Features Log
+
+### Batch logs-page — dismiss guard + filter bar + AI suggestion strip — 2026-08-14
+
+Three changes to `/dashboard/logs` in ONE batch because they touch one file, built in
+the spec's required order A → B → C. **No migration · no new route · no new mutation
+surface · no schema change → no Jenny.** Spec `docs/HANDOFF-logs-page-batch.md`,
+**REVISION 1**, committed as commit 1 BEFORE the build opened. **v2.8 → v2.9.**
+**PUSHED + deployed 2026-08-14 — prod `/api/health` reports `version: cdb2cc6`** —
+7-commit chain `f2f9511` → `a89d2bc` → `c7431f4` → `c91c5f0` → `3af03e0` → `0497d69`
+→ `cdb2cc6`.
+
+**SUPERSEDES classifier-1 COMMIT 3.** The standalone AI review queue is DELETED and
+the suggestion moves inside the edit-log modal, directly below Root cause (final) —
+one place a log is ever classified. **The reason is Karen's classifier HIGH-2:**
+`/dashboard/reports` has no middleware admin gate (r24 covers `/dashboard/settings/*`
+only), and spec §4 forbids fixing that by gating Reports — the surface leaves the page.
+
+**Part A — dismiss guard.** Esc, outside-click, X and Cancel all route through ONE
+`requestClose`; dirty = differs from the OPENING SNAPSHOT. **`snapshotFromLog` is the
+SINGLE producer** of both the snapshot and the form's initial values — the §15
+shared-ancestor shape inverted deliberately, because there is only one mapping to be
+right about. The confirm is a NESTED Dialog (r26), which buys the hardest case free:
+Radix routes Esc to the topmost layer only, so Esc at the prompt keeps editing. Karen
+traced `@radix-ui/react-dismissable-layer` source and confirmed it — one global stack
+keyed on MOUNT ORDER, not DOM nesting. Autosave explicitly rejected (partial writes
+become real data; audit noise in the trail sync-guard just made load-bearing; it would
+clear `needs_review` per r29 on a half-filled row).
+
+**Part B — filter bar.** THREE of the spec's four brand-dropdown candidates were RULED
+OUT by evidence: paging (17 brands, nothing near the 1,000 cap), dark-mode theming
+(`globals.css:407` makes `bg-white` theme-aware app-wide), selection-reflection (the
+trigger renders `selected.label`). What was actually wrong: **labels rendered the raw
+`jira_value` while `display_name` was fetched and thrown away** — "MRA - Mr Appliance"
+for a brand named "Mr. Appliance", since jira_value is Jira's internal string and drops
+the periods — and **search matched the label only**, so typing the brand as Jira spells
+it returned "No matching brand". Plus a client-side search across ticket key, title and
+brand (200 ms debounce, header row so it costs no vertical height and survives
+collapse), B3 spacing, and the `BrandSelector` `id` fix that leaves `/dashboard/logs`
+with zero orphaned labels.
+
+**B5 — two empty review chips**, resolved as `count > 0 || isActive`, ONE rule shared
+by both. **Merging was ruled out on STRUCTURE:** `needs_review` clears on ANY save
+(r29) while `ai_review_pending` clears ONLY on an explicit ruling, and that difference
+is the entire reason classifier §4 made it a separate column — a merged chip would show
+one population under two incompatible clearing rules. The `|| isActive` half is
+load-bearing: clearing the last flagged row while filtered by it would otherwise remove
+the only control that can switch the filter off.
+
+**RIDE-ALONG:** `logs/page.tsx` never destructured its select's `error`, so any failure
+yielded `null` → `setLogs([])` → "No logs found for the selected filters" —
+indistinguishable from a too-narrow filter, failing toward "everything is fine" on the
+page every admin uses. Now surfaced.
+
+> ### THREE KAREN ROUNDS — FAIL, FAIL, PASS-WITH-FINDINGS
+>
+> **Round 1 — CRITICAL-1: "Confirm suggestion" was UNREACHABLE, and every accepted
+> suggestion would have been discarded and filed as a HUMAN REJECTION.**
+> `suggestionAction` compared the dropdown against the SUGGESTION, but classifier
+> §13.6 selection admits a row only when `root_cause_final` is null or `{}`, so the
+> dropdown seeds EMPTY on every eligible row. An untouched form never equalled the
+> suggestion: the button always read "Save correction" with nothing edited, and
+> clicking POSTed `values: []`, which `classifyReviewOutcome` scores `rejected`. Since
+> §6 makes the outcome shape the batch's ONLY validation, the record would have said
+> the classifier produced nothing usable. Also a REGRESSION against the retired queue,
+> which had an explicit confirm action AND an empty-correction guard. **Fixed:** the
+> comparand is the PRISTINE SNAPSHOT — "has the human touched the field".
+>
+> **Round 2 — CRITICAL-2: the confirmed value diverged between DB and UI, and a later
+> save ERASED it with NO audit row.** The route writes `confirmedValues = suggested` on
+> confirm; the dialog's mirror was hardcoded to `rootCauseFinal`, right for `correct`
+> and wrong for `confirm` — and confirm only became reachable when CRITICAL-1 was
+> fixed, so **the two defects were stacked**. DB held the suggestion while dropdown,
+> snapshot and table row held `[]`. Then the new status line said "use Save changes
+> below", and that save sent `root_cause_final: null`, which `/api/logs/edit` writes
+> WHOLESALE while its diff guard compared `null` to a stale `null`, emitted no diff and
+> therefore **no audit row**. §13 r37's exact shape. **Fixed** with a pure
+> `rulingWriteValues` mirroring the route's three branches in one tested place, feeding
+> all three local writes.
+>
+> **Round 3 — MEDIUM-1: two same-typed positional params could transpose and
+> reintroduce CRITICAL-2 with tsc clean.** `rulingWriteValues` took four positional
+> parameters with arguments 2 and 3 both `readonly string[]`; swapping them
+> type-checked silently and restored the exact defect with 311/311 passing. **Fixed by
+> changing the SHAPE rather than watching it** — `(action, log, selection)`, three
+> arguments of three DISTINCT types, verified unconstructable by applying the swap and
+> reading `TS2345`. A source assertion was rejected on round two's own lesson.
+
+**⚠ MY OWN TESTS LOCKED IN A DEFECT TWICE, and that is the batch's durable lesson.**
+Round 1: `suggestionAction(['QA Gap'], []) === 'correct'` — true in the abstract, FALSE
+for the only reachable state where `[]` is PRISTINE. Round 2: a regex pinning the WHOLE
+ternary froze the wrong confirm branch alongside the right reject branch. Both times
+applying the fix FAILED the test. **A test that must be deleted to make the code
+correct was never testing the right question**, and **a regex over source cannot
+distinguish the part you meant to protect from the part broken beside it.** Both were
+repaired the same way: test BEHAVIOUR through a pure function instead of matching the
+source that produces it.
+
+> ### ⚠ THE SUGGESTION STRIP SHIPPED UNEXERCISED — NOT VERIFIED
+>
+> `ai_review_pending` is true on **0 of 122** rows and **no model credential exists**,
+> so the classifier has never run. The strip's only reachable state is ABSENT. The
+> strip, band pill, prose block and Confirm / Reject are **unrun in production**.
+> Exercising them requires the mint and a classify run. **Do not read this entry as
+> saying the review flow works.**
+
+**PROSE PROVENANCE — the strip says what the classifier READ, not where the answer came
+from.** §3 C3 asked for "From resolution notes: …" and the data cannot support it:
+`lib/classifier/model.ts:144` locks the response to `root_causes` + `confidence`, so no
+provenance is captured. Lacey's call: label every non-empty prose field. Single-field-
+by-precedence was rejected — it reads as attribution while being a guess.
+
+**Gates (re-run per commit, never inherited):** tsc 0 · **312/312** · ESLint every
+touched file at exactly its measured baseline (`logs/page.tsx` 4e/0w — the debounce adds
+no `set-state-in-effect`; `edit-log-dialog.tsx` 0e/1w; `reports/page.tsx` 2e/2w so the
+queue deletion shifted nothing else; `combobox.tsx`/`brand-selector.tsx` measured against
+their HEAD versions rather than assumed clean) · build 0 with both pages still `○` ·
+**36+ mutations caught across the chain**, dirty-file count asserted constant across every
+restore.
+
+**Lacey smoke 2026-08-13: tests 1, 2, 3, 5, 6 PASS.** Dirty-state guard on all three
+dismiss paths with Esc-at-prompt keeping the modal open, pristine closing freely, search
+across key/title/brand, both review chips correctly absent, filter-bar spacing good in
+both themes. **Test 4 FAILED — see the open defect in §15.**
+
+### Direct-SQL directive add — five NBLY chat goals — 2026-08-12
+
+Data-only pass, run by Lacey directly against production in ONE transaction with a
+5 × 16 verification before COMMIT. **No migration, no route, no app-code change, no
+deploy, no version bump.**
+
+Five NBLY goal directives added to `directives`, each fanned out to **all 16 active
+NBLY brands** at `todo` — **80 new `directive_brand_status` cells**:
+
+- `Chat Messages Sent` (Revenue, $1/msg) · `Sent 5 Messages` · `Sent 10 Messages` ·
+  `Sent 15+ Messages` · `Chat Engaged Time` (Revenue, 30s ticks)
+
+Rendering confirmed across all 16 brand columns in Pulse (Lacey, 2026-08-12).
+
+**⚠ THE HEADLINE COUNT "82 → 87" IS AMBIGUOUS AND WAS CORRECTED ON RE-PROBE
+(2026-08-14).** NBLYCRO holds **86** ACTIVE directives, not 87. The 87 is the GLOBAL
+active count (86 NBLY + 1 SPLCRO) — and coincidentally also NBLY's ALL-STATUS count
+(86 active + 1 archived). Two different quantities, same number, neither of them the
+per-project active figure §15's render-ceiling derivations need. Those now read
+**86 × 13 = 1,118** under defaults and **86 × 16 = 1,376** paused-shown. Total cells are
+**1,393**, which counts the archived directive's 16 as well.
+
+**AND THIS PASS FALSIFIED A RECORDED CLAIM.** §15 carried Karen's LOW-8 finding that
+directive archiving was *verified unreachable* on 2026-07-29 — no archive writer
+anywhere in `app/api/`, create never sets `status`, archive UI still an open TODO.
+Prod now contains **one `archived` directive, `Submits Form Lead - Combined`**, beside a
+replacement `Remove Submits Form Lead - Combined`. It was archived by direct SQL, which
+is a path the LOW-8 audit did not consider. **The consequence LOW-8 predicted is now
+live:** `loadProject` loads `status='active'` only, so an archived directive is invisible
+to the matrix search and counts 0 toward `hiddenByStatus` — an exists-but-archived title
+reads as "found nothing". See §15 for the follow-up.
+
+### Batch classifier-1 — AI root-cause classifier, Phase 1 — 2026-08-14
+
+A suggester that proposes `root_cause_final` values into **separate AI columns** with
+its own review-pending flag. **It never writes the canonical field** — a human confirm
+is the only path. Phase 1 uses only data CQIP already holds: no Rovo, no Copilot, no new
+external integration. Spec `docs/HANDOFF-root-cause-classifier.md` **rev 2**.
+**Jenny pre-flight DO-NOT-BUILD-YET (2 CRITICAL · 5 HIGH · 4 MEDIUM · 5 LOW), every
+finding folded into spec §13 BEFORE the build opened.** Karen post-flight
+PASS-WITH-FINDINGS, folded. **v2.7 → v2.8. Migration 028 applied; PUSHED + deployed
+2026-08-14** — 4-commit chain `1c4939e` → `f229c5d` → `a6256c2` → `9407c7f`.
+
+**Migration 028 is TWO columns, not one.** `ai_review_pending` plus a CHECK-constrained
+TEXT **`ai_confidence_band`** — because `ai_confidence_score` is NUMERIC and cannot hold
+`'high'`, and encoding the band as 1/2/3 would recreate the orderable number §11.2 exists
+to eliminate, after which "Confirm all high" is one `ORDER BY` away. `ai_confidence_score`
+stays **unwritten and unused**; its emptiness is intentional.
+
+**The two Jenny CRITICALs changed what got built.** (1) `Confirm` as specced would have
+silently destroyed human classifications on 58 of 91 non-deleted rows — same column, same
+direction, same invisibility as §13 r37, written two days earlier. Fixed by excluding
+non-empty rows **at selection**, plus a write-time re-check that 409s, plus rendering the
+current value. (2) §4 and §8 demanded mutually exclusive behaviour from one route, so the
+"a test, not a comment" requirement was unwritable — fixed with a separate
+`POST /api/admin/logs/ai-review` owning confirm/reject/correct, with `ai_review_pending`
+deliberately absent from `/api/logs/edit`'s `ALLOWED_FIELDS` so §4 holds **by
+construction**.
+
+**Also folded:** the vocabulary is **14, not 13**, and the number is DELETED rather than
+corrected — read from `quality_log_taxonomy` at request time, which satisfies r29 by
+construction. **The `field_name` is `root_cause`, NOT `root_cause_final`** — querying the
+column name yields an empty vocabulary and a 100% OOV drop rate that reads as model
+failure rather than a bug.
+
+**Karen: 17 mutations, 14 caught / 3 survived.** HIGH-1 — the r37 bypass ban was never
+ported, so `update.root_cause_final = accepted` wrote the canonical field on every
+classified row with tsc clean and 44/44 passing; now banned in **both dot and bracket
+notation**. MEDIUM-1 — two of the three mutations §13.10 EXPLICITLY REQUIRES did not
+fail, because the blinding whitelist was asserted against the very array the builder
+iterates: **the oracle moved with the value.**
+
+**⚠ NO MODEL CREDENTIAL EXISTS.** Per spec §13.7 the route ships answering **500
+`not_configured`** — deployable and inert, the Batch telemetry-ac precedent. Model is
+`claude-opus-5` as a named constant; transport is plain `fetch`, no new dependency;
+secret `CQIP_ANTHROPIC_API_KEY` is **Worker-only** per r27. **Nothing has been
+classified in production.**
+
+**COMMIT 3's review queue was SUPERSEDED before it ever ran** — Batch logs-page deleted
+it and rebuilt the surface inside the edit-log modal. The two load-bearing decisions in
+it carry over verbatim: **no bulk or select-all action** (bulk confirm is auto-confirm
+with a human's finger resting on it, the §9 failure mode) and **`root_cause_final` read
+at RENDER time, never snapshotted**.
+
+### Batch sync-guard — skip-if-empty guard + sync audit rows — 2026-08-08
+
+Defect fix on a production write path whose failure mode was **silent data loss**. No
+migration, no schema change, no new route — but a behaviour change to an existing prod
+writer, so **Jenny pre-flight YES** (APPROVE-WITH-FINDINGS, all folded into the spec
+before the build). Karen post-flight PASS-WITH-FINDINGS ×2, all folded. Spec
+`docs/batch-sync-guard-spec.md` rev 2.
+
+**The defect.** `jira-sync` wrote the QA-tab block into `quality_logs` unconditionally,
+so an empty Jira QA tab overwrote human-entered values with `[]` / `null` — and **the
+empty tab is the NORMAL state**, because Jira automation clears those fields on entry to
+Dev QA / Dev Client Review (§6). **Five rows confirmed damaged** (`b77c1d57`, `a6111337`,
+`a57c357c`, `bf5fc1d7`, `67079106`), each losing all six human-editable guarded fields.
+**Undetected for ten weeks because the sync emitted no audit row** — the trail showed the
+human's write and nothing after it, which reads as "the value is still there".
+
+**The fix: omit the key, never write `null`.** The two are indistinguishable to a naive
+change-check and only one preserves data. §13 **r37** carries the rule.
+
+**THE DECISION RULE CHANGED MID-BATCH, and that is the durable part.** It began as
+`ALLOWED_FIELDS ∩ updateData` — *"can a human edit this in CQIP"* — and that rule MISSED
+`root_cause_description`, which holds **32 rows of human prose** imported from the CSV's
+"Issue Details" column and is not editable in CQIP at all. Editability turned out to be
+an **incomplete proxy** for what was being protected. The rule is now *"can this column
+hold human work the sync can destroy"*, with two sources — editable (six) and
+authored-by-import (one) — giving **7 guarded + 9 unguarded = 16**.
+
+**THREE CORRECTIONS TO THE BRIEF, each proven against prod:** `root_cause_initial` was
+never blanked by the sync — the sync does not write it at all, and §13 r3's snapshot is
+structurally a no-op because the QA tab is already empty at sendback time (74 of 83
+webhook-created logs have it empty vs 0 of 38 CSV-imported). The loss is **5 rows, not
+6** — the sixth was a human clear, correctly audited. And there was **no pending loss**:
+all 33 working-set rows were already empty on all six fields.
+
+**Karen HIGH-1 — the stated mitigation did not exist.** Code, spec and commit message all
+said an audit-write failure is surfaced because "the pill renders `error_message` in its
+detail dialog". It does not: `sync-status-pill.tsx` gated that block on
+`status === 'failed'`, so an audit failure would have landed the data and rendered the
+pill **green with no indication** — the ten-week silence reproduced inside the batch's own
+mitigation. **MEDIUM-1**, found by mutation not reading: the drift test sliced only up to
+the guard call, so `addGuardedSyncFields(...)` followed by `updateData.severity = ...`
+reinstated the bug in full with 23/23 passing. Now banned outright in dot and bracket
+notation.
+
+**Gate reality, because two of three gates cannot do what their names suggest:**
+`tsconfig.json:33` excludes `supabase/functions`, so **`tsc` never type-checks the
+deployed file**, and ESLint "clean" is unachievable — the edge function carries a baseline
+of 8 errors + 1 warning, so the gate is *zero NEW findings*. That is what makes the
+drift test load-bearing rather than decorative: the guard body is inlined verbatim into
+the Deno function from `lib/sync/sync-field-guard.ts`, and **the drift assertion is the
+only gate reaching the deployed code**.
+
+**Verification:** tsc clean · ESLint zero NEW findings · **195/195** · build green ·
+**15 of 15 mutations caught**. **NOT verified and not verifiable from that machine:** the
+function was never bundled or run — no Deno locally, `supabase functions serve` needs
+Docker. **A real sync run against Jira was the outstanding gate.**
+
+**⚠ THE LATENT ADF HAZARD REMAINS OPEN** (§15). `mapJiraFields` does
+`fields[customfield_12909] ?? null` with **no ADF extraction**, while §7 documents that
+field as a Jira Paragraph — API v3 returns an ADF **object** into a `TEXT` column. And
+`isEmptyForSync` treats any non-array object as non-empty, so a field cleared in Jira that
+returns an empty ADF doc rather than `null` is read as a real value and written. Both fail
+SAFE and both are latent (0 of 33 working-set tickets return a non-empty value), but the
+guard's protection is **contingent on Jira sending literal `null`**.
 
 ### Batch telemetry-ac — AC → DC telemetry + System Info AC section — 2026-08-07
 
