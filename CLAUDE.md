@@ -3795,13 +3795,12 @@ hypothesis is available would be waiting for the wrong gate.
 as UNEXERCISED for this reason, and that wording should survive until a real run
 exists.
 
-### ⚠ OPEN DEFECT — brand dropdown panel is CLIPPED, and it is LIVE IN PRODUCTION
+### ⚠ Brand dropdown panel CLIPPED — FIXED, committed, NOT YET PUSHED
 
-**Found by Lacey in smoke, 2026-08-13 (test 4). Prod is serving `cdb2cc6`, which
-contains it.** The fix is built but **NOT committed and NOT pushed** — it exists only
-as uncommitted working-tree changes (`components/ui/combobox.tsx` plus two new files),
-and its gate run was interrupted before completion. **Nothing in the pushed chain
-fixes this.**
+**Found by Lacey in smoke 2026-08-13 (test 4). STILL LIVE IN PRODUCTION:** prod serves
+`cdb2cc6`, which contains the defect, and the fix is committed locally but **not
+pushed**. Two docs-only pushes since (`1d816f1`, `ee9d782`) correctly skipped a deploy
+via `paths-ignore`, so prod has not moved. **Lacey smokes on localhost, then pushes.**
 
 **Characterised, not assumed** — the first two hypotheses were both wrong, which is
 why this is written down rather than left as "probably the spacing":
@@ -3818,8 +3817,9 @@ why this is written down rather than left as "probably the spacing":
   shadcn's Select renders through `SelectPrimitive.Portal` (`select.tsx:74`). **Brand
   was the only control in that row that did not portal.**
 
-**Fix (built, unverified, uncommitted):** portal the panel to `document.body` with
-fixed positioning from the trigger rect, via a pure tested `computePopoverPosition`.
+**Fix:** portal the panel to `document.body` with fixed positioning from the trigger
+rect, via a pure tested `computePopoverPosition`. This makes Combobox behave like its
+row-mates rather than making the page accommodate it.
 **Two traps it creates and must keep handling:** the outside-click check must consult
 the PANEL ref as well as the trigger root, or every click inside the open panel closes
 it instantly; and position must be recomputed on scroll **with capture** and on resize,

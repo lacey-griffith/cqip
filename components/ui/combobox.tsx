@@ -1,8 +1,14 @@
 'use client';
 
 import * as React from 'react';
+import { createPortal } from 'react-dom';
 import { Check, ChevronDown, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { computePopoverPosition, type PopoverPosition } from '@/lib/ui/popover-position';
+
+// Matches the panel's own max-h-60 (15rem). Used only to decide whether to flip
+// above the trigger; the rendered panel is still bounded by that class.
+const PANEL_MAX_HEIGHT = 240;
 
 // The option shape and the filter both live in lib/ui/combobox-filter.ts so they
 // can be tested without loading the component tree. Re-exported here so existing
@@ -47,6 +53,11 @@ export function Combobox({
   const [highlight, setHighlight] = React.useState(0);
   const rootRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
+  const triggerRef = React.useRef<HTMLButtonElement>(null);
+  // The portalled panel is NOT a descendant of rootRef, so the outside-click
+  // handler must know about it separately — see the comment there.
+  const panelRef = React.useRef<HTMLDivElement>(null);
+  const [position, setPosition] = React.useState<PopoverPosition | null>(null);
 
   const selected = options.find(o => o.value === value);
 
@@ -55,12 +66,48 @@ export function Combobox({
     [options, query],
   );
 
+  // Position is measured from the live trigger rect rather than derived from
+  // layout, because the panel is now fixed-positioned in a portal and has no
+  // positioned ancestor to inherit from. Recomputed on scroll and resize: a fixed
+  // panel does not move with the page, so without this it detaches from its
+  // trigger the moment anything scrolls. `true` on the scroll listener catches
+  // scrolling INSIDE ancestors (the logs filter card, the dialog body), not just
+  // the window.
+  React.useEffect(() => {
+    if (!open) return;
+    function measure() {
+      const el = triggerRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      setPosition(
+        computePopoverPosition(
+          { top: r.top, bottom: r.bottom, left: r.left, width: r.width },
+          window.innerHeight,
+          PANEL_MAX_HEIGHT,
+        ),
+      );
+    }
+    measure();
+    window.addEventListener('scroll', measure, true);
+    window.addEventListener('resize', measure);
+    return () => {
+      window.removeEventListener('scroll', measure, true);
+      window.removeEventListener('resize', measure);
+    };
+  }, [open]);
+
   React.useEffect(() => {
     if (!open) return;
     function onClick(e: MouseEvent) {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+      const target = e.target as Node;
+      // ⚠ BOTH refs. Before the portal the panel lived inside rootRef, so one
+      // containment check covered it. A portalled panel is a child of <body>, so
+      // checking rootRef alone would treat every click INSIDE the open panel —
+      // including the search box and every option — as an outside click and close
+      // it instantly, making the control unusable.
+      const insideTrigger = rootRef.current?.contains(target) ?? false;
+      const insidePanel = panelRef.current?.contains(target) ?? false;
+      if (!insideTrigger && !insidePanel) setOpen(false);
     }
     window.addEventListener('mousedown', onClick);
     return () => window.removeEventListener('mousedown', onClick);
@@ -100,6 +147,7 @@ export function Combobox({
   return (
     <div ref={rootRef} className={cn('relative', className)}>
       <button
+        ref={triggerRef}
         type="button"
         id={id}
         onClick={() => setOpen(o => !o)}
@@ -113,8 +161,12 @@ export function Combobox({
         <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
       </button>
 
-      {open ? (
-        <div className="absolute z-50 mt-1 w-full rounded-md border border-[color:var(--f92-border)] bg-[color:var(--f92-surface)] shadow-lg">
+      {open && position && typeof document !== 'undefined'
+        ? createPortal(
+        <div
+          ref={panelRef}
+          style={{ position: 'fixed', top: position.top, left: position.left, width: position.width }}
+          className="z-50 rounded-md border border-[color:var(--f92-border)] bg-[color:var(--f92-surface)] shadow-lg">
           <div className="flex items-center gap-2 border-b border-[color:var(--f92-border)] px-3 py-2">
             <Search className="h-4 w-4 text-[color:var(--f92-gray)]" />
             <input
@@ -153,8 +205,10 @@ export function Combobox({
               })
             )}
           </div>
-        </div>
-      ) : null}
+        </div>,
+        document.body,
+        )
+        : null}
     </div>
   );
 }
