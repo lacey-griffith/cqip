@@ -3954,12 +3954,48 @@ deleted in the same commit that writes the §16 shipped entry.
 (The Convert reconciliation backfill is NOT here — it lives in §16: it is BUILT
 and reviewed, awaiting only Lacey's run, so it is not in-flight work.)
 
-**EMPTY as of 2026-08-14.** Batches logs-page, classifier-1 and sync-guard all moved
-to §16 in the same commit that wrote their shipped entries, per r34. The sync-guard
-move was **six days overdue** — its §15.5 entry still read "BOTH COMMITS BUILT, Karen
-post-flight next" while its own body already recorded Karen done and a COMMIT 4
-widening, and no §16 entry existed. That is exactly the drift r34 exists to prevent,
-and it happened anyway because the reconcile was never the same commit as the ship.
+(Batches logs-page, classifier-1 and sync-guard moved to §16 on 2026-08-14 in the same
+commit that wrote their shipped entries, per r34. The sync-guard move was **six days
+overdue** — its §15.5 entry still read "BOTH COMMITS BUILT, Karen post-flight next"
+while its own body already recorded Karen done and a COMMIT 4 widening, and no §16
+entry existed. That is exactly the drift r34 exists to prevent, and it happened anyway
+because the reconcile was never the same commit as the ship.)
+
+### Batch 012 — Pulse matrix: filter reorg + grid ergonomics — IN FLIGHT (opened 2026-08-14)
+
+Three changes to `app/dashboard/pulse/page.tsx`, one batch because they touch one file.
+**No migration · no new route · no mutation surface · no schema change → no Jenny.**
+Karen post-flight. Spec: `docs/batch-012-pulse-matrix-filter-grid-spec.md`, committed as
+**commit 1 before the build opened** (the §15 PROCESS note, which exists because two
+earlier Pulse batches opened against an authority that lived only outside the repo).
+
+- **Part A** — filter bar into two labelled rows; **STATUS becomes multi-select**.
+- **Part B** — header row + directive column pinned in a fixed-height scroll region.
+- **Part C** — clicking a brand header highlights that column, full depth.
+
+**Locked decisions, so they are not relitigated mid-build:**
+- **STATE and STATUS are different functions and neither is renamed** (spec §A2). STATE is
+  the derived-resolve classifier across all brands; STATUS is one cell's own status. The
+  verbatim `state !== 'resolved'` guard is untouched.
+- **The result count is the PER-PROJECT active figure — 86, not 87** (spec §A6). 87 is the
+  global count, and also coincidentally NBLY's all-status count. The word "active" is
+  deliberately kept OUT of the visible string: it is also a derived resolve state and a
+  different number, so it would re-create the trap in a new form.
+- **Archived directives are surfaced, and the recorded premise for not surfacing them is
+  FALSIFIED** (spec §A7). Karen LOW-8 recorded archiving as verified-unreachable on
+  2026-07-29; prod now holds one archived directive written by **direct SQL**, a path that
+  audit did not consider. Archived rows go in their own state slot and must never reach
+  `buildMatrixRows` / `computeMatrixKpis` / `countHiddenByFilters`.
+- **Part C collides with the batch-3 hover crosshair**, which already bands a column with
+  `--f92-tint`. The highlight gets its own token and **wins on overlap** — deliberate
+  persistent state beats transient pointer feedback (spec §C1).
+- **Part C DOES add tab stops** — one per visible brand header, 13 under defaults (spec
+  §C3). The handoff asked to confirm it does not; the honest answer is that it does, and
+  the alternatives are a mouse-only feature or a control Tab cannot reach. G7 stays
+  recorded against restyle batch 4.
+- **Directive CRUD is NOT in this batch**, including a disabled affordance.
+
+**Phase status:** commit 1 (spec) landed. Parts A/B/C next, then Karen.
 
 
 ## 16. Shipped Features Log
