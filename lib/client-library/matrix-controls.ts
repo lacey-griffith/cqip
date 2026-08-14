@@ -10,7 +10,6 @@
 
 import {
   CELL_STATUSES,
-  CELL_STATUS_LABEL,
   DIRECTIVE_TYPES,
   outstandingCount,
   type CellStatus,
@@ -219,25 +218,51 @@ export function compareMatrixRows<D extends MatrixDirectiveLike>(
 // The mockup's `Done` tab is this group, not a relabelled `Resolved`. ("Rolled
 // out" from the mockup is dead vocabulary and appears nowhere.)
 //
-// PREDICATE: a row matches when it has AT LEAST ONE cell in that status. A mixed
-// row therefore matches SEVERAL tabs at once. That is intended, and it has a
-// consequence the UI must respect: THESE TABS DO NOT PARTITION THE ROW SET, so
-// their counts do not sum to the total and no readout may imply they do.
+// PREDICATE: a row matches when it has AT LEAST ONE cell in ANY selected status.
+// A mixed row therefore matches SEVERAL statuses at once. That is intended, and
+// it has a consequence the UI must respect: THESE OPTIONS DO NOT PARTITION THE
+// ROW SET, so their counts do not sum to the total and no readout may imply they
+// do. Multi-select makes that more visible, not less true.
+//
+// MULTI-SELECT as of the filter-reorg batch (spec §A2). The empty set means
+// "all" — deliberately, rather than a separate `'all'` member alongside the five
+// statuses:
+//   - `'all'` in the same union as a CellStatus made every consumer carry a
+//     `filter === 'all'` special case, and made the type lie about what it holds.
+//   - An empty selection is the only representation with ONE meaning. A set
+//     holding all five statuses is NOT the same thing: it would exclude a
+//     directive with no cells at all, which "all" must not.
+//
+// The vocabulary is now guaranteed rather than merely matched: there is no
+// second label map to drift. `MATRIX_CELL_FILTER_LABEL` was DELETED — it spelled
+// the same five strings a second time, and spec §A3 requires them to be verbatim
+// identical to the editor dropdown's. The UI reads CELL_STATUS_LABEL directly.
 // -------------------------------------------------------------------------
-export const MATRIX_CELL_FILTERS = [...CELL_STATUSES, 'all'] as const;
-export type MatrixCellFilter = (typeof MATRIX_CELL_FILTERS)[number];
-
-export const MATRIX_CELL_FILTER_LABEL: Record<MatrixCellFilter, string> = {
-  ...CELL_STATUS_LABEL,
-  all: 'All',
-};
+export type MatrixCellSelection = readonly CellStatus[];
 
 export function matchesCellFilter(
   cells: ReadonlyArray<{ status: CellStatus }>,
-  filter: MatrixCellFilter,
+  selected: MatrixCellSelection,
 ): boolean {
-  if (filter === 'all') return true;
-  return cells.some((c) => c.status === filter);
+  if (selected.length === 0) return true; // empty = All
+  return cells.some((c) => selected.includes(c.status));
+}
+
+// Toggle one status in/out of the selection.
+//
+// Rebuilt from CELL_STATUSES rather than push/splice on the input, so the result
+// is always in canonical order regardless of the order the user clicked. That is
+// not cosmetic: it makes two selections with the same members deeply equal, which
+// is what lets a test assert on the array directly and what keeps the rendered
+// order stable. Never mutates the input.
+export function toggleCellStatus(
+  selected: MatrixCellSelection,
+  status: CellStatus,
+): MatrixCellSelection {
+  const next = new Set(selected);
+  if (next.has(status)) next.delete(status);
+  else next.add(status);
+  return CELL_STATUSES.filter((s) => next.has(s));
 }
 
 // -------------------------------------------------------------------------
@@ -281,7 +306,8 @@ export function matchesTypeFilter(
 export interface MatrixControls {
   search: string;
   statusFilter: MatrixStatusFilter;
-  cellFilter: MatrixCellFilter;
+  /** Multi-select. EMPTY MEANS ALL — see the group's comment for why. */
+  cellFilter: MatrixCellSelection;
   typeFilter: MatrixTypeFilter;
   sortKey: MatrixSortKey;
 }
@@ -371,9 +397,61 @@ export function countHiddenByFilters<D extends MatrixDirectiveLike>(
 export function hasActiveFilterGroup(controls: MatrixControls): boolean {
   return (
     controls.statusFilter !== 'all' ||
-    controls.cellFilter !== 'all' ||
+    controls.cellFilter.length > 0 ||
     controls.typeFilter !== 'all'
   );
+}
+
+// Everything the `Clear filters` control claims to clear — the search AND all
+// three groups. Deliberately scoped to exactly that:
+//
+//   SORT is not a filter. Resetting someone's chosen ordering from a control
+//   labelled "Clear filters" is a surprise, and the sort hides nothing, so it
+//   cannot contribute to the "I searched and found nothing" failure this whole
+//   signal chain exists to prevent.
+//
+//   HIDE PAUSED is not cleared either, for a sharper reason: it has its own
+//   dedicated correction (the countHiddenOwedCells amber warning and its `Show
+//   paused` button), and folding it in here would give one piece of state two
+//   competing reset paths.
+//
+// This predicate and clearAllFilters() must stay in step — a control that
+// appears when nothing it clears is set, or that hides while something is, is
+// the same class of dishonest signal as the count itself. Pinned by test.
+export function hasClearableFilters(controls: MatrixControls): boolean {
+  return controls.search.trim().length > 0 || hasActiveFilterGroup(controls);
+}
+
+// How many ARCHIVED directives match the current search (spec §A7).
+//
+// WHY THIS EXISTS, and why it is not a plain archived count. `loadProject` reads
+// `status='active'` only, so an archived directive is invisible to the matrix
+// search AND contributes 0 to countHiddenByFilters — an exists-but-archived title
+// reads as "found nothing". That is exactly the inference countHiddenByFilters
+// was built to prevent, because `POST /api/admin/directives` still performs no
+// duplicate-title check and migration 024 puts no unique constraint on
+// (project_key, title), so acting on it mints a duplicate that then makes any
+// title→id resolver silently pick the wrong row.
+//
+// A bare "3 archived directives exist" does not answer the question the user is
+// actually asking, which is whether THEIR term exists. So this is scoped to the
+// search, and returns 0 on a blank query: with nothing searched there is no
+// false-negative to correct, and a line that renders on every page load is the
+// LOW-6 regression again.
+//
+// KAREN LOW-8 RECORDED THIS AS UNREACHABLE ON 2026-07-29 AND THE PREMISE IS NOW
+// FALSE. That audit checked app/api/ for an archive writer, found none, and
+// concluded no archived directive could exist. Prod holds one — `Submits Form
+// Lead - Combined`, archived by DIRECT SQL, which is not a path any route audit
+// covers. The consequence LOW-8 predicted is live, not hypothetical.
+export function countArchivedMatchingSearch<D extends { title: string }>(
+  archived: ReadonlyArray<D>,
+  search: string,
+): number {
+  if (search.trim().length === 0) return 0;
+  let n = 0;
+  for (const d of archived) if (matchesSearch(d.title, search)) n += 1;
+  return n;
 }
 
 // How many directives carry a given type, for the empty-tab copy. An empty tab

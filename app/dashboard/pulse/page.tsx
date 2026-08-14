@@ -44,6 +44,8 @@ import {
 import { useToast } from '@/components/layout/toaster';
 import { CellEditStrip } from '@/components/client-library/cell-edit-strip';
 import {
+  CELL_STATUSES,
+  CELL_STATUS_LABEL,
   DIRECTIVE_TYPES,
   type CellStatus,
   type DirectiveType,
@@ -57,26 +59,27 @@ import {
 import {
   buildMatrixRows,
   computeMatrixKpis,
+  countArchivedMatchingSearch,
   countByType,
   countHiddenByFilters,
   countHiddenOwedCells,
   hasActiveFilterGroup,
+  hasClearableFilters,
+  toggleCellStatus,
   visibleMatrixBrands,
-  MATRIX_CELL_FILTERS,
-  MATRIX_CELL_FILTER_LABEL,
   MATRIX_SORT_KEYS,
   MATRIX_SORT_LABEL,
   MATRIX_STATUS_FILTERS,
   MATRIX_STATUS_FILTER_LABEL,
   MATRIX_TYPE_FILTERS,
   MATRIX_TYPE_FILTER_LABEL,
-  type MatrixCellFilter,
+  type MatrixCellSelection,
   type MatrixSortKey,
   type MatrixStatusFilter,
   type MatrixTypeFilter,
 } from '@/lib/client-library/matrix-controls';
 import { NoteIndicator, StatusCellBox, StatusLegend } from '@/components/client-library/status-cell';
-import { TabGroup } from '@/components/client-library/tab-group';
+import { MultiTabGroup, TabGroup } from '@/components/client-library/tab-group';
 import { saveDirectiveCell } from '@/lib/client-library/directive-cell-save';
 import {
   compareForPanel,
@@ -207,6 +210,18 @@ export default function ClientLibraryPage() {
   const [projectKey, setProjectKey] = useState<string>('');
   const [brands, setBrands] = useState<BrandRow[]>([]);
   const [directives, setDirectives] = useState<DirectiveRow[]>([]);
+  // ARCHIVED directives, in their OWN slot and deliberately never merged into
+  // `directives` (spec §A7). They exist only to answer "does the title you just
+  // searched for exist, archived?" — the question an archived directive
+  // otherwise answers with a silent "no", because loadProject reads
+  // status='active' only.
+  //
+  // THE ISOLATION IS THE LOAD-BEARING PART. `directives` is the denominator of
+  // the result count and is fed to computeMatrixKpis, buildMatrixRows and
+  // countHiddenByFilters; folding archived rows in would inflate every KPI on
+  // the page and add rows nobody can act on. Only `title` is kept, so there is
+  // nothing here that a render path could accidentally use as a matrix row.
+  const [archivedTitles, setArchivedTitles] = useState<Array<{ title: string }>>([]);
   const [cells, setCells] = useState<CellRow[]>([]);
   const [findings, setFindings] = useState<FindingRow[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -252,10 +267,13 @@ export default function ClientLibraryPage() {
   // unlike ProjectBrandFilter's persisted page scope.
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<MatrixStatusFilter>('open');
-  // Groups 2 + 3 (Batch 012 restyle). Single-choice within each, AND across, AND
-  // with the search. `all` is the default for both so the initial view is only
-  // narrowed by the State group's `open`, exactly as before this batch.
-  const [cellFilter, setCellFilter] = useState<MatrixCellFilter>('all');
+  // Groups 2 + 3. AND across the groups, AND with the search. Both default to
+  // "all" so the initial view is only narrowed by the State group's `open`.
+  //
+  // Group 2 (STATUS) is MULTI-select as of the filter-reorg batch, and its "all"
+  // is the EMPTY selection rather than a sixth member — see MatrixCellSelection
+  // for why those are not the same thing. Group 3 (TYPE) stays single-choice.
+  const [cellFilter, setCellFilter] = useState<MatrixCellSelection>([]);
   const [typeFilter, setTypeFilter] = useState<MatrixTypeFilter>('all');
   const [sortKey, setSortKey] = useState<MatrixSortKey>('title');
   // Defaults to CHECKED (2026-07-31): a paused brand's column is dead width on
@@ -312,6 +330,28 @@ export default function ClientLibraryPage() {
     if (directivesRes.error) failures.push(`directives: ${directivesRes.error.message}`);
     if (findingsRes.error) failures.push(`findings: ${findingsRes.error.message}`);
 
+    // ARCHIVED titles — the §A7 signal, and NOTHING else reads this. Kept out of
+    // the Promise.all above so it is unmistakably a separate read feeding a
+    // separate state slot: nothing on the render path can mistake it for part of
+    // the matrix data.
+    //
+    // PAGED from the outset even though prod holds exactly one archived row.
+    // Archived directives only ever accumulate — nothing deletes them — and an
+    // unranged PostgREST select returns the short result with NO error, so the
+    // failure mode is a silently-wrong signal on the surface whose whole job is
+    // to prevent a silently-wrong conclusion. Cheap now, correct later.
+    const { data: archivedRows, error: archivedErr } = await fetchAllPaged<{ title: string }>(
+      'archived directives',
+      (from, to) =>
+        supabase
+          .from('directives')
+          .select('title')
+          .eq('project_key', key)
+          .eq('status', 'archived')
+          .range(from, to),
+    );
+    if (archivedErr) failures.push(archivedErr);
+
     const directiveRows = (directivesRes.data ?? []) as DirectiveRow[];
     let cellRows: CellRow[] = [];
     if (directiveRows.length > 0) {
@@ -348,6 +388,7 @@ export default function ClientLibraryPage() {
 
     setBrands((brandsRes.data ?? []) as BrandRow[]);
     setDirectives(directiveRows);
+    setArchivedTitles(archivedRows);
     setCells(cellRows);
     setFindings(findingRows);
     setLoadError(failures.length > 0 ? failures.join(' · ') : null);
@@ -579,6 +620,20 @@ export default function ClientLibraryPage() {
     [directives, cells, controls],
   );
   const filtersActive = hasActiveFilterGroup(controls);
+  // Drives whether `Clear filters` is offered at all (spec §A1). Broader than
+  // filtersActive: it includes the search, because clearing a search is the most
+  // common thing the control is wanted for.
+  const clearable = hasClearableFilters(controls);
+
+  // §A7 — archived directives matching the CURRENT search. The other half of the
+  // "found nothing" correction: hiddenByFilters covers rows a filter hid,
+  // this covers rows the STATUS='active' LOAD hid, which no filter can reveal
+  // and which therefore contribute 0 to hiddenByFilters. Returns 0 on a blank
+  // query by construction.
+  const archivedMatches = useMemo(
+    () => countArchivedMatchingSearch(archivedTitles, search),
+    [archivedTitles, search],
+  );
 
   // KPI strip — every value derived from loaded data, never a literal. Reuses the
   // same classifier + outstandingCount the rows use, so the strip and the
@@ -589,10 +644,16 @@ export default function ClientLibraryPage() {
   );
 
   // Clears every filter group AND the search — what the hidden-count reset does.
+  // Clears exactly what `hasClearableFilters` reports — the search and all three
+  // groups. NOT the sort (not a filter, hides nothing) and NOT hide-paused
+  // (which has its own dedicated correction, and two competing reset paths for
+  // one piece of state is worse than none). The two must stay in step: a control
+  // that appears when nothing it clears is set, or hides while something is, is
+  // the same class of dishonest signal as a wrong count.
   const clearAllFilters = useCallback(() => {
     setSearch('');
     setStatusFilter('all');
-    setCellFilter('all');
+    setCellFilter([]);
     setTypeFilter('all');
   }, []);
 
@@ -819,6 +880,12 @@ export default function ClientLibraryPage() {
               that case only reaches here with the create strip open. */}
           {directives.length > 0 ? (
           <div className="border-b border-[color:var(--f92-border)] p-3">
+            {/* TWO ROWS (spec §A1):
+                  row 1  search · STATE · STATUS
+                  row 2  TYPE · sort · hide-paused (+ warning) · result count
+                Each group brightens its border + legend when it holds a
+                non-default value, so "something is filtered" is visible without
+                reading every tab. */}
             <div className="flex flex-wrap items-center gap-2.5">
               <div className="relative min-w-[13rem] flex-1 max-w-xs">
                 <Label htmlFor="matrixSearch" className="sr-only">Search directives by title</Label>
@@ -844,27 +911,44 @@ export default function ClientLibraryPage() {
                 ) : null}
               </div>
 
-              {/* THREE INDEPENDENT GROUPS — single-choice within each, AND across,
-                  AND with the search.
+              {/* THREE INDEPENDENT GROUPS — AND across, AND with the search.
 
                   Group 1 STATE is the DERIVED classifier across all brands of a
-                  directive. Group 2 STATUS is one CELL's own status. They are
-                  different concepts and both exist; group 2 is NOT a rename of
-                  group 1, and "rolled out" is not vocabulary here. */}
+                  directive; single-choice. Group 2 STATUS is one CELL's own
+                  status; MULTI-select, OR within the group. They are different
+                  concepts and both exist; group 2 is NOT a rename of group 1,
+                  and "rolled out" is not vocabulary here.
+
+                  Their legends differ by one letter and they sit adjacent. That
+                  is accepted (spec §A2) — neither name is load-free enough to
+                  change, and the GroupShell legend is each group's accessible
+                  name, so a bare "Done" is never ambiguous between them. */}
               <TabGroup
                 legend="State"
                 options={MATRIX_STATUS_FILTERS}
                 labels={MATRIX_STATUS_FILTER_LABEL}
                 value={statusFilter}
                 onChange={(v) => setStatusFilter(v)}
+                active={statusFilter !== 'all'}
               />
-              <TabGroup
+              {/* Labels come STRAIGHT from CELL_STATUS_LABEL — the same export
+                  the editor dropdown and the cell aria-labels read. Spec §A3
+                  requires the five strings to be verbatim identical across those
+                  surfaces, and this batch deleted MATRIX_CELL_FILTER_LABEL,
+                  which was a second spelling of them and therefore the thing
+                  that could drift. Guaranteed by construction now, not by care. */}
+              <MultiTabGroup
                 legend="Status"
-                options={MATRIX_CELL_FILTERS}
-                labels={MATRIX_CELL_FILTER_LABEL}
-                value={cellFilter}
-                onChange={(v) => setCellFilter(v)}
+                options={CELL_STATUSES}
+                labels={CELL_STATUS_LABEL}
+                selected={cellFilter}
+                onToggle={(s) => setCellFilter((cur) => toggleCellStatus(cur, s))}
+                onClear={() => setCellFilter([])}
               />
+            </div>
+
+            {/* ── row 2 ───────────────────────────────────────────────────── */}
+            <div className="mt-2.5 flex flex-wrap items-center gap-2.5">
               {/* Type reads the REAL directive_type column. All four always render.
                   (Karen LOW-4: "prod holds only goal + trigger" was wrong — verified
                   2026-08-02, NBLYCRO is goal 75 / trigger 7 but SPLCRO already has 1
@@ -877,6 +961,7 @@ export default function ClientLibraryPage() {
                 labels={MATRIX_TYPE_FILTER_LABEL}
                 value={typeFilter}
                 onChange={(v) => setTypeFilter(v)}
+                active={typeFilter !== 'all'}
               />
 
               <div>
@@ -892,6 +977,21 @@ export default function ClientLibraryPage() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* Offered only when something is non-default (spec §A1), gated on
+                  hasClearableFilters so the button and clearAllFilters cannot
+                  disagree about what "non-default" covers. Deliberately does NOT
+                  clear the sort (not a filter) or hide-paused (has its own
+                  correction, two clicks below). */}
+              {clearable ? (
+                <button
+                  type="button"
+                  onClick={clearAllFilters}
+                  className="h-9 whitespace-nowrap px-2 text-xs font-medium text-[color:var(--f92-orange)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-focus-ring)]"
+                >
+                  Clear filters
+                </button>
+              ) : null}
 
               {/* Hides paused brand COLUMNS only. Default ON as of 2026-07-31
                   (see the hidePaused state above for the prod evidence that this
@@ -955,10 +1055,26 @@ export default function ClientLibraryPage() {
                 aria-live="polite"
                 aria-atomic="true"
               >
+                {/* §A6 — THE QUANTITY, STATED. The design file reads "87
+                    directives"; 87 is the GLOBAL active count (86 NBLY + 1 SPL)
+                    and ALSO, by coincidence, NBLY's all-status count (86 active
+                    + 1 archived). Two different quantities at one number,
+                    neither of them the per-project figure this surface needs.
+
+                    `directives` is already project-and-status scoped by
+                    loadProject, so the number is correct by construction — the
+                    project NAME is what makes which quantity it is legible to a
+                    reader, which is the whole point of the finding.
+
+                    The word "active" is deliberately absent: `active` is also a
+                    derived resolve state in the State group sitting inches away,
+                    and a DIFFERENT number again (openDirectives). Writing "86
+                    active directives" beside Open/Resolved tabs would recreate
+                    the same ambiguity in a new form. */}
                 <span className="tabular-nums">
                   {matrixRows.length === directives.length
-                    ? `${directives.length} directive${directives.length === 1 ? '' : 's'}`
-                    : `${matrixRows.length} of ${directives.length} directives`}
+                    ? `${directives.length} directive${directives.length === 1 ? '' : 's'} in ${projectLabel}`
+                    : `${matrixRows.length} of ${directives.length} directives in ${projectLabel}`}
                 </span>
 
                 {/* Never let "I searched and found nothing" read as "it doesn't
@@ -987,6 +1103,36 @@ export default function ClientLibraryPage() {
                     >
                       Clear all filters
                     </button>
+                  </span>
+                ) : null}
+
+                {/* §A7 — THE ARCHIVED HALF of the same correction, and the one
+                    no filter can fix. hiddenByFilters covers rows a FILTER hid;
+                    this covers rows the status='active' LOAD hid, which
+                    contribute 0 to that count and are unreachable from every
+                    control on this page.
+
+                    It matters because acting on the false negative mints a
+                    DUPLICATE: POST /api/admin/directives still performs no
+                    duplicate-title check and migration 024 puts no unique
+                    constraint on (project_key, title), after which any title→id
+                    resolver silently picks the wrong row.
+
+                    NO CLEAR BUTTON HERE, deliberately — there is nothing to
+                    clear. Archived directives are not rendered by this page at
+                    all (loadProject reads active only), and there is no archive
+                    UI to link to yet. Stating the fact is the whole deliverable;
+                    an affordance that did nothing would be worse than none.
+
+                    Recorded as unreachable by Karen LOW-8 on 2026-07-29 — that
+                    audit checked app/api/ for an archive writer and found none.
+                    Prod has one, written by direct SQL. */}
+                {archivedMatches > 0 ? (
+                  <span className="font-normal">
+                    ·{' '}
+                    {archivedMatches === 1
+                      ? '1 archived directive matches your search and is not shown.'
+                      : `${archivedMatches} archived directives match your search and are not shown.`}
                   </span>
                 ) : null}
               </div>
@@ -1123,10 +1269,22 @@ export default function ClientLibraryPage() {
                 // admin who created while a search was active — the very flow
                 // the search box invites — got a "✅ created" toast and no new
                 // row, whose natural reading is "it failed, try again" → a
-                // duplicate title. A new directive fans out to todo/n_a, so it
-                // is always `active` and always shown under `open`.
-                setSearch('');
-                setStatusFilter('open');
+                // duplicate title.
+                //
+                // NOW clearAllFilters(), NOT search + state alone. The original
+                // pair predates the Type and Status groups and the guarantee in
+                // the comment above it had QUIETLY STOPPED BEING TRUE: creating
+                // a goal while Type=Trigger, or while Status=Done, left the new
+                // row hidden and reproduced the exact MEDIUM-2 failure the reset
+                // exists to prevent. Multi-select STATUS widens the ways to
+                // reach it, which is what surfaced this.
+                //
+                // Correct for every fan-out outcome only because `open` keeps
+                // `unstarted` visible (the verbatim guard): an all-paused
+                // project fans out to all-n_a and a brand-less one to zero
+                // cells; both classify unstarted, and clearAllFilters lands on
+                // `all`, which shows them either way.
+                clearAllFilters();
                 void loadProject(projectKey);
               }}
               onCancel={() => setCreateOpen(false)}
@@ -1191,6 +1349,19 @@ export default function ClientLibraryPage() {
               ) : (
                 <>
                   No directives match “{search.trim()}”.{' '}
+                  {/* THE WORST CASE FOR A FALSE NEGATIVE: nothing on screen and
+                      a search that "found nothing", which is exactly when
+                      someone concludes the directive does not exist and creates
+                      a duplicate. If the term matches an ARCHIVED directive, say
+                      so right here — the live region above carries it too, but
+                      this is where the eye is. */}
+                  {archivedMatches > 0 ? (
+                    <span className="italic">
+                      {archivedMatches === 1
+                        ? 'It exists, archived. '
+                        : `${archivedMatches} archived directives match it. `}
+                    </span>
+                  ) : null}
                   <button
                     type="button"
                     onClick={clearAllFilters}

@@ -5,14 +5,16 @@ import {
   buildMatrixRows,
   classifyDirectiveCells,
   compareMatrixRows,
+  countArchivedMatchingSearch,
   countByType,
   countHiddenByFilters,
   countHiddenOwedCells,
   computeMatrixKpis,
   hasActiveFilterGroup,
+  hasClearableFilters,
   matchesCellFilter,
   matchesTypeFilter,
-  MATRIX_CELL_FILTERS,
+  toggleCellStatus,
   MATRIX_TYPE_FILTERS,
   DIRECTIVE_RESOLVE_STATES,
   matchesSearch,
@@ -21,8 +23,8 @@ import {
   resolveStateFrom,
   summarizeDirectiveCells,
   visibleMatrixBrands,
-  type MatrixCellFilter,
   type MatrixCellLike,
+  type MatrixCellSelection,
   type MatrixTypeFilter,
   type MatrixControls,
   type MatrixRow,
@@ -215,7 +217,7 @@ const CELLS: MatrixCellLike[] = [
   cell('d5', 'done'),
 ];
 const controls = (over: Partial<MatrixControls> = {}): MatrixControls => ({
-  cellFilter: 'all',
+  cellFilter: [], // empty = All (multi-select as of the filter-reorg batch)
   typeFilter: 'all',
   search: '',
   statusFilter: 'open',
@@ -451,30 +453,85 @@ test('countHiddenOwedCells agrees with outstandingCount about what "owed" means'
 // Both concepts exist; group 2 is NOT a rename of group 1.
 // -------------------------------------------------------------------------
 
-test('matchesCellFilter: a row matches when AT LEAST ONE cell holds that status', () => {
+test('matchesCellFilter: a row matches when AT LEAST ONE cell holds a SELECTED status', () => {
   const mixed = [cell('d', 'todo'), cell('d', 'done'), cell('d', 'n_a')];
-  assert.equal(matchesCellFilter(mixed, 'todo'), true);
-  assert.equal(matchesCellFilter(mixed, 'done'), true);
-  assert.equal(matchesCellFilter(mixed, 'n_a'), true);
-  assert.equal(matchesCellFilter(mixed, 'blocked'), false);
-  assert.equal(matchesCellFilter(mixed, 'in_progress'), false);
-  assert.equal(matchesCellFilter(mixed, 'all'), true);
-  // A cell-less directive matches nothing except `all`.
-  assert.equal(matchesCellFilter([], 'todo'), false);
-  assert.equal(matchesCellFilter([], 'all'), true);
+  assert.equal(matchesCellFilter(mixed, ['todo']), true);
+  assert.equal(matchesCellFilter(mixed, ['done']), true);
+  assert.equal(matchesCellFilter(mixed, ['n_a']), true);
+  assert.equal(matchesCellFilter(mixed, ['blocked']), false);
+  assert.equal(matchesCellFilter(mixed, ['in_progress']), false);
+  assert.equal(matchesCellFilter(mixed, []), true); // empty = All
+  // A cell-less directive matches nothing except the empty (All) selection.
+  assert.equal(matchesCellFilter([], ['todo']), false);
+  assert.equal(matchesCellFilter([], []), true);
 });
 
-// THE NON-PARTITION PROPERTY. A mixed row matches SEVERAL status tabs at once,
-// so tab counts do NOT sum to the row total. The readout must never imply a
-// partition ("N of 82 directives" is fine; "N + M + … = 82" is a lie). Pinned
+// MULTI-SELECT is OR WITHIN THE GROUP, and the direction matters: selecting a
+// second status must WIDEN the result, never narrow it. An AND reading ("has a
+// todo AND a blocked cell") is the plausible wrong implementation and it is
+// strictly narrower, so a test that only ever selects ONE status cannot tell the
+// two apart. Both of these fixtures exist to make them differ.
+test('matchesCellFilter: selecting two statuses is OR, not AND', () => {
+  const todoOnly = [cell('d', 'todo'), cell('d', 'done')];
+  // Has todo, has NO blocked. OR → matches. AND → would not.
+  assert.equal(matchesCellFilter(todoOnly, ['todo', 'blocked']), true);
+  // Has neither → false under both readings, so this pins the negative half.
+  assert.equal(matchesCellFilter([cell('d', 'n_a')], ['todo', 'blocked']), false);
+  // Widening is monotonic: adding a status can only ever add rows.
+  assert.equal(matchesCellFilter(todoOnly, ['blocked']), false);
+  assert.equal(matchesCellFilter(todoOnly, ['blocked', 'todo']), true);
+});
+
+// THE EMPTY SET IS NOT "ALL FIVE SELECTED". They differ on exactly one input —
+// a directive with NO cells — and that input is real (a brand-less project, or a
+// directive created before any brand existed). If someone "simplifies" the empty
+// case to a full selection, cell-less directives silently vanish from the view.
+test('empty selection is not the same as selecting every status', () => {
+  assert.equal(matchesCellFilter([], []), true, 'empty = All must keep a cell-less row');
+  assert.equal(matchesCellFilter([], [...CELL_STATUSES]), false, 'all-five cannot match no cells');
+});
+
+// THE NON-PARTITION PROPERTY. A mixed row matches SEVERAL statuses at once, so
+// per-status counts do NOT sum to the row total. The readout must never imply a
+// partition ("N of 86 directives" is fine; "N + M + … = 86" is a lie). Pinned
 // here because it is a property of the predicate, not of the UI copy — if
 // someone "fixes" matchesCellFilter to be exclusive, this fails.
-test('cell-status tabs deliberately OVERLAP — they do not partition the rows', () => {
-  const matched = MATRIX_CELL_FILTERS.filter(
-    (f) => f !== 'all' && matchesCellFilter([cell('d', 'todo'), cell('d', 'done')], f),
+test('cell statuses deliberately OVERLAP — they do not partition the rows', () => {
+  const matched = CELL_STATUSES.filter((s) =>
+    matchesCellFilter([cell('d', 'todo'), cell('d', 'done')], [s]),
   );
-  assert.deepEqual(matched, ['todo', 'done']); // one row, TWO tabs
-  assert.ok(matched.length > 1, 'a mixed row must match more than one tab');
+  assert.deepEqual(matched, ['todo', 'done']); // one row, TWO statuses
+  assert.ok(matched.length > 1, 'a mixed row must match more than one status');
+});
+
+test('toggleCellStatus adds, removes, and normalises order', () => {
+  assert.deepEqual(toggleCellStatus([], 'done'), ['done']);
+  assert.deepEqual(toggleCellStatus(['done'], 'done'), []);
+  // Canonical CELL_STATUSES order regardless of click order — which is what
+  // makes two selections with the same members deeply equal.
+  assert.deepEqual(toggleCellStatus(['done'], 'todo'), ['todo', 'done']);
+  assert.deepEqual(toggleCellStatus(['todo'], 'done'), ['todo', 'done']);
+  // Never mutates its input.
+  const before: MatrixCellSelection = ['todo'];
+  toggleCellStatus(before, 'blocked');
+  assert.deepEqual(before, ['todo']);
+});
+
+// Spec §A7 — the archived signal. The premise Karen LOW-8 recorded (archiving is
+// unreachable) is FALSE: prod holds one archived directive, written by direct
+// SQL. loadProject reads status='active' only, so it is invisible to search AND
+// counts 0 toward countHiddenByFilters — "found nothing" for a title that exists.
+test('countArchivedMatchingSearch answers "does my term exist, archived?"', () => {
+  const archived = [{ title: 'Submits Form Lead - Combined' }, { title: 'Old Scroll Depth' }];
+  assert.equal(countArchivedMatchingSearch(archived, 'submits'), 1);
+  assert.equal(countArchivedMatchingSearch(archived, 'SCROLL'), 1); // case-insensitive
+  assert.equal(countArchivedMatchingSearch(archived, 'chat'), 0);
+  // Blank search → 0, NOT the archived total. A count that rendered on every
+  // page load would be the LOW-6 regression again: it claims a correction when
+  // nothing was searched, so there is no false negative to correct.
+  assert.equal(countArchivedMatchingSearch(archived, ''), 0);
+  assert.equal(countArchivedMatchingSearch(archived, '   '), 0);
+  assert.equal(countArchivedMatchingSearch([], 'submits'), 0);
 });
 
 test('matchesTypeFilter reads the real column and never a title heuristic', () => {
@@ -506,12 +563,12 @@ test('the three groups AND together, and AND with the search', () => {
   );
   // Type AND state AND cell-status: goals, not resolved, with a todo cell.
   assert.deepEqual(
-    buildMatrixRows(DIRECTIVES, CELLS, controls({ typeFilter: 'goal', cellFilter: 'todo' })).map((r) => r.directive.id),
+    buildMatrixRows(DIRECTIVES, CELLS, controls({ typeFilter: 'goal', cellFilter: ['todo'] })).map((r) => r.directive.id),
     ['d1'],
   );
   // …AND the search, which narrows it to nothing.
   assert.equal(
-    buildMatrixRows(DIRECTIVES, CELLS, controls({ typeFilter: 'goal', cellFilter: 'todo', search: 'chat' })).length,
+    buildMatrixRows(DIRECTIVES, CELLS, controls({ typeFilter: 'goal', cellFilter: ['todo'], search: 'chat' })).length,
     0,
   );
 });
@@ -543,9 +600,20 @@ test('countHiddenByFilters counts rows hidden by ANY group, not just status', ()
 });
 
 test('hidden + shown always equals the search-matched set, for every group combo', () => {
+  // ALL 32 cell-status subsets, not a sampled few. With multi-select the
+  // selection is a power set, and the invariant has to hold across every one of
+  // them — enumerating is cheap here (3 × 32 × 5 × 2 = 960 checks) and a sampled
+  // subset would leave the pair/triple selections, the ones the batch actually
+  // added, unexercised.
+  const cellSelections: MatrixCellSelection[] = [];
+  for (let mask = 0; mask < 1 << CELL_STATUSES.length; mask += 1) {
+    cellSelections.push(CELL_STATUSES.filter((_, i) => (mask >> i) & 1));
+  }
+  assert.equal(cellSelections.length, 32);
+
   const combos: Array<Partial<MatrixControls>> = [];
   for (const statusFilter of MATRIX_STATUS_FILTERS)
-    for (const cellFilter of MATRIX_CELL_FILTERS as readonly MatrixCellFilter[])
+    for (const cellFilter of cellSelections)
       for (const typeFilter of MATRIX_TYPE_FILTERS as readonly MatrixTypeFilter[])
         combos.push({ statusFilter, cellFilter, typeFilter });
   for (const over of combos) {
@@ -562,8 +630,32 @@ test('hidden + shown always equals the search-matched set, for every group combo
 test('hasActiveFilterGroup is true iff some group is narrowing', () => {
   assert.equal(hasActiveFilterGroup(controls({ statusFilter: 'all' })), false);
   assert.equal(hasActiveFilterGroup(controls()), true); // default state=open narrows
-  assert.equal(hasActiveFilterGroup(controls({ statusFilter: 'all', cellFilter: 'todo' })), true);
+  assert.equal(hasActiveFilterGroup(controls({ statusFilter: 'all', cellFilter: ['todo'] })), true);
   assert.equal(hasActiveFilterGroup(controls({ statusFilter: 'all', typeFilter: 'goal' })), true);
+  // An EMPTY selection is the "all" state and must not count as narrowing —
+  // otherwise `Clear filters` would sit on screen permanently, offering to clear
+  // something that is not set.
+  assert.equal(hasActiveFilterGroup(controls({ statusFilter: 'all', cellFilter: [] })), false);
+});
+
+// Spec §A1: `Clear filters` appears only when something is non-default. The
+// predicate and clearAllFilters() must agree about WHAT that covers, or the
+// control is itself a dishonest signal — the same failure class as the count.
+test('hasClearableFilters covers the search AND the three groups — and nothing else', () => {
+  const none = controls({ statusFilter: 'all' });
+  assert.equal(hasClearableFilters(none), false);
+  assert.equal(hasClearableFilters({ ...none, search: 'chat' }), true);
+  assert.equal(hasClearableFilters({ ...none, statusFilter: 'open' }), true);
+  assert.equal(hasClearableFilters({ ...none, cellFilter: ['blocked'] }), true);
+  assert.equal(hasClearableFilters({ ...none, typeFilter: 'goal' }), true);
+  // Whitespace is not a search — matchesSearch trims, so a space-only query
+  // filters nothing and must not light up a control that would clear nothing.
+  assert.equal(hasClearableFilters({ ...none, search: '   ' }), false);
+  // SORT is deliberately NOT clearable: it is not a filter, it hides nothing,
+  // and silently resetting someone's chosen ordering from a button labelled
+  // "Clear filters" is a surprise. If this ever starts returning true for a sort
+  // change, the button's label has stopped being true.
+  assert.equal(hasClearableFilters({ ...none, sortKey: 'outstanding' }), false);
 });
 
 // -------------------------------------------------------------------------

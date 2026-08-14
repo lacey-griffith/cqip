@@ -4014,7 +4014,24 @@ earlier Pulse batches opened against an authority that lived only outside the re
   recorded against restyle batch 4.
 - **Directive CRUD is NOT in this batch**, including a disabled affordance.
 
-**Phase status:** commit 1 (spec) landed. Parts A/B/C next, then Karen.
+**Phase status:** commit 1 (spec) + commit 2 (Part A) landed. Parts B/C next, then Karen.
+
+**Part A shipped in commit 2.** Two-row bar; STATUS multi-select via a new
+`MultiTabGroup` sharing `GroupShell` + `OptionButton` with `TabGroup` (so the two
+groups cannot drift apart visually, and only their ARIA differs — `aria-checked`
+announces exclusivity, `aria-pressed` announces independent on/off, and getting that
+backwards would tell a screen-reader user the opposite of how the control behaves).
+`MATRIX_CELL_FILTER_LABEL` **deleted**: it spelled the five status strings a second
+time, so §A3's verbatim requirement is now met by construction rather than by care.
+Empty selection means All — **not** a set holding all five, which is a different
+predicate that would drop cell-less directives. Result count states the project.
+Archived-match signal added in its own state slot, paged from the outset.
+
+**Also fixed, because this batch made it reachable:** `onCreated` cleared only search
++ state, so its own comment's guarantee that a newly-created directive is "GUARANTEED
+visible" had **quietly stopped being true** when the Type and Status groups landed —
+creating a goal while Type=Trigger reproduced the exact Karen MEDIUM-2 failure the
+reset exists to prevent. Now `clearAllFilters()`.
 
 
 ## 16. Shipped Features Log
