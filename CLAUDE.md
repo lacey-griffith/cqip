@@ -2300,6 +2300,53 @@ Resolved             → green-500
     it is harmless there only because the webhook runs at row creation, where
     there is no prior value to destroy. Do not assume it stays harmless.
 
+38. **A passing test can ENCODE a defect instead of catching it. Assume yours
+    might, and use the fix itself as the probe.** (Promoted 2026-08-14 from four
+    instances in a single session — it is no longer a run of incidents.)
+
+    **The tell, and it is cheap:** *when you fix a defect, a test should FAIL.*
+    If applying a correct fix turns a green suite red, the test that broke was
+    encoding the bug. **A test that must be deleted or rewritten to make the code
+    correct was never testing the right question.** Conversely, if a real fix
+    changes nothing in the suite, nothing was covering that behaviour.
+
+    **THREE DISTINCT MECHANISMS, because naming only one under-covers the rule.**
+    The originating instances were described as "tests written against source
+    shape rather than behaviour" — true of (a) and (c), but **not of (b), which
+    was a behavioural test over a pure function**. A rule that names only the
+    source-shape cause would have missed the one that cost a CRITICAL:
+    - **(a) Source-shape assertion.** A regex over source cannot distinguish the
+      part you meant to protect from a wrong thing sitting beside it. *Instance:*
+      a check that `...log,` was PRESENT in an `onSaved` call passed when a
+      mutation kept the spread and appended `...{ notes: notes }`. *Instance:* a
+      regex pinning a WHOLE ternary froze the wrong `confirm` branch alongside the
+      right `reject` branch, so applying the fix failed it.
+    - **(b) Wrong oracle.** A behavioural test whose expected value encodes a
+      mistaken belief about the domain. *Instance:* `suggestionAction(['QA Gap'],
+      []) === 'correct'` — "clearing the field is a correction" is true in the
+      abstract and false for the only reachable state, where `[]` is the row's
+      PRISTINE value and nothing was cleared. It locked in a CRITICAL in which
+      every accepted AI suggestion would have been filed as a human rejection.
+    - **(c) Under-constrained fixture.** Right oracle, but inputs that cannot
+      discriminate. *Instance:* a flip-boundary test whose fixture made the second
+      half of an `&&` false either way, so `>` versus `>=` was never exercised and
+      the off-by-one mutation survived.
+
+    **Why:** every one of these was GREEN. tsc, ESLint, the build and the rest of
+    the suite were all green too. None of the ordinary gates can see this class,
+    which is what makes it worth a rule rather than a habit.
+
+    **How to apply.** Prefer behaviour through a **pure exported function** over
+    matching the source that produces it — that is the repair that worked in every
+    instance above. Where a source assertion is genuinely the only reach (wiring,
+    "this route is never called from here"), keep it NARROW: assert the one token
+    that matters, never a whole expression, and pair it with a behavioural test of
+    the value. **Mutate to confirm**, and count a survivor only after verifying the
+    patch actually applied. Note the sibling rule this generalises: §15's *"if a
+    check can only be satisfied by the same artifact that produced the value, it is
+    not a check"* covers a shared **oracle**; this covers a test that is
+    independent and still wrong.
+
 ---
 
 ## 14. What Is NOT In Scope for V1
@@ -3717,6 +3764,36 @@ its reason so nobody re-derives the analysis.
       Left as-is on purpose: changing it would split one event type across two
       `changed_by` values, so an operator filtering `'system'` would silently stop
       catching new auto-advance rows. Only worth changing alongside a backfill.
+
+### AI root-cause classifier — PARKED, not dropped (2026-08-14)
+
+**The surface shipped; the path has never run.** Batch classifier-1 and the Batch
+logs-page suggestion strip are both in production (§16), so the columns, the routes,
+the review UI and the whole confirm/reject/correct flow exist and are tested. **What
+does not exist is a single classified row.** `ai_review_pending` is true on **0 of
+122**, `ai_suggested_root_cause` is non-null on **0 of 122**, and the route answers
+**500 `not_configured`** by design until a key exists.
+
+- **Blocker: no credential.** `CQIP_ANTHROPIC_API_KEY` is unminted. API usage is
+  **paid**, and the spend question is **unresolved at F92**. This is a commercial
+  decision, not an engineering one — nothing in the codebase is waiting on code.
+- **Free alternative, not yet tried — do this BEFORE paying for anything.** Use
+  **Rovo in the Jira UI** to classify **~10 logs by hand**, entering the results
+  through the existing edit modal. **No build, no credential, no spend.** It tests
+  the thing the money would buy — *are the suggestions good enough to be worth
+  confirming?* — against the one population that matters, and it produces real
+  correction-rate data rather than an estimate.
+- **Unparks on EITHER:** the credential being minted, **or** the manual pass showing
+  suggestion quality good enough to justify automation.
+
+**Why this framing and not "blocked":** the classifier spec's §2 makes the correction
+rate the batch's ONLY validation, and a manual pass generates exactly that signal at
+zero cost. Parking it behind a spend decision while an unpaid test of the same
+hypothesis is available would be waiting for the wrong gate.
+
+**Do not read the shipped surface as evidence the classifier works.** §16 records it
+as UNEXERCISED for this reason, and that wording should survive until a real run
+exists.
 
 ### ⚠ OPEN DEFECT — brand dropdown panel is CLIPPED, and it is LIVE IN PRODUCTION
 
