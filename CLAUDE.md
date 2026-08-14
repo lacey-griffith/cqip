@@ -3820,6 +3820,25 @@ why this is written down rather than left as "probably the spacing":
 **Fix:** portal the panel to `document.body` with fixed positioning from the trigger
 rect, via a pure tested `computePopoverPosition`. This makes Combobox behave like its
 row-mates rather than making the page accommodate it.
+
+**Karen post-flight PASS-WITH-FINDINGS; MEDIUM-1 folded.** `PANEL_MAX_HEIGHT` was 240
+with a comment claiming to match "the panel's own `max-h-60`" — but that class is on
+the **LIST**, and the outer panel had **no max-height at all**, so the constant
+understated the real box (~279px) by ~39px. Two consequences, both invisible without
+rendering: in the 240–279px band the flip never fired, so the panel overhung the
+viewport and — being `position: fixed` — **could not be scrolled to**, which is the
+same symptom as the defect being fixed; and worse, **a flipped panel overlapped its own
+trigger** by ~35px of a 40px control, in exactly the long-list case where flip fires.
+**Karen's mutation proved it unpinned: changing the number failed zero tests** — the
+`COVERAGE_TARGET_EFFECTIVE` shape, a constant describing a value nothing couples it to.
+**Repaired by coupling rather than a better estimate:** the panel's own `maxHeight` IS
+the constant (with `overflow: hidden` so the cap is real, not advisory), which makes it
+true by construction — there is no "correct value" left to drift from. The
+flip-never-overlaps-the-trigger invariant is now asserted over the returned geometry for
+any panel height. **LOW-1 folded** (position cleared on close, so a reopen cannot paint
+one frame at the previous coordinates). **`aria-controls` + a panel `id` added** — and
+recorded honestly as an improvement, NOT a regression repair: the association never
+existed, since the panel was always a sibling of the button rather than a descendant.
 **Two traps it creates and must keep handling:** the outside-click check must consult
 the PANEL ref as well as the trigger root, or every click inside the open panel closes
 it instantly; and position must be recomputed on scroll **with capture** and on resize,

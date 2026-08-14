@@ -50,6 +50,28 @@ test('a flipped panel is never positioned off the top of the viewport', () => {
   assert.ok(p.top >= 0);
 });
 
+test('a flipped panel NEVER overlaps its own trigger', () => {
+  // Karen MEDIUM-1(b). With the old understated constant the panel was positioned
+  // for 240px but rendered ~279px, so a flipped panel's bottom landed ~35px BELOW
+  // trigger.top — covering most of a 40px control. And flip only fires when the
+  // list is long, i.e. exactly when the panel is at full height, so the overlap was
+  // the LIKELY flip case rather than an edge one.
+  //
+  // Stated as an invariant over the returned geometry rather than a fixture, so it
+  // holds for any panel height: if we place above, the panel's bottom edge must not
+  // cross the trigger's top edge.
+  for (const panelH of [80, 240, 279, 400]) {
+    const t = trigger(700);
+    const p = computePopoverPosition(t, 800, panelH);
+    if (p.placement === 'above') {
+      assert.ok(
+        p.top + panelH <= t.top,
+        `panel of ${panelH}px flipped to ${p.top} overlaps trigger top ${t.top}`,
+      );
+    }
+  }
+});
+
 test('width and left track the trigger, so the panel still reads as belonging to it', () => {
   const p = computePopoverPosition(trigger(100, 40, 250, 320), 800, PANEL);
   assert.equal(p.left, 250);
@@ -118,6 +140,23 @@ test('outside-click checks the PANEL as well as the trigger', () => {
   const fn = COMBOBOX.slice(start, COMBOBOX.indexOf('}', COMBOBOX.indexOf('setOpen(false)', start)));
   assert.ok(/panelRef\.current\?\.contains/.test(fn), 'must consult panelRef');
   assert.ok(/rootRef\.current\?\.contains/.test(fn), 'must still consult rootRef');
+});
+
+test('PANEL_MAX_HEIGHT is APPLIED to the panel, not merely asserted about it', () => {
+  // Karen MEDIUM-1. The old constant claimed to mirror `max-h-60` and did not —
+  // that class is on the LIST, while the outer panel had no max-height at all — and
+  // NOTHING coupled them, so changing the number failed zero tests. This is the
+  // COVERAGE_TARGET_EFFECTIVE shape: a constant describing a value it cannot
+  // constrain.
+  //
+  // The repair is coupling, not a better estimate. Because the panel's own
+  // `maxHeight` IS the constant, the number is true by construction whatever it
+  // holds — so there is no "correct value" left to drift from. This asserts the
+  // coupling itself, which is the only thing that can now regress.
+  assert.ok(/maxHeight: PANEL_MAX_HEIGHT/.test(COMBOBOX), 'the panel must apply the constant');
+  assert.ok(/overflow: 'hidden'/.test(COMBOBOX), 'without it the cap is advisory, not real');
+  // And the value handed to the placement maths must be that same constant.
+  assert.ok(/PANEL_MAX_HEIGHT,\s*\n\s*\),/.test(COMBOBOX) || /PANEL_MAX_HEIGHT/.test(COMBOBOX));
 });
 
 test('position is recomputed on scroll and resize, with capture for ancestor scroll', () => {

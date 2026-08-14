@@ -6,9 +6,29 @@ import { Check, ChevronDown, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { computePopoverPosition, type PopoverPosition } from '@/lib/ui/popover-position';
 
-// Matches the panel's own max-h-60 (15rem). Used only to decide whether to flip
-// above the trigger; the rendered panel is still bounded by that class.
-const PANEL_MAX_HEIGHT = 240;
+// The panel's maximum height, ENFORCED inline below rather than estimated here.
+//
+// ⚠ THE PREVIOUS VALUE WAS WRONG AND NOTHING PINNED IT (Karen MEDIUM-1). It was 240
+// with a comment claiming to match "the panel's own max-h-60" — but `max-h-60` is on
+// the LIST, and the outer panel had NO max-height at all. The real box is
+// ~2px borders + ~37px search row (py-2 + text-sm line-height + border-b) + 240px
+// list = ~279px, so the constant understated the panel by ~39px. Two consequences,
+// both invisible without rendering:
+//   (a) in the 240–279px band the flip never fired, so the panel rendered below and
+//       overhung the viewport — and a `position: fixed` element cannot be scrolled
+//       to, making those options unreachable. The same symptom as the defect this
+//       whole fix exists to close, just narrower.
+//   (b) worse, a flipped panel OVERLAPPED ITS OWN TRIGGER by ~35px of a 40px
+//       control — and flip only fires when the list is long, which is exactly when
+//       the panel is at full height, so the overlap was the LIKELY flip case.
+//
+// Setting it to the true height is not enough on its own: a constant that merely
+// claims to mirror a CSS value with nothing coupling them is the
+// COVERAGE_TARGET_EFFECTIVE shape, and Karen's mutation proved it — changing this
+// number to 279 failed zero tests. So it is now applied as the panel's actual
+// `maxHeight`, which makes it true BY CONSTRUCTION: whatever this number says, the
+// rendered box cannot exceed it.
+const PANEL_MAX_HEIGHT = 279;
 
 // The option shape and the filter both live in lib/ui/combobox-filter.ts so they
 // can be tested without loading the component tree. Re-exported here so existing
@@ -58,6 +78,12 @@ export function Combobox({
   // handler must know about it separately — see the comment there.
   const panelRef = React.useRef<HTMLDivElement>(null);
   const [position, setPosition] = React.useState<PopoverPosition | null>(null);
+  // Karen Q2. `aria-controls` was absent BEFORE the portal too, so this is not a
+  // regression being repaired — the panel was always a sibling of the button, never
+  // a descendant, so containment never associated them either. But the portal moves
+  // the panel to the end of <body>, which makes an explicit id the only association
+  // mechanism available. Cheap, so worth adding.
+  const panelId = React.useId();
 
   const selected = options.find(o => o.value === value);
 
@@ -119,6 +145,12 @@ export function Combobox({
       setTimeout(() => inputRef.current?.focus(), 0);
     } else {
       setQuery('');
+      // Karen LOW-1. Without this, the SECOND and later opens paint one frame at
+      // the PREVIOUS position before the measure effect corrects them — a visible
+      // jump if the page scrolled in between. Clearing it restores the first-open
+      // behaviour, where `position` is null and the panel simply does not render
+      // until measured.
+      setPosition(null);
     }
   }, [open]);
 
@@ -154,6 +186,7 @@ export function Combobox({
         className="flex h-10 w-full items-center justify-between rounded-md border border-[color:var(--f92-border)] bg-white px-3 py-2 text-left text-sm text-[color:var(--f92-dark)] shadow-sm ring-offset-background focus:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-orange)]"
         aria-haspopup="listbox"
         aria-expanded={open}
+        aria-controls={open ? panelId : undefined}
       >
         <span className={cn('truncate', !selected && 'text-[color:var(--f92-lgray)]')}>
           {selected?.label ?? placeholder}
@@ -165,7 +198,21 @@ export function Combobox({
         ? createPortal(
         <div
           ref={panelRef}
-          style={{ position: 'fixed', top: position.top, left: position.left, width: position.width }}
+          id={panelId}
+          style={{
+            position: 'fixed',
+            top: position.top,
+            left: position.left,
+            width: position.width,
+            // THE COUPLING. computePopoverPosition is handed PANEL_MAX_HEIGHT and
+            // decides placement from it; this is what guarantees the rendered box
+            // actually obeys that number. overflow:hidden makes the cap real rather
+            // than advisory — without it a taller child would overflow visibly while
+            // the box stayed capped, and the placement maths would be wrong again
+            // with nothing to show for it.
+            maxHeight: PANEL_MAX_HEIGHT,
+            overflow: 'hidden',
+          }}
           className="z-50 rounded-md border border-[color:var(--f92-border)] bg-[color:var(--f92-surface)] shadow-lg">
           <div className="flex items-center gap-2 border-b border-[color:var(--f92-border)] px-3 py-2">
             <Search className="h-4 w-4 text-[color:var(--f92-gray)]" />
