@@ -4014,7 +4014,19 @@ earlier Pulse batches opened against an authority that lived only outside the re
   recorded against restyle batch 4.
 - **Directive CRUD is NOT in this batch**, including a disabled affordance.
 
-**Phase status:** commits 1 (spec) + 2 (Part A) + 3 (Part B) landed. Part C next, then Karen.
+**Phase status:** commits 1 (spec) + 2 (Part A) + 3 (Part B) + 4 (Part C) landed. Karen next.
+
+**Part C shipped in commit 4.** Clicking a brand header toggles a full-depth column
+highlight; clicking a different header moves it; any other click in the grid clears it
+(one rule on the scroll container, header buttons `stopPropagation`). New
+`--pulse-col-highlight` token, **opaque in both themes** because Part B made the header
+sticky and a translucent header lets rows scroll through it. **The two themes move in
+OPPOSITE directions from their card surface** — light lifts cool off the warm cream tint,
+dark recesses below it — because in each theme that is the direction that RAISES contrast
+for the marks and text landing on it. The precedence (highlight > crosshair > fallback,
+exactly one class) was extracted to a pure `lib/client-library/matrix-band.ts` rather than
+left as a JSX ternary, and the header's and body's differing fallbacks (opaque vs
+transparent) are pinned by test — both are load-bearing in opposite directions.
 
 **Part B shipped in commit 3.** `overflow-x-auto` → `max-h-[65vh] overflow-auto`, because
 `position: sticky` resolves against the nearest scrollport and the page body is not it.

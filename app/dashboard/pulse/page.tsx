@@ -78,6 +78,7 @@ import {
   type MatrixStatusFilter,
   type MatrixTypeFilter,
 } from '@/lib/client-library/matrix-controls';
+import { cellBandClass, headerBandClass } from '@/lib/client-library/matrix-band';
 import { NoteIndicator, StatusCellBox, StatusLegend } from '@/components/client-library/status-cell';
 import { MultiTabGroup, TabGroup } from '@/components/client-library/tab-group';
 import { saveDirectiveCell } from '@/lib/client-library/directive-cell-save';
@@ -301,6 +302,22 @@ export default function ClientLibraryPage() {
   // again, same as the other three controls.
   const [hidePaused, setHidePaused] = useState(true);
 
+  // PART C — the clicked brand column. NOT a filter and NOT a selection: it
+  // changes nothing about which rows or cells exist, it only bands one column so
+  // the eye can follow it across a 16-wide grid.
+  //
+  // Kept deliberately separate from `pinned` and `hover`, which drive the batch-3
+  // crosshair. Those answer "which CELL is being inspected"; this answers "which
+  // COLUMN did the user ask to keep visible", and they can legitimately disagree
+  // — hovering row 4 of column B while column A is highlighted is a normal state,
+  // not a conflict to resolve away.
+  //
+  // Holds a brand id that may stop being rendered (hide-paused toggled, project
+  // switched). That is harmless by construction: the id is only ever compared
+  // against brands being rendered, so an unresolvable one simply bands nothing —
+  // the same reasoning that lets `pinned` survive a filter change.
+  const [highlightBrandId, setHighlightBrandId] = useState<string | null>(null);
+
   // Fetch brands + directives + cells for a project. RLS allows authenticated
   // SELECT on both new tables, so direct client queries are fine (spec §4).
   const loadProject = useCallback(async (key: string) => {
@@ -457,6 +474,11 @@ export default function ClientLibraryPage() {
     setExpandedCell(null); // stale across a project switch
     setPinned(null); // ditto — a pinned readout from another client is nonsense
     setHover(null);
+    // Part C. Harmless if left set — an unrendered brand id bands nothing — but
+    // cleared for the same reason as the three above: state describing another
+    // client should not survive the switch, and leaving it would mean a column
+    // silently re-highlights if the user switches back.
+    setHighlightBrandId(null);
     writeStoredPulseProject(key); // persist only — this page owns the state (no self-dispatch)
     void loadProject(key);
   }
@@ -488,6 +510,7 @@ export default function ClientLibraryPage() {
         setExpandedCell(null); // symmetric with handleProjectChange — no stale open editor across a switch
         setPinned(null);
         setHover(null);
+        setHighlightBrandId(null);
         void loadProject(detail);
       }
     }
@@ -1396,7 +1419,21 @@ export default function ClientLibraryPage() {
                STACKING — intersection 30 > header 20 > sticky body cells 10.
                The top-left cell is sticky on BOTH axes, so it is the one cell
                that both of the others would otherwise scroll over. */
-            <div className="max-h-[65vh] overflow-auto">
+            /* PART C's clear-on-outside-click lives HERE, on the scroll region,
+               as ONE rule: any click in the grid that is not on a brand header
+               clears the highlight. The header buttons stop propagation, so
+               "click the same header again" is a toggle and "click a different
+               header" moves it, while a cell click — which already pins or opens
+               the editor — clears it on the way past. Clicking inside the open
+               editor strip clears it too; that is "anywhere else in the grid",
+               stated rather than special-cased.
+
+               A DIV WITH onClick AND NO ROLE IS CORRECT HERE, not a missing
+               button: every interactive thing inside is already a real <button>
+               with its own keyboard path, and this handler only ever REMOVES a
+               purely decorative state. There is nothing here for a keyboard user
+               to reach that they cannot reach by activating a header again. */
+            <div className="max-h-[65vh] overflow-auto" onClick={() => setHighlightBrandId(null)}>
               <table className="w-full border-collapse text-sm">
                 {/* The header's bottom rule is an inset BOX-SHADOW, not a
                     border, and the <tr>'s border-b is gone. Under
@@ -1420,29 +1457,96 @@ export default function ClientLibraryPage() {
                     >
                       Directive
                     </th>
-                    {visibleBrands.map((brand) => (
+                    {visibleBrands.map((brand) => {
+                      const isHighlighted = highlightBrandId === brand.id;
+                      return (
                       <th
                         key={brand.id}
                         // §2.4 — the brand header bands with its column, so the
                         // band reads as "this column" rather than as a stripe
                         // floating in the middle of the grid.
+                        //
+                        // PRECEDENCE (spec §C1) lives in headerBandClass, not
+                        // here: highlight > crosshair > opaque fallback, always
+                        // exactly one class. Shared with the body cells so the
+                        // header cannot disagree with its own column, and
+                        // pinned by tests/matrix-band.test.ts — a ternary in
+                        // JSX would be invisible to tsc, ESLint and the build.
                         className={
                           'sticky top-0 z-20 px-3 py-3 text-center text-[10px] font-semibold uppercase transition-colors ' +
-                          (hotBrandId === brand.id
-                            ? 'bg-[color:var(--f92-tint)]'
-                            : 'bg-[color:var(--f92-surface)]')
+                          headerBandClass({
+                            highlighted: isHighlighted,
+                            crosshair: hotBrandId === brand.id,
+                          })
                         }
                         style={{
                           letterSpacing: 'var(--tracking-wide)',
-                          color: brand.is_paused ? 'var(--f92-lgray)' : 'var(--f92-gray)',
+                          // Both text colours step UP on the highlight rather
+                          // than staying put, because every candidate background
+                          // is darker/cooler than the plain card and holding the
+                          // colour would have LOWERED contrast on the one column
+                          // the user asked to look at. Both improve instead:
+                          // non-paused 4.77:1 → 13.83:1 (light) / 6.08:1 →
+                          // 15.04:1 (dark); paused 2.54:1 → 3.87:1 (light) /
+                          // 3.31:1 → 7.26:1 (dark).
+                          //
+                          // Light-mode paused-and-highlighted is 3.87:1, short of
+                          // AA for small text — stated rather than rounded up. It
+                          // is a strict improvement on the pre-existing 2.54:1,
+                          // the paused state is redundantly encoded by the `·`
+                          // suffix and the title, and paused columns are hidden
+                          // by default, so reaching this state at all takes two
+                          // deliberate actions.
+                          color: isHighlighted
+                            ? brand.is_paused
+                              ? 'var(--f92-gray)'
+                              : 'var(--f92-dark)'
+                            : brand.is_paused
+                              ? 'var(--f92-lgray)'
+                              : 'var(--f92-gray)',
                           boxShadow: HEADER_RULE,
                         }}
-                        title={brand.is_paused ? `${brand.display_name} (paused)` : brand.display_name}
                       >
-                        {brand.brand_code}
-                        {brand.is_paused ? <span className="ml-0.5 opacity-70">·</span> : null}
+                        {/* A REAL BUTTON, and it costs a tab stop per visible
+                            brand — 13 under defaults, 16 with paused shown. The
+                            handoff asked to confirm it adds none; it does, and
+                            saying otherwise would be false. A keyboard-operable
+                            control needs a tab stop, and the alternatives are a
+                            mouse-only feature or a control Tab cannot reach. The
+                            only way to have both is a roving tabindex over
+                            role="grid", which is out of scope (G7, recorded
+                            against restyle batch 4) — and these 13 sit at the
+                            very top of the grid, where the already-recorded
+                            skip-the-matrix link would clear them in one press.
+
+                            stopPropagation is what makes the container's
+                            clear-on-click a toggle rather than an
+                            immediately-undone set.
+
+                            The title moved onto the button so the tooltip is
+                            reachable by the thing that is now interactive. */}
+                        <button
+                          type="button"
+                          aria-pressed={isHighlighted}
+                          title={brand.is_paused ? `${brand.display_name} (paused)` : brand.display_name}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setHighlightBrandId((cur) => (cur === brand.id ? null : brand.id));
+                          }}
+                          className="cursor-pointer rounded px-1 py-0.5 uppercase focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-focus-ring)]"
+                        >
+                          {brand.brand_code}
+                          {brand.is_paused ? <span className="ml-0.5 opacity-70">·</span> : null}
+                          <span className="sr-only">
+                            {' — '}
+                            {brand.display_name}
+                            {brand.is_paused ? ' (paused)' : ''}
+                            {isHighlighted ? ', column highlighted' : ', highlight column'}
+                          </span>
+                        </button>
                       </th>
-                    ))}
+                      );
+                    })}
                     <th
                       className="sticky top-0 z-20 bg-[color:var(--f92-surface)] px-4 py-3 text-right text-[10px] font-semibold uppercase text-[color:var(--f92-gray)]"
                       style={{ letterSpacing: 'var(--tracking-wide)', boxShadow: HEADER_RULE }}
@@ -1555,14 +1659,21 @@ export default function ClientLibraryPage() {
                             return (
                               <td
                                 key={brand.id}
-                                // Both crosshair axes, ONE source (`inspected`).
-                                // A single class either way, so no two `bg-*`
-                                // utilities ever compete at equal specificity.
+                                // Both crosshair axes, ONE source (`inspected`),
+                                // now behind the Part C highlight — and the
+                                // whole precedence in cellBandClass, shared
+                                // with the header. Note the fallback differs
+                                // there: a body cell must stay TRANSPARENT so
+                                // the row band underneath shows through, while
+                                // the sticky header must be opaque. That
+                                // difference is load-bearing in both directions
+                                // and is pinned by test.
                                 className={
                                   'px-2.5 py-2.5 text-center transition-colors ' +
-                                  (isHotRow || hotBrandId === brand.id
-                                    ? 'bg-[color:var(--f92-tint)]'
-                                    : '')
+                                  cellBandClass({
+                                    highlighted: highlightBrandId === brand.id,
+                                    crosshair: isHotRow || hotBrandId === brand.id,
+                                  })
                                 }
                               >
                                 <button

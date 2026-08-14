@@ -194,6 +194,31 @@
   --cell-blocked-fill:    #FAEEDA;
   --cell-na:              #6B7280;   /* gray-500 — 4.83:1; n/a is muted by design */
   --cell-na-fill:         transparent;  /* n/a renders as a bar, never a filled box */
+
+  /* ── Pulse matrix: clicked-column highlight (Part C) ──────────────────
+     A SEPARATE token from --f92-tint on purpose. The matrix already bands a
+     column with tint, from the batch-3 hover/focus crosshair; reusing it would
+     make a deliberate persistent highlight indistinguishable from transient
+     pointer feedback, and the crosshair would appear to erase the highlight as
+     the pointer moved across the grid.
+
+     OPAQUE, NOT rgba, in both themes — non-negotiable now that the header row is
+     sticky (Part B). A translucent header background lets body rows scroll
+     visibly through it.
+
+     The two themes move in OPPOSITE directions from their card surface, and that
+     is deliberate rather than an inconsistency: in each theme the highlight steps
+     AWAY from --f92-tint in the direction that raises contrast for what sits on
+     it. Light lifts cool off warm cream; dark recesses below the lifted tint.
+     Measured on the marks and text that actually land on it:
+       light #E2E8F5 — vs white card 1.23:1 (tint is 1.07:1, so the highlight is
+         the stronger band, as a deliberate state should be); --cell-na 3.87:1;
+         --f92-dark 13.83:1; --f92-gray 3.87:1
+       dark  #10131F — vs the #1E2235 card 1.19:1, matching tint's 1.18:1 in the
+         other direction; --cell-na 3.95:1 (up from 3.31:1 on the plain card, and
+         well up from the 2.80:1 that the EXISTING tint band already gives it);
+         --f92-dark 15.04:1; --f92-gray 7.26:1 */
+  --pulse-col-highlight:  #E2E8F5;
 }
 
 :root[data-theme="dark"] {
@@ -333,6 +358,10 @@
   --cell-blocked-fill:    rgba(245, 158, 11, 0.16);
   --cell-na:              #64748B;
   --cell-na-fill:         transparent;
+
+  /* Recessed rather than lifted — see the light-mode block for why the two
+     themes move in opposite directions. Opaque, because the header is sticky. */
+  --pulse-col-highlight:  #10131F;
 }
 
 @theme inline {
