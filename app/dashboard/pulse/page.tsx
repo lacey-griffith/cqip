@@ -192,6 +192,13 @@ function timeAgo(iso: string): string {
 
 const DEFAULT_PROJECT = 'NBLYCRO';
 
+// The sticky header's bottom rule (Part B). A box-shadow rather than a border,
+// because under `border-collapse: collapse` the collapsed border belongs to the
+// table's border model rather than to the cell, so it does not reliably travel
+// with a sticky cell while rows scroll under it. Declared once so the three
+// header cells cannot end up with three slightly different rules.
+const HEADER_RULE = 'inset 0 -1px 0 var(--f92-border)';
+
 // This page is the live consumer of the pulse:project channel. The channel
 // (lib/client-library/pulse-project-channel.ts) hands a project selection
 // across the app without a URL param (the shared nav can't read search params
@@ -1373,12 +1380,44 @@ export default function ClientLibraryPage() {
               )}
             </div>
           ) : (
-            /* Horizontal scroll keeps ≥16-brand projects usable (spec §4). */
-            <div className="overflow-x-auto">
+            /* ── PART B: the scroll region ───────────────────────────────────
+               BOTH axes scroll here (was `overflow-x-auto`), because `position:
+               sticky` resolves against the nearest scrollport: a header row can
+               only pin to something that scrolls, and the page body is not it.
+
+               HEIGHT — 65vh, chosen rather than magic. On a 900px laptop
+               viewport that is ~585px, roughly 13 body rows at the current ~44px
+               row height, while leaving the KPI strip, filter bar and legend
+               reachable above without pushing the filter controls off screen. A
+               `vh` unit so it can never exceed the viewport on a short screen,
+               and a MAX-height so a three-row project does not render 65vh of
+               empty box.
+
+               STACKING — intersection 30 > header 20 > sticky body cells 10.
+               The top-left cell is sticky on BOTH axes, so it is the one cell
+               that both of the others would otherwise scroll over. */
+            <div className="max-h-[65vh] overflow-auto">
               <table className="w-full border-collapse text-sm">
+                {/* The header's bottom rule is an inset BOX-SHADOW, not a
+                    border, and the <tr>'s border-b is gone. Under
+                    `border-collapse: collapse` a collapsed border belongs to the
+                    table's border model rather than to the cell, so it does not
+                    reliably travel with a sticky cell while rows scroll beneath
+                    it — the rule detaches or disappears. A box-shadow is drawn
+                    by the cell itself and is untouched by border collapsing.
+
+                    Every header cell also needs an OPAQUE background or the rows
+                    scroll straight through it. That is why the brand headers,
+                    which previously had no background at all, now carry the same
+                    surface/tint ternary as the body: two competing `bg-*`
+                    utilities at equal specificity would be resolved by
+                    Tailwind's emission order, so exactly one class is emitted. */}
                 <thead>
-                  <tr className="border-b border-[color:var(--f92-border)]">
-                    <th className="sticky left-0 z-10 bg-[color:var(--f92-surface)] px-4 py-3 text-left text-[10px] font-semibold uppercase text-[color:var(--f92-gray)]" style={{ letterSpacing: 'var(--tracking-wide)' }}>
+                  <tr>
+                    <th
+                      className="sticky left-0 top-0 z-30 bg-[color:var(--f92-surface)] px-4 py-3 text-left text-[10px] font-semibold uppercase text-[color:var(--f92-gray)]"
+                      style={{ letterSpacing: 'var(--tracking-wide)', boxShadow: HEADER_RULE }}
+                    >
                       Directive
                     </th>
                     {visibleBrands.map((brand) => (
@@ -1388,12 +1427,15 @@ export default function ClientLibraryPage() {
                         // band reads as "this column" rather than as a stripe
                         // floating in the middle of the grid.
                         className={
-                          'px-3 py-3 text-center text-[10px] font-semibold uppercase transition-colors ' +
-                          (hotBrandId === brand.id ? 'bg-[color:var(--f92-tint)]' : '')
+                          'sticky top-0 z-20 px-3 py-3 text-center text-[10px] font-semibold uppercase transition-colors ' +
+                          (hotBrandId === brand.id
+                            ? 'bg-[color:var(--f92-tint)]'
+                            : 'bg-[color:var(--f92-surface)]')
                         }
                         style={{
                           letterSpacing: 'var(--tracking-wide)',
                           color: brand.is_paused ? 'var(--f92-lgray)' : 'var(--f92-gray)',
+                          boxShadow: HEADER_RULE,
                         }}
                         title={brand.is_paused ? `${brand.display_name} (paused)` : brand.display_name}
                       >
@@ -1401,7 +1443,10 @@ export default function ClientLibraryPage() {
                         {brand.is_paused ? <span className="ml-0.5 opacity-70">·</span> : null}
                       </th>
                     ))}
-                    <th className="px-4 py-3 text-right text-[10px] font-semibold uppercase text-[color:var(--f92-gray)]" style={{ letterSpacing: 'var(--tracking-wide)' }}>
+                    <th
+                      className="sticky top-0 z-20 bg-[color:var(--f92-surface)] px-4 py-3 text-right text-[10px] font-semibold uppercase text-[color:var(--f92-gray)]"
+                      style={{ letterSpacing: 'var(--tracking-wide)', boxShadow: HEADER_RULE }}
+                    >
                       Outstanding
                     </th>
                   </tr>

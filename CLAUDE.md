@@ -4014,7 +4014,17 @@ earlier Pulse batches opened against an authority that lived only outside the re
   recorded against restyle batch 4.
 - **Directive CRUD is NOT in this batch**, including a disabled affordance.
 
-**Phase status:** commit 1 (spec) + commit 2 (Part A) landed. Parts B/C next, then Karen.
+**Phase status:** commits 1 (spec) + 2 (Part A) + 3 (Part B) landed. Part C next, then Karen.
+
+**Part B shipped in commit 3.** `overflow-x-auto` → `max-h-[65vh] overflow-auto`, because
+`position: sticky` resolves against the nearest scrollport and the page body is not it.
+Header row pins on vertical scroll, directive column on horizontal, intersection `z-30` >
+header `z-20` > sticky body cells `z-10`. The header's bottom rule moved from the `<tr>`'s
+`border-b` to an inset **box-shadow** on each header cell: under `border-collapse: collapse`
+a collapsed border belongs to the table's border model rather than to the cell, so it does
+not reliably travel with a sticky cell. Brand headers gained an opaque background they never
+had (rows would otherwise scroll straight through them), as a ternary — two competing `bg-*`
+utilities at equal specificity would be resolved by Tailwind's emission order.
 
 **Part A shipped in commit 2.** Two-row bar; STATUS multi-select via a new
 `MultiTabGroup` sharing `GroupShell` + `OptionButton` with `TabGroup` (so the two
