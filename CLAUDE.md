@@ -3235,6 +3235,9 @@ bullets is not.** That is worth more than the ordering rule it sits under.
   render side (Karen MEDIUM-1 → `countHiddenByStatus`). This is the **durable**
   fix. Route change (+ optionally a unique index → migration), so it needs its
   own gate profile — likely Jenny. Decide whether to reject outright or warn.
+  **IN FLIGHT — see §15.5 (directive CRUD).** Answered there: reject outright,
+  at BOTH layers (unique index + a 409 from the route). Prod probed 2026-08-15 —
+  **0 duplicates** at every strictness, so the index lands cleanly.
 - **Archive-UI signal obligation (Karen LOW-8)** — `loadProject` only loads
   `status='active'` directives, so an ARCHIVED directive is invisible to the
   matrix search and counts 0 toward `hiddenByStatus`: an exists-but-archived title
@@ -3244,6 +3247,14 @@ bullets is not.** That is worth more than the ordering rule it sits under.
   `DEFAULT 'active'`), and directive edit/archive UI is still an open TODO. When
   that UI is built it **owes this surface a signal** (include archived titles in
   the duplicate-risk count, or land the route check above first).
+  **⚠ THE "unreachable" CLAIM ABOVE IS FALSIFIED — left in place, not deleted,
+  because the way it failed is the lesson.** Prod holds an archived directive
+  (`Submits Form Lead - Combined`), written by **direct SQL** — a surface that
+  audit did not consider, because it examined `app/api/` only. **A "no writer
+  exists" claim must state which surfaces were checked.** See the dedicated §15
+  entry below, and **IN FLIGHT — see §15.5 (directive CRUD)**, which pays the
+  signal obligation in full: archived rows become viewable behind a `Hide
+  archived` toggle rather than merely counted.
 
 **V2.1 trigger backport — 8 items, HAND-ENTERED via the UI (loader ABANDONED
 2026-07-30):**
@@ -3916,6 +3927,12 @@ why total cells (**1,393**) exceed rendered cells (86 × 16 + 1 = **1,377**).
       duplicate-risk count, or land the `POST /api/admin/directives` duplicate-title
       check first (already a §15 item). **A `status` filter that hides rows a user is
       searching for needs to say so** — the same lesson as B5's hidden-count readout.
+      **IN FLIGHT — see §15.5 (directive CRUD), which does BOTH** and goes past the
+      signal: archived rows become *viewable* behind a `Hide archived` toggle, so the
+      answer to "does it exist?" stops being a count and becomes the row itself. Note
+      the count signal shipped 2026-08-14 (`countArchivedMatchingSearch`) and its
+      wording — *"…are not shown"* — becomes FALSE the moment the toggle is off, so
+      that batch must gate it on `hideArchived` rather than leave it standing.
 
 ### Logs-page deferred follow-ons (from the 2026-08-12 batch, Lacey's scope call)
 
@@ -4028,6 +4045,81 @@ overdue** — its §15.5 entry still read "BOTH COMMITS BUILT, Karen post-flight
 while its own body already recorded Karen done and a COMMIT 4 widening, and no §16
 entry existed. That is exactly the drift r34 exists to prevent, and it happened anyway
 because the reconcile was never the same commit as the ship.)
+
+### Batch 012 — Pulse: directive CRUD (edit · soft-delete · archive) — SPEC LANDED 2026-08-15
+
+In-place row editing of directives on the Pulse matrix, plus soft-delete/archive
+and duplicate-title blocking. **Spec: `docs/batch-012-directive-crud-spec.md`,
+committed as COMMIT 1 BEFORE the build opened** (the §15 PROCESS note — two
+earlier Pulse batches opened against an authority that existed only outside the
+repo). Source: Lacey's 2026-08-15 handoff, whose 12 locked decisions are
+transcribed into spec §1 verbatim.
+
+**Gate: Jenny pre-flight REQUIRED — before COMMIT 3, not COMMIT 2 (spec §9).**
+The handoff gated the migration because it was to carry a new column plus a
+constraint; the column turns out to already exist (below), so commit 2 is a lone
+unique index on data proven non-violating. The privileged surface worth a
+pre-flight is the **new PATCH route** — it can move a directive between projects
+and destroy cells. Karen post-flight. **DO NOT PUSH** — Lacey smokes.
+
+**Phase status: COMMIT 1 (spec) only. No code written.**
+
+**Four findings from the 2026-08-15 prod probe, each moving work the handoff
+placed elsewhere:**
+- **The archive flag ALREADY EXISTS.** Migration 024 ships
+  `directives.status CHECK (status IN ('active','archived'))`, which IS decision
+  A's "one flag" — `DIRECTIVE_STATUSES` already mirrors it. Soft-delete is
+  `status='archived'`; **no new column**, and adding one would create the
+  two-flag state decision A forbids. COMMIT 2 shrinks to the unique index alone.
+- **The unique constraint can land cleanly — verified, not assumed.** A unique
+  constraint added to a table that already violates it fails at apply time, in
+  prod, mid-deploy. Probed across all 89 rows: **0** duplicates on
+  `(project_key, title)` exact all-statuses, **0** active-only, and **0** even
+  case/whitespace-insensitive. So we are not choosing between a constraint that
+  lands and one that is strict enough to be useful — both are available.
+- **The directive count moved AGAIN — 86 → 87 NBLY active** (88 global, 89 rows
+  incl. the archived one) since the 2026-08-14 re-probe. It has now moved on
+  **every** re-probe: 82 → 83 → 86 → 87. The spec therefore contains no count any
+  code may read, and requires the same of the build.
+- **⚠ Editing `project_key` silently corrupts the KPI strip, and the handoff does
+  not mention it.** Cells are keyed to `brand_id`, so moving a directive
+  NBLY → SPL leaves its 16 cells pointing at NBLY brands. The cell read is scoped
+  by `directive_id`, so SPLCRO loads them; the matrix renders SPL's columns, so
+  the row renders **entirely hollow**; and `computeMatrixKpis` scopes cells by
+  directive id rather than brand, so those 16 NBLY cells **are counted** into
+  SPL's KPIs while rendering nowhere. Counted-but-invisible — the defect
+  `countHiddenOwedCells` was built to catch for paused brands, through a door
+  that guard does not watch, with no error and a plausible-looking number.
+  Spec §4.4 requires a re-fan-out in the same write.
+
+**Two decisions the spec makes STRUCTURAL rather than conventional:**
+- **§2's "archived is not completed" gets a mechanism.** `loadProject` must drop
+  its `.eq('status','active')` filter for the archived rows to be viewable — from
+  which moment a display toggle would move `coveragePct`'s denominator, i.e.
+  archive counted as completion, reachable by clicking a checkbox. So
+  `MatrixDirectiveLike` gains `status` and **`computeMatrixKpis` filters
+  `status === 'active'` internally**: it cannot count an archived directive even
+  when handed one. Pinned by a mixed-array test — the one place in this batch
+  where a test that only ever passes active rows would prove nothing (r38).
+- **Restore is IN SCOPE**, because `status` is one of the editable fields and a
+  soft-delete with no undo path through the UI is a hard delete with extra steps.
+
+**Three items open for Lacey, each with a stated default so the build is not
+blocked:** whether the inline `project_key` warning (a label inside the
+already-open editor — deliberately NOT a second modal, so the "one prompt
+pattern" lock holds) is sufficient surfacing for cell destruction; whether
+uniqueness spans archived rows (**default yes** — a partial index on active would
+make *restore* fail at the database on an operation the user expects to work);
+and whether the index is exact-match or a stricter normalized functional index
+(**default exact**, per the handoff, recorded so "we only blocked exact
+duplicates" is a decision rather than an oversight).
+
+**This batch also closes a live defect AND a falsified claim.** The archived
+`Submits Form Lead - Combined` reads as "found nothing" to anyone searching it;
+and Karen's LOW-8 recorded archiving as *verified unreachable* on 2026-07-29 —
+that audit examined `app/api/` only, so the direct-SQL path that created this row
+was outside its scope. Standing lesson: **a "no writer exists" claim must state
+which surfaces were checked.**
 
 
 ## 16. Shipped Features Log
