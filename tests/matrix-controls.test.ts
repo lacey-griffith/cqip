@@ -5,6 +5,7 @@ import type { DirectiveStatus } from '../lib/client-library/directives';
 
 import {
   buildMatrixRows,
+  buildResultCountLabel,
   classifyDirectiveCells,
   compareMatrixRows,
   countArchivedMatchingSearch,
@@ -800,4 +801,93 @@ test('computeMatrixKpis: the archived fixture DISCRIMINATES (guards the test its
   assert.equal(asIfActive.blockedCells, activeOnly.blockedCells + 1);
   assert.equal(asIfActive.total, activeOnly.total + 1);
   assert.notEqual(asIfActive.coveragePct, activeOnly.coveragePct);
+});
+
+// -------------------------------------------------------------------------
+// buildResultCountLabel — extracted AFTER it shipped wrong (Karen HIGH-1).
+//
+// The bug: the base figure used `visibleDirectives.length`, which with Hide
+// archived OFF is the ALL-STATUS count, and then `+ N archived` was appended to
+// a number that already contained it — "88 directives + 1 archived", reading as
+// 89, beside a KPI card saying 87. It shipped because the string was assembled
+// inline in JSX, where no test reaches.
+//
+// THE INVARIANT these tests exist for: the FIRST figure equals the ACTIVE count
+// in BOTH toggle states, so it always matches computeMatrixKpis' `total`.
+// -------------------------------------------------------------------------
+const LABEL_BASE = {
+  activeCount: 87,
+  archivedCount: 1,
+  projectLabel: 'NBLYCRO',
+};
+
+test('buildResultCountLabel: hidden archived — the shipped spec §4.2 table', () => {
+  assert.equal(
+    buildResultCountLabel({ ...LABEL_BASE, shown: 87, renderable: 87, hideArchived: true }),
+    '87 directives in NBLYCRO',
+  );
+  assert.equal(
+    buildResultCountLabel({ ...LABEL_BASE, shown: 12, renderable: 87, hideArchived: true }),
+    '12 of 87 directives in NBLYCRO',
+  );
+});
+
+test('buildResultCountLabel: shown archived — names BOTH figures, never merges them', () => {
+  // `renderable` is 88 here (87 active + 1 archived) — that is precisely the
+  // number the broken version put in the base. If it reappears, these fail.
+  assert.equal(
+    buildResultCountLabel({ ...LABEL_BASE, shown: 88, renderable: 88, hideArchived: false }),
+    '87 directives + 1 archived in NBLYCRO',
+  );
+  assert.equal(
+    buildResultCountLabel({ ...LABEL_BASE, shown: 12, renderable: 88, hideArchived: false }),
+    '12 of 87 directives + 1 archived in NBLYCRO',
+  );
+});
+
+test('buildResultCountLabel: the first figure ALWAYS equals the KPI total', () => {
+  // Stated as a property over both toggle states rather than as four literals,
+  // because the literals above could all be updated together to match a wrong
+  // implementation. This one cannot be satisfied by a base that includes
+  // archived rows.
+  for (const hideArchived of [true, false]) {
+    const renderable = hideArchived ? 87 : 88;
+    // shown <= renderable only: more rows rendered than renderable is not a
+    // state the page can produce, and asserting over impossible inputs tests
+    // nothing while making the test look broader than it is.
+    for (const shown of [0, 12, 87, renderable]) {
+      const label = buildResultCountLabel({ ...LABEL_BASE, shown, renderable, hideArchived });
+      // The figure attached to the word "directives" is the one a reader compares
+      // against the KPI card — the sole figure when unfiltered, the DENOMINATOR
+      // when filtered.
+      const quoted = Number(label.match(/(\d+) directives? /)?.[1]);
+      assert.equal(quoted, LABEL_BASE.activeCount, `wrong figure in "${label}"`);
+      // 88 is the all-status count — exactly what the broken version put here.
+      assert.equal(label.includes('88'), false, `all-status count leaked into "${label}"`);
+    }
+  }
+});
+
+test('buildResultCountLabel: archived suffix only when archived rows are SHOWN and exist', () => {
+  assert.equal(
+    buildResultCountLabel({ ...LABEL_BASE, archivedCount: 0, shown: 87, renderable: 87, hideArchived: false }),
+    '87 directives in NBLYCRO',
+    'no suffix when the project has no archived directives',
+  );
+  assert.match(
+    buildResultCountLabel({ ...LABEL_BASE, shown: 87, renderable: 87, hideArchived: true }),
+    /^87 directives in NBLYCRO$/,
+    'no suffix while archived rows are hidden',
+  );
+});
+
+test('buildResultCountLabel: singular only at exactly one', () => {
+  assert.equal(
+    buildResultCountLabel({ ...LABEL_BASE, activeCount: 1, archivedCount: 0, shown: 1, renderable: 1, hideArchived: true }),
+    '1 directive in NBLYCRO',
+  );
+  assert.equal(
+    buildResultCountLabel({ ...LABEL_BASE, activeCount: 0, archivedCount: 0, shown: 0, renderable: 0, hideArchived: true }),
+    '0 directives in NBLYCRO',
+  );
 });

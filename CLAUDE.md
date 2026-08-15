@@ -4130,12 +4130,82 @@ unique index on data proven non-violating. The privileged surface worth a
 pre-flight is the **new PATCH route** — it can move a directive between projects
 and destroy cells. Karen post-flight. **DO NOT PUSH** — Lacey smokes.
 
-**Phase status: ALL SIX BUILD COMMITS DONE** (spec · migration 029 · the pure
-layer · `PATCH /api/admin/directives/[id]` · the row editor · the `Hide archived`
-control + consumer wiring). **Karen post-flight is the remaining gate.**
-Jenny pre-flight DONE across TWO passes and folded as spec rev 3. **Migration NOT
-yet applied — Lacey runs it.** Remaining: the PATCH route, the row editor, the
-`Hide archived` wiring, Karen.
+**Phase status: ALL BUILD COMMITS DONE, plus Karen's post-flight folded** (spec ·
+migration 029 · the pure layer · `PATCH /api/admin/directives/[id]` · the row
+editor · the `Hide archived` control + consumer wiring · the MEDIUM-4 close-path
+unification · this fold). Jenny pre-flight DONE across TWO passes (spec rev 3);
+Karen post-flight PASS-WITH-FINDINGS, all folded.
+
+**Remaining before push: nothing in code.** **Migration 029 is NOT applied —
+Lacey runs it**, and it carries its own pre-flight query. Nothing has been
+rendered in a browser, and there is no route-level test harness in this repo, so
+the CRITICAL-1-shaped assertion (*PATCH a move on a worked directive → 409, cells
+unchanged by direct query*) is a Lacey-smoke item.
+
+*(This block previously said "ALL SIX BUILD COMMITS DONE" and then, five lines
+later in the same paragraph, listed three of those commits as "Remaining" — Karen
+MEDIUM-6. A session reading it would have rebuilt shipped work. Left recorded
+rather than silently overwritten, because §16 already notes this shape twice:
+"Moving an entry is not the same as reconciling it.")*
+
+**KAREN POST-FLIGHT: PASS-WITH-FINDINGS — 2 HIGH · 7 MEDIUM · 5 LOW, no
+CRITICAL, all folded across COMMITS 7 + 8.** She re-ran every gate rather than
+trusting the numbers, reproduced the mutation counts exactly, and confirmed the
+things that most needed confirming: **the eight consumers are wired exactly as
+§4.2's table requires** (three raw reads remain and they are the three the spec
+names), **an archived directive cannot reach a coverage figure**, **no
+interleaving she could construct loses a cell**, and **the move is genuinely
+re-runnable**. What did not survive was, for the fifth batch running, the
+CLAIMS — plus one wrong number on the batch's own headline surface.
+
+- **HIGH-1 — the result line contradicted the KPI card AND double-counted.** With
+  Hide-archived OFF, `visibleDirectives` IS the all-status array, so `+ N
+  archived` was appended to a base that already contained it: "88 directives + 1
+  archived", reading as 89, beside a KPI card saying 87. §4.2 explicitly warns
+  that `visibleDirectives` only fixes the toggle-ON state; the implementation
+  stopped exactly there, and the comment above the code described a fix the code
+  below it did not perform. **The spec's own §8 assertion would have caught it** —
+  which is the point: the string was assembled inline in JSX where no test
+  reaches, so it is now the pure `buildResultCountLabel`, and the invariant
+  (*first figure = active count, in both toggle states*) is asserted as a property
+  rather than four literals.
+- **HIGH-2 — `POST /api/admin/directives` was never touched by the batch.** Spec
+  §5 says BOTH routes 409; the PATCH route got the full treatment and its sibling
+  got none, with no commit message disclosing it. Migration 029 then turns its
+  duplicate path into a raw `duplicate key value violates unique constraint
+  "idx_directives_project_title"` shown to an admin who simply retyped a title —
+  on the surface §4.3 spent this batch making trustworthy.
+- **MEDIUM-1 — the DELETE's `WHERE` was not the predicate.** A whitespace-only
+  note is non-blocking to `isDirectiveMovable` (pinned by test) but blocking to
+  `note IS NULL`, so such a cell passed the check, survived the delete, tripped
+  the count mismatch, and reported *"someone else edited this"* when nobody had —
+  permanently, on every retry. Now deletes by the **exact ids the predicate
+  approved**, keeping `updated_by IS NULL` as the race guard: ids cannot disagree
+  with the predicate because they ARE its output.
+- **MEDIUM-2 — a destination with no active brands stranded the directive at zero
+  cells**, a state §7 declines to build a repair affordance for *on the grounds
+  that it is unreachable*. It is reachable — HDCRO exists with 0 brands. Refused
+  with a 400 that says why.
+- **MEDIUM-4 — the dirty guard covered TWO of five close paths** (COMMIT 7, see
+  §16 when this ships). The strip owned the dialog, so the three closes the PAGE
+  performs bypassed it: editing a title and clicking any cell dot discarded the
+  edit silently.
+- **MEDIUM-5/6/7 + LOW-1/5 — the claims.** A "delete control" named in three
+  documents that **was never built**; the self-contradicting phase block above;
+  four comment blocks asserting the opposite of what shipped, **including one
+  whose own state slot had been deleted out from under it** and which went on
+  insisting archived rows were "deliberately never merged"; a hardcoded
+  Active/Archived pair; and a predicate clause that failed **open**.
+
+**⚠ AND MY OWN LOW-5 FIX WAS BACKWARDS, caught by the test written for it.**
+Rewriting `!== null && !== undefined` as `!= null` reads like a tidy-up and is
+the *same* fail-open behaviour — loose inequality treats `undefined` as null-ish,
+so a missing field still read as untouched. The correct fail-closed form is
+strict `!== null` **alone**. Both wrong spellings now fail a test that reaches the
+branch through an explicit cast, since `MovabilityCell` declares the field
+non-optional and no type-checked caller can get there. Recorded because the
+mistake is the interesting part: the fix looked more careful than the original and
+was identical to it.
 
 **COMMIT 3 shipped the pure layer, ahead of the route on purpose** — the route's
 server-side re-check imports `isDirectiveMovable`, and writing the route first is
@@ -4153,8 +4223,12 @@ drops. tsc 0 · ESLint 0 on all five files · 343/343 · build 0 with
 
 **COMMIT 4 — `PATCH /api/admin/directives/[id]`**, one route for edit / archive /
 restore / move, mirroring the two Phase A routes' shape. Archive is an ORDINARY
-field change (`status`), not a special action, which is what keeps the delete
-control and the editor's status field on one code path and one audit row. The
+field change (`status`), not a special action — so archive, restore and an
+ordinary edit share one code path and one audit row. *(This sentence originally
+said that kept "the delete control and the editor's status field" on one path.
+**There is no delete control** — the editor's State dropdown is the only writer
+of `status`, and the phrase reached three documents describing a control nobody
+built. Karen MEDIUM-5; see the spec §4.1 correction.)* The
 movability re-check runs **only when `project_key` actually changes** — checking
 unconditionally would 409 every title edit on the ~88 directives that hold work.
 Order is load-bearing throughout: destination cells are **upserted first**
@@ -4346,21 +4420,31 @@ placed elsewhere:**
 - **Restore is IN SCOPE**, because `status` is one of the editable fields and a
   soft-delete with no undo path through the UI is a hard delete with extra steps.
 
-**Both open questions ANSWERED by Lacey 2026-08-15; spec is at rev 1 and nothing
-is outstanding:**
+**Both open questions ANSWERED by Lacey 2026-08-15. ⚠ THE BLOCK BELOW DESCRIBED
+SPEC REV 1 AND IS SUPERSEDED — the predicate and the figure it states were both
+FALSIFIED by this batch's own probe. Corrected in place (Karen MEDIUM-6), because
+a reader landing here to answer "what is the movability rule?" was getting the
+version this batch proved wrong, ~65 lines below the correct one.**
 - **`project_key` moves are BLOCKED when the directive holds work** — chosen over
   an inline warning and over a confirm step, because it is the only option where
   **no data can be lost**. Movable ⟺ every cell is at a fan-out default
-  (`todo`/`n_a`) **and** carries no note; the formulation is deliberately
-  independent of the brand's current `is_paused`, which can flip after fan-out.
+  (`todo`/`n_a`), carries no note, **AND has a NULL `updated_by`**; the
+  formulation is deliberately independent of the brand's current `is_paused`,
+  which can flip after fan-out.
+  *(Rev 1 stated only the first two clauses. That version would have wrongly
+  allowed moving 5 of its 6 "movable" directives — `n_a` is not machine-only, and
+  620 prod cells that looked like fan-out output had in fact been written.)*
   **This makes the required re-fan-out lossless BY CONSTRUCTION** — §0.4's silent
   miscount is fixed *and* nothing can be destroyed, so the two goals stop trading
   against each other, and the "one prompt pattern" lock survives untouched
   because there is nothing left to warn about.
-  **⚠ The measured cost, and it is large: `project_key` is editable on 6 of 89
-  directives — 7%.** The 6 are the never-worked ones (the five chat goals added
-  2026-08-12 plus a sibling), which is exactly the case decision B exists for, so
-  the rule is well-targeted rather than accidentally narrow. **But do not
+  **⚠ The measured cost, and it is large: `project_key` is editable on 1 of 89
+  directives.** *(Rev 1 said "6 of 89 — 7%", and called those 6 "the never-worked
+  ones"; both were superseded by the third clause — 5 of them had `updated_by`
+  written by direct SQL at creation.)* The one remaining is genuinely untouched.
+  Every directive created **from now on** leaves `updated_by` NULL and is movable
+  until someone works it, which is exactly the case decision B exists for, so the
+  rule is well-targeted rather than accidentally narrow. **But do not
   describe this as "project is editable":** it is editable *until someone works
   the directive*, which in practice means the same session. An admin needing to
   move a worked directive archives it and creates a replacement — lossy too, but

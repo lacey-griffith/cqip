@@ -220,7 +220,21 @@ export interface MovabilityVerdict {
 }
 
 function cellHoldsWork(cell: MovabilityCell): boolean {
-  if (cell.updated_by !== null && cell.updated_by !== undefined) return true;
+  // STRICT `!== null`, and the strictness is the whole point (Karen LOW-5).
+  //
+  // Only an explicit NULL means "never written since fan-out". Anything else —
+  // including a MISSING field — counts as touched, so the predicate fails CLOSED
+  // (refuses a move) rather than open (permits one). Its failures cost cells;
+  // that is the direction to be wrong in.
+  //
+  // ⚠ DO NOT "TIDY" THIS TO `!= null`. Loose inequality treats undefined as
+  // null-ish, so a missing field would read as untouched and permit the move —
+  // the exact fail-open behaviour LOW-5 raised, reintroduced by a change that
+  // looks like a simplification. The original form was
+  // `!== null && !== undefined`, which had the same defect spelled out longhand.
+  // A test pins this via an explicit cast, because MovabilityCell declares the
+  // field non-optional and no type-checked caller can reach the branch.
+  if (cell.updated_by !== null) return true;
   if (!FAN_OUT.has(cell.status)) return true;
   return typeof cell.note === 'string' && cell.note.trim().length > 0;
 }

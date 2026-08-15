@@ -365,11 +365,16 @@ export function buildMatrixRows<D extends MatrixDirectiveLike>(
 
 // How many directives the SEARCH kept but the three filter GROUPS excluded.
 //
-// Why this replaces the old status-only count (Karen MEDIUM-1, still live): the
-// guard exists because a filtered view made someone conclude a directive didn't
-// exist and create a duplicate — and `POST /api/admin/directives` STILL performs
-// no duplicate-title check, with no unique constraint on (project_key, title), so
-// that failure mode is not hypothetical.
+// Why this replaces the old status-only count (Karen MEDIUM-1): the guard exists
+// because a filtered view made someone conclude a directive didn't exist and
+// create a duplicate.
+//
+// That specific consequence is now CLOSED — directive CRUD added migration 029's
+// unique index on (project_key, title) plus 409s on both POST and PATCH, so the
+// same false negative can no longer mint a duplicate. The guard is still needed:
+// it now prevents a user concluding a directive does not exist when it does, and
+// then hitting a rejection they cannot explain. Corrected rather than deleted,
+// because the ORIGINAL reason is why this function is shaped the way it is.
 //
 // With three groups a hidden row can have three different causes, and this
 // deliberately does NOT attempt per-group attribution: a row can be excluded by
@@ -431,13 +436,15 @@ export function hasClearableFilters(controls: MatrixControls): boolean {
 // How many ARCHIVED directives match the current search (spec §A7).
 //
 // WHY THIS EXISTS, and why it is not a plain archived count. `loadProject` reads
-// `status='active'` only, so an archived directive is invisible to the matrix
+// `status='active'` only. (That is no longer true of the matrix page as of
+// directive CRUD — it loads all statuses and filters at render — but this helper
+// still answers the same question, and its caller feeds it the full set. See the
+// ⚠ paragraph below.) An archived directive hidden by the toggle is invisible to the matrix
 // search AND contributes 0 to countHiddenByFilters — an exists-but-archived title
 // reads as "found nothing". That is exactly the inference countHiddenByFilters
-// was built to prevent, because `POST /api/admin/directives` still performs no
-// duplicate-title check and migration 024 puts no unique constraint on
-// (project_key, title), so acting on it mints a duplicate that then makes any
-// title→id resolver silently pick the wrong row.
+// was built to prevent. Acting on it no longer mints a duplicate — migration 029
+// and the two route-level 409s closed that — but it still sends a user to create
+// something that will be refused.
 //
 // A bare "3 archived directives exist" does not answer the question the user is
 // actually asking, which is whether THEIR term exists. So this is scoped to the

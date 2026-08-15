@@ -308,13 +308,28 @@ archived directive can be set back to `active` from the same editor. This is not
 scope creep — without it, an all-admins soft-delete has no undo path through the
 UI, and "soft delete" that cannot be undone is a hard delete with extra steps.
 
-**Two affordances write `status`, and that is deliberate** (Jenny LOW-6): the row
-editor's field, and the delete control. Two write paths to one column is normally
-the shape `clearAllFilters`' comment warns about — it is accepted here because
-the delete control is a shortcut for the overwhelmingly common case, and both
-paths go through the **same** PATCH route and emit the **same** audit row, so
-they cannot diverge in behaviour or in the trail. If they ever stop sharing the
-route, this stops being acceptable.
+**⚠ ONE affordance writes `status`, not two — CORRECTED (Karen MEDIUM-5).**
+
+This paragraph previously described "two affordances … the row editor's field,
+**and the delete control**", and argued at length that the duplication was safe
+because both went through the same route. **No delete control was built.** The
+editor's **State** dropdown (Active / Archived) is the only writer; the word
+"Delete" appears nowhere in the Pulse UI. The same false claim reached COMMIT 4's
+message and `CLAUDE.md`, so three documents described a control that does not
+exist while the batch's own title says "soft-delete".
+
+**Nothing is broken** — archiving is reachable in two clicks (State → Archived →
+Save), and that IS the soft-delete. What was wrong was the description, and the
+"two paths cannot diverge" argument was defending a design that was never built.
+
+**Left as one affordance, deliberately.** A separate Archive button is a
+convenience, not a capability, and adding UI to make a stale sentence true is the
+wrong direction. If it is wanted later it must go through the same PATCH route
+and emit the same audit row — at which point the divergence argument above
+becomes live rather than decorative.
+
+**Lacey:** if you smoke-test looking for a delete button because three documents
+named one, this is why you will not find it.
 
 ### 4.2 `Hide archived`
 

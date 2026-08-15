@@ -243,17 +243,21 @@ export default function ClientLibraryPage() {
   const [projectKey, setProjectKey] = useState<string>('');
   const [brands, setBrands] = useState<BrandRow[]>([]);
   const [directives, setDirectives] = useState<DirectiveRow[]>([]);
-  // ARCHIVED directives, in their OWN slot and deliberately never merged into
-  // `directives` (spec §A7). They exist only to answer "does the title you just
-  // searched for exist, archived?" — the question an archived directive
-  // otherwise answers with a silent "no", because loadProject reads
-  // status='active' only.
+  // ⚠ `directives` HOLDS ALL STATUSES — active AND archived — as of directive
+  // CRUD. It used to be active-only, with archived titles in a separate slot.
   //
-  // THE ISOLATION IS THE LOAD-BEARING PART. `directives` is the denominator of
-  // the result count and is fed to computeMatrixKpis, buildMatrixRows and
-  // countHiddenByFilters; folding archived rows in would inflate every KPI on
-  // the page and add rows nobody can act on. Only `title` is kept, so there is
-  // nothing here that a render path could accidentally use as a matrix row.
+  // (The docblock that stood here described that separate slot, and SURVIVED its
+  // deletion: it went on asserting archived rows were "deliberately never merged"
+  // and that merging them "would inflate every KPI on the page", above code that
+  // had merged them. Karen MEDIUM-7. Recorded because a comment that outlives
+  // the thing it documents is worse than no comment — it reads as a live
+  // invariant and is believed.)
+  //
+  // Merging them is safe for exactly one reason, and it is a mechanism rather
+  // than a convention: computeMatrixKpis filters `status === 'active'` INTERNALLY
+  // (see matrix-controls.ts), so an archived directive cannot reach a coverage
+  // figure even when handed one. Everything that must NOT see archived rows takes
+  // `visibleDirectives` instead — the split is enumerated at that memo below.
   const [cells, setCells] = useState<CellRow[]>([]);
   const [findings, setFindings] = useState<FindingRow[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -1363,10 +1367,13 @@ export default function ClientLibraryPage() {
                 </span>
 
                 {/* Never let "I searched and found nothing" read as "it doesn't
-                    exist" — a filter may be hiding the match, and a duplicate
-                    title is STILL unguarded server-side (POST /api/admin/directives
-                    has no duplicate check and there is no unique constraint), so
-                    the failure this prevents is live.
+                    exist" — a filter may be hiding the match.
+                    The stakes are LOWER than they were: duplicate titles are now
+                    blocked at both layers (migration 029's unique index, plus a
+                    409 from POST and PATCH), so acting on a false negative can no
+                    longer mint a duplicate. It now costs a confusing rejection
+                    instead — still worth preventing, and this comment no longer
+                    claims a hazard the batch closed.
                     Gated on a NON-EMPTY search (Karen LOW-6): matchesSearch()
                     matches everything on a blank query, so without this gate the
                     line would render on every page load, claiming a match when
@@ -1397,21 +1404,26 @@ export default function ClientLibraryPage() {
                     contribute 0 to that count and are unreachable from every
                     control on this page.
 
-                    It matters because acting on the false negative mints a
-                    DUPLICATE: POST /api/admin/directives still performs no
-                    duplicate-title check and migration 024 puts no unique
-                    constraint on (project_key, title), after which any title→id
-                    resolver silently picks the wrong row.
+                    It used to matter because acting on the false negative MINTED
+                    a duplicate — POST performed no duplicate check and there was
+                    no unique constraint. Both are now closed (migration 029 +
+                    409s on POST and PATCH), so the remaining cost is a user who
+                    concludes a directive does not exist when it does.
 
-                    NO CLEAR BUTTON HERE, deliberately — there is nothing to
-                    clear. Archived directives are not rendered by this page at
-                    all (loadProject reads active only), and there is no archive
-                    UI to link to yet. Stating the fact is the whole deliverable;
-                    an affordance that did nothing would be worse than none.
+                    AND THERE IS NOW SOMEWHERE TO SEND THEM. The earlier version
+                    of this block said "no CLEAR BUTTON HERE, deliberately —
+                    there is nothing to clear … archived directives are not
+                    rendered by this page at all … there is no archive UI to link
+                    to yet". All three clauses are false as of directive CRUD:
+                    archived rows render behind the Hide-archived toggle, and the
+                    Show-archived button below IS the affordance that comment
+                    said could not exist.
 
-                    Recorded as unreachable by Karen LOW-8 on 2026-07-29 — that
-                    audit checked app/api/ for an archive writer and found none.
-                    Prod has one, written by direct SQL. */}
+                    Karen LOW-8 recorded archiving as unreachable on 2026-07-29 —
+                    that audit checked app/api/ for a writer and found none; prod
+                    has one, written by direct SQL. The durable lesson stands: a
+                    "no writer exists" claim must say which surfaces were
+                    checked. */}
                 {/* GATED ON hideArchived. With the toggle off, archived rows
                     ARE shown, so "are not shown" would be a false statement on
                     the one surface whose job is preventing a false conclusion —

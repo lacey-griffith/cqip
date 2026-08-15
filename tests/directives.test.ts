@@ -13,6 +13,7 @@ import {
   isDirectiveType,
   outstandingCount,
   type CellStatus,
+  type MovabilityCell,
 } from '../lib/client-library/directives';
 
 // Spec §6.1 — Outstanding = cells in {todo,in_progress,blocked}; done/n_a
@@ -277,4 +278,18 @@ test('diffDirectiveFields: covers every editable field and nothing else', () => 
   });
   assert.equal(all.length, 5);
   assert.deepEqual(DIRECTIVE_EDITABLE_FIELDS.length, 5, 'DIRECTIVE_EDITABLE_FIELDS drift');
+});
+
+test('isDirectiveMovable: a MISSING updated_by fails CLOSED (Karen LOW-5)', () => {
+  // Only reachable through a cast — MovabilityCell declares updated_by
+  // non-optional precisely so tsc catches the omission. But the predicate's
+  // failures cost cells, so its one runtime branch must fail closed, and this
+  // pins the direction: missing counts as TOUCHED, never as untouched.
+  //
+  // Written with the cast deliberately rather than skipped as "unreachable":
+  // `!== null` alone survives every other test in this file, so without this the
+  // clause could be silently weakened back.
+  const missing = [{ status: 'todo', note: null } as unknown as MovabilityCell];
+  assert.equal(isDirectiveMovable(missing).movable, false);
+  assert.equal(isDirectiveMovable(missing).blockingCells, 1);
 });
