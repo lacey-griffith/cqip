@@ -4131,8 +4131,43 @@ pre-flight is the **new PATCH route** — it can move a directive between projec
 and destroy cells. Karen post-flight. **DO NOT PUSH** — Lacey smokes.
 
 **Phase status: COMMIT 1 (spec) + COMMIT 2 (migration 029) built; Jenny
-pre-flight DONE and folded as spec rev 2. Migration NOT yet applied — Lacey runs
-it. No application code written yet.**
+pre-flight DONE across TWO passes and folded as spec rev 3. Migration NOT yet
+applied — Lacey runs it.**
+
+**Jenny's re-gate on rev 2: APPROVE-WITH-FINDINGS (1 HIGH · 10 MEDIUM · 4 LOW),
+no third gate needed.** She closed CRITICAL-1 as genuinely fixed and confirmed
+the consumer table's two contested rows. Five of the new findings would each have
+shipped as a real bug, and two are worth carrying as lessons:
+- **My §8 assertion would have FAILED on a correct build** — it said `Hide
+  archived` OFF where it should say ON (88 vs 87), and the natural "fix" for a
+  failing test is to point the count at active-only, i.e. a count excluding rows
+  visibly on screen. Underneath it sat an undecided design question: rev 2's fix
+  removed HIGH-3's contradiction for toggle-ON and **preserved it verbatim for
+  toggle-OFF**. Now decided — the line names both figures.
+- **MEDIUM-2 had the right fix with the WRONG REASON**, and the reason is what a
+  maintainer follows: rev 2 justified scoping the paused-brand warning by the KPI
+  strip, but the warning is about the **per-row Outstanding pill** (its own
+  docblock says so). Following the stated reason, a maintainer would re-scope to
+  active-only and reintroduce a false negative. Code kept, prose fixed.
+- Also: the movability check must fire **only when `project_key` changes**, or
+  every title edit on the 88 blocked directives 409s; `updated_by` is **not
+  currently selected** and the predicate's field must be non-optional or the
+  client lock silently inverts; the `directives.project_key` UPDATE goes **last**
+  or a failed cell write reproduces §0.4 through its own repair path; and PATCH
+  must trim the title and validate the destination project is **active** — a move
+  to an inactive project succeeds and leaves the directive unreachable through
+  the UI, from a one-character typo.
+
+**She also withdrew her own "exact" claim.** `updated_by IS NULL` held for the
+app's writers but not for prod, which contains direct-SQL rows — and she noted
+that is Karen's LOW-8 lesson landing on her: *a "no writer exists" claim must
+state which surfaces were checked.* She then improved the conjunction's
+justification past mine: every clause can only **shrink** the movable set, so
+adding one can never introduce loss, only reduce convenience. The predicate is
+fail-safe in one direction **by construction** — which is what makes "1 of 89"
+acceptable without further argument, and a better guard against a future
+"simplification" than the measurement, since the measurement goes stale and the
+asymmetry does not.
 
 **JENNY PRE-FLIGHT: DO-NOT-BUILD-YET on rev 1 — 1 CRITICAL · 3 HIGH · 6 MEDIUM ·
 10 LOW, all folded into rev 2.** The design survived; three load-bearing safety

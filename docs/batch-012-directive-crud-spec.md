@@ -1,15 +1,16 @@
 # Batch 012 — Pulse: directive CRUD (edit · soft-delete · archive)
 
-**Status:** SPEC, **rev 2** — Jenny pre-flight returned **DO-NOT-BUILD-YET** on
-rev 1 (1 CRITICAL · 3 HIGH · 6 MEDIUM · 10 LOW). Every finding is folded below;
-see §0.5 for what changed and what I verified before accepting it. Rev 1 held
-Lacey's two decisions of 2026-08-15 (§4.4, §5). **No open questions remain.**
+**Status:** SPEC, **rev 3** — Jenny pre-flight (rev 1, DO-NOT-BUILD-YET: 1
+CRITICAL · 3 HIGH · 6 MEDIUM · 10 LOW) and her narrow re-gate (rev 2,
+**APPROVE-WITH-FINDINGS**: 1 HIGH · 10 MEDIUM · 4 LOW) are both folded. She
+confirmed no further gate is needed. §0.5 records what changed and what I
+verified before accepting it. Rev 1 held Lacey's two decisions of 2026-08-15
+(§4.4, §5). **Build may proceed.**
 **Source:** `HANDOFF — Directive CRUD (edit · soft-delete · archive)`, Lacey via
 Claudette, 2026-08-15. Every locked decision in §1 below is transcribed from that
 handoff; nothing there was reinterpreted.
-**Gate:** Jenny pre-flight **DONE** — findings folded into this rev; re-gate on
-§4.2's consumer table and §4.4's server-side re-check before COMMIT 3 opens.
-Karen post-flight. Lacey smoke + push.
+**Gate:** Jenny pre-flight **DONE** (two passes, all findings folded). Karen
+post-flight. Lacey smoke + push.
 **Follows:** the Pulse matrix filter/grid batch (`5795a89`). Same file.
 
 This spec is committed **before the build opens**, per the §15 PROCESS note. Two
@@ -216,24 +217,45 @@ watched**.
   §4.2's table that does.
 
 **⚠ The test rev 1 specified would have passed on a half-applied filter.**
-`computeMatrixKpis` uses `directives` **twice** — the resolve-state loop
-(`matrix-controls.ts:514`) and the cell scoping
-`known = new Set(directives.map(d => d.id))` (`:523`). Filtering the loop but not
-`known` — the natural half-implementation — leaves `total`, `openDirectives`,
-`resolved`, `unstarted`, `coveragePct` and every brand field **correct**, and
-corrupts only `outstandingCells` / `inProgressCells` / `blockedCells`. Those three
-are identical either way *unless the archived fixture carries cells in owed
-statuses*, which rev 1 did not require. That is r38 mechanism (c) — an
-under-constrained fixture — on the single assertion this batch calls structural.
+`computeMatrixKpis` uses `directives` in **FOUR** places — the resolve-state loop
+(`matrix-controls.ts:514`), the cell scoping `known` (`:523`),
+`total: directives.length` (`:535`), and `coveragePct`'s denominator (`:542`).
+Rev 2 named two. Filtering the loop but not `known` leaves `total`,
+`openDirectives`, `resolved`, `unstarted`, `coveragePct` and every brand field
+**correct**, corrupting only the three cell counts — which are identical either
+way *unless the archived fixture carries cells in owed statuses*, which rev 1 did
+not require. r38 mechanism (c), on the single assertion this batch calls
+structural.
 
-So the test is specified concretely, not by intent:
+**Implement it so the half-versions are unconstructable, not merely tested:** one
+`const active = directives.filter(d => d.status === 'active')` at the top, and
+every subsequent use reads `active`. An in-loop `continue` gives four places to
+forget; the single `const` gives none.
+
+Then the test, specified concretely rather than by intent:
 
 - The archived fixture directive carries **≥1 cell in each of `todo`,
   `in_progress`, `blocked`, `done`** — otherwise the fixture cannot discriminate.
 - Assert **every** field of `MatrixKpis` equals the active-only subset's value.
-- **Mutations that must each fail:** (a) delete the filter entirely; (b) apply it
-  to the state loop only, leaving `known` unfiltered; (c) apply it to `known`
-  only. If (b) passes, the test is decorative.
+- **Mutations that must each fail:** (a) delete the filter entirely; (b) filter
+  the state loop only; (c) filter `known` only; (d) filter the loop and `known`
+  but leave `total` / `coveragePct` on the raw length. If (b) or (d) passes, the
+  test is decorative.
+
+**⚠ POLARITY: `status === 'active'`, NOT `status !== 'archived'` — and this needs
+a stated reason, because the sibling predicate 400 lines away says the opposite.**
+The two are behaviourally identical on today's closed two-value set, so **every
+fixture and every mutation passes under both**; they diverge only when a third
+status exists. `matrix-controls.ts:81–100` documents the VERBATIM GUARD requiring
+`state !== 'resolved'` — the *negative* form — precisely so a future state
+defaults to visible. The polarity flips here because the fail-safe direction
+flips: for a **visibility filter**, failing open shows a row; for a **coverage
+denominator**, failing open silently inflates a percentage. Excluding an unknown
+future status from the denominator is the conservative error.
+
+No test can catch this — the same shape §16 records for `TERMINAL_CELL_STATUSES`
+— so **the comment at the code IS the enforcement** and must say this, not merely
+state the polarity.
 
 ---
 
@@ -333,16 +355,34 @@ const visibleCells = useMemo(() => {              // for countHiddenOwedCells on
 
 **The correct answer is NOT uniform. Two consumers must keep the raw array:**
 
-| # | Consumer | Line | Gets | Why |
-|---|---|---|---|---|
-| 1 | `computeMatrixKpis` | `:672` | **raw** | Its internal `status === 'active'` filter IS the guarantee (§2.1). Handing it a pre-filtered array would make the toggle load-bearing again and leave the internal filter untested in practice. |
-| 2 | archived-count derivation | `:663` | **raw** | It exists to count the rows the view is hiding. |
-| 3 | cells load `ids` | `:387` | **raw** | Archived cells must load or an archived row renders hollow. |
-| 4 | `buildMatrixRows` | `:541` | `visibleDirectives` | The rendered set. |
-| 5 | `countHiddenByFilters` | `:649` | `visibleDirectives` | **HIGH-2** below. |
-| 6 | `countByType` | `:1340` | `visibleDirectives` | **MEDIUM-1** below. |
-| 7 | `directives.length` ×6 | `:818 :839 :911 :1105–1107 :1324` | `visibleDirectives` | **HIGH-3** below. |
-| 8 | `countHiddenOwedCells` | `:638` | `visibleCells` | **MEDIUM-2** below. |
+| # | Consumer | Line | directives arg | cells arg | Why |
+|---|---|---|---|---|---|
+| 1 | `computeMatrixKpis` | `:672` | **raw** | **raw** | Its internal `status === 'active'` filter IS the guarantee (§2.1). Pre-filtering would make the filter dead code in the default state — on raw, every render exercises it, so deleting it fails §8 immediately. |
+| 2 | archived count | `:663` | **raw, filtered to `status === 'archived'`** | — | See the ⚠ below — "raw" alone inverts this helper. |
+| 3 | cells load `ids` | `:387` | **raw** | — | Archived cells must load or an archived row renders hollow. |
+| 4 | `buildMatrixRows` | `:541` | `visibleDirectives` | **raw** | The rendered set. Cells may be raw: it builds a map then reads only `byDirective.get(d.id)` for directives it was passed, so an archived directive's cells sit **unread**. |
+| 5 | `countHiddenByFilters` | `:649` | `visibleDirectives` | **raw** | Same structure as row 4. **HIGH-2** below. |
+| 6 | `countByType` | `:1340` | `visibleDirectives` | — | **MEDIUM-1** below. |
+| 7 | `directives.length` ×6 | `:818 :839 :911 :1105–1107 :1324` | `visibleDirectives` | — | **HIGH-3** below. |
+| 8 | `countHiddenOwedCells` | `:638` | — | **`visibleCells`** | **The only consumer with no directive parameter at all**, so it is the only one needing pre-scoped cells. **MEDIUM-2** below. |
+
+The `cells` column exists because three of these take two arrays and rev 2's table
+assigned one — leaving a builder to make exactly the judgment the table promised
+to remove. There is no correctness difference on rows 4 and 5; the column records
+*why* there isn't.
+
+#### ⚠ Row 2 — "raw" alone would invert the archived signal
+
+`countArchivedMatchingSearch(archived, search)` (`matrix-controls.ts:447`) takes
+an array that is **already archived-only** and counts title matches. Hand it the
+raw all-status array and it counts every match, **active ones included**: search
+`"chat"` on NBLYCRO and the line renders *"5 archived directives match your search
+and are not shown"* when zero do — flatly false, on the one surface whose whole
+job is preventing a false conclusion, and the surface §4.3 exists to repair.
+
+**Fix it inside the helper**, not at the call site: it takes the full array and
+filters `status === 'archived'` itself. Then it cannot be mis-fed, which is worth
+more than the call-site version being one character shorter.
 
 #### HIGH-3 — the result count's denominator
 
@@ -353,7 +393,30 @@ per-project line ("*two different quantities at one number*"). Three consequence
 on **every unfiltered page load**: the line flips to its `N of M` form implying a
 filter is active when none is; the denominator is wrong; and it contradicts the
 KPI strip's `total` (87) inches away, both labelled as directives in this project.
-It takes `visibleDirectives`, and §8 pins it.
+It takes `visibleDirectives`.
+
+**⚠ But `visibleDirectives` only fixes the toggle-ON state, and rev 2 stopped
+there.** With `Hide archived` **OFF**, `visibleDirectives` is all 88, so the line
+reads *"88 directives in NBLYCRO"* while the KPI strip's `total` reads **87** —
+HIGH-3's original complaint, preserved verbatim in the one state the fix does not
+reach. Two numbers on one screen, both meaning "directives in NBLYCRO".
+
+**Decision: the result line names both quantities when archived rows are shown**,
+so neither number has to be wrong and the first figure always matches the KPI:
+
+| `Hide archived` | Result line |
+|---|---|
+| ON (default) | `87 directives in NBLYCRO` |
+| OFF | `87 directives + 1 archived in NBLYCRO` |
+| ON, filtered | `12 of 87 directives in NBLYCRO` |
+| OFF, filtered | `12 of 87 directives + 1 archived in NBLYCRO` |
+
+Both figures derived. The archived count is the row-2 helper with an empty query.
+
+**Flagged for Lacey — a copy call, not a correctness one.** The alternative is to
+scope the KPI card's label instead. Either works; leaving it unstated does not,
+because it is the exact §A6 ambiguity one toggle-click away. Default if
+unanswered: the table above.
 
 #### HIGH-2 — `countHiddenByFilters` and the button that would lie
 
@@ -394,10 +457,48 @@ archived directive holds all 16. An owed cell on a paused brand belonging to an
 
 > ⚠ N outstanding cells on paused brands are hidden but still counted.
 
-**"still counted" is false**, because §2.1 removes archived cells from the KPI
-scoping — and the offered fix, *Show paused*, reveals nothing, since the row is
-hidden by `hideArchived`. A guard built to catch counted-but-invisible cells,
-reporting invisible-and-not-counted ones. It takes `visibleCells`.
+The offered fix, *Show paused*, reveals nothing — the row is hidden by
+`hideArchived`. A guard built to catch counted-but-invisible cells, reporting
+invisible-and-not-counted ones. It takes `visibleCells`.
+
+**⚠ Rev 2 gave the right fix with the WRONG REASON, and the reason is what a
+maintainer follows.** It argued "*still counted* is false because §2.1 removes
+archived cells from the KPI scoping" — under which the correct scope would be
+**active-only**, not `visibleDirectives`, since §2.1 excludes archived cells from
+the KPI *regardless of the toggle*. Following that reason, a later maintainer
+re-scopes to active-only and reintroduces a false negative in the toggle-off
+state.
+
+The warning is **not about the KPI strip**. Its own docblock
+(`matrix-controls.ts:135–145`) says: *"One such edit makes a row read 'Outstanding
+1' with no owed dot visible anywhere in it."* It is about the **per-row
+Outstanding pill** — and on that reading `visibleDirectives` is exactly right:
+toggle off, the archived row renders, its pill counts the cell, the warning is
+true; toggle on, there is no row, so it must be silent. Keep the code; this
+paragraph is the fix.
+
+#### An archived directive's CELLS become editable — decided, not inherited
+
+With the toggle off the archived row renders, and the grid's
+`editable = isAdmin && !!cell` has **no status dimension** — so an admin could
+change statuses and write notes on a directive §2 defines as "no longer tracked".
+Previously unreachable, because archived rows never rendered. **This batch
+creates it**, so it is decided here rather than discovered later.
+
+**Archived rows render their cells READ-ONLY:**
+`editable = isAdmin && !!cell && directive.status === 'active'`.
+
+Two reasons. §2's own definition — a retired directive is not being worked, so an
+editor on it is an affordance without a meaning. And it would move the per-row
+Outstanding pill on a row the KPI strip deliberately does not count (§2.1), which
+is a fresh instance of exactly the counted-vs-shown mismatch MEDIUM-2 above is
+about. Cells stay **intact** either way (decision 6), so a restore still finds
+them as they were — which is the actual reason to keep them, and it does not
+require them to be editable while archived.
+
+**Flagged for Lacey:** if editing an archived directive's cells turns out to be
+wanted, restore-then-edit is the two-click path and it leaves an audit trail of
+the restore. Default: read-only.
 
 #### LOW — empty states and the control's own visibility
 
@@ -489,12 +590,20 @@ rather than by any edit. Nothing about them was worked. That is an artifact of
 how they were created, not evidence of work — and it does not matter, because
 nobody needs to move them.
 
-**Why keep all three clauses when one implies the others today.** They fail
-independently. If a future writer forgets to set `updated_by`, the status and
-note clauses still catch worked cells. If a future fan-out gains a third default
-status, the `updated_by` clause still catches edits. Requiring all three costs
-nothing measurable (the conjunction equals the `updated_by` clause alone on
-current data) and removes the need for either assumption to hold on its own.
+**Why keep all three clauses when one implies the others today — and this is the
+argument to keep, because it does not go stale.** Every clause can only **shrink**
+the movable set. Adding one therefore can never introduce data loss; it can only
+reduce a convenience. **The predicate is fail-safe in one direction by
+construction**, which is why requiring all three costs nothing and why adding a
+fourth later would also cost nothing.
+
+That asymmetry — not the measurement — is what makes "1 of 89" acceptable without
+further argument, and it is the durable guard against a future reviewer
+"simplifying" the redundant clauses away. The measurement will be stale next
+week; the asymmetry will not. Secondarily, the three fail independently: if a
+future writer forgets `updated_by`, the status and note clauses still catch worked
+cells; if a future fan-out gains a third default status, `updated_by` still
+catches edits.
 
 Deliberately **independent of the brand's current pause state**: `is_paused` can
 flip after fan-out, so "is this cell at *its* default" is ambiguous and this is
@@ -522,15 +631,39 @@ So:
 - **The route re-evaluates the predicate server-side against freshly-read cells**
   and returns **409** with the derived reason when it fails. It does not trust
   the request, and it does not trust the client's view of the cells.
+- **⚠ ONLY when `project_key` actually changes** —
+  `body.project_key !== stored.project_key`. Checking unconditionally makes
+  **every title, description or type edit on any of the 88 blocked directives
+  return 409**, killing the feature on 99% of the data on day one. Same shape as
+  §5.0's self-collision bug: a guard firing on an unchanged field. §8 pins it.
 - **UI and route call ONE shared pure predicate** exported from
   `lib/client-library/directives.ts` — `isDirectiveMovable(cells)` — so the two
   cannot drift. This is the `snapshotFromLog` shape: one mapping, no second
   transcription to be wrong.
-- The read-then-write window remains (the check and the delete are separate
-  statements). **Accepted and recorded, not silently left:** closing it needs a
-  single RPC or an advisory lock, which is disproportionate to a two-admin tool
-  where the guard already reduces the window from "the whole session" to "the
-  duration of one request".
+- **The REASON STRING comes from the same module too.** §4.4 requires the lock to
+  name the failing clause and the 409 to carry "the derived reason" — that is two
+  derivations of one message, the second-spelling defect §3 forbids for
+  `CELL_STATUS_LABEL`. `isDirectiveMovable` returns the reason alongside the
+  verdict, so the inert `<span>` and the 409 body cannot disagree about *why*.
+- **⚠ `updated_by` IS NOT CURRENTLY SELECTED.** `loadProject`'s cell select is
+  `id, directive_id, brand_id, status, note` (`page.tsx:393`) and `CellRow`
+  (`:119–124`) mirrors it. Both gain `updated_by`, **in the same commit as the
+  predicate**, and the predicate's parameter field is **non-optional**
+  (`updated_by: string | null`, never `?`). With `?`, today's `CellRow` satisfies
+  it structurally, every cell reads `undefined` → treated as null → **every
+  directive renders movable**, tsc clean, with only the route's 409 standing
+  between that and loss. One word decides whether the failure is loud or silent.
+- **Carry the predicate into the DELETE's `WHERE`** — `directive_id = $1 AND
+  updated_by IS NULL AND status IN ('todo','n_a') AND note IS NULL` — and compare
+  the deleted count to what the check saw. A cell written inside the window then
+  **survives** instead of being destroyed, and the mismatch is reportable. This
+  degrades the residual failure from *silent loss* to *partial apply with a
+  signal*, the same trade insert-first and `cellError` already make, and it is
+  what lets "lossless by construction" be literally true rather than nearly true.
+- The read-then-write window still exists in principle. **Accepted and recorded:**
+  closing it entirely needs a single RPC or an advisory lock, disproportionate to
+  a two-admin tool where the guard plus the DELETE predicate reduce the exposure
+  from "the whole session" to "one request, and even then nothing is destroyed".
 
 The client-side lock stays, because a 409 the user could have been shown up front
 is a bad experience — but it is now the *convenience*, and the route is the
@@ -558,7 +691,16 @@ information. §0.4's silent miscount is fixed *and* nothing can be destroyed, so
 the two goals stop trading against each other. *Given* the server-side re-check
 above; without it the phrase is false, which is what CRITICAL-1 was about.
 
-**Write order: INSERT FIRST, then delete.** Rev 1 said "delete the old cells,
+**The `directives.project_key` UPDATE goes LAST — after the cell work.** Rev 2
+ordered the cells and said nothing about the row itself, which leaves the half
+that reproduces §0.4: update the row first, have the cell work fail, and you land
+in exactly the state this subsection exists to prevent — directive in the new
+project, old cells intact, loaded by `directive_id`, counted, rendering hollow.
+The defect produced by its own repair path. Row last means a cell failure leaves
+cells for both projects with the directive still in the old one: a transient
+over-count that is visible and clears on a re-run.
+
+**Cell write order: INSERT FIRST, then delete.** Rev 1 said "delete the old cells,
 insert fresh ones" and specified no transaction, no ordering rationale and no
 failure response — and that is the destructive order. Delete-then-insert, with
 the insert failing, leaves a directive in the new project with **zero cells**:
@@ -598,9 +740,11 @@ trade Lacey chose.
 
 **Do not describe this to anyone as "project can be edited."** It can be edited
 *until someone touches the directive*, which in practice means the same session.
-The historical 88 are blocked because their cells were written by the goal load,
-the reconciliation backfill, or Lacey — which is the predicate working, not
-failing.
+**83 of the 88** blocked directives are blocked because the goal load, the
+reconciliation backfill or Lacey wrote their cells — the predicate working. The
+other **5 are over-blocked**, per the paragraph above: the direct-SQL chat goals,
+whose `updated_by` was populated at creation rather than by an edit. That
+concession stands; it is not quietly reversed here.
 
 **Escape hatch, deliberately not built:** an admin who genuinely must move a
 worked directive archives it (§4.1) and creates a replacement in the right
@@ -638,8 +782,29 @@ the message.
   to the user. Both routes map `error.code === '23505'` to the pre-check's 409;
   the precedent is `app/api/admin/milestones/route.ts:126`.
 
+- **PATCH must `trim()` the title exactly as POST does** (`asTrimmedString`,
+  `route.ts:27–31`). Without it `" Chat Started"` coexists with `"Chat Started"`
+  under an exact index, defeating §5.1 through a door §5.2 never decided — §5.2
+  ruled on *case and internal* whitespace; leading/trailing is a different thing
+  that POST already eliminates. Also reject an empty-after-trim title: `NOT NULL`
+  admits `''`.
+- **PATCH must validate the destination project exists AND is active**, as POST
+  does (`route.ts:87–101`). Otherwise a nonexistent key surfaces as a raw 500 on
+  the FK, and — worse — **a move to an INACTIVE project succeeds**, after which
+  the directive is unreachable through the UI entirely: `initialLoad` selects
+  `is_active = true` projects only (`page.tsx:429`), so no picker can reach it,
+  while its cells have already been re-fanned. Unrecoverable through the UI, from
+  a one-character typo.
+- **`old_value` comes from the route's own re-read, never the client.** §6's
+  "diff against the row as loaded" is ambiguous between the route's load and the
+  browser's; the cell PATCH already sets the precedent (`status/route.ts:78–90`).
+  Trusting a client `old_value` is §13 r19's shape one field over.
+- **404 on a missing directive id.**
+
 The violation **is** distinguishable: `directives` carries only its PK and this
-index, and a PK violation is unreachable on an UPDATE that does not touch `id`.
+index — 024's other two (`idx_directives_project`, `idx_directives_active`) are
+non-unique — and a PK violation is unreachable on an UPDATE that does not touch
+`id`.
 
 ### 5.1 Scope: across ALL statuses — DECIDED
 
@@ -775,9 +940,19 @@ Behavioural, in the order a reviewer can actually run them.
   `updated_by` clause passes, the fixture set is rev 1's and is under-constrained.
 
 **Filter/consumer wiring (§4.2)**
-- With `Hide archived` OFF and no filters set, the result line reads
-  `N directives in {project}` — **not** `N of M` — and its number equals the KPI
-  strip's `total`. This is the HIGH-3 assertion; run it on an unfiltered load.
+- With `Hide archived` **ON** (the default) and no filters set, the result line
+  reads `N directives in {project}` — **not** `N of M` — and its number equals the
+  KPI strip's `total`. **Rev 2 wrote OFF here and the assertion would have FAILED
+  on a correct build** (88 vs 87), whose natural "fix" is to point the count at
+  active-only and introduce a count that excludes rows visibly on screen. Run it
+  ON.
+- With `Hide archived` **OFF**, the line names both figures
+  (`87 directives + 1 archived`), and the first still equals the KPI `total`.
+- The archived-count helper returns **0** for a search matching only ACTIVE
+  directives — the row-2 inversion. Search a term hitting several active
+  directives and no archived one; the "…are not shown" line must not render.
+- An archived directive's cells are **not editable** while archived; after
+  restore they are.
 - `countHiddenByFilters` never counts an archived row, so **Clear all filters**
   can never be offered for a row it cannot reveal.
 - A type whose only directives are archived still shows the "no directives of
@@ -788,6 +963,11 @@ Behavioural, in the order a reviewer can actually run them.
 **Duplicate titles (§5.0)**
 - **Saving a directive with its title UNCHANGED succeeds** — the self-collision
   case; this one is the reason §5.0 exists.
+- **Editing the TITLE of a directive holding `done` cells succeeds** — the
+  movability check must fire only on a `project_key` change. Without this the
+  feature is dead on 88 of 89 directives.
+- A title differing only by leading/trailing whitespace is rejected.
+- A move to an **inactive** project is rejected, not silently accepted.
 - A create colliding with an **archived** title is rejected (§5.1's scope).
 - A project move whose title collides **at the destination** is rejected.
 - The route returns **409 with a usable message**, not a 500 carrying a Postgres
@@ -863,8 +1043,10 @@ agreed the ordering was right.
 before any code path can hand `computeMatrixKpis` an archived directive; building
 the toggle first would put the defect in the tree between two commits.
 
-**Re-gate before COMMIT 4** on the two things this rev changed most — §4.2's
-consumer table and §4.4's server-side re-check.
+**Re-gate done.** Jenny's narrow second pass returned APPROVE-WITH-FINDINGS on
+rev 2 and confirmed no third gate is needed — the remaining items were folded
+into rev 3 and none changed a design decision. She closed CRITICAL-1 as genuinely
+fixed and confirmed the consumer table's two contested rows.
 
 **Do not push.** Report back → Karen.
 
