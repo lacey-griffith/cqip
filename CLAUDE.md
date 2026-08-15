@@ -736,6 +736,16 @@ SHAREPOINT_SITE_PATH=/sites/CRO  # CRO SharePoint site server-relative path.
 ### .env.example
 Committed to repo with all keys present but empty values.
 
+### ⚠ `/api/health` REPORTS THE WORKER ONLY — it says nothing about edge functions
+
+The `version` field is the **Worker** build SHA. It does **not** reflect Supabase
+Edge Function deploys, so a matching SHA is not evidence that `jira-sync`,
+`jira-webhook` or `drought-evaluator` shipped — those deploy on a separate path
+(`supabase functions deploy`) with no version surface at all. **This has misled twice**
+(recorded 2026-08-15). When a batch changes an edge function, the deploy must be
+verified against the function's own behaviour — a `sync_runs` row, an invocation log —
+never against this endpoint.
+
 ### `/api/health` env reads (Batch 011 — all optional, none required)
 The public health probe reads, in priority order, `NEXT_PUBLIC_BUILD_COMMIT`
 (stamped at build by `scripts/gen-build-info.js` — the only one actually set
@@ -2346,6 +2356,32 @@ Resolved             → green-500
     check can only be satisfied by the same artifact that produced the value, it is
     not a check"* covers a shared **oracle**; this covers a test that is
     independent and still wrong.
+
+39. **Check for a concurrent session at session open, before touching the tree.**
+    (Recorded 2026-08-14, after it cost a clean gate run.)
+
+    **What happened:** two sessions committed into this checkout on the same day.
+    Mid-batch, `lib/client-library/matrix-controls.ts`, `matrix-controls.test.ts` and
+    `tab-group.tsx` appeared modified and uncommitted — another session mid-build,
+    renaming exports that `pulse/page.tsx` still referenced. That broke `tsc` and 15
+    tests **repo-wide**, so the batch in progress could not run a clean project gate
+    and had to verify around the breakage: per-file `tsc` error attribution, the test
+    suite minus the affected file, and **no `build` at all**, because a red build
+    would have said nothing about the change under review.
+
+    **Why it needs a rule rather than care:** the failure is silent and looks like
+    your own. A red `tsc` on a shared tree reads as "I broke something", and the
+    honest response — investigate, stash, re-verify — costs more than the check that
+    prevents it. It also makes `git add -A` actively dangerous: staging is no longer
+    "my work", and a wide add captures someone else's half-finished edit into your
+    commit.
+
+    **How to apply.** At session open, and again before any commit: `git status`,
+    `git log --oneline -5`, and `git rev-list --left-right --count origin/main...HEAD`.
+    If the tree carries changes you did not make, **say so before proceeding**, stage
+    by explicit path only, and state in the commit which files were deliberately left
+    out. If a gate cannot be run clean, **report which gate and why** rather than
+    reporting the subset as if it were the whole.
 
 ---
 
@@ -3980,7 +4016,27 @@ while its own body already recorded Karen done and a COMMIT 4 widening, and no �
 entry existed. That is exactly the drift r34 exists to prevent, and it happened anyway
 because the reconcile was never the same commit as the ship.)
 
-### Batch 012 — Pulse matrix: filter reorg + grid ergonomics — IN FLIGHT (opened 2026-08-14)
+
+## 16. Shipped Features Log
+
+### Batch 012 — Pulse matrix: filter reorg + grid ergonomics — 2026-08-14
+
+**SHIPPED + PUSHED 2026-08-14 — prod `/api/health` reports `version: 5795a89`.**
+5-commit chain ending `5795a89`. Karen post-flight PASS-WITH-FINDINGS (1 HIGH + 1
+MEDIUM + 4 LOW), all folded in COMMIT 5.
+
+**HIGH-1 — the active-group legend reintroduced `--f92-orange` at 2.58:1 in light
+mode on 10px semibold text**, roughly 150 lines from the `globals.css` note recording
+that this exact token is under WCAG and that `--f92-focus-ring` exists because of it.
+The note and the regression shipped in the same file. **Proximity is not protection** —
+a warning comment sitting near the code does not stop the code, and a token known to be
+non-compliant needs a mechanism, not a note.
+
+**LOW-1 — `BAND_SURFACE`'s only oracle was itself**, so mutating it to
+`bg-transparent` survived the entire band suite green. The tests asserted the constant
+against the constant. This is §13 **r38** mechanism (a) — a check satisfiable by the
+artifact that produced the value — found in a batch that shipped the day r38 was
+written, which is the argument for the rule rather than against it.
 
 Three changes to `app/dashboard/pulse/page.tsx`, one batch because they touch one file.
 **No migration · no new route · no mutation surface · no schema change → no Jenny.**
@@ -4087,9 +4143,6 @@ Archived-match signal added in its own state slot, paged from the outset.
 visible" had **quietly stopped being true** when the Type and Status groups landed —
 creating a goal while Type=Trigger reproduced the exact Karen MEDIUM-2 failure the
 reset exists to prevent. Now `clearAllFilters()`.
-
-
-## 16. Shipped Features Log
 
 ### Batch logs-page — dismiss guard + filter bar + AI suggestion strip — 2026-08-14
 
@@ -4209,6 +4262,24 @@ their HEAD versions rather than assumed clean) · build 0 with both pages still 
 **36+ mutations caught across the chain**, dirty-file count asserted constant across every
 restore.
 
+**FOLLOW-ON — Combobox portal fix, 2 commits (`9a65bb6` → `211e237`), SHIPPED +
+PUSHED.** Lacey's smoke caught what three Karen rounds did not: **the brand dropdown
+panel was clipped**, rendering one option. **The cause was not this batch.** The
+clipping ancestor — `overflow-hidden` on the collapsible filter body — is
+**pre-existing** (`f2f9511^:550`) and **load-bearing**, since it is what makes the
+`grid-rows-[0fr]→[1fr]` collapse animate rather than pop. B3's spacing change touched
+zero overflow or stacking lines, verified by a filtered diff. The Combobox panel was
+`absolute` in-flow and could not escape it, while its row-mates Severity and Status
+portal via `SelectPrimitive.Portal`. **So the fix conforms the CONTROL to its
+neighbours rather than reshaping the PAGE around it** — the panel now portals to
+`document.body` with fixed positioning from a pure, tested `computePopoverPosition`.
+Karen post-flight PASS-WITH-FINDINGS: `PANEL_MAX_HEIGHT` claimed to mirror `max-h-60`
+but that class is on the LIST, so the constant understated the panel by ~39px — which
+made a flipped panel **overlap its own trigger** in exactly the long-list case where
+flip fires. Repaired by **coupling** (the panel's `maxHeight` IS the constant) rather
+than a better estimate, the same unconstructable-not-watched shape as this batch's
+other MEDIUM-1.
+
 **Lacey smoke 2026-08-13: tests 1, 2, 3, 5, 6 PASS.** Dirty-state guard on all three
 dismiss paths with Esc-at-prompt keeping the modal open, pristine closing freely, search
 across key/title/brand, both review chips correctly absent, filter-bar spacing good in
@@ -4254,7 +4325,11 @@ is the only path. Phase 1 uses only data CQIP already holds: no Rovo, no Copilot
 external integration. Spec `docs/HANDOFF-root-cause-classifier.md` **rev 2**.
 **Jenny pre-flight DO-NOT-BUILD-YET (2 CRITICAL · 5 HIGH · 4 MEDIUM · 5 LOW), every
 finding folded into spec §13 BEFORE the build opened.** Karen post-flight
-PASS-WITH-FINDINGS, folded. **v2.7 → v2.8. Migration 028 applied; PUSHED + deployed
+PASS-WITH-FINDINGS, folded. **Shipped AT v2.8 — no bump of its own** (Batch
+telemetry-ac had already taken v2.8; an earlier draft of this entry claimed
+"v2.7 → v2.8", which recorded TWO batches making the same bump and is corrected here
+— a version line reads as verified and is never re-derived). **Migration 028 applied;
+PUSHED + deployed
 2026-08-14** — 4-commit chain `1c4939e` → `f229c5d` → `a6256c2` → `9407c7f`.
 
 **Migration 028 is TWO columns, not one.** `ai_review_pending` plus a CHECK-constrained
