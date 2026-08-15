@@ -48,6 +48,7 @@ import {
   CELL_STATUS_LABEL,
   DIRECTIVE_TYPES,
   type CellStatus,
+  type DirectiveStatus,
   type DirectiveType,
 } from '@/lib/client-library/directives';
 import {
@@ -112,7 +113,10 @@ interface DirectiveRow {
   title: string;
   directive_type: DirectiveType;
   description: string | null;
-  status: string;
+  // Narrowed from `string` by directive CRUD. MatrixDirectiveLike now declares
+  // `status: DirectiveStatus`, and a plain `string` does not satisfy it — so this
+  // narrowing is what makes computeMatrixKpis' archived filter reachable at all.
+  status: DirectiveStatus;
   created_at: string;
 }
 
@@ -122,6 +126,12 @@ interface CellRow {
   brand_id: string;
   status: CellStatus;
   note: string | null;
+  // Required by isDirectiveMovable, whose parameter declares it NON-optional
+  // precisely so that omitting it here is a compile error rather than a silent
+  // "every directive is movable". Written by the cell PATCH route and by scripts;
+  // left NULL by fanOutCells, which is what makes NULL mean "untouched since
+  // creation". MUST stay in loadProject's select.
+  updated_by: string | null;
 }
 
 // Batch 012 Phase B — a monitoring finding for the "Needs action" panel.
@@ -229,7 +239,9 @@ export default function ClientLibraryPage() {
   // countHiddenByFilters; folding archived rows in would inflate every KPI on
   // the page and add rows nobody can act on. Only `title` is kept, so there is
   // nothing here that a render path could accidentally use as a matrix row.
-  const [archivedTitles, setArchivedTitles] = useState<Array<{ title: string }>>([]);
+  const [archivedTitles, setArchivedTitles] = useState<
+    Array<{ title: string; status: DirectiveStatus }>
+  >([]);
   const [cells, setCells] = useState<CellRow[]>([]);
   const [findings, setFindings] = useState<FindingRow[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -364,12 +376,15 @@ export default function ClientLibraryPage() {
     // unranged PostgREST select returns the short result with NO error, so the
     // failure mode is a silently-wrong signal on the surface whose whole job is
     // to prevent a silently-wrong conclusion. Cheap now, correct later.
-    const { data: archivedRows, error: archivedErr } = await fetchAllPaged<{ title: string }>(
+    const { data: archivedRows, error: archivedErr } = await fetchAllPaged<{
+      title: string;
+      status: DirectiveStatus;
+    }>(
       'archived directives',
       (from, to) =>
         supabase
           .from('directives')
-          .select('title')
+          .select('title, status')
           .eq('project_key', key)
           .eq('status', 'archived')
           .range(from, to),
@@ -390,7 +405,7 @@ export default function ClientLibraryPage() {
         (from, to) =>
           supabase
             .from('directive_brand_status')
-            .select('id, directive_id, brand_id, status, note')
+            .select('id, directive_id, brand_id, status, note, updated_by')
             .in('directive_id', ids)
             .range(from, to),
       );

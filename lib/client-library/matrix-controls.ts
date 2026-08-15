@@ -13,6 +13,7 @@ import {
   DIRECTIVE_TYPES,
   outstandingCount,
   type CellStatus,
+  type DirectiveStatus,
   type DirectiveType,
 } from './directives';
 
@@ -176,6 +177,11 @@ export interface MatrixDirectiveLike {
   id: string;
   title: string;
   directive_type: DirectiveType;
+  // Added by directive CRUD. Load-bearing for computeMatrixKpis ONLY, which
+  // filters on it internally so an archived directive cannot reach a coverage
+  // figure even when handed one (spec §2.1). Every other consumer here ignores
+  // it — they receive an already-scoped array from the page.
+  status: DirectiveStatus;
 }
 
 export interface MatrixCellLike {
@@ -444,13 +450,25 @@ export function hasClearableFilters(controls: MatrixControls): boolean {
 // concluded no archived directive could exist. Prod holds one — `Submits Form
 // Lead - Combined`, archived by DIRECT SQL, which is not a path any route audit
 // covers. The consequence LOW-8 predicted is live, not hypothetical.
-export function countArchivedMatchingSearch<D extends { title: string }>(
-  archived: ReadonlyArray<D>,
-  search: string,
-): number {
+//
+// ⚠ IT FILTERS `status === 'archived'` ITSELF, and that is deliberate rather than
+// redundant. Directive CRUD merges the archived read into the single directive
+// load, so this helper's caller now holds an ALL-STATUS array — and the previous
+// signature (`{ title }`, archived-only by convention) would have silently
+// counted ACTIVE directives too. Searching "chat" would then render "5 archived
+// directives match your search and are not shown" when zero do: a false statement
+// on the one surface whose entire job is preventing a false conclusion. Filtering
+// inside means it cannot be mis-fed; filtering at the call site would mean it
+// could. See the batch-012 directive CRUD spec §4.2 row 2.
+export function countArchivedMatchingSearch<
+  D extends { title: string; status: DirectiveStatus },
+>(directives: ReadonlyArray<D>, search: string): number {
   if (search.trim().length === 0) return 0;
   let n = 0;
-  for (const d of archived) if (matchesSearch(d.title, search)) n += 1;
+  for (const d of directives) {
+    if (d.status !== 'archived') continue;
+    if (matchesSearch(d.title, search)) n += 1;
+  }
   return n;
 }
 
@@ -507,11 +525,44 @@ export function computeMatrixKpis<D extends MatrixDirectiveLike>(
   cells: ReadonlyArray<MatrixCellLike>,
   brands: ReadonlyArray<{ is_paused: boolean }>,
 ): MatrixKpis {
+  // ⚠ ARCHIVED DIRECTIVES ARE EXCLUDED HERE, INSIDE, AND THAT IS THE MECHANISM.
+  //
+  // Archived is a LIFECYCLE flag, not a completion state — "resolved" is derived
+  // from a directive's cells. Letting a retired directive into these figures
+  // makes coverage count retirements as achievements, which is the moving
+  // denominator the QMS baseline (finding G1) already calls the platform's most
+  // serious measurement weakness.
+  //
+  // The page hands this function the RAW array on purpose (spec §4.2 row 1). If
+  // it were handed a pre-filtered one, the toggle would be load-bearing again and
+  // this filter would be dead code in the default state. On raw, every render
+  // exercises it — so deleting it fails the "identical with Hide archived on and
+  // off" assertion immediately.
+  //
+  // ONE `const`, NOT four guards. `directives` was read in FOUR places here (the
+  // state loop, `known`, `total`, and coveragePct's denominator). An in-loop
+  // `continue` leaves four places to forget, and forgetting `known` alone corrupts
+  // only the three cell counts — invisible unless a fixture's archived directive
+  // carries owed cells. Filtering once makes the half-versions unconstructable
+  // rather than merely tested.
+  //
+  // POLARITY IS DELIBERATE AND UNTESTABLE — READ BEFORE "SIMPLIFYING".
+  // `=== 'active'`, NOT `!== 'archived'`. On today's two-value set the two are
+  // behaviourally identical, so every fixture and every mutation passes under
+  // both; they diverge only when a third status exists. The VERBATIM GUARD ~400
+  // lines above mandates the OPPOSITE form (`state !== 'resolved'`) so a future
+  // state defaults to VISIBLE — correct for a visibility filter. This is a
+  // coverage DENOMINATOR, where the fail-safe direction inverts: failing open
+  // silently inflates a percentage. Excluding an unknown future status is the
+  // conservative error. No test can catch a flip here; this comment is the
+  // enforcement.
+  const active = directives.filter((d) => d.status === 'active');
+
   const byDirective = groupCellsByDirective(cells);
   let openDirectives = 0;
   let resolved = 0;
   let unstarted = 0;
-  for (const d of directives) {
+  for (const d of active) {
     const state = summarizeDirectiveCells(byDirective.get(d.id) ?? NO_CELLS).resolveState;
     if (state === 'active') openDirectives += 1;
     else if (state === 'resolved') resolved += 1;
@@ -520,7 +571,7 @@ export function computeMatrixKpis<D extends MatrixDirectiveLike>(
 
   // Cell-level counts. Scoped to the loaded directives so a stray cell belonging
   // to another project's directive cannot inflate the strip.
-  const known = new Set(directives.map((d) => d.id));
+  const known = new Set(active.map((d) => d.id));
   const own = cells.filter((c) => known.has(c.directive_id));
   const outstandingCells = outstandingCount(own);
   let inProgressCells = 0;
@@ -532,14 +583,14 @@ export function computeMatrixKpis<D extends MatrixDirectiveLike>(
 
   const brandsPaused = brands.filter((b) => b.is_paused).length;
   return {
-    total: directives.length,
+    total: active.length,
     openDirectives,
     resolved,
     unstarted,
     outstandingCells,
     inProgressCells,
     blockedCells,
-    coveragePct: directives.length === 0 ? 0 : Math.round((resolved / directives.length) * 100),
+    coveragePct: active.length === 0 ? 0 : Math.round((resolved / active.length) * 100),
     brandsTotal: brands.length,
     brandsActive: brands.length - brandsPaused,
     brandsPaused,

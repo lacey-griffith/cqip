@@ -5,6 +5,7 @@ import {
   CELL_STATUSES,
   DIRECTIVE_TYPES,
   fanOutCells,
+  isDirectiveMovable,
   initialCellStatus,
   isCellStatus,
   isDirectiveType,
@@ -87,4 +88,114 @@ test('directive-type validation guard rejects out-of-set values', () => {
   assert.equal(isDirectiveType(''), false);
   assert.equal(isDirectiveType(null), false);
   assert.equal(DIRECTIVE_TYPES.length, 4, 'DIRECTIVE_TYPES count drift');
+});
+
+// -------------------------------------------------------------------------
+// isDirectiveMovable — may project_key change? (spec §4.4)
+//
+// Moving a directive re-fans its cells, which DELETES them. The predicate is
+// what makes that deletion lossless rather than merely warned-about, so a false
+// "movable" is data loss. Every fixture below isolates ONE clause: a fixture
+// where two clauses fail together cannot tell you which one is doing the work,
+// and a fixture where the same clause fails twice cannot discriminate at all.
+// -------------------------------------------------------------------------
+const clean = (status: CellStatus = 'todo') => ({ status, note: null, updated_by: null });
+
+test('isDirectiveMovable: fresh fan-out output is movable', () => {
+  // The load-bearing case. If this is ever false the feature is dead on arrival:
+  // a directive created through POST /api/admin/directives yields exactly this
+  // shape, and correcting a mis-filed create is the ONLY thing the move is for.
+  assert.equal(isDirectiveMovable([clean('todo'), clean('n_a')]).movable, true);
+  assert.equal(isDirectiveMovable([]).movable, true); // brand-less project
+  assert.equal(isDirectiveMovable([clean()]).blockingCells, 0);
+  assert.equal(isDirectiveMovable([clean()]).reason, null);
+});
+
+test('isDirectiveMovable: a worked STATUS blocks (status clause alone)', () => {
+  for (const s of ['in_progress', 'done', 'blocked'] as const) {
+    const v = isDirectiveMovable([clean(), { status: s, note: null, updated_by: null }]);
+    assert.equal(v.movable, false, `${s} must block`);
+    assert.equal(v.blockingCells, 1);
+  }
+});
+
+test('isDirectiveMovable: a NOTE blocks even on a fan-out status (note clause alone)', () => {
+  // status is `todo` and updated_by is NULL — only the note differs, so this
+  // fixture fails if the note clause is dropped and nothing else.
+  const v = isDirectiveMovable([clean(), { status: 'todo', note: 'client asked', updated_by: null }]);
+  assert.equal(v.movable, false);
+  assert.equal(v.blockingCells, 1);
+});
+
+test('isDirectiveMovable: updated_by blocks even on a pristine-looking cell (updated_by clause alone)', () => {
+  // status `todo`, note null — the cell is indistinguishable from fan-out output
+  // EXCEPT that someone wrote it. Measured against prod 2026-08-15: 620 cells
+  // look exactly like this, so dropping this clause is not a theoretical loss.
+  const v = isDirectiveMovable([
+    clean(),
+    { status: 'todo', note: null, updated_by: 'l.hay@fusion92.com' },
+  ]);
+  assert.equal(v.movable, false);
+  assert.equal(v.blockingCells, 1);
+  // A deliberate n_a — "this brand does not run this test" — is real information
+  // wearing a fan-out default's clothing. The cell PATCH route accepts n_a with
+  // no paused check, which is what makes this reachable.
+  assert.equal(
+    isDirectiveMovable([{ status: 'n_a', note: null, updated_by: 'system:convert-reconciliation' }])
+      .movable,
+    false,
+  );
+});
+
+test('isDirectiveMovable: a whitespace-only note does NOT block', () => {
+  // Otherwise a stray space in a textarea permanently freezes project_key, with
+  // a reason naming a note the user cannot see.
+  assert.equal(isDirectiveMovable([{ status: 'todo', note: '   ', updated_by: null }]).movable, true);
+  assert.equal(isDirectiveMovable([{ status: 'todo', note: '', updated_by: null }]).movable, true);
+});
+
+test('isDirectiveMovable: the reason names BOTH clauses and pluralises', () => {
+  // "hold status beyond their defaults" is FALSE for a todo cell blocked only by
+  // a note, which is why the message says "edited or hold a note".
+  const one = isDirectiveMovable([{ status: 'done', note: null, updated_by: null }]);
+  assert.match(one.reason ?? '', /^Cannot move — 1 brand cell has been edited or hold a note\.$/);
+  const many = isDirectiveMovable([
+    { status: 'done', note: null, updated_by: null },
+    { status: 'todo', note: 'x', updated_by: null },
+  ]);
+  assert.equal(many.blockingCells, 2);
+  assert.match(many.reason ?? '', /2 brand cells have been edited or hold a note/);
+});
+
+test('isDirectiveMovable: every clause can only SHRINK the movable set', () => {
+  // The reason three redundant clauses cost nothing (spec §4.4): the predicate is
+  // fail-safe in one direction BY CONSTRUCTION. Adding a blocking cell to a
+  // movable set can never make it movable again — asserted rather than argued, so
+  // a future "simplification" that inverts a clause fails here.
+  const movable = [clean('todo'), clean('n_a')];
+  assert.equal(isDirectiveMovable(movable).movable, true);
+  for (const extra of [
+    { status: 'done' as const, note: null, updated_by: null },
+    { status: 'todo' as const, note: 'note', updated_by: null },
+    { status: 'todo' as const, note: null, updated_by: 'someone' },
+  ]) {
+    assert.equal(isDirectiveMovable([...movable, extra]).movable, false);
+  }
+});
+
+test('isDirectiveMovable: fanOutCells output satisfies it (the two cannot drift)', () => {
+  // Anchors the predicate to the REAL producer instead of to a hand-written
+  // fixture that agrees with it by construction — the shared-ancestor trap §15
+  // records four times. fanOutCells omits updated_by and note entirely, so this
+  // also pins that omission: if it ever starts writing updated_by, this fails.
+  const cells = fanOutCells('d1', [
+    { id: 'b1', is_paused: false },
+    { id: 'b2', is_paused: true },
+  ]);
+  const asMovability = cells.map((c) => ({
+    status: c.status,
+    note: (c as { note?: string | null }).note ?? null,
+    updated_by: (c as { updated_by?: string | null }).updated_by ?? null,
+  }));
+  assert.equal(isDirectiveMovable(asMovability).movable, true);
 });

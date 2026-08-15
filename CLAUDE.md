@@ -4130,9 +4130,24 @@ unique index on data proven non-violating. The privileged surface worth a
 pre-flight is the **new PATCH route** — it can move a directive between projects
 and destroy cells. Karen post-flight. **DO NOT PUSH** — Lacey smokes.
 
-**Phase status: COMMIT 1 (spec) + COMMIT 2 (migration 029) built; Jenny
-pre-flight DONE across TWO passes and folded as spec rev 3. Migration NOT yet
-applied — Lacey runs it.**
+**Phase status: COMMITS 1–3 built** (spec · migration 029 · the pure layer);
+Jenny pre-flight DONE across TWO passes and folded as spec rev 3. **Migration NOT
+yet applied — Lacey runs it.** Remaining: the PATCH route, the row editor, the
+`Hide archived` wiring, Karen.
+
+**COMMIT 3 shipped the pure layer, ahead of the route on purpose** — the route's
+server-side re-check imports `isDirectiveMovable`, and writing the route first is
+how a second copy of a guard gets created. It adds `isDirectiveMovable` (one
+predicate, returning the verdict AND the user-facing reason, so the editor's
+inert `<span>` and the route's 409 cannot disagree about why); `status` on
+`MatrixDirectiveLike` with `computeMatrixKpis` filtering it internally via a
+single top-level `const`; and an internal `status === 'archived'` filter inside
+`countArchivedMatchingSearch`. `CellRow` + `loadProject`'s select gain
+`updated_by`, and `DirectiveRow.status` narrows `string → DirectiveStatus` —
+without which the KPI filter is unreachable. **8 of 8 mutations caught**,
+including all four half-applied-filter variants and all three predicate-clause
+drops. tsc 0 · ESLint 0 on all five files · 343/343 · build 0 with
+`/dashboard/pulse` still `○` and no new routes.
 
 **Jenny's re-gate on rev 2: APPROVE-WITH-FINDINGS (1 HIGH · 10 MEDIUM · 4 LOW),
 no third gate needed.** She closed CRITICAL-1 as genuinely fixed and confirmed

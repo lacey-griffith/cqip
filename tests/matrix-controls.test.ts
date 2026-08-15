@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
 
+import type { DirectiveStatus } from '../lib/client-library/directives';
+
 import {
   buildMatrixRows,
   classifyDirectiveCells,
@@ -170,8 +172,13 @@ const row = (
   id: string,
   title: string,
   outstanding: number,
-): MatrixRow<{ id: string; title: string; directive_type: 'goal' }> => ({
-  directive: { id, title, directive_type: 'goal' },
+): MatrixRow<{
+  id: string;
+  title: string;
+  directive_type: 'goal';
+  status: DirectiveStatus;
+}> => ({
+  directive: { id, title, directive_type: 'goal', status: 'active' },
   outstanding,
   resolveState: outstanding > 0 ? 'active' : 'resolved',
 });
@@ -203,11 +210,11 @@ const DIRECTIVES = [
   // directive_type comes from the REAL column (migration 024), never from a
   // title regex — the mockup's GOALISH heuristic is scaffolding and would
   // mislabel several of these titles.
-  { id: 'd1', title: 'Submits Form Lead - Combined', directive_type: 'goal' as const },     // active, outstanding 2
-  { id: 'd2', title: '[Upsell] Clicks Submit CTA', directive_type: 'trigger' as const },    // resolved
-  { id: 'd3', title: 'Chat Started', directive_type: 'trigger' as const },                  // active, outstanding 5
-  { id: 'd4', title: '[GTM] Submits Lead Combined', directive_type: 'goal' as const },      // unstarted (all n_a)
-  { id: 'd5', title: 'Submits Quote Request', directive_type: 'goal' as const },            // resolved
+  { id: 'd1', title: 'Submits Form Lead - Combined', directive_type: 'goal' as const, status: 'active' as const },     // active, outstanding 2
+  { id: 'd2', title: '[Upsell] Clicks Submit CTA', directive_type: 'trigger' as const, status: 'active' as const },    // resolved
+  { id: 'd3', title: 'Chat Started', directive_type: 'trigger' as const, status: 'active' as const },                  // active, outstanding 5
+  { id: 'd4', title: '[GTM] Submits Lead Combined', directive_type: 'goal' as const, status: 'active' as const },      // unstarted (all n_a)
+  { id: 'd5', title: 'Submits Quote Request', directive_type: 'goal' as const, status: 'active' as const },            // resolved
 ];
 const CELLS: MatrixCellLike[] = [
   cell('d1', 'todo'), cell('d1', 'blocked'), cell('d1', 'done'),
@@ -287,7 +294,9 @@ test('buildMatrixRows: COMPOSE — search + status + sort apply together', () =>
 test('buildMatrixRows: no match → empty array (the "no directives match" state)', () => {
   assert.deepEqual(buildMatrixRows(DIRECTIVES, CELLS, controls({ search: 'zzzz' })), []);
   // Every directive resolved → `resolved` filter is populated, `open` is empty.
-  const allDone = [{ id: 'x', title: 'Only One', directive_type: 'goal' as const }];
+  const allDone = [
+    { id: 'x', title: 'Only One', directive_type: 'goal' as const, status: 'active' as const },
+  ];
   const doneCells: MatrixCellLike[] = [cell('x', 'done')];
   assert.deepEqual(buildMatrixRows(allDone, doneCells, controls()), []);
   assert.equal(buildMatrixRows(allDone, doneCells, controls({ statusFilter: 'resolved' })).length, 1);
@@ -366,7 +375,9 @@ test('Outstanding counts a PAUSED brand cell and is unaffected by column filteri
     { id: 'bActive', brand_code: 'ASV', is_paused: false },
     { id: 'bPaused', brand_code: 'MRR-CA', is_paused: true },
   ];
-  const directives = [{ id: 'd1', title: 'Some directive', directive_type: 'goal' as const }];
+  const directives = [
+    { id: 'd1', title: 'Some directive', directive_type: 'goal' as const, status: 'active' as const },
+  ];
   // A brand paused AFTER the directive was created can still hold an owed
   // status — the count includes it, by design (excluding it would change
   // reported data, which this render batch deliberately does not do).
@@ -522,9 +533,23 @@ test('toggleCellStatus adds, removes, and normalises order', () => {
 // SQL. loadProject reads status='active' only, so it is invisible to search AND
 // counts 0 toward countHiddenByFilters — "found nothing" for a title that exists.
 test('countArchivedMatchingSearch answers "does my term exist, archived?"', () => {
-  const archived = [{ title: 'Submits Form Lead - Combined' }, { title: 'Old Scroll Depth' }];
+  // ⚠ MIXED ON PURPOSE. Directive CRUD merges the archived read into the single
+  // all-status directive load, so this helper is now fed active rows too and
+  // filters them out ITSELF. An archived-only fixture cannot discriminate that:
+  // it passes whether the status filter exists or not.
+  const archived = [
+    { title: 'Submits Form Lead - Combined', status: 'archived' as const },
+    { title: 'Old Scroll Depth', status: 'archived' as const },
+    // Active, and matches 'submits' — must NOT be counted. Without the internal
+    // filter this row makes the assertion below read 2, and the page renders
+    // "2 archived directives match your search" when one does.
+    { title: 'Submits Quote Request', status: 'active' as const },
+    { title: 'Chat Started', status: 'active' as const },
+  ];
   assert.equal(countArchivedMatchingSearch(archived, 'submits'), 1);
   assert.equal(countArchivedMatchingSearch(archived, 'SCROLL'), 1); // case-insensitive
+  // 'chat' matches only an ACTIVE directive → 0. This is the row-2 inversion:
+  // it reads 1 if the helper is fed raw rows with no internal status filter.
   assert.equal(countArchivedMatchingSearch(archived, 'chat'), 0);
   // Blank search → 0, NOT the archived total. A count that rendered on every
   // page load would be the LOW-6 regression again: it claims a correction when
@@ -717,4 +742,62 @@ test('computeMatrixKpis: empty project divides by zero safely', () => {
   assert.equal(k.coveragePct, 0); // not NaN
   assert.equal(k.outstandingCells, 0);
   assert.equal(k.brandsTotal, 0);
+});
+
+// -------------------------------------------------------------------------
+// ⚠ ARCHIVED DIRECTIVES MUST NEVER REACH A COVERAGE FIGURE (spec §2.1).
+//
+// This is the batch's structural assertion: archived is a LIFECYCLE flag, not a
+// completion state, so letting one into these numbers makes coverage count
+// retirements as achievements.
+//
+// THE FIXTURE IS THE WHOLE TEST. computeMatrixKpis read `directives` in FOUR
+// places (state loop, `known`, `total`, coveragePct denominator). A filter
+// applied to the loop but NOT to `known` leaves total / openDirectives /
+// resolved / unstarted / coveragePct and every brand field CORRECT, corrupting
+// only the three cell counts — and those are identical either way UNLESS the
+// archived fixture carries cells in owed statuses. An archived directive with no
+// cells, or with only `done` cells, passes under the broken implementation.
+// So it carries one cell in each of todo / in_progress / blocked / done.
+// -------------------------------------------------------------------------
+const ARCHIVED_D = {
+  id: 'dArch',
+  title: 'Submits Form Lead - Combined',
+  directive_type: 'goal' as const,
+  status: 'archived' as const,
+};
+const ARCHIVED_CELLS: MatrixCellLike[] = [
+  cell('dArch', 'todo'),
+  cell('dArch', 'in_progress'),
+  cell('dArch', 'blocked'),
+  cell('dArch', 'done'),
+];
+
+test('computeMatrixKpis: an archived directive changes NOTHING, field for field', () => {
+  const activeOnly = computeMatrixKpis(DIRECTIVES, CELLS, KPI_BRANDS);
+  const mixed = computeMatrixKpis(
+    [...DIRECTIVES, ARCHIVED_D],
+    [...CELLS, ...ARCHIVED_CELLS],
+    KPI_BRANDS,
+  );
+  // Every field, not a sample: a half-applied filter corrupts only three of them.
+  assert.deepEqual(mixed, activeOnly);
+});
+
+test('computeMatrixKpis: the archived fixture DISCRIMINATES (guards the test itself)', () => {
+  // If this fails, the fixture above has stopped being able to detect a
+  // half-applied filter and the deepEqual becomes decorative — r38 mechanism (c).
+  // Treating the archived directive as active MUST move the three cell counts
+  // AND the directive counts, so both halves of the filter are pinned.
+  const asIfActive = computeMatrixKpis(
+    [...DIRECTIVES, { ...ARCHIVED_D, status: 'active' as const }],
+    [...CELLS, ...ARCHIVED_CELLS],
+    KPI_BRANDS,
+  );
+  const activeOnly = computeMatrixKpis(DIRECTIVES, CELLS, KPI_BRANDS);
+  assert.equal(asIfActive.outstandingCells, activeOnly.outstandingCells + 3);
+  assert.equal(asIfActive.inProgressCells, activeOnly.inProgressCells + 1);
+  assert.equal(asIfActive.blockedCells, activeOnly.blockedCells + 1);
+  assert.equal(asIfActive.total, activeOnly.total + 1);
+  assert.notEqual(asIfActive.coveragePct, activeOnly.coveragePct);
 });
