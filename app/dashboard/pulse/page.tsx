@@ -245,9 +245,6 @@ export default function ClientLibraryPage() {
   // countHiddenByFilters; folding archived rows in would inflate every KPI on
   // the page and add rows nobody can act on. Only `title` is kept, so there is
   // nothing here that a render path could accidentally use as a matrix row.
-  const [archivedTitles, setArchivedTitles] = useState<
-    Array<{ title: string; status: DirectiveStatus }>
-  >([]);
   const [cells, setCells] = useState<CellRow[]>([]);
   const [findings, setFindings] = useState<FindingRow[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -324,6 +321,11 @@ export default function ClientLibraryPage() {
   // again, same as the other three controls.
   const [hidePaused, setHidePaused] = useState(true);
 
+  // Hide archived directives. Default ON: archived means "no longer tracked",
+  // so the working view should not carry them. Unchecking reveals them, marked.
+  // NOT persisted, matching hidePaused.
+  const [hideArchived, setHideArchived] = useState(true);
+
   // PART C — the clicked brand column. NOT a filter and NOT a selection: it
   // changes nothing about which rows or cells exist, it only bands one column so
   // the eye can follow it across a 16-wide grid.
@@ -356,12 +358,19 @@ export default function ClientLibraryPage() {
         .eq('project_key', key)
         .eq('is_active', true)
         .order('display_name'),
-      supabase
-        .from('directives')
-        .select('id, project_key, title, directive_type, description, status, created_at')
-        .eq('project_key', key)
-        .eq('status', 'active')
-        .order('created_at'),
+      // ALL statuses. The archived rows are needed for the Hide-archived toggle
+      // AND for the archived-search signal, and loading them here rather than
+      // separately means toggling never refetches — a refetch would show the row
+      // before its cells and render it hollow, which is the pagination-hotfix
+      // symptom manufactured on purpose.
+      fetchAllPaged<DirectiveRow>('directives', (from, to) =>
+        supabase
+          .from('directives')
+          .select('id, project_key, title, directive_type, description, status, created_at')
+          .eq('project_key', key)
+          .order('created_at')
+          .range(from, to),
+      ),
       supabase
         .from('monitoring_findings')
         .select(
@@ -373,35 +382,10 @@ export default function ClientLibraryPage() {
 
     const failures: string[] = [];
     if (brandsRes.error) failures.push(`brands: ${brandsRes.error.message}`);
-    if (directivesRes.error) failures.push(`directives: ${directivesRes.error.message}`);
+    if (directivesRes.error) failures.push(directivesRes.error);
     if (findingsRes.error) failures.push(`findings: ${findingsRes.error.message}`);
 
-    // ARCHIVED titles — the §A7 signal, and NOTHING else reads this. Kept out of
-    // the Promise.all above so it is unmistakably a separate read feeding a
-    // separate state slot: nothing on the render path can mistake it for part of
-    // the matrix data.
-    //
-    // PAGED from the outset even though prod holds exactly one archived row.
-    // Archived directives only ever accumulate — nothing deletes them — and an
-    // unranged PostgREST select returns the short result with NO error, so the
-    // failure mode is a silently-wrong signal on the surface whose whole job is
-    // to prevent a silently-wrong conclusion. Cheap now, correct later.
-    const { data: archivedRows, error: archivedErr } = await fetchAllPaged<{
-      title: string;
-      status: DirectiveStatus;
-    }>(
-      'archived directives',
-      (from, to) =>
-        supabase
-          .from('directives')
-          .select('title, status')
-          .eq('project_key', key)
-          .eq('status', 'archived')
-          .range(from, to),
-    );
-    if (archivedErr) failures.push(archivedErr);
-
-    const directiveRows = (directivesRes.data ?? []) as DirectiveRow[];
+    const directiveRows = directivesRes.data;
     let cellRows: CellRow[] = [];
     if (directiveRows.length > 0) {
       // PAGED — directives × brands exceeds PostgREST's 1,000-row cap, and an
@@ -437,7 +421,6 @@ export default function ClientLibraryPage() {
 
     setBrands((brandsRes.data ?? []) as BrandRow[]);
     setDirectives(directiveRows);
-    setArchivedTitles(archivedRows);
     setCells(cellRows);
     setFindings(findingRows);
     setLoadError(failures.length > 0 ? failures.join(' · ') : null);
@@ -497,6 +480,8 @@ export default function ClientLibraryPage() {
   function handleProjectChange(key: string) {
     setProjectKey(key);
     setExpandedCell(null); // stale across a project switch
+    setEditingDirectiveId(null); // ditto — and an open editor would submit a
+    // PATCH for a directive the user is no longer looking at.
     setPinned(null); // ditto — a pinned readout from another client is nonsense
     setHover(null);
     // Part C. Harmless if left set — an unrendered brand id bands nothing — but
@@ -533,6 +518,7 @@ export default function ClientLibraryPage() {
       if (typeof detail === 'string' && detail && detail !== projectKey) {
         setProjectKey(detail);
         setExpandedCell(null); // symmetric with handleProjectChange — no stale open editor across a switch
+        setEditingDirectiveId(null);
         setPinned(null);
         setHover(null);
         setHighlightBrandId(null);
@@ -542,6 +528,34 @@ export default function ClientLibraryPage() {
     window.addEventListener(PULSE_PROJECT_EVENT, onProject);
     return () => window.removeEventListener(PULSE_PROJECT_EVENT, onProject);
   }, [projectKey, loadProject]);
+
+  // ⚠ §4.2's MECHANISM. "Filter at render" is a phrase; this is the thing.
+  //
+  // EIGHT consumers read the directive set, and the right answer is NOT uniform.
+  // Two of them must keep the RAW array:
+  //   • computeMatrixKpis — its own internal status filter IS the guarantee, and
+  //     pre-filtering here would make that filter dead code in the default state
+  //     instead of exercised on every render.
+  //   • countArchivedMatchingSearch — its whole job is counting what the view
+  //     hides, so a filtered input would zero it out.
+  // Everything else — the rendered rows, the hidden-by-filters correction, the
+  // type-tab empty state, and every `.length` readout — takes visibleDirectives.
+  const visibleDirectives = useMemo(
+    () => (hideArchived ? directives.filter((d) => d.status === 'active') : directives),
+    [directives, hideArchived],
+  );
+
+  // Cells scoped to the rendered directives, for countHiddenOwedCells ONLY —
+  // the one consumer that takes no directive argument and therefore cannot scope
+  // itself. Without this, an owed cell on a paused brand belonging to an ARCHIVED
+  // directive fires the amber warning, whose text ("still counted") is false and
+  // whose offered fix (Show paused) reveals nothing, because the row is hidden by
+  // hideArchived rather than by hidePaused.
+  const visibleCells = useMemo(() => {
+    if (!hideArchived) return cells;
+    const ids = new Set(visibleDirectives.map((d) => d.id));
+    return cells.filter((c) => ids.has(c.directive_id));
+  }, [cells, visibleDirectives, hideArchived]);
 
   const cellByKey = useMemo(() => {
     const map = new Map<string, CellRow>();
@@ -580,8 +594,8 @@ export default function ClientLibraryPage() {
     [search, statusFilter, cellFilter, typeFilter, sortKey],
   );
   const matrixRows = useMemo(
-    () => buildMatrixRows(directives, cells, controls),
-    [directives, cells, controls],
+    () => buildMatrixRows(visibleDirectives, cells, controls),
+    [visibleDirectives, cells, controls],
   );
 
   // The rendered brand axis. Orthogonal to matrixRows above: this is the only
@@ -677,8 +691,8 @@ export default function ClientLibraryPage() {
   // CHECKED (Karen MEDIUM-4) — see countHiddenOwedCells for why a prod
   // measurement alone is not enough. Reads only already-loaded state, no query.
   const hiddenOwedCount = useMemo(
-    () => countHiddenOwedCells(brands, cells, hidePaused),
-    [brands, cells, hidePaused],
+    () => countHiddenOwedCells(brands, visibleCells, hidePaused),
+    [brands, visibleCells, hidePaused],
   );
 
   // Directives matching the search but excluded by the status filter. Surfaced
@@ -688,8 +702,8 @@ export default function ClientLibraryPage() {
   // and the reset clears ALL of them — no per-group attribution (a row can be
   // excluded by two groups at once, so any breakdown would double-count).
   const hiddenByFilters = useMemo(
-    () => countHiddenByFilters(directives, cells, controls),
-    [directives, cells, controls],
+    () => countHiddenByFilters(visibleDirectives, cells, controls),
+    [visibleDirectives, cells, controls],
   );
   const filtersActive = hasActiveFilterGroup(controls);
   // Drives whether `Clear filters` is offered at all (spec §A1). Broader than
@@ -703,8 +717,8 @@ export default function ClientLibraryPage() {
   // and which therefore contribute 0 to hiddenByFilters. Returns 0 on a blank
   // query by construction.
   const archivedMatches = useMemo(
-    () => countArchivedMatchingSearch(archivedTitles, search),
-    [archivedTitles, search],
+    () => countArchivedMatchingSearch(directives, search),
+    [directives, search],
   );
 
   // KPI strip — every value derived from loaded data, never a literal. Reuses the
@@ -847,6 +861,14 @@ export default function ClientLibraryPage() {
   // Move targets. `projects` already holds ACTIVE projects only (initialLoad
   // filters is_active), which matters: the route rejects a move to an inactive
   // project, so offering one would be an option that always 409s.
+  // Archived directives in THIS project, regardless of search. Drives the
+  // toggle's own visibility and the result line's second figure. Derived from
+  // the single all-status load — one fetch, one source.
+  const archivedCount = useMemo(
+    () => directives.filter((d) => d.status === 'archived').length,
+    [directives],
+  );
+
   const projectOptions = useMemo(
     () => projects.map((p) => ({ key: p.jira_project_key, label: p.display_name })),
     [projects],
@@ -910,9 +932,10 @@ export default function ClientLibraryPage() {
 
       {loading ? (
         <Card className="p-8 text-center text-sm text-[color:var(--f92-gray)]">Loading…</Card>
-      ) : directives.length === 0 && !createOpen ? (
+      ) : visibleDirectives.length === 0 && !createOpen ? (
         <Card className="p-8 text-center text-sm text-[color:var(--f92-gray)]">
-          No active directives for {projectLabel}.{' '}
+          {hideArchived ? 'No active directives for ' : 'No directives for '}
+          {projectLabel}.{' '}
           {isAdmin ? 'Create one to seed the matrix.' : 'An admin can create one.'}
         </Card>
       ) : (
@@ -931,7 +954,7 @@ export default function ClientLibraryPage() {
             the reader nothing, so the strip ships with the six cards that carry
             real data. Batch 3/4 can add it when the grouping exists.
             --------------------------------------------------------------- */}
-        {directives.length > 0 ? (
+        {visibleDirectives.length > 0 ? (
           <div
             className="mb-4 flex flex-wrap items-stretch overflow-hidden border border-[color:var(--f92-border)]"
             style={{ borderRadius: 'var(--radius-xl)', background: 'var(--f92-surface)', boxShadow: 'var(--shadow-sm)' }}
@@ -1003,7 +1026,7 @@ export default function ClientLibraryPage() {
               over already-loaded data; nothing here refetches. Suppressed when
               the project has no directives (nothing to search/filter/sort) —
               that case only reaches here with the create strip open. */}
-          {directives.length > 0 ? (
+          {visibleDirectives.length > 0 ? (
           <div className="border-b border-[color:var(--f92-border)] p-3">
             {/* TWO ROWS (spec §A1):
                   row 1  search · STATE · STATUS
@@ -1139,6 +1162,23 @@ export default function ClientLibraryPage() {
                 </label>
               ) : null}
 
+              {/* Mirrors Hide paused, including its own visibility gate: it
+                  appears the first time something in this project is archived,
+                  rather than sitting there permanently doing nothing. Default ON
+                  — archived means "no longer tracked", so the working view
+                  should not carry it. */}
+              {archivedCount > 0 ? (
+                <label className="flex h-9 items-center gap-2 text-xs font-medium text-[color:var(--f92-dark)]">
+                  <input
+                    type="checkbox"
+                    checked={hideArchived}
+                    onChange={(e) => setHideArchived(e.target.checked)}
+                    className="h-4 w-4 rounded border-[color:var(--f92-border)] text-[color:var(--f92-orange)] focus:ring-[color:var(--f92-focus-ring)]"
+                  />
+                  Hide archived ({archivedCount})
+                </label>
+              ) : null}
+
               {/* The precondition behind the checked-by-default state, checked at
                   RUNTIME instead of trusted (countHiddenOwedCells). If a paused
                   brand ever holds owed work, an Outstanding pill would count it
@@ -1181,25 +1221,49 @@ export default function ClientLibraryPage() {
                 aria-atomic="true"
               >
                 {/* §A6 — THE QUANTITY, STATED. The design file reads "87
-                    directives"; 87 is the GLOBAL active count (86 NBLY + 1 SPL)
-                    and ALSO, by coincidence, NBLY's all-status count (86 active
-                    + 1 archived). Two different quantities at one number,
-                    neither of them the per-project figure this surface needs.
+                    directives", and 87 has meant a different thing on every
+                    probe: on 2026-08-14 it was the GLOBAL active count (86 NBLY
+                    + 1 SPL) and ALSO, by coincidence, NBLY's all-status count.
+                    Re-probed 2026-08-15 it is NBLY's active count, while global
+                    active is 88 and NBLY all-status is 88. Three quantities
+                    circling the same couple of numbers, none of them reliably
+                    the per-project figure this surface needs.
 
-                    `directives` is already project-and-status scoped by
-                    loadProject, so the number is correct by construction — the
-                    project NAME is what makes which quantity it is legible to a
-                    reader, which is the whole point of the finding.
+                    ⚠ DO NOT WRITE ANY OF THEM DOWN. The count has moved on all
+                    four probes (82 → 83 → 86 → 87 NBLY active in two weeks), so
+                    a figure in a comment is wrong by the next re-read; that is
+                    why every number here is derived. This paragraph names them
+                    only to show they are NOT interchangeable.
+
+                    `visibleDirectives` is project-scoped by loadProject and
+                    status-scoped by the toggle, so the number is correct by
+                    construction — the project NAME is what makes which quantity
+                    it is legible to a reader, which is the whole point of the
+                    finding.
 
                     The word "active" is deliberately absent: `active` is also a
                     derived resolve state in the State group sitting inches away,
                     and a DIFFERENT number again (openDirectives). Writing "86
                     active directives" beside Open/Resolved tabs would recreate
                     the same ambiguity in a new form. */}
+                {/* ⚠ THE DENOMINATOR IS THE VISIBLE SET, NOT THE LOADED ONE.
+                    Post-CRUD `directives` is ALL statuses, so using it here
+                    would put NBLY's all-status count on a per-project line —
+                    exactly the "two different quantities at one number" the
+                    comment above forbids — and would contradict the KPI strip's
+                    `total` inches away.
+
+                    And when archived rows ARE shown, the line names both
+                    figures rather than merging them: the first still matches the
+                    KPI card, so neither number has to be wrong. */}
                 <span className="tabular-nums">
-                  {matrixRows.length === directives.length
-                    ? `${directives.length} directive${directives.length === 1 ? '' : 's'} in ${projectLabel}`
-                    : `${matrixRows.length} of ${directives.length} directives in ${projectLabel}`}
+                  {matrixRows.length === visibleDirectives.length
+                    ? `${visibleDirectives.length} directive${visibleDirectives.length === 1 ? '' : 's'}`
+                    : `${matrixRows.length} of ${visibleDirectives.length} directives`}
+                  {!hideArchived && archivedCount > 0
+                    ? ` + ${archivedCount} archived`
+                    : ''}
+                  {` in ${projectLabel}`}
                 </span>
 
                 {/* Never let "I searched and found nothing" read as "it doesn't
@@ -1252,7 +1316,11 @@ export default function ClientLibraryPage() {
                     Recorded as unreachable by Karen LOW-8 on 2026-07-29 — that
                     audit checked app/api/ for an archive writer and found none.
                     Prod has one, written by direct SQL. */}
-                {archivedMatches > 0 ? (
+                {/* GATED ON hideArchived. With the toggle off, archived rows
+                    ARE shown, so "are not shown" would be a false statement on
+                    the one surface whose job is preventing a false conclusion —
+                    the same failure mode in a new direction. */}
+                {hideArchived && archivedMatches > 0 ? (
                   <span className="font-normal">
                     ·{' '}
                     {archivedMatches === 1
@@ -1416,9 +1484,10 @@ export default function ClientLibraryPage() {
             />
           ) : null}
 
-          {directives.length === 0 ? (
+          {visibleDirectives.length === 0 ? (
             <div className="p-8 text-center text-sm text-[color:var(--f92-gray)]">
-              No active directives for {projectLabel} yet.{' '}
+              {hideArchived ? 'No active directives for ' : 'No directives for '}
+              {projectLabel} yet.{' '}
               {isAdmin ? 'Add one above.' : 'An admin can add one.'}
             </div>
           ) : matrixRows.length === 0 ? (
@@ -1432,7 +1501,7 @@ export default function ClientLibraryPage() {
                while the generic no-match copy reads as a bug on a type Lacey
                simply has not started using. */
             <div className="p-8 text-center text-sm text-[color:var(--f92-gray)]">
-              {typeFilter !== 'all' && countByType(directives, typeFilter) === 0 ? (
+              {typeFilter !== 'all' && countByType(visibleDirectives, typeFilter) === 0 ? (
                 <>
                   No {MATRIX_TYPE_FILTER_LABEL[typeFilter].toLowerCase()} directives yet for{' '}
                   {projectLabel}.{' '}
@@ -1488,11 +1557,25 @@ export default function ClientLibraryPage() {
                       to create a duplicate, so it must not assert identity from
                       a substring. Kept word-for-word in step with the live
                       region above. */}
-                  {archivedMatches > 0 ? (
+                  {hideArchived && archivedMatches > 0 ? (
                     <span className="italic">
                       {archivedMatches === 1
                         ? '1 archived directive matches your search and is not shown. '
                         : `${archivedMatches} archived directives match your search and are not shown. `}
+                      {/* The one-click escape, mirroring the paused warning's
+                          "Show paused". Without it the empty state names a row
+                          it will not let you reach — and "Clear all filters"
+                          beside it does NOT reveal it, because hideArchived is a
+                          view preference and clearAllFilters deliberately leaves
+                          those alone (same as hidePaused). */}
+                      <button
+                        type="button"
+                        onClick={() => setHideArchived(false)}
+                        className="font-semibold not-italic text-[color:var(--f92-orange)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-focus-ring)]"
+                      >
+                        Show archived
+                      </button>
+                      {'. '}
                     </span>
                   ) : null}
                   <button
@@ -1743,6 +1826,24 @@ export default function ClientLibraryPage() {
                               >
                                 {TYPE_LABEL[directive.directive_type]}
                               </span>
+                              {/* Archived rows only ever render with the toggle
+                                  off, so this marker cannot appear unasked. It
+                                  says LIFECYCLE, not completion — "Archived" is
+                                  not a resolve state and must never be read as
+                                  one, which is why it sits beside the type badge
+                                  rather than anywhere near the Outstanding
+                                  pill. */}
+                              {directive.status === 'archived' ? (
+                                <span
+                                  className="inline-flex w-fit items-center border border-dashed border-[color:var(--f92-gray)] px-2 py-0.5 text-[10px] font-semibold uppercase text-[color:var(--f92-gray)]"
+                                  style={{
+                                    letterSpacing: 'var(--tracking-wide)',
+                                    borderRadius: 'var(--radius-full)',
+                                  }}
+                                >
+                                  Archived
+                                </span>
+                              ) : null}
                               <span className="font-medium text-[color:var(--f92-dark)]">{directive.title}</span>
                               {directive.description ? (
                                 <span className="max-w-xs text-xs text-[color:var(--f92-gray)]">{directive.description}</span>
@@ -1781,7 +1882,20 @@ export default function ClientLibraryPage() {
                             const status = cell?.status ?? 'n_a';
                             // EDITING needs a real cell and admin. INSPECTING
                             // needs neither — that split is the whole of §2.6.
-                            const canEdit = isAdmin && !!cell;
+                            // Archived rows render their cells READ-ONLY. A
+                            // retired directive is not being worked, so an
+                            // editor on it is an affordance without a meaning —
+                            // and an edit would move the per-row Outstanding
+                            // pill on a row computeMatrixKpis deliberately does
+                            // not count, which is a fresh instance of the same
+                            // counted-vs-shown mismatch the paused-brand warning
+                            // exists to catch. The cells stay INTACT either way
+                            // (they must, so a restore finds them as they were);
+                            // that does not require them to be editable while
+                            // archived. Restore-then-edit is the two-click path
+                            // and it leaves an audit trail of the restore.
+                            const canEdit =
+                              isAdmin && !!cell && directive.status === 'active';
                             const isExpanded =
                               !!cell &&
                               expandedCell?.directiveId === directive.id &&
@@ -1856,6 +1970,15 @@ export default function ClientLibraryPage() {
                                   // the only truthful behaviour.
                                   onClick={() => {
                                     if (canEdit && cell) {
+                                      // The other direction of the mutual
+                                      // exclusion: a row has one expansion slot,
+                                      // so opening the cell editor closes the
+                                      // directive editor. Unconditional rather
+                                      // than row-scoped — only one directive
+                                      // editor is ever open, and if it belongs
+                                      // to another row it is being replaced by
+                                      // this one anyway.
+                                      setEditingDirectiveId(null);
                                       setExpandedCell((cur) =>
                                         cur && cur.directiveId === directive.id && cur.brandId === brand.id
                                           ? null

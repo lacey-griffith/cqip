@@ -4130,8 +4130,9 @@ unique index on data proven non-violating. The privileged surface worth a
 pre-flight is the **new PATCH route** — it can move a directive between projects
 and destroy cells. Karen post-flight. **DO NOT PUSH** — Lacey smokes.
 
-**Phase status: COMMITS 1–5 built** (spec · migration 029 · the pure layer ·
-`PATCH /api/admin/directives/[id]` · the in-place row editor);
+**Phase status: ALL SIX BUILD COMMITS DONE** (spec · migration 029 · the pure
+layer · `PATCH /api/admin/directives/[id]` · the row editor · the `Hide archived`
+control + consumer wiring). **Karen post-flight is the remaining gate.**
 Jenny pre-flight DONE across TWO passes and folded as spec rev 3. **Migration NOT
 yet applied — Lacey runs it.** Remaining: the PATCH route, the row editor, the
 `Hide archived` wiring, Karen.
@@ -4199,6 +4200,31 @@ all, and on a move its entire cell set. Failures render **inline**, not as a
 toast — the route's 409s are the informative part and the user has to act on them
 while the form is still open. **5 of 5 mutations caught** on the dirty module.
 tsc 0 · ESLint 0 · 354/354 · build 0.
+
+**COMMIT 6 — `Hide archived` + the §4.2 consumer wiring.** `loadProject` drops
+`.eq('status','active')` and does ONE paged all-status read; the separate
+archived-titles fetch is deleted, so the signal and the rows come from one
+source. Two derived arrays carry the rest — and **the correct answer is not
+uniform**, which is the whole reason the spec needed a table: `computeMatrixKpis`
+and the archived count keep the **RAW** array (the first because its internal
+filter IS the guarantee and pre-filtering would make it dead code in the default
+state; the second because its job is counting what the view hides), while the
+rendered rows, `countHiddenByFilters`, `countByType` and all six `.length`
+readouts take `visibleDirectives`, and `countHiddenOwedCells` — the one consumer
+that takes no directive argument — takes `visibleCells`. Audited after the fact:
+exactly three raw reads remain, and they are the three the spec names. The result
+line names **both** figures when archived rows are shown, so the first still
+matches the KPI card and neither number is wrong. The archived-search signal is
+gated on `hideArchived` (its "are not shown" wording becomes false the moment the
+toggle is off) and gains a **Show archived** escape, mirroring *Show paused* —
+needed because `clearAllFilters` deliberately does not touch view preferences, so
+"Clear all filters" would not reveal the row it names. Archived rows are marked
+beside the type badge, never near the Outstanding pill, and **their cells render
+read-only**: an edit would move a per-row pill on a row the KPI strip does not
+count, a fresh instance of the counted-vs-shown mismatch. Cells stay intact
+regardless, so restore finds them as they were. Also corrected a comment that had
+already gone stale: the "87 is the global active count" note, true on 08-14,
+false on 08-15 — the count has now moved on all four probes.
 
 **Jenny's re-gate on rev 2: APPROVE-WITH-FINDINGS (1 HIGH · 10 MEDIUM · 4 LOW),
 no third gate needed.** She closed CRITICAL-1 as genuinely fixed and confirmed
