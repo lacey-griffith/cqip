@@ -4130,8 +4130,54 @@ unique index on data proven non-violating. The privileged surface worth a
 pre-flight is the **new PATCH route** — it can move a directive between projects
 and destroy cells. Karen post-flight. **DO NOT PUSH** — Lacey smokes.
 
-**Phase status: COMMIT 1 (spec) + COMMIT 2 (migration 029) built. Migration NOT
-yet applied — Lacey runs it. No application code written yet.**
+**Phase status: COMMIT 1 (spec) + COMMIT 2 (migration 029) built; Jenny
+pre-flight DONE and folded as spec rev 2. Migration NOT yet applied — Lacey runs
+it. No application code written yet.**
+
+**JENNY PRE-FLIGHT: DO-NOT-BUILD-YET on rev 1 — 1 CRITICAL · 3 HIGH · 6 MEDIUM ·
+10 LOW, all folded into rev 2.** The design survived; three load-bearing safety
+claims did not, and the shape is one this file has recorded before — **a claim
+stated at a layer that cannot enforce it.**
+- **CRITICAL-1 — the `project_key` block was specified only as a render-layer
+  lock.** Every statement of it described what *renders*, so the route's contract
+  had **no precondition** and §4.4's whole "lossless by construction" argument
+  existed in the browser only. Ordinary two-admin concurrency (one stale page —
+  `loadProject` snapshots cells once) destroys 16 cells including notes, **and the
+  audit trail would not record what was lost**, because the spec asked for one
+  summary row with no `old_value` and cells have no soft-delete. §13 r37's shape
+  exactly. Rev 2 requires a **server-side re-check against freshly-read cells**
+  returning 409, through ONE shared pure predicate both layers call.
+- **HIGH-1 — "filter at render" is a phrase, not a mechanism.** §2.1 is itself an
+  argument that a phrase is not enough, and rev 1 applied it to **one of eight**
+  consumers of the `directives` slot. Verified against the page: eight, three
+  covered. HIGH-2/HIGH-3/MEDIUM-1/MEDIUM-2 are four different wrong answers to
+  the question that left open — including a **Clear all filters** button that
+  would be offered for rows it cannot reveal, and a result-count denominator that
+  becomes NBLY's all-status count (88), the exact number the comment thirteen
+  lines above it forbids on a per-project line.
+- **MEDIUM-4 — the §2.1 test would have passed on a half-applied filter.**
+  `computeMatrixKpis` reads `directives` twice; filtering the state loop but not
+  the `known` cell-scoping leaves six of ten KPI fields correct and is invisible
+  unless the archived fixture carries owed cells. r38 mechanism (c), on the one
+  assertion the batch calls structural.
+
+**MEDIUM-3 — I re-probed rather than accepting it, and the result cut both ways.**
+Jenny said `n_a` can be human-set (**true** — the cell PATCH accepts it with no
+paused check) and that `updated_by IS NULL` is the **exact** discriminator
+(**not true** — it is *strictly stronger* and over-blocks rows a script populated
+at creation). Measured: **620 cells** rev 1's predicate called disposable had in
+fact been written by a human or script; **0** in the other direction; and rev 1
+would have wrongly allowed moving **5 of its 6 "movable" directives**. Rev 2 uses
+a **conjunction** of all three clauses — they fail independently, so requiring all
+three removes the need for any one assumption to hold alone.
+
+**⚠ The corrected predicate makes the feature nearly inert on existing data: 1 of
+89 directives is movable, down from 6.** That is the predicate working, not
+failing — the 88 are blocked because the goal load, the reconciliation backfill
+or Lacey wrote their cells. Every directive created **from now on** goes through
+`fanOutCells`, which leaves `updated_by` NULL, so it is movable until someone
+works it. **Do not describe this as "project is editable":** it is editable until
+someone touches the directive, i.e. the same session.
 
 **Four findings from the 2026-08-15 prod probe, each moving work the handoff
 placed elsewhere:**

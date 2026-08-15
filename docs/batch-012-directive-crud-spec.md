@@ -1,14 +1,15 @@
 # Batch 012 — Pulse: directive CRUD (edit · soft-delete · archive)
 
-**Status:** SPEC, **rev 1** — Lacey's two decisions of 2026-08-15 folded (§4.4
-`project_key` blocked-when-worked; §5.1/§5.2 unique index across all statuses,
-exact match). **No open questions remain.** Build may proceed.
+**Status:** SPEC, **rev 2** — Jenny pre-flight returned **DO-NOT-BUILD-YET** on
+rev 1 (1 CRITICAL · 3 HIGH · 6 MEDIUM · 10 LOW). Every finding is folded below;
+see §0.5 for what changed and what I verified before accepting it. Rev 1 held
+Lacey's two decisions of 2026-08-15 (§4.4, §5). **No open questions remain.**
 **Source:** `HANDOFF — Directive CRUD (edit · soft-delete · archive)`, Lacey via
 Claudette, 2026-08-15. Every locked decision in §1 below is transcribed from that
 handoff; nothing there was reinterpreted.
-**Gate:** **Jenny pre-flight REQUIRED before COMMIT 3** (see §9 — the gate moves
-one commit later than the handoff placed it, and §9 says why). Karen post-flight.
-Lacey smoke + push.
+**Gate:** Jenny pre-flight **DONE** — findings folded into this rev; re-gate on
+§4.2's consumer table and §4.4's server-side re-check before COMMIT 3 opens.
+Karen post-flight. Lacey smoke + push.
 **Follows:** the Pulse matrix filter/grid batch (`5795a89`). Same file.
 
 This spec is committed **before the build opens**, per the §15 PROCESS note. Two
@@ -94,6 +95,57 @@ watch. And it is silent — no error, no warning, a plausible-looking number.
 §4.4 specifies the fix. It is the reason `project_key` editing is the highest-risk
 line in this batch, not the most convenient one.
 
+**Jenny sharpened this one:** the KPI strip is the *less* visible symptom. The
+per-row **Outstanding pill** is worse — `buildMatrixRows` → `summarizeDirectiveCells`
+would render a non-zero Outstanding on a row that draws **entirely hollow**, which
+is a visible contradiction rather than a quiet number.
+
+### 0.5 What the Jenny pre-flight changed, and what I checked before accepting it
+
+Rev 1 was returned **DO-NOT-BUILD-YET**. The design survived; three of its
+load-bearing safety claims did not. Findings are folded at the section they
+belong to rather than listed here, but the four that changed the *design* are:
+
+- **CRITICAL-1 — the §4.4 block was specified only as a render-layer lock.**
+  Every statement of it was about what *renders*. So the route's contract was
+  "move → delete cells → re-fan-out" with **no precondition**, and §4.4's whole
+  safety argument ("lossless by construction") existed only in the browser. Two
+  admins, one stale page, and 16 cells including notes are gone — with no
+  `old_value` anywhere in the audit trail, because §6 specified only a summary
+  row. That is §13 r37's shape exactly. **Verified by reading rev 1: the claim
+  was real. §4.4 now requires a server-side re-check.**
+
+- **HIGH-1 — §4.2's mechanism was the phrase "filter at render."** That is a
+  phrase, not a mechanism — and §2.1 is itself an argument that a phrase is not
+  enough, applied to exactly one of eight consumers. **Verified against the
+  page: there are eight, and rev 1 covered three.** §4.2 now carries a named
+  mechanism and a per-consumer table; HIGH-2, HIGH-3, MEDIUM-1 and MEDIUM-2 are
+  four different wrong answers to the question rev 1 left open.
+
+- **HIGH-3 — the result-count denominator.** `matrixRows.length ===
+  directives.length` at `page.tsx:1105`. **Verified verbatim.** Post-§4.2 that
+  denominator becomes NBLY's *all-status* count — 88 — which is the exact number
+  the comment thirteen lines above it exists to forbid on a per-project line.
+  The line would flip to its `N of M` form on **every unfiltered page load** and
+  contradict the KPI strip's `total` inches away.
+
+- **MEDIUM-3 — the movability predicate.** Jenny said `n_a` can be human-set and
+  that `updated_by IS NULL` is the exact discriminator. **I probed both against
+  prod rather than accepting it, and the result is stronger than her framing in
+  one direction and weaker in the other** — see §4.4, which now uses a
+  conjunction of both clauses and says why neither alone is right.
+
+**Two claims I checked and did NOT fold as stated.** Jenny called `updated_by IS
+NULL` "exact"; it is not — it is *strictly stronger*, and it over-blocks rows a
+script populated at creation (§4.4). And she read §4.3's paging as a regression;
+it is, but the merged read inherits `fetchAllPaged` rather than losing it, so the
+discipline is preserved rather than accepted-as-lost.
+
+Jenny independently confirmed §0.1, §0.2, §0.4's mechanism, §4.3's feasibility,
+the audit shape (no constraint change needed), and that §9's commit ordering is
+safe — commit 3 lands the archive-capable route while `loadProject` still filters
+to active, so no window exists between commits 3 and 4.
+
 ---
 
 ## 1. Locked decisions (transcribed — do not relitigate)
@@ -155,14 +207,33 @@ already (`PANEL_MAX_HEIGHT`, `rulingWriteValues`): make it **unconstructable, no
 watched**.
 
 - `MatrixDirectiveLike` gains `status: DirectiveStatus`.
+- **`DirectiveRow.status` must be narrowed from `string` to `DirectiveStatus`**
+  (`page.tsx:115`). Until it is, `MatrixDirectiveLike` is not structurally
+  satisfied and this will be the first thing that fails to compile.
 - `computeMatrixKpis` **filters `status === 'active'` internally**, before any
-  count. It cannot count an archived directive even when handed one.
-- Test with an independent oracle: pass a mixed array, assert every KPI field
-  equals the value for the active-only subset. Mutate by deleting the filter —
-  that test must fail.
+  count. It cannot count an archived directive even when handed one — so it
+  takes the **raw** `directives` array, deliberately, and is the one consumer in
+  §4.2's table that does.
 
-This is the one place in the batch where a passing test could otherwise encode
-the defect (§13 r38): a test that only ever passes active rows proves nothing.
+**⚠ The test rev 1 specified would have passed on a half-applied filter.**
+`computeMatrixKpis` uses `directives` **twice** — the resolve-state loop
+(`matrix-controls.ts:514`) and the cell scoping
+`known = new Set(directives.map(d => d.id))` (`:523`). Filtering the loop but not
+`known` — the natural half-implementation — leaves `total`, `openDirectives`,
+`resolved`, `unstarted`, `coveragePct` and every brand field **correct**, and
+corrupts only `outstandingCells` / `inProgressCells` / `blockedCells`. Those three
+are identical either way *unless the archived fixture carries cells in owed
+statuses*, which rev 1 did not require. That is r38 mechanism (c) — an
+under-constrained fixture — on the single assertion this batch calls structural.
+
+So the test is specified concretely, not by intent:
+
+- The archived fixture directive carries **≥1 cell in each of `todo`,
+  `in_progress`, `blocked`, `done`** — otherwise the fixture cannot discriminate.
+- Assert **every** field of `MatrixKpis` equals the active-only subset's value.
+- **Mutations that must each fail:** (a) delete the filter entirely; (b) apply it
+  to the state loop only, leaving `known` unfiltered; (c) apply it to `known`
+  only. If (b) passes, the test is decorative.
 
 ---
 
@@ -215,6 +286,14 @@ archived directive can be set back to `active` from the same editor. This is not
 scope creep — without it, an all-admins soft-delete has no undo path through the
 UI, and "soft delete" that cannot be undone is a hard delete with extra steps.
 
+**Two affordances write `status`, and that is deliberate** (Jenny LOW-6): the row
+editor's field, and the delete control. Two write paths to one column is normally
+the shape `clearAllFilters`' comment warns about — it is accepted here because
+the delete control is a shortcut for the overwhelmingly common case, and both
+paths go through the **same** PATCH route and emit the **same** audit row, so
+they cannot diverge in behaviour or in the trail. If they ever stop sharing the
+route, this stops being acceptable.
+
 ### 4.2 `Hide archived`
 
 Checkbox beside `Hide paused`, **default on**, mirroring its placement and
@@ -228,8 +307,110 @@ for all of them. Rationale:
   renders **hollow** — the pagination-hotfix symptom, manufactured on purpose.
 - The archived set is tiny and grows only by archiving.
 - The cell read is already `fetchAllPaged`, so it absorbs the extra rows.
+- **The merged directive read INHERITS `fetchAllPaged`.** Today the archived read
+  is paged (`page.tsx:367`) and the main directive read at `:337` is not. Merging
+  them must page, not un-page: the archived read's own docblock explains it was
+  paged from the outset because archived directives only ever accumulate. 89 rows
+  is enormous headroom; the discipline is the point.
 
-The safety this trades away is exactly what §2.1's structural filter buys back.
+### ⚠ "Filter at render" is a phrase, not a mechanism — here is the mechanism
+
+Rev 1 said "filter at render" and left it there. **Eight things read the
+`directives` slot**, and every finding in this subsection is a different wrong
+answer to *which array each of them gets*. The mechanism is two derived memos and
+one scoped cell array:
+
+```ts
+const visibleDirectives = useMemo(
+  () => (hideArchived ? directives.filter((d) => d.status === 'active') : directives),
+  [directives, hideArchived],
+);
+const visibleCells = useMemo(() => {              // for countHiddenOwedCells only
+  const ids = new Set(visibleDirectives.map((d) => d.id));
+  return cells.filter((c) => ids.has(c.directive_id));
+}, [cells, visibleDirectives]);
+```
+
+**The correct answer is NOT uniform. Two consumers must keep the raw array:**
+
+| # | Consumer | Line | Gets | Why |
+|---|---|---|---|---|
+| 1 | `computeMatrixKpis` | `:672` | **raw** | Its internal `status === 'active'` filter IS the guarantee (§2.1). Handing it a pre-filtered array would make the toggle load-bearing again and leave the internal filter untested in practice. |
+| 2 | archived-count derivation | `:663` | **raw** | It exists to count the rows the view is hiding. |
+| 3 | cells load `ids` | `:387` | **raw** | Archived cells must load or an archived row renders hollow. |
+| 4 | `buildMatrixRows` | `:541` | `visibleDirectives` | The rendered set. |
+| 5 | `countHiddenByFilters` | `:649` | `visibleDirectives` | **HIGH-2** below. |
+| 6 | `countByType` | `:1340` | `visibleDirectives` | **MEDIUM-1** below. |
+| 7 | `directives.length` ×6 | `:818 :839 :911 :1105–1107 :1324` | `visibleDirectives` | **HIGH-3** below. |
+| 8 | `countHiddenOwedCells` | `:638` | `visibleCells` | **MEDIUM-2** below. |
+
+#### HIGH-3 — the result count's denominator
+
+`page.tsx:1105` reads `matrixRows.length === directives.length ? … : "N of M"`.
+On the raw array that denominator becomes NBLY's **all-status** count — **88** —
+which is precisely the quantity the comment at `:1088–1103` exists to forbid on a
+per-project line ("*two different quantities at one number*"). Three consequences,
+on **every unfiltered page load**: the line flips to its `N of M` form implying a
+filter is active when none is; the denominator is wrong; and it contradicts the
+KPI strip's `total` (87) inches away, both labelled as directives in this project.
+It takes `visibleDirectives`, and §8 pins it.
+
+#### HIGH-2 — `countHiddenByFilters` and the button that would lie
+
+That helper counts directives matching the **search** but failing a filter group,
+and offers **Clear all filters** — which by deliberate design does *not* touch
+`hidePaused` (`:678–682`). On the raw array it produces two dishonest outcomes:
+an archived row that matches the search and passes every group contributes **0**,
+so the correction stays silent (the exact false negative the helper exists to
+prevent); and an archived row that fails a group *is* counted, so the page offers
+**Clear all filters** — which **reveals nothing**, because the row is hidden by
+`hideArchived`. The second is strictly worse than the pre-batch state.
+
+**Resolution: exclude archived rows from its input** (`visibleDirectives`), and
+let the §4.3 archived signal be the sole channel for "it exists, archived".
+
+**The rejected alternative, and why:** folding `hideArchived` into
+`hasClearableFilters`/`clearAllFilters` would also work, but `hideArchived` is a
+**view preference**, the same class as `hidePaused` — which `clearAllFilters`
+deliberately excludes. Folding one in and not the other is incoherent, and
+folding both in changes what "Clear filters" means. **Do not do both**; that
+recreates the two-competing-reset-paths hazard `clearAllFilters`' own comment
+forbids.
+
+#### MEDIUM-1 — `countByType` suppresses the copy it exists to produce
+
+`:1340` gates the "no directives of this type yet" empty state on
+`countByType(directives, typeFilter) === 0`. On the raw array, a type whose only
+directives are archived reports `> 0`, so it falls through to the generic
+no-match copy — which its own comment says "reads as a bug on a type Lacey simply
+has not started using."
+
+#### MEDIUM-2 — the paused-brand warning gains a false positive AND false text
+
+`countHiddenOwedCells(brands, cells, hidePaused)` takes **all** cells with no
+directive scoping. Post-§4.2 that includes archived directives' cells — the prod
+archived directive holds all 16. An owed cell on a paused brand belonging to an
+*archived* directive would fire:
+
+> ⚠ N outstanding cells on paused brands are hidden but still counted.
+
+**"still counted" is false**, because §2.1 removes archived cells from the KPI
+scoping — and the offered fix, *Show paused*, reveals nothing, since the row is
+hidden by `hideArchived`. A guard built to catch counted-but-invisible cells,
+reporting invisible-and-not-counted ones. It takes `visibleCells`.
+
+#### LOW — empty states and the control's own visibility
+
+`:820` and `:1326` read *"No **active** directives for {project}"* while gated on
+a length that post-§4.2 means "no directives of any status"; on
+`visibleDirectives` the copy is true again when the toggle is on and must be
+reworded when off. And **the `Hide archived` checkbox renders only when the
+project has ≥1 archived directive**, mirroring `Hide paused`'s
+`pausedBrandCount > 0` gate — so it appears the first time something is archived.
+Stated because "mirroring its placement" was ambiguous about exactly this.
+
+The safety this whole subsection trades away is what §2.1's structural filter
+buys back.
 
 ### 4.3 The existing archived-search signal must not contradict the new view
 
@@ -241,9 +422,15 @@ is off. So:
 
 - Delete the separate `archivedTitles` fetch; derive the count from the single
   directive load. **One fetch, one source** — two reads of the same fact is the
-  divergence hazard this module exists to prevent.
-- Render the signal **only when `hideArchived` is true**.
+  divergence hazard this module exists to prevent. Feasible as written:
+  `DirectiveRow.status` is already selected (`page.tsx:339`).
+- The merged read **inherits `fetchAllPaged`** (§4.2) rather than dropping to the
+  main read's unranged form.
+- Render the signal **only when `hideArchived` is true**. Gating it there leaves
+  no state in which "…are not shown" is false — Jenny confirmed the enumeration.
 - Give it the same one-click escape the paused warning has: *"Show archived"*.
+- It reads the **raw** directive array (§4.2 row 2): its whole job is to count
+  what the view is hiding, so a filtered input would zero it out.
 
 This closes the live defect the handoff names — `Submits Form Lead - Combined`
 is archived in prod right now (added by direct SQL) and reads as "found nothing"
@@ -261,38 +448,130 @@ were checked.**
 inline warning or a confirm step; both were declined in favour of the option
 where **no data can be lost**, accepting that some corrections become impossible.
 
-#### The rule
-
-A directive is **movable** only when **every one of its cells is at a fan-out
-default AND carries no note**:
+#### The rule — a CONJUNCTION, and rev 1's version was wrong
 
 ```
-movable  ⟺  ∀ cell:  cell.status ∈ {todo, n_a}  ∧  isBlank(cell.note)
+movable  ⟺  ∀ cell:  cell.updated_by IS NULL
+                   ∧ cell.status ∈ {todo, n_a}
+                   ∧ isBlank(cell.note)
 ```
 
-`todo` and `n_a` are the **only** two statuses `fanOutCells` ever produces, and
-neither encodes anything a human entered. A note is human work regardless of
-status. Deliberately **independent of the brand's current pause state**: a
-brand's `is_paused` can flip after fan-out, so "is this cell at *its* default"
-is ambiguous and this formulation is not.
+Rev 1 omitted the first clause and justified it with *"`todo` and `n_a` are the
+only two statuses `fanOutCells` produces, and **neither encodes anything a human
+entered**."* **The second half of that sentence is false**, and Jenny caught it:
+`app/api/admin/directives/status/route.ts:66` accepts any `isCellStatus` value
+**including `n_a`**, with no paused-brand check. An admin deliberately marking
+"this brand does not run this test" produces a cell rev 1 classified as
+disposable. Same for a deliberate `done → todo` reopen.
 
-When not movable, the `project_key` control renders **locked** — an inert
-`<span>` plus the derived reason, never `<button disabled>`:
+**Measured against prod, 2026-08-15 — the gap was not theoretical:**
 
-> Cannot move — 9 brand cells hold status beyond their defaults.
+| | |
+|---|---|
+| Cells whose `updated_by` is NULL (never written since fan-out) | 191 of 1,409 |
+| Writers of the rest | `system:nbly-goal-load` 746 · `l.hay@fusion92.com` 267 · `system:convert-reconciliation` 205 |
+| **Cells rev 1's predicate called disposable that a human or script had written** | **620** — 313 `todo`, 307 `n_a` |
+| Cells never written that rev 1 called held | **0** |
+| Directives movable under rev 1's predicate | 6 of 89 |
+| Directives movable under the corrected predicate | **1 of 89** |
+| **Directives rev 1 would have wrongly allowed moving** | **5** |
 
-Count derived, never literal (§0.3). Every other field stays editable; only
+`fanOutCells` (`directives.ts:78`) writes only `{directive_id, brand_id, status}`,
+leaving `updated_by` **NULL**; the status PATCH route always sets it
+(`status/route.ts:109`), as does the reconciliation backfill. So `updated_by IS
+NULL` means "untouched since creation" and, as the zero-false-negatives row above
+shows, **implies** the other two clauses on today's data.
+
+**But it is NOT "exact", as Jenny called it — it is STRICTLY STRONGER, and it
+over-blocks.** The 5 directives it newly blocks are the chat goals inserted by
+**direct SQL** on 2026-08-12, whose `updated_by` was populated *at creation*
+rather than by any edit. Nothing about them was worked. That is an artifact of
+how they were created, not evidence of work — and it does not matter, because
+nobody needs to move them.
+
+**Why keep all three clauses when one implies the others today.** They fail
+independently. If a future writer forgets to set `updated_by`, the status and
+note clauses still catch worked cells. If a future fan-out gains a third default
+status, the `updated_by` clause still catches edits. Requiring all three costs
+nothing measurable (the conjunction equals the `updated_by` clause alone on
+current data) and removes the need for either assumption to hold on its own.
+
+Deliberately **independent of the brand's current pause state**: `is_paused` can
+flip after fan-out, so "is this cell at *its* default" is ambiguous and this is
+not.
+
+#### Where it is enforced — BOTH layers. The route is the real one.
+
+**⚠ Rev 1 specified this block only as a render-layer lock, and that was the
+CRITICAL finding.** Every statement of it described what *renders*, so the
+route's contract was "move → delete cells → re-fan-out" with **no precondition**
+— and §4.4's whole safety argument existed in the browser only.
+
+**The failure is ordinary two-admin concurrency, not a race you have to
+engineer.** Admin A opens the matrix; `loadProject` snapshots cells **once**
+(`page.tsx:388`), and directive `D` renders movable. Admin B works `D` from the
+brand page, or the reconciliation script runs. A never reloads, changes
+`project_key`, saves. The route deletes 16 cells including B's notes. **And the
+audit trail would not record what was lost** — §6 specified a single summary row
+with no `old_value`, and cells have no soft-delete (§13 r1 is scoped to
+`quality_logs`). The trail shows B's write, then a move, then nothing. That is
+§13 r37's shape precisely: the destructive write is the one that leaves no mark.
+
+So:
+
+- **The route re-evaluates the predicate server-side against freshly-read cells**
+  and returns **409** with the derived reason when it fails. It does not trust
+  the request, and it does not trust the client's view of the cells.
+- **UI and route call ONE shared pure predicate** exported from
+  `lib/client-library/directives.ts` — `isDirectiveMovable(cells)` — so the two
+  cannot drift. This is the `snapshotFromLog` shape: one mapping, no second
+  transcription to be wrong.
+- The read-then-write window remains (the check and the delete are separate
+  statements). **Accepted and recorded, not silently left:** closing it needs a
+  single RPC or an advisory lock, which is disproportionate to a two-admin tool
+  where the guard already reduces the window from "the whole session" to "the
+  duration of one request".
+
+The client-side lock stays, because a 409 the user could have been shown up front
+is a bad experience — but it is now the *convenience*, and the route is the
+guarantee.
+
+#### The locked control
+
+When not movable, `project_key` renders as an inert `<span>` plus the derived
+reason, never `<button disabled>`. **The reason names the clause that actually
+failed** — rev 1's single message ("*N brand cells hold status beyond their
+defaults*") is false for a `todo` cell that blocks only because it carries a
+note, or only because it was edited:
+
+> Cannot move — 9 brand cells have been edited or hold a note.
+
+Counts derived, never literal (§0.3). Every other field stays editable; only
 `project_key` locks.
 
 #### What this buys, and it is more than it looks
 
-The move is still a re-fan-out — delete the old cells, insert fresh ones for the
-new project's active brands via the same `fanOutCells` create uses, audited as
-one summary row (`field_name = 'directive_brand_status'`, `new_value =
-'re-fanned to N brands on project move'`). **But the block makes that re-fan-out
-lossless BY CONSTRUCTION:** every cell it deletes was at a default carrying no
-information. §0.4's silent miscount is fixed *and* nothing can be destroyed —
-the two goals stop trading against each other.
+The move is still a re-fan-out, via the same `fanOutCells` create uses so the two
+paths cannot drift. **But the block makes that re-fan-out lossless BY
+CONSTRUCTION** — every cell it deletes was untouched since fan-out and carries no
+information. §0.4's silent miscount is fixed *and* nothing can be destroyed, so
+the two goals stop trading against each other. *Given* the server-side re-check
+above; without it the phrase is false, which is what CRITICAL-1 was about.
+
+**Write order: INSERT FIRST, then delete.** Rev 1 said "delete the old cells,
+insert fresh ones" and specified no transaction, no ordering rationale and no
+failure response — and that is the destructive order. Delete-then-insert, with
+the insert failing, leaves a directive in the new project with **zero cells**:
+renders `unstarted`, all hollow, Outstanding 0, and **there is no re-fan-out
+affordance anywhere in the UI to repair it.** Insert-first cannot collide —
+the new cells carry different `brand_id`s, so `UNIQUE (directive_id, brand_id)`
+is not in play — and its worst case is a transient double-count that the next
+statement removes. On partial failure the route returns the directive as moved
+with an explicit `cellError`, mirroring the create route's fan-out failure shape
+(`route.ts:134–140`), which leaves a *recoverable* state and says so.
+
+Audit: one summary row, `field_name = 'directive_brand_status'`, `new_value =
+'re-fanned to N brands on project move'`.
 
 The lock in §1 row B also survives untouched: there is no new prompt, because
 there is nothing left to warn about.
@@ -303,18 +582,25 @@ Probed 2026-08-15 across all 89 directives and 1,409 cells:
 
 | | |
 |---|---|
-| **Movable** (`project_key` editable) | **6 of 89 — 7%** |
-| Blocked (holds work) | 83 |
+| **Movable today** (`project_key` editable) | **1 of 89 — about 1%** |
+| Blocked | 88 |
 | Cell statuses | `done` 586 · `todo` 451 · `n_a` 371 · `in_progress` 1 |
 | Cells carrying a note | 23 |
+| Cells never written since fan-out | 191 of 1,409 |
 
-**So `project_key` editing is a create-time correction, not a general repair.**
-The 6 movable directives are the never-worked ones — the five chat goals added
-2026-08-12 and one sibling. That is precisely the case decision B exists for
-("a directive created against the wrong project must be correctable"), and it is
-well-targeted rather than accidentally narrow. But do not describe this feature
-to anyone as "project can be edited": it can be edited *until someone works the
-directive*, which in practice means the same session.
+**So `project_key` editing is a create-time correction, not a general repair —
+and on existing data it is close to inert.** That is not a defect: every
+directive created **from now on** goes through `POST /api/admin/directives` →
+`fanOutCells`, which leaves `updated_by` NULL, so a newly created directive **is**
+movable until someone works it. The feature works exactly when it is needed —
+minutes after a mis-filed create — and is unavailable afterwards, which is the
+trade Lacey chose.
+
+**Do not describe this to anyone as "project can be edited."** It can be edited
+*until someone touches the directive*, which in practice means the same session.
+The historical 88 are blocked because their cells were written by the goal load,
+the reconciliation backfill, or Lacey — which is the predicate working, not
+failing.
 
 **Escape hatch, deliberately not built:** an admin who genuinely must move a
 worked directive archives it (§4.1) and creates a replacement in the right
@@ -333,6 +619,27 @@ the message.
   return a usable 409. Blocking creation closes the standing backlog item the
   create route has carried since Phase A — it performs **no** duplicate check
   today, which is why `countHiddenByFilters` had to mitigate on the render side.
+
+### 5.0 Three route behaviours rev 1 left unspecified — one is the classic bug
+
+- **Self-exclusion.** The PATCH pre-check MUST carry `.neq('id', <directive id>)`.
+  Without it, **saving a row whose title is unchanged 409s against itself** — and
+  since editing title is optional, that breaks nearly every save. §8 pins it with
+  a "save with an unchanged title succeeds" case, which rev 1's test plan lacked,
+  so this would have shipped.
+- **Destination scoping.** On a project move the pre-check runs against the
+  **new** `project_key`, not the current one. Checking the old project would
+  permit a move that collides at the destination and then fails at the index.
+- **Map `23505` to the same 409.** A pre-check is not a lock: two concurrent
+  creates both pass it and the index catches one.
+  `POST /api/admin/directives:120–123` returns **500 with the raw Postgres
+  message**, so post-029 a create race would surface
+  `duplicate key value violates unique constraint "idx_directives_project_title"`
+  to the user. Both routes map `error.code === '23505'` to the pre-check's 409;
+  the precedent is `app/api/admin/milestones/route.ts:126`.
+
+The violation **is** distinguishable: `directives` carries only its PK and this
+index, and a PK violation is unreachable on an UPDATE that does not touch `id`.
 
 ### 5.1 Scope: across ALL statuses — DECIDED
 
@@ -372,8 +679,12 @@ Every directive mutation writes `audit_log` rows on the quality-logs convention:
 `field_name` / `old_value` / `new_value` / `changed_by`, one row per changed
 field. Diff against the row as loaded; unchanged fields emit nothing.
 
-- `target_type = 'directive'`, `target_id = <directive id>`. Migration 024
-  already admits this in `audit_log_target_shape_chk` — **no constraint change.**
+- `target_type = 'directive'`, `target_id = <directive id>`. **No constraint
+  change is needed** — but cite migration **025**, not 024: `025_monitoring_findings.sql:109–118`
+  is the LIVE definition of `audit_log_target_shape_chk`, having re-DROPped and
+  re-ADDed 024's full set plus `monitoring_finding`. 024's version is superseded.
+  The conclusion is unchanged and Jenny re-verified it; only the citation was
+  dangling, which is a failure mode this file has paid for before.
 - `action`: reuse `'UPDATE'` with a descriptive `field_name`. The
   `audit_log.action` CHECK has its own closed set; do not invent a value.
 - `changed_by` is **server-derived** via `getChangedBy()` on the **cookie-bound**
@@ -402,6 +713,16 @@ filtering `system:%` miss it. Anything non-interactive here uses `system:`.
   addition is stated in §8.
 - Bulk edit or bulk delete. One directive at a time.
 - Hard delete. Ever.
+- **The BRAND PAGE keeps `.eq('status','active')`**
+  (`app/dashboard/pulse/[projectKey]/[brandCode]/page.tsx:252`) and gets no
+  archived toggle. **This batch therefore CREATES an asymmetry:** an archived
+  directive becomes visible on the matrix (toggle off) while remaining silently
+  absent from the brand page. Deliberate — the brand page is a per-brand working
+  view, not an inventory — but recorded as created-here rather than discovered
+  later, and it is the natural first item if the asymmetry turns out to confuse.
+- A **re-fan-out affordance** for a directive left with zero cells. §4.4's
+  insert-first ordering means the state is not reachable by the specified path;
+  if it is ever reached another way, repair is SQL.
 
 ---
 
@@ -414,8 +735,11 @@ Behavioural, in the order a reviewer can actually run them.
 - Non-admins get plain inert markup, **never `<button disabled>`** (standing
   rule; the matrix's own pre-existing `disabled={!clickable}` is out of scope but
   do not add a second instance).
-- The PATCH route enforces admin server-side regardless of what renders; RLS
-  (`directives_admin_write`) is the backstop.
+- The PATCH route enforces admin server-side regardless of what renders.
+  **RLS is NOT the backstop for the route** — rev 1 said it was, and that is
+  wrong: the route writes via `supabaseAdmin` (service role), which **bypasses**
+  RLS entirely. `directives_admin_write` backstops the direct browser-client path
+  only. The route's own session→profile check is the sole gate on the route.
 
 **Editing**
 - Dirty prompt fires on all three dismiss paths; pristine exits freely; Esc at
@@ -423,22 +747,51 @@ Behavioural, in the order a reviewer can actually run them.
 - `directive_type` persists and the TYPE filter reflects it immediately.
 - `description` and `title` persist.
 
-**`project_key` (§4.4)**
-- A directive holding **any** cell outside `{todo, n_a}`, or **any** cell with a
-  note, renders `project_key` **locked** with a derived reason. Inert markup,
-  never `<button disabled>`.
-- A directive whose cells are all at fan-out defaults **is** movable.
-- Moving it re-fans the cells to the new project's brands, and the old cells are
-  gone — **verify both by direct query, not by the UI.**
-- **The §0.4 regression test:** after a move, the destination project's KPI strip
-  contains no cell belonging to a brand outside that project.
-- **The movability predicate is unit-tested with an independent oracle**, and
-  must be tested at each boundary separately — a cell in `in_progress` blocks; a
-  cell in `todo` **with a note** blocks; a whitespace-only note does **not**
-  block. A fixture where both halves of the `∧` are false the same way cannot
-  discriminate them (r38 mechanism (c)), so build fixtures that isolate each.
-- Mutate to confirm: dropping the note clause, and widening the status set to
-  include `done`, must each fail a test.
+**`project_key` (§4.4) — the highest-risk area, test it hardest**
+- A directive with **any** cell that has a non-null `updated_by`, or a status
+  outside `{todo, n_a}`, or a note, renders `project_key` **locked** with a
+  reason naming the clause that failed. Inert markup, never `<button disabled>`.
+- A freshly created directive **is** movable — create one and move it.
+- Moving it inserts the new project's cells and removes the old ones —
+  **verify by direct query, not by the UI or the response body.**
+- **⚠ THE CRITICAL-1 TEST, and it is a ROUTE test, not a UI test.** `PATCH` a
+  project move on a directive holding one `done` cell → **409**, *and the cells
+  are unchanged*, asserted by direct query. Without this the block is UI-only in
+  practice no matter what the prose says. A UI test cannot substitute: the whole
+  finding is that the UI's view can be stale.
+- **The §0.4 regression test, stated so it is runnable.** Rev 1 asked that "the
+  destination project's KPI strip contains no cell belonging to a brand outside
+  that project" — **not assertable**, because `MatrixCellLike` is
+  `{directive_id, status}` and carries no brand identity. Assert instead, by
+  direct query: after a move, every `directive_brand_status` row for that
+  directive references a brand whose `project_key` is the destination.
+- **`isDirectiveMovable` is unit-tested with fixtures that isolate each clause**
+  — a cell in `in_progress`; a `todo` cell **with a note**; a `todo` cell with a
+  **non-null `updated_by`** and no note; a whitespace-only note (must NOT block).
+  A fixture where two clauses fail together cannot discriminate them (r38
+  mechanism (c)).
+- **Mutations that must each fail a test:** drop the `updated_by` clause; drop
+  the note clause; widen the status set to include `done`. If dropping the
+  `updated_by` clause passes, the fixture set is rev 1's and is under-constrained.
+
+**Filter/consumer wiring (§4.2)**
+- With `Hide archived` OFF and no filters set, the result line reads
+  `N directives in {project}` — **not** `N of M` — and its number equals the KPI
+  strip's `total`. This is the HIGH-3 assertion; run it on an unfiltered load.
+- `countHiddenByFilters` never counts an archived row, so **Clear all filters**
+  can never be offered for a row it cannot reveal.
+- A type whose only directives are archived still shows the "no directives of
+  this type yet" empty state, not the generic no-match copy.
+- The paused-brand amber warning does not fire for an owed cell belonging to an
+  archived directive.
+
+**Duplicate titles (§5.0)**
+- **Saving a directive with its title UNCHANGED succeeds** — the self-collision
+  case; this one is the reason §5.0 exists.
+- A create colliding with an **archived** title is rejected (§5.1's scope).
+- A project move whose title collides **at the destination** is rejected.
+- The route returns **409 with a usable message**, not a 500 carrying a Postgres
+  constraint name — verify by forcing the `23505` path, not only the pre-check.
 
 **Archive**
 - Delete archives; the row leaves the default view; **all 16 cells survive** —
@@ -450,8 +803,10 @@ Behavioural, in the order a reviewer can actually run them.
 **§2 — the prohibition**
 - KPI totals, `coveragePct` and every count are **identical** with `Hide
   archived` on and off. This is the batch's single most important assertion.
-- The mixed-array unit test in §2.1 passes, and fails when the internal filter is
-  deleted.
+- The §2.1 mixed-array unit test passes, with an archived fixture carrying ≥1
+  cell in each of `todo`/`in_progress`/`blocked`/`done`, and **fails under all
+  three** specified mutations — including "filter the state loop but not
+  `known`", which rev 1's test would have passed.
 
 **Duplicates**
 - Blocked at the route with a usable message, and by constraint (verify the
@@ -475,33 +830,47 @@ batch's estimated figures were all wrong.
 ## 9. Commits
 
 ```
-1  this spec, docs only
-2  migration — unique (project_key, title)          [§0.1: flag already exists]
-3  PATCH route + audit rows                          ← JENNY PRE-FLIGHT BEFORE THIS
-4  matrix-controls: status on MatrixDirectiveLike + KPI filter + tests   [§2.1]
+1  this spec, docs only                                              [DONE 887f55e]
+2  migration — unique (project_key, title)          [§0.1]           [DONE d4a3283]
+   … Jenny pre-flight → DO-NOT-BUILD-YET → folded as rev 2           [DONE]
+3  lib: isDirectiveMovable + status on MatrixDirectiveLike
+      + computeMatrixKpis internal filter + tests    [§2.1, §4.4]
+4  PATCH route — edit / archive / restore / move + audit rows [§4.4, §5.0, §6]
 5  in-place row editing UI + dirty guard             [§3]
-6  Hide archived control + archived rendering        [§4.2, §4.3]
+6  Hide archived control + the §4.2 consumer wiring  [§4.2, §4.3]
 7  Karen fold
 ```
 
+**Commit 3 splits off from the old commit 4 and moves AHEAD of the route.** Rev 1
+had the route first. But §4.4's server-side re-check calls `isDirectiveMovable`,
+and §2.1's filter is what keeps archived rows out of the KPIs — so both pure
+pieces must exist, and be tested, before anything imports them. Building the
+route first would mean writing the guard inline and extracting it later, which is
+how two copies of a predicate get created.
+
 Atomic `CLAUDE.md` per r23 on each.
 
-**The Jenny gate moves from before commit 2 to before commit 3, and stays
-required.** The handoff placed it before the migration because that commit was to
-carry a new column plus a constraint. §0.1 removes the column; commit 2 is now a
-single unique index on data proven non-violating (§0.2). The privileged surface
-Jenny exists to pre-flight is the **new mutation route** in commit 3 — a PATCH
-that can move a directive between projects and destroy cells. Gating there
-reviews the risk rather than the index. If that reasoning is not accepted, gate
-before commit 2 and lose nothing but ordering.
+**The Jenny gate moved from before commit 2 to after it, and it earned its
+place.** The handoff gated the migration because that commit was to carry a new
+column plus a constraint; §0.1 removed the column, leaving a single index on data
+proven non-violating (§0.2). The privileged surface worth pre-flighting is the
+**PATCH route** — which can move a directive between projects and destroy cells.
+**Jenny's CRITICAL-1 is the vindication:** it is a route-level finding that a
+migration-stage gate would have had nothing to say about. She independently
+agreed the ordering was right.
 
-**Commit 4 lands before the UI on purpose.** The §2.1 structural filter must
-exist before any code path can hand `computeMatrixKpis` an archived directive.
-Building the toggle first would put the defect in the tree between two commits.
+**The pure layer lands before the UI on purpose.** §2.1's filter must exist
+before any code path can hand `computeMatrixKpis` an archived directive; building
+the toggle first would put the defect in the tree between two commits.
+
+**Re-gate before COMMIT 4** on the two things this rev changed most — §4.2's
+consumer table and §4.4's server-side re-check.
 
 **Do not push.** Report back → Karen.
 
 ---
 
-*Spec committed 2026-08-15, before the build opened. Prod figures in §0 were
-probed the same day and will be stale; re-probe rather than citing them.*
+*Rev 1 committed 2026-08-15 before the build opened; rev 2 folds the Jenny
+pre-flight the same day. Prod figures throughout (89 directives · 1,409 cells ·
+87 NBLY active · 191 untouched cells) were probed 2026-08-15 and **will be
+stale** — this table has moved on every single probe. Re-probe; do not cite.*
