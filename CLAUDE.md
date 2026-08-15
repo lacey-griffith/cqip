@@ -4130,8 +4130,8 @@ unique index on data proven non-violating. The privileged surface worth a
 pre-flight is the **new PATCH route** — it can move a directive between projects
 and destroy cells. Karen post-flight. **DO NOT PUSH** — Lacey smokes.
 
-**Phase status: COMMITS 1–4 built** (spec · migration 029 · the pure layer ·
-`PATCH /api/admin/directives/[id]`);
+**Phase status: COMMITS 1–5 built** (spec · migration 029 · the pure layer ·
+`PATCH /api/admin/directives/[id]` · the in-place row editor);
 Jenny pre-flight DONE across TWO passes and folded as spec rev 3. **Migration NOT
 yet applied — Lacey runs it.** Remaining: the PATCH route, the row editor, the
 `Hide archived` wiring, Karen.
@@ -4175,6 +4175,30 @@ survivor was verified an EQUIVALENT mutant** (`field in next` vs
 `next[field] !== undefined` cannot diverge — the route only assigns `string |
 null`, and `JSON.parse` never yields `undefined`), and the overclaiming test
 comment was corrected rather than the test bent to catch it.
+
+**COMMIT 5 — the in-place row editor.** `DirectiveEditStrip` renders as a
+full-width expansion row under its directive, the same container shape as the
+existing `CellEditStrip`, so the two read as one pattern and only one is ever
+open (opening either closes the other — one expansion slot per row, and two Save
+buttons in a row would mean two different things). Admin-only, and non-admins get
+**no control at all** rather than a disabled one. Keyed by directive id so the
+form re-seeds per open; without the key, reopening a *different* row would reuse
+the previous row's field state and the dirty guard would compare against the
+wrong snapshot. The `project_key` control renders as inert markup with its reason
+whenever the directive holds work — **the reason comes from the same
+`isDirectiveMovable` the route's 409 uses**, so the two cannot describe the block
+differently. New `lib/client-library/directive-edit-dirty.ts` carries the logs
+batch's contract rather than widening its module (that one's snapshot IS the nine
+log fields, and its array-order comparison exists for a reason that does not
+apply to five scalars): `snapshotFromDirective` is the **single producer** of both
+the snapshot and the form's initial values, and `directivePatchBody` sends only
+changed fields — **never an unchanged `project_key`**, which is what the route
+keys its move check on. Save is deliberately **not** optimistic, unlike the cell
+editor: this can change a row's identity, its type badge, whether it renders at
+all, and on a move its entire cell set. Failures render **inline**, not as a
+toast — the route's 409s are the informative part and the user has to act on them
+while the form is still open. **5 of 5 mutations caught** on the dirty module.
+tsc 0 · ESLint 0 · 354/354 · build 0.
 
 **Jenny's re-gate on rev 2: APPROVE-WITH-FINDINGS (1 HIGH · 10 MEDIUM · 4 LOW),
 no third gate needed.** She closed CRITICAL-1 as genuinely fixed and confirmed

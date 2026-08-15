@@ -43,6 +43,7 @@ import {
 } from '@/components/ui/select';
 import { useToast } from '@/components/layout/toaster';
 import { CellEditStrip } from '@/components/client-library/cell-edit-strip';
+import { DirectiveEditStrip } from '@/components/client-library/directive-edit-strip';
 import {
   CELL_STATUSES,
   CELL_STATUS_LABEL,
@@ -110,6 +111,11 @@ interface BrandRow {
 
 interface DirectiveRow {
   id: string;
+  // Redundant with the query's own scope today (loadProject filters by it), but
+  // the row editor edits this field, so it must come from the ROW rather than
+  // from the page's current picker value — otherwise a move would submit the
+  // project the user is looking at instead of the one the directive is in.
+  project_key: string;
   title: string;
   directive_type: DirectiveType;
   description: string | null;
@@ -253,6 +259,10 @@ export default function ClientLibraryPage() {
   const [createOpen, setCreateOpen] = useState(false);
   // Inline cell editor — which cell's row-expansion strip is open (one at a
   // time). Keyed by (directiveId, brandId); only real cells are ever set here.
+  // The one open DIRECTIVE editor. Mutually exclusive with expandedCell below:
+  // two open editors in one row would compete for the same expansion slot, and
+  // the row would have two Save buttons meaning different things.
+  const [editingDirectiveId, setEditingDirectiveId] = useState<string | null>(null);
   const [expandedCell, setExpandedCell] = useState<{
     directiveId: string;
     brandId: string;
@@ -348,7 +358,7 @@ export default function ClientLibraryPage() {
         .order('display_name'),
       supabase
         .from('directives')
-        .select('id, title, directive_type, description, status, created_at')
+        .select('id, project_key, title, directive_type, description, status, created_at')
         .eq('project_key', key)
         .eq('status', 'active')
         .order('created_at'),
@@ -536,6 +546,23 @@ export default function ClientLibraryPage() {
   const cellByKey = useMemo(() => {
     const map = new Map<string, CellRow>();
     for (const cell of cells) map.set(`${cell.directive_id}:${cell.brand_id}`, cell);
+    return map;
+  }, [cells]);
+
+  // Cells grouped per directive, for the editor's project_key lock.
+  //
+  // Reads the FULL `cells` array, NEVER visibleBrands — a paused or hidden
+  // brand's cell can hold work just as much as a visible one, and a movability
+  // verdict computed off the visible subset would tell an admin a move is safe
+  // while a hidden cell was about to be deleted. The same reason
+  // buildMatrixRows takes no hidePaused flag.
+  const cellsByDirective = useMemo(() => {
+    const map = new Map<string, CellRow[]>();
+    for (const cell of cells) {
+      const list = map.get(cell.directive_id);
+      if (list) list.push(cell);
+      else map.set(cell.directive_id, [cell]);
+    }
     return map;
   }, [cells]);
 
@@ -770,7 +797,60 @@ export default function ClientLibraryPage() {
     [projectKey, loadProject, toast],
   );
 
+  // Directive edit / archive / restore / move. Returns null on success or the
+  // failure MESSAGE, which the strip renders inline — the route's 409s ("N brand
+  // cells have been edited", "a directive titled X already exists") are the
+  // informative part and a toast that vanishes is the wrong surface for them.
+  //
+  // Deliberately NOT optimistic, unlike handleCellSave. A cell edit changes one
+  // dot; this can change a row's identity, its type badge, whether it renders at
+  // all (archive), and — on a move — its entire cell set. Reloading is the only
+  // way the page cannot end up describing a directive that no longer matches
+  // what was stored.
+  const handleDirectiveSave = useCallback(
+    async (directiveId: string, body: Record<string, string | null>): Promise<string | null> => {
+      try {
+        const res = await fetch(`/api/admin/directives/${directiveId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const result = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          return result.error ?? `Save failed (${res.status})`;
+        }
+        if (result.auditError) {
+          // The write landed but the trail did not. Say so rather than reporting
+          // a clean success — an incomplete audit trail is exactly the silence
+          // that let the sync-guard defect run for ten weeks.
+          toast('⚠ Saved, but the change log entry failed to write.');
+        } else if (result.changed === 0) {
+          toast('No changes to save');
+        } else {
+          toast(
+            result.cells_refanned !== undefined
+              ? `✅ Directive moved — ${result.cells_refanned} brand cells rebuilt`
+              : '✅ Directive updated',
+          );
+        }
+        await loadProject(projectKey);
+        return null;
+      } catch (err) {
+        return err instanceof Error ? err.message : 'Save failed';
+      }
+    },
+    [projectKey, loadProject, toast],
+  );
+
+
   const projectLabel = projects.find((p) => p.jira_project_key === projectKey)?.display_name ?? projectKey;
+  // Move targets. `projects` already holds ACTIVE projects only (initialLoad
+  // filters is_active), which matters: the route rejects a move to an inactive
+  // project, so offering one would be an option that always 409s.
+  const projectOptions = useMemo(
+    () => projects.map((p) => ({ key: p.jira_project_key, label: p.display_name })),
+    [projects],
+  );
   // A blank query matches everything (matchesSearch), so "did the user actually
   // search?" is a separate question from "are rows hidden?" — the hidden-match
   // correction is only meaningful once a search is active (Karen LOW-6).
@@ -1622,6 +1702,7 @@ export default function ClientLibraryPage() {
                     // Dropping `group-focus-within` costs nothing, because
                     // `onFocus` already feeds `hover`: a tabbed-to cell resolves
                     // through `inspected` and bands its row from state.
+                    const isEditingDirective = editingDirectiveId === directive.id;
                     const isHotRow = inspected?.directiveId === directive.id;
                     return (
                       <Fragment key={directive.id}>
@@ -1665,6 +1746,26 @@ export default function ClientLibraryPage() {
                               <span className="font-medium text-[color:var(--f92-dark)]">{directive.title}</span>
                               {directive.description ? (
                                 <span className="max-w-xs text-xs text-[color:var(--f92-gray)]">{directive.description}</span>
+                              ) : null}
+                              {/* Admin-only. Non-admins get NO control at all
+                                  rather than a disabled one — the route and RLS
+                                  both enforce this regardless of what renders.
+                                  Opening the directive editor closes any open
+                                  CELL editor: one expansion slot per row, and
+                                  two Save buttons in one row would mean two
+                                  different things. */}
+                              {isAdmin ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setExpandedCell(null);
+                                    setEditingDirectiveId(isEditingDirective ? null : directive.id);
+                                  }}
+                                  aria-expanded={isEditingDirective}
+                                  className="w-fit text-xs font-medium text-[color:var(--f92-orange)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-focus-ring)]"
+                                >
+                                  {isEditingDirective ? 'Close' : 'Edit'}
+                                </button>
                               ) : null}
                             </div>
                           </td>
@@ -1946,6 +2047,32 @@ export default function ClientLibraryPage() {
                             </span>
                           </td>
                         </tr>
+
+                        {/* Inline DIRECTIVE editor — same expansion-row shape
+                            as the cell editor below, so the two read as one
+                            pattern. Keyed by directive id so the form's
+                            useState initializers re-seed from the snapshot on
+                            every open; without the key, closing and reopening a
+                            DIFFERENT row would reuse the previous row's field
+                            state and the dirty guard would compare against the
+                            wrong snapshot. */}
+                        {isEditingDirective ? (
+                          <tr className="border-b border-[color:var(--f92-border)] bg-[color:var(--f92-tint)]">
+                            <td colSpan={visibleBrands.length + 2} className="p-0">
+                              <div className="sticky left-0 w-[min(56rem,100%)] p-2">
+                                <DirectiveEditStrip
+                                  key={directive.id}
+                                  directive={directive}
+                                  typeLabel={TYPE_LABEL}
+                                  projectOptions={projectOptions}
+                                  cells={cellsByDirective.get(directive.id) ?? []}
+                                  onSave={(body) => handleDirectiveSave(directive.id, body)}
+                                  onClose={() => setEditingDirectiveId(null)}
+                                />
+                              </div>
+                            </td>
+                          </tr>
+                        ) : null}
 
                         {/* Inline cell editor — a row-expansion strip spanning
                             the full table width under this directive (one open
