@@ -206,18 +206,37 @@
      sticky (Part B). A translucent header background lets body rows scroll
      visibly through it.
 
-     The two themes move in OPPOSITE directions from their card surface, and that
-     is deliberate rather than an inconsistency: in each theme the highlight steps
-     AWAY from --f92-tint in the direction that raises contrast for what sits on
-     it. Light lifts cool off warm cream; dark recesses below the lifted tint.
-     Measured on the marks and text that actually land on it:
-       light #E2E8F5 — vs white card 1.23:1 (tint is 1.07:1, so the highlight is
-         the stronger band, as a deliberate state should be); --cell-na 3.87:1;
-         --f92-dark 13.83:1; --f92-gray 3.87:1
-       dark  #10131F — vs the #1E2235 card 1.19:1, matching tint's 1.18:1 in the
-         other direction; --cell-na 3.95:1 (up from 3.31:1 on the plain card, and
-         well up from the 2.80:1 that the EXISTING tint band already gives it);
-         --f92-dark 15.04:1; --f92-gray 7.26:1 */
+     The two themes move in OPPOSITE directions from their card surface: light
+     lifts cool off the warm cream tint, dark recesses below the lifted tint.
+     Each is the direction with more headroom in its own theme.
+
+     ⚠ WHAT THAT DOES TO CONTRAST IS NOT SYMMETRIC, and an earlier version of
+     this comment claimed it was. Only DARK raises foreground contrast. LIGHT
+     LOWERS IT, for everything that keeps its colour:
+       light, card -> highlight:  --f92-dark 17.06->13.89 · --f92-gray 4.83->3.94
+                                  --cell-na  4.83->3.94  · --f92-lgray 2.54->2.07
+       dark,  card -> highlight:  --f92-dark 12.76->15.01 · --f92-gray 6.13->7.22
+                                  --cell-na   3.30->3.89
+     Header TEXT is rescued in light because the header steps its colour up on
+     the highlight (see the th in the pulse page). BODY CELLS ARE NOT: the status
+     marks keep their colour and simply sit on a new background, so in a
+     highlighted light-mode column --cell-na falls 4.83 -> 3.94. That is still
+     over the 3:1 non-text floor, so it is a trade rather than a failure — band
+     visibility bought with foreground contrast — but it is a trade, and it is
+     stated here so nobody re-derives it as a win.
+
+     Band strength vs the card:
+       light #E2E8F5 — 1.23:1, against tint's 1.07:1, so the deliberate state IS
+         the stronger band, which is what a deliberate state should be.
+       dark  #10131F — 1.18:1, against tint's 1.19:1. Very slightly the WEAKER
+         band, so the "deliberate state is stronger" principle holds in light
+         only. Imperceptible at these magnitudes, and not worth darkening
+         further, but do not claim the symmetry: an earlier version of this
+         comment had these two transposed.
+
+     All figures recomputed 2026-08-14 after Karen found every new number in the
+     first version off by up to 0.08 — close enough to look right, none of them
+     actually run. */
   --pulse-col-highlight:  #E2E8F5;
 }
 

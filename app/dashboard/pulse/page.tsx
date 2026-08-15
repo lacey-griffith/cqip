@@ -1385,11 +1385,19 @@ export default function ClientLibraryPage() {
                       a duplicate. If the term matches an ARCHIVED directive, say
                       so right here — the live region above carries it too, but
                       this is where the eye is. */}
+                  {/* "MATCHES", NEVER "EXISTS" (Karen LOW-2). The helper knows
+                      only that an archived TITLE CONTAINS the query — searching
+                      "form" matching "Submits Form Lead - Combined" is not the
+                      same claim as "the thing you searched for exists". This is
+                      the copy shown at the exact moment someone decides whether
+                      to create a duplicate, so it must not assert identity from
+                      a substring. Kept word-for-word in step with the live
+                      region above. */}
                   {archivedMatches > 0 ? (
                     <span className="italic">
                       {archivedMatches === 1
-                        ? 'It exists, archived. '
-                        : `${archivedMatches} archived directives match it. `}
+                        ? '1 archived directive matches your search and is not shown. '
+                        : `${archivedMatches} archived directives match your search and are not shown. `}
                     </span>
                   ) : null}
                   <button
@@ -1482,21 +1490,30 @@ export default function ClientLibraryPage() {
                         style={{
                           letterSpacing: 'var(--tracking-wide)',
                           // Both text colours step UP on the highlight rather
-                          // than staying put, because every candidate background
-                          // is darker/cooler than the plain card and holding the
-                          // colour would have LOWERED contrast on the one column
-                          // the user asked to look at. Both improve instead:
-                          // non-paused 4.77:1 → 13.83:1 (light) / 6.08:1 →
-                          // 15.04:1 (dark); paused 2.54:1 → 3.87:1 (light) /
-                          // 3.31:1 → 7.26:1 (dark).
+                          // than staying put. In LIGHT that is not a bonus, it
+                          // is a REPAIR: the light highlight lowers contrast for
+                          // anything that keeps its colour (see globals.css), so
+                          // holding --f92-gray here would have dropped the
+                          // header to 3.94:1 — below AA — on the one column the
+                          // user asked to look at. Stepping up recovers it and
+                          // then some. In dark the background already helps and
+                          // the step is pure gain.
+                          //   non-paused 4.83:1 → 13.89:1 light · 6.13:1 →
+                          //     15.01:1 dark
+                          //   paused     2.54:1 →  3.94:1 light · 3.30:1 →
+                          //     7.22:1 dark
                           //
-                          // Light-mode paused-and-highlighted is 3.87:1, short of
+                          // Light-mode paused-and-highlighted is 3.94:1, short of
                           // AA for small text — stated rather than rounded up. It
                           // is a strict improvement on the pre-existing 2.54:1,
                           // the paused state is redundantly encoded by the `·`
                           // suffix and the title, and paused columns are hidden
                           // by default, so reaching this state at all takes two
                           // deliberate actions.
+                          //
+                          // Figures recomputed 2026-08-14 (Karen MEDIUM-1): the
+                          // first set here was estimated, not run, and every one
+                          // was off.
                           color: isHighlighted
                             ? brand.is_paused
                               ? 'var(--f92-gray)'
@@ -1771,27 +1788,35 @@ export default function ClientLibraryPage() {
                                   // (the two `.map`s below). 650 = 50 × 13, and
                                   // 50 was the open-filtered row count recorded
                                   // when prod held 69 directives; prod is now
-                                  // 82, so that product describes a tree that
+                                  // 86, so that product describes a tree that
                                   // no longer exists. Same shelf-life problem
-                                  // the 2026-07-31 batch hit at 45 minutes.
+                                  // the 2026-07-31 batch hit at 45 minutes —
+                                  // and this comment has now been stale TWICE
+                                  // (it said 82 until 2026-08-14), which is the
+                                  // argument for probing rather than trusting
+                                  // any figure written here, this one included.
                                   //
-                                  // What IS derivable today:
-                                  //   82 × 13 = 1,066  defaults (hide-paused ON
+                                  // What IS derivable today (re-probed
+                                  // 2026-08-14; 86 is NBLYCRO's ACTIVE count —
+                                  // 87 is the global figure and also NBLY's
+                                  // all-status count, two different quantities
+                                  // at one number, so never paste 87 here):
+                                  //   86 × 13 = 1,118  defaults (hide-paused ON
                                   //                     → 16 active − 3 paused),
                                   //                     before the status filter
                                   //                     removes any row
-                                  //   82 × 16 = 1,312  paused columns shown
+                                  //   86 × 16 = 1,376  paused columns shown
                                   // The `open` default only ever subtracts rows,
-                                  // so 1,066 is the ceiling under defaults and
+                                  // so 1,118 is the ceiling under defaults and
                                   // the typical figure sits below it by however
                                   // many directives are fully resolved — a count
-                                  // nobody has measured at 82 directives. Probe
+                                  // nobody has measured at 86 directives. Probe
                                   // it before sizing the follow-on; do not scale
                                   // the old 50/69 ratio, which is how the stale
                                   // number got here.
                                   //
-                                  // So judge the follow-on against ~1,066, not
-                                  // 650. Each cell is a button plus one styled
+                                  // So judge the follow-on against ~1,118, not
+                                  // 1,066 and not 650. Each cell is a button plus one styled
                                   // span, so it is still a cheap reconcile a few
                                   // times a second rather than sixty — which is
                                   // why this is acceptable, rather than because

@@ -23,6 +23,27 @@ import type { ReactNode } from 'react';
 // "default" differs per group (a single-choice group compares to 'all', a
 // multi-select compares to empty), and a component that guessed would be wrong
 // for one of them.
+//
+// ⚠ NEITHER ACTIVE COLOUR IS --f92-orange, AND THAT IS THE WHOLE POINT.
+// The first cut of this used it for both. On the shell's own --f92-tint
+// background that is 2.58:1 in light / 3.64:1 in dark, and the legend is 10px
+// semibold — small text, so AA wants 4.5:1. It REPLACED an unconditional
+// --f92-gray at 4.52:1 / 5.15:1, so it was a regression on text that already
+// passed, and because State defaults to `open` the orange legend rendered on
+// every page load: turning a filter OFF would have raised its contrast.
+//
+// globals.css already says --f92-orange is under WCAG — that sentence is the
+// stated reason --f92-focus-ring exists — and restyle batch 2's HIGH-2 was this
+// exact shape: a colour measured for its intended surface and not for the text
+// sitting on it. Measured on --f92-tint, both themes:
+//   legend --f92-dark        15.95:1 light · 10.71:1 dark   (AA, small text)
+//   border --f92-focus-ring   4.84:1 light ·  4.86:1 dark   (well over the
+//     3:1 that 1.4.11 wants for a state indicator, vs 2.58:1 for raw orange)
+//
+// The border uses --f92-focus-ring because that token IS "the orange that meets
+// the non-text contrast floor" — the reason it was minted. It is not being
+// borrowed for an unrelated purpose; it is being used for the requirement it
+// exists to satisfy.
 function GroupShell({
   id,
   legend,
@@ -40,7 +61,7 @@ function GroupShell({
       style={{
         borderRadius: 'var(--radius-lg)',
         background: 'var(--f92-tint)',
-        borderColor: active ? 'var(--f92-orange)' : 'var(--f92-border)',
+        borderColor: active ? 'var(--f92-focus-ring)' : 'var(--f92-border)',
       }}
     >
       <span
@@ -48,7 +69,7 @@ function GroupShell({
         className="shrink-0 text-[10px] font-semibold uppercase transition-colors"
         style={{
           letterSpacing: 'var(--tracking-wide)',
-          color: active ? 'var(--f92-orange)' : 'var(--f92-gray)',
+          color: active ? 'var(--f92-dark)' : 'var(--f92-gray)',
         }}
       >
         {legend}

@@ -86,4 +86,12 @@ test('the three bands are three different tokens', () => {
   assert.equal(new Set(all).size, 3, 'highlight, crosshair and surface must not collapse');
   assert.match(BAND_HIGHLIGHT, /--pulse-col-highlight/);
   assert.match(BAND_CROSSHAIR, /--f92-tint/);
+  // BAND_SURFACE NEEDS ITS OWN ANCHOR (Karen LOW-1). Without this line the only
+  // constraints on it are `notEqual(BAND_SURFACE, BAND_NONE)` and set
+  // cardinality — both of which `'bg-transparent'` satisfies, and
+  // `'bg-transparent'` IS the Part B breakage: a sticky header that body rows
+  // scroll straight through. Mutating the value survived the entire file. The
+  // property this module's own comment calls load-bearing was the one property
+  // nothing tested, because its oracle was itself (§13 r38).
+  assert.match(BAND_SURFACE, /--f92-surface/);
 });
