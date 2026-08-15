@@ -222,7 +222,8 @@ matrix; the matrix's save orchestration + `CellEditStrip` extracted to shared
 modules both pages call, local copies deleted; reuses the same PATCH route, no
 migration, no Jenny; Karen PASS-WITH-FINDINGS → 2 MEDIUM FOLDED [stale-reconcile
 blanking the new brand; permanent `Loading…` on a cell-error] → Karen re-confirm
-CONFIRMED, 3 LOW noted; **COMMITTED, NOT PUSHED** — Lacey smoke-tests + pushes —
+CONFIRMED, 3 LOW noted; **PUSHED** (`52dc69d` is in `origin/main`; the line read
+"COMMITTED, NOT PUSHED" until corrected 2026-08-15) —
 89e69df → c58364c → d940772 → 52dc69d, 2026-07-25), Batch 012 Convert
 reconciliation backfill (one-off data pass —
 `scripts/backfill-convert-reconciliation.ts` flips existing Pulse matrix cells to
@@ -355,8 +356,9 @@ rejects count, which is labelled all-envs because a payload DC could not
 parse has no recoverable env; ride-along
 fixed the hardcoded `APP_VERSION = 'v1.2'` → stamped from
 package.json; Jenny APPROVED-WITH-FINDINGS, all six revisions folded
-into the spec BEFORE the build; **COMMITTED, NOT PUSHED — the token is
-not minted, so the route is inert at 500 not_configured** — 4-commit
+into the spec BEFORE the build; **PUSHED** (`4a85869` is in `origin/main`; the line read
+"COMMITTED, NOT PUSHED" until corrected 2026-08-15) — **the token is still
+not minted, so the route remains inert at 500 not_configured** — 4-commit
 chain 8b312c1 → d36110b → 379a642 → docs, 2026-08-07).
 All migrations 001-025 have run against production (022 + 023 applied with
 the auth-chain deploy on 2026-07-07; 024 + 025 with the Batch 012 deploys
@@ -2383,6 +2385,15 @@ Resolved             → green-500
     out. If a gate cannot be run clean, **report which gate and why** rather than
     reporting the subset as if it were the whole.
 
+    **And the symmetric obligation, which the first version of this rule omitted:
+    when YOU are the concurrent session, do not leave the tree broken between
+    commits.** The cost above was not paid by whoever left `matrix-controls.ts`
+    half-renamed — it was paid by the session that arrived afterwards and could not
+    tell whose breakage it was. If you must pause mid-rename, either commit a
+    compiling intermediate or stash, and if you cannot, say so where the other
+    session will see it. A rule that only tells you how to react to someone else's
+    mess describes half the problem.
+
 ---
 
 ## 14. What Is NOT In Scope for V1
@@ -2993,7 +3004,9 @@ reviews. Effort: LG (multi-phase).
     `CellEditStrip` were extracted to shared modules both pages call (local
     copies deleted). Render/interaction only, same PATCH route, no Jenny. Karen
     PASS-WITH-FINDINGS → 2 MEDIUM folded → re-confirm CONFIRMED; 3 LOW noted (2
-    are Lacey click-through items). COMMITTED, NOT PUSHED.
+    are Lacey click-through items). **PUSHED** — `52dc69d` is in `origin/main`
+    (corrected 2026-08-15; this line and §0's entry for the same batch both still
+    read "COMMITTED, NOT PUSHED").
   - **V2.1 trigger backport — LOADER ABANDONED 2026-07-30; 8 items move to UI
     hand-entry.** Not an E-phase and no longer a scripted load at all — see the
     §15 backlog entry for why (superseded brief, inverted polarity) and for the
@@ -4070,9 +4083,12 @@ earlier Pulse batches opened against an authority that lived only outside the re
   recorded against restyle batch 4.
 - **Directive CRUD is NOT in this batch**, including a disabled affordance.
 
-**Phase status:** ALL 5 COMMITS BUILT + COMMITTED, **NOT PUSHED**. Karen post-flight
-**PASS-WITH-FINDINGS** (1 HIGH · 1 MEDIUM · 4 LOW, no CRITICAL); every fix-before-push
-finding folded in commit 5. Awaiting Lacey's render check + push.
+**Phase status:** all 5 commits **SHIPPED + PUSHED**; `5795a89` is in `origin/main` and
+is what prod serves. Karen post-flight **PASS-WITH-FINDINGS** (1 HIGH · 1 MEDIUM · 4
+LOW, no CRITICAL); every fix-before-push finding folded in commit 5. **[This line read
+"COMMITTED, NOT PUSHED" until 2026-08-15 — a stale in-flight status carried through the
+§15.5 → §16 move, contradicting the ship header 50 lines above it in the same entry.
+Moving an entry is not the same as reconciling it.]**
 
 **Karen's findings, folded:**
 - **HIGH-1 — a NEW text-contrast regression, rendering by default.** The active-group
@@ -9818,4 +9834,4 @@ demo blocker.
 
 ---
 
-*Last updated: 2026-08-14 | CQIP v2.9 — **BATCH 012 PULSE: MATRIX FILTER REORG + GRID ERGONOMICS — 5 commits BUILT, COMMITTED, NOT PUSHED. Karen post-flight PASS-WITH-FINDINGS (1 HIGH · 1 MEDIUM · 4 LOW, no CRITICAL); all fix-before-push findings folded in COMMIT 5.** Three changes to `app/dashboard/pulse/page.tsx`, one batch because they touch one file. No migration, no new route, no new mutation surface, no schema change -> **no Jenny**. Spec `docs/batch-012-pulse-matrix-filter-grid-spec.md`, committed as **commit 1 before the build opened**, per the §15 PROCESS note. **Part A** — filter bar into two labelled rows; STATUS becomes MULTI-SELECT with the EMPTY SET as its "all", which is deliberately NOT a set holding all five: those differ on exactly one input, a directive with no cells, and that input is reachable today (HDCRO exists in prod with 0 brands). Karen found that distinction has a LIVE consumer rather than only a test — `onCreated` calls `clearAllFilters()`, so collapsing empty into all-five would hide a newly-created directive in a brand-less project and reproduce the Karen MEDIUM-2 duplicate-minting failure. **Part B** — grid into `max-h-[65vh] overflow-auto` with a sticky header row and directive column. Karen corrected the framing here and it matters: the container was ALREADY a clipping context, because `overflow-x-auto` computes the other axis to `auto`, so this batch could not have introduced a clipping regression — what is newly exercised is vertical overflow, and she swept every descendant for a non-portalled popover and found none. **Part C** — clicking a brand header highlights that column; new `--pulse-col-highlight`, opaque in both themes because the header is now sticky; precedence (highlight > crosshair > fallback, exactly one class) extracted to a pure `lib/client-library/matrix-band.ts` rather than left as a JSX ternary. **⚠ THE HEADLINE FINDING WAS A CLAIM, NOT LOGIC — for the fourth batch running.** HIGH-1: the new active-group treatment used `--f92-orange` for the legend, which is **2.58:1 on the shell's own tint** against the **4.52:1** unconditional gray it replaced — a REGRESSION on 10px semibold text, rendering on **every page load** because State defaults to `open`, so turning a filter OFF would have raised its contrast. `globals.css` already says that token is under WCAG; that sentence is the reason `--f92-focus-ring` exists, ~150 lines away. Folded to `--f92-dark` (15.95:1 / 10.71:1) for the legend and `--f92-focus-ring` (4.84:1 / 4.86:1) for the border. MEDIUM-1: **every new Part C contrast figure was wrong** — estimated, not run, while the comment said "measured, not eyeballed" — two were transposed, and the light-mode rationale was INVERTED: only dark raises foreground contrast, light LOWERS it, and body-cell marks are not rescued the way header text is (`--cell-na` 4.83 -> 3.94, still over the 3:1 non-text floor, so a trade rather than a failure — but a trade). All recomputed. LOW-1: `BAND_SURFACE` had no external anchor, so mutating it to `bg-transparent` — which IS the Part B breakage — survived the entire band suite; its oracle was itself. **Part C DOES add tab stops**, ~13, contrary to what the handoff asked to confirm; G7 stays recorded against restyle batch 4. Gates re-run per commit and independently by Karen: tsc 0 · ESLint 0 on all six lintable files · **333/333** · build 0 with `/dashboard/pulse` still `○` and no new routes · **14/14 mutations caught** (7 Part A + 5 Part C + 2 closing Karen's LOW-1 survivors), plus 5 more she ran independently, all caught. Every contrast figure in this batch is now produced by a script that first reproduces four values the repo already documents — after the first version of those numbers was estimated and every one was wrong. **NOT VERIFIED — nothing in this batch has been rendered:** the two-row layout, the active-group treatment, the sticky header under two-axis scroll, and above all whether the highlight and the batch-3 crosshair are tellable apart at a glance. Both themes. All Lacey's.*
+*Last updated: 2026-08-15 | CQIP v2.9 — **BATCH 012 PULSE: MATRIX FILTER REORG + GRID ERGONOMICS — SHIPPED + PUSHED 2026-08-14, prod `/api/health` reports `version: 5795a89`. Karen post-flight PASS-WITH-FINDINGS (1 HIGH · 1 MEDIUM · 4 LOW, no CRITICAL); all fix-before-push findings folded in COMMIT 5.** Three changes to `app/dashboard/pulse/page.tsx`, one batch because they touch one file. No migration, no new route, no new mutation surface, no schema change -> **no Jenny**. Spec `docs/batch-012-pulse-matrix-filter-grid-spec.md`, committed as **commit 1 before the build opened**, per the §15 PROCESS note. **Part A** — filter bar into two labelled rows; STATUS becomes MULTI-SELECT with the EMPTY SET as its "all", which is deliberately NOT a set holding all five: those differ on exactly one input, a directive with no cells, and that input is reachable today (HDCRO exists in prod with 0 brands). Karen found that distinction has a LIVE consumer rather than only a test — `onCreated` calls `clearAllFilters()`, so collapsing empty into all-five would hide a newly-created directive in a brand-less project and reproduce the Karen MEDIUM-2 duplicate-minting failure. **Part B** — grid into `max-h-[65vh] overflow-auto` with a sticky header row and directive column. Karen corrected the framing here and it matters: the container was ALREADY a clipping context, because `overflow-x-auto` computes the other axis to `auto`, so this batch could not have introduced a clipping regression — what is newly exercised is vertical overflow, and she swept every descendant for a non-portalled popover and found none. **Part C** — clicking a brand header highlights that column; new `--pulse-col-highlight`, opaque in both themes because the header is now sticky; precedence (highlight > crosshair > fallback, exactly one class) extracted to a pure `lib/client-library/matrix-band.ts` rather than left as a JSX ternary. **⚠ THE HEADLINE FINDING WAS A CLAIM, NOT LOGIC — for the fourth batch running.** HIGH-1: the new active-group treatment used `--f92-orange` for the legend, which is **2.58:1 on the shell's own tint** against the **4.52:1** unconditional gray it replaced — a REGRESSION on 10px semibold text, rendering on **every page load** because State defaults to `open`, so turning a filter OFF would have raised its contrast. `globals.css` already says that token is under WCAG; that sentence is the reason `--f92-focus-ring` exists, ~150 lines away. Folded to `--f92-dark` (15.95:1 / 10.71:1) for the legend and `--f92-focus-ring` (4.84:1 / 4.86:1) for the border. MEDIUM-1: **every new Part C contrast figure was wrong** — estimated, not run, while the comment said "measured, not eyeballed" — two were transposed, and the light-mode rationale was INVERTED: only dark raises foreground contrast, light LOWERS it, and body-cell marks are not rescued the way header text is (`--cell-na` 4.83 -> 3.94, still over the 3:1 non-text floor, so a trade rather than a failure — but a trade). All recomputed. LOW-1: `BAND_SURFACE` had no external anchor, so mutating it to `bg-transparent` — which IS the Part B breakage — survived the entire band suite; its oracle was itself. **Part C DOES add tab stops**, ~13, contrary to what the handoff asked to confirm; G7 stays recorded against restyle batch 4. Gates re-run per commit and independently by Karen: tsc 0 · ESLint 0 on all six lintable files · **333/333** · build 0 with `/dashboard/pulse` still `○` and no new routes · **14/14 mutations caught** (7 Part A + 5 Part C + 2 closing Karen's LOW-1 survivors), plus 5 more she ran independently, all caught. Every contrast figure in this batch is now produced by a script that first reproduces four values the repo already documents — after the first version of those numbers was estimated and every one was wrong. **NOT VERIFIED — nothing in this batch has been rendered:** the two-row layout, the active-group treatment, the sticky header under two-axis scroll, and above all whether the highlight and the batch-3 crosshair are tellable apart at a glance. Both themes. All Lacey's.*

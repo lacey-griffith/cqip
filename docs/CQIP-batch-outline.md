@@ -236,10 +236,14 @@ one external human review. Do not bring another self-review as evidence against 
                                                     (cdb2cc6, v2.9) + the portal fix
                                                     (9a65bb6 → 211e237). Shipped as ONE
                                                     batch as specified.
- 2  012 ▸ PULSE      restyle batch 4 of 4 ONLY     Discrepancy 3 settled: everything else
-                                                    shipped. Batch 4 NOT STARTED; Gate 0
-                                                    done. Carries G7 tab-stops — do not
-                                                    fold that item earlier.
+ 2  012 ▸ PULSE      restyle batch 4 of 4          Discrepancy 3 settled: the parity +
+                                                    restyle SERIES is otherwise complete.
+                                                    Batch 4 NOT STARTED; Gate 0 done.
+                                                    Carries G7 tab-stops — do not fold
+                                                    that item earlier.
+                                                    NOT an exhaustive Pulse claim: Phase C
+                                                    and D are at #7/#8 below, E2 is BLOCKED
+                                                    and E3 QUEUED.
  4  Keep-both-and-flag                             Jenny. Behind Rec 1 because it is larger
                                                     and Rec 1 is nearly free.
  5  QMS Rec 3        Split 010.1                   Unbundles the target half from alerting;
