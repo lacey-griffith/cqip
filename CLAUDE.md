@@ -1397,6 +1397,74 @@ add a sibling row to `quality_log_taxonomy` with the same string and a
 `sort_order` slot. There is no live sync from Jira to this table; the
 two stay aligned by human discipline.
 
+### directives / directive_brand_status (migration 024 — Batch 012 Phase A)
+The Pulse directive × brand status matrix. **Isolation contract: these tables
+never touch the live coverage tables** (`brands` / `test_milestones` /
+`quality_logs`) beyond FK references, and **no coverage KPI reads from them.**
+
+```sql
+CREATE TABLE directives (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_key    TEXT NOT NULL REFERENCES projects(jira_project_key),
+  title          TEXT NOT NULL,
+  directive_type TEXT NOT NULL CHECK (directive_type IN
+                   ('goal','trigger','site_area','audience')),
+  description    TEXT,
+  status         TEXT NOT NULL DEFAULT 'active'
+                   CHECK (status IN ('active','archived')),
+  created_by     TEXT NOT NULL,      -- server-derived via getChangedBy()
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE directive_brand_status (       -- the matrix cells
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  directive_id UUID NOT NULL REFERENCES directives(id) ON DELETE CASCADE,
+  brand_id     UUID NOT NULL REFERENCES brands(id)     ON DELETE CASCADE,
+  status       TEXT NOT NULL DEFAULT 'todo'
+                 CHECK (status IN ('todo','in_progress','done','blocked','n_a')),
+  note         TEXT,
+  updated_by   TEXT,
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (directive_id, brand_id)
+);
+
+-- Migration 029 (Batch 012 directive CRUD):
+CREATE UNIQUE INDEX idx_directives_project_title
+  ON directives (project_key, title);
+```
+
+**`directives.status` IS the soft-delete flag** — there is no `is_deleted`
+column and there must not be one. Delete sets `'archived'`; restore sets
+`'active'`. `lib/client-library/directives.ts` mirrors the set as
+`DIRECTIVE_STATUSES`. **Archived is a lifecycle flag, NOT a completion state** —
+"resolved" is *derived* across a directive's cells by `summarizeDirectiveCells`,
+and conflating the two makes retired directives count as coverage achievements.
+`computeMatrixKpis` therefore filters `status === 'active'` internally so it
+cannot count an archived directive even when handed one.
+
+**Migration 029's unique index spans ALL statuses, not just active.** A partial
+index would let a title be reused while the original is archived, after which
+*restore* — the only undo path for a soft-delete — would fail at the database.
+Verified before applying: 0 duplicates across all 89 rows at every strictness,
+including case/whitespace-insensitive.
+
+**Cells are keyed to `brand_id`, so they belong to a PROJECT implicitly.** Moving
+a directive's `project_key` would strand them: they render nowhere (the new
+project's columns don't match) yet `computeMatrixKpis` scopes cells by
+`directive_id`, so they'd still be counted — counted-but-invisible, silently.
+This is why `project_key` edits are blocked on any directive holding work; see
+§15.5.
+
+RLS mirrors migration 009 on both tables: authenticated SELECT, admin `FOR ALL`
+via `public.is_admin()`. Migration 024 also extended
+`audit_log_target_shape_chk` to admit `target_type` of `'directive'` and
+`'directive_brand_status'`.
+
+(**Doc gap, pre-existing:** `monitoring_findings` (migration 025, Batch 012
+Phase B) is still absent from §5. Not this batch's table; recorded so it is
+found rather than rediscovered.)
+
 ### audit_log generalization (migrations 011 + 012 — Batch 002.5b)
 Original `audit_log` had `log_entry_id NOT NULL` with FK to
 `quality_logs`, so milestone and brand mutations had no place to land.
@@ -4062,7 +4130,8 @@ unique index on data proven non-violating. The privileged surface worth a
 pre-flight is the **new PATCH route** — it can move a directive between projects
 and destroy cells. Karen post-flight. **DO NOT PUSH** — Lacey smokes.
 
-**Phase status: COMMIT 1 (spec) only. No code written.**
+**Phase status: COMMIT 1 (spec) + COMMIT 2 (migration 029) built. Migration NOT
+yet applied — Lacey runs it. No application code written yet.**
 
 **Four findings from the 2026-08-15 prod probe, each moving work the handoff
 placed elsewhere:**
@@ -4104,15 +4173,32 @@ placed elsewhere:**
 - **Restore is IN SCOPE**, because `status` is one of the editable fields and a
   soft-delete with no undo path through the UI is a hard delete with extra steps.
 
-**Three items open for Lacey, each with a stated default so the build is not
-blocked:** whether the inline `project_key` warning (a label inside the
-already-open editor — deliberately NOT a second modal, so the "one prompt
-pattern" lock holds) is sufficient surfacing for cell destruction; whether
-uniqueness spans archived rows (**default yes** — a partial index on active would
-make *restore* fail at the database on an operation the user expects to work);
-and whether the index is exact-match or a stricter normalized functional index
-(**default exact**, per the handoff, recorded so "we only blocked exact
-duplicates" is a decision rather than an oversight).
+**Both open questions ANSWERED by Lacey 2026-08-15; spec is at rev 1 and nothing
+is outstanding:**
+- **`project_key` moves are BLOCKED when the directive holds work** — chosen over
+  an inline warning and over a confirm step, because it is the only option where
+  **no data can be lost**. Movable ⟺ every cell is at a fan-out default
+  (`todo`/`n_a`) **and** carries no note; the formulation is deliberately
+  independent of the brand's current `is_paused`, which can flip after fan-out.
+  **This makes the required re-fan-out lossless BY CONSTRUCTION** — §0.4's silent
+  miscount is fixed *and* nothing can be destroyed, so the two goals stop trading
+  against each other, and the "one prompt pattern" lock survives untouched
+  because there is nothing left to warn about.
+  **⚠ The measured cost, and it is large: `project_key` is editable on 6 of 89
+  directives — 7%.** The 6 are the never-worked ones (the five chat goals added
+  2026-08-12 plus a sibling), which is exactly the case decision B exists for, so
+  the rule is well-targeted rather than accidentally narrow. **But do not
+  describe this as "project is editable":** it is editable *until someone works
+  the directive*, which in practice means the same session. An admin needing to
+  move a worked directive archives it and creates a replacement — lossy too, but
+  visible, audited and chosen.
+- **Unique index spans ALL statuses, exact match** (migration 029). Not partial
+  on `active`: that would let a name be reused while archived and then break
+  *restore*, which §4.1 made the only undo path for a soft-delete. Exact rather
+  than normalized — both would have applied cleanly against today's data, so the
+  stricter functional index stays available as a follow-up, and a future
+  near-duplicate reads as in-scope for that rather than as this constraint
+  failing.
 
 **This batch also closes a live defect AND a falsified claim.** The archived
 `Submits Form Lead - Combined` reads as "found nothing" to anyone searching it;

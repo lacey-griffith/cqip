@@ -1,0 +1,106 @@
+-- Batch 012 — Pulse directive CRUD. COMMIT 2.
+-- Spec: docs/batch-012-directive-crud-spec.md §5 (rev 1).
+--
+-- ONE unique index. Nothing else.
+--
+-- WHY THIS MIGRATION IS SMALLER THAN THE HANDOFF ASKED FOR:
+-- The handoff's commit plan reads "migration — soft-delete/archive flag +
+-- unique (project_key, title)". The flag ALREADY EXISTS: migration 024 ships
+--
+--     status TEXT NOT NULL DEFAULT 'active'
+--       CHECK (status IN ('active', 'archived'))
+--
+-- which is exactly the "one flag" decision A settles on, and
+-- lib/client-library/directives.ts already mirrors it as DIRECTIVE_STATUSES.
+-- Soft-delete is status='archived'. Adding a second column would CREATE the
+-- two-flag state decision A exists to forbid, so the correct action is to add
+-- nothing. Stated here so a reader diffing the handoff against this file does
+-- not read the absence as an omission.
+--
+-- WHY (project_key, title) AND NOT title ALONE:
+-- Titles are only meaningful within a project. Two clients may legitimately
+-- both run a directive called "Chat Started" — and do: the matrix is per
+-- project, and directives.project_key is a FK to projects.jira_project_key.
+--
+-- WHY THIS SPANS ARCHIVED ROWS (spec §5.1, Lacey 2026-08-15):
+-- The obvious alternative — a partial index WHERE status = 'active' — would let
+-- a title be reused while the original is archived, and then RESTORE would fail
+-- at the database with a constraint violation, on an operation the user has
+-- every reason to expect to work. That matters more here than it usually would:
+-- restore is the ONLY undo path for a soft-delete (spec §4.1), so a restore that
+-- can fail is a delete that can be permanent. Full uniqueness makes restore safe
+-- by construction.
+--
+-- The accepted cost: archiving "X" no longer frees the name "X"; a same-named
+-- replacement must be renamed. Prod already shows that convention in use —
+-- "Submits Form Lead - Combined" (archived) sits beside "Remove Submits Form
+-- Lead - Combined" (active) — so the constraint codifies existing practice
+-- rather than imposing a new one.
+--
+-- EXACT MATCH, NOT NORMALIZED (spec §5.2):
+-- The index is on the raw title, so "Chat Started" and "chat  started" can
+-- coexist. A functional index on
+-- lower(regexp_replace(title,'\s+',' ','g')) would also have applied cleanly
+-- against today's data (see the probe below) and remains available as a
+-- follow-up. Recorded so a future near-duplicate reads as in-scope for that
+-- follow-up rather than as this constraint having failed.
+--
+-- ⚠ PRE-FLIGHT — RUN BEFORE APPLYING, DO NOT SKIP:
+-- A unique index added to a table that already violates it fails at apply time,
+-- in production, halfway through a deploy. This was checked rather than assumed.
+-- Probed 2026-08-15 across all 89 directive rows:
+--
+--     (project_key, title) exact, all statuses ......... 0 duplicates
+--     (project_key, title) exact, active only .......... 0 duplicates
+--     (project_key, lower/trim/collapse-ws(title)) ..... 0 duplicates
+--
+-- The third line is why §5.2 is a choice and not a constraint on us: BOTH the
+-- exact and the normalized form would land cleanly today.
+--
+-- Prod drifts fast — this table went 82 → 83 → 86 → 87 active NBLY directives
+-- across four probes in two weeks — so RE-RUN the verification query at the
+-- bottom of this file immediately before applying. Do not trust the numbers
+-- above; they are a record of what was true, not a guarantee of what is.
+--
+-- Idempotent: IF NOT EXISTS. No RLS change (migration 024's policies stand).
+-- No data change. No backfill. Reversible: DROP INDEX.
+
+-- -------------------------------------------------------------------------
+-- The index.
+--
+-- CREATE UNIQUE INDEX rather than ADD CONSTRAINT ... UNIQUE: the two are
+-- equivalent in enforcement, but only the index form supports IF NOT EXISTS,
+-- which is this repo's idempotency convention for migrations (024, 020, 015).
+-- -------------------------------------------------------------------------
+CREATE UNIQUE INDEX IF NOT EXISTS idx_directives_project_title
+  ON directives (project_key, title);
+
+COMMENT ON INDEX idx_directives_project_title IS
+  'Batch 012 directive CRUD: blocks duplicate directive titles within a '
+  'project. Spans ALL statuses (not partial on active) so that restoring an '
+  'archived directive can never collide — restore is the only undo path for a '
+  'soft-delete. Exact match: case/whitespace variants are not blocked.';
+
+-- -------------------------------------------------------------------------
+-- VERIFICATION — run BEFORE applying (expect zero rows), and again after.
+--
+-- Before: any row returned is a blocker. Resolve it by renaming one of the
+-- duplicates through the UI, NOT by making the index partial — a partial index
+-- reopens the restore hazard above.
+-- -------------------------------------------------------------------------
+-- SELECT project_key, title, COUNT(*) AS n,
+--        array_agg(status) AS statuses,
+--        array_agg(id)     AS ids
+--   FROM directives
+--  GROUP BY project_key, title
+-- HAVING COUNT(*) > 1;
+--
+-- After: confirm the index exists and is unique.
+--
+-- SELECT indexname, indexdef
+--   FROM pg_indexes
+--  WHERE tablename = 'directives'
+--    AND indexname = 'idx_directives_project_title';
+--
+-- Rollback:
+-- DROP INDEX IF EXISTS idx_directives_project_title;

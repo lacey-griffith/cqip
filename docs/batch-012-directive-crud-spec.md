@@ -1,6 +1,8 @@
 # Batch 012 — Pulse: directive CRUD (edit · soft-delete · archive)
 
-**Status:** SPEC — commit 1, docs only. Build has not started.
+**Status:** SPEC, **rev 1** — Lacey's two decisions of 2026-08-15 folded (§4.4
+`project_key` blocked-when-worked; §5.1/§5.2 unique index across all statuses,
+exact match). **No open questions remain.** Build may proceed.
 **Source:** `HANDOFF — Directive CRUD (edit · soft-delete · archive)`, Lacey via
 Claudette, 2026-08-15. Every locked decision in §1 below is transcribed from that
 handoff; nothing there was reinterpreted.
@@ -113,9 +115,16 @@ line in this batch, not the most convenient one.
 
 **No bespoke confirmation dialog on `project_key`.** One prompt pattern for the
 whole row; the dirty-state prompt (§3) is the only guard and the audit row (§6)
-is the record. §4.4 satisfies this **without** adding a confirm step — the
-warning it specifies is an inline label inside the already-open editor, not a
-second modal. Read §4.4 before deciding it violates this row.
+is the record.
+
+**§4.4 honours this by removing the thing a confirm would have guarded.** Lacey
+ruled 2026-08-15 that a `project_key` move is **blocked** whenever the directive
+holds work, so the move is only ever available in the case where it destroys
+nothing. No warning, no confirm, no second prompt — and no data loss to disclose.
+Row 2 ("all fields editable") is therefore true with one measured exception:
+`project_key` is editable on **6 of 89** directives as they stand today. Read
+§4.4 before treating that as a contradiction; it is the consequence Lacey
+priced, not a quiet narrowing.
 
 ---
 
@@ -246,40 +255,70 @@ examined `app/api/` only, so the direct-SQL path was outside its scope. Standing
 lesson, already recorded: **a "no writer exists" claim must state which surfaces
 were checked.**
 
-### 4.4 ⚠ Changing `project_key` — REQUIRED, or §0.4 ships
+### 4.4 ⚠ Changing `project_key` — BLOCKED when the directive holds work
 
-A `project_key` change **must re-fan-out the cells in the same write**:
+**DECIDED by Lacey 2026-08-15: block the move.** The alternatives offered were an
+inline warning or a confirm step; both were declined in favour of the option
+where **no data can be lost**, accepting that some corrections become impossible.
 
-1. Delete the directive's existing `directive_brand_status` rows.
-2. Insert fresh cells for the **new** project's active brands, via the existing
-   `fanOutCells` (paused → `n_a`, else `todo`) — the same function create uses,
-   so the two paths cannot drift.
-3. Audit it: one row, `field_name = 'directive_brand_status'`,
-   `new_value = 're-fanned to N brands on project move'`, mirroring the create
-   route's fan-out summary row.
+#### The rule
 
-Per-brand status **is destroyed** by this, and that is the honest outcome — those
-statuses describe brands the directive no longer belongs to. Keeping them is the
-silent miscount in §0.4.
+A directive is **movable** only when **every one of its cells is at a fan-out
+default AND carries no note**:
 
-**Surfacing it without breaking the §1 row-B lock:** while `project_key` is
-changed *and unsaved*, the open editor shows an inline warning —
+```
+movable  ⟺  ∀ cell:  cell.status ∈ {todo, n_a}  ∧  isBlank(cell.note)
+```
 
-> Moving to SPLCRO rebuilds this directive's brand cells (16 → 1). Per-brand
-> status will be lost.
+`todo` and `n_a` are the **only** two statuses `fanOutCells` ever produces, and
+neither encodes anything a human entered. A note is human work regardless of
+status. Deliberately **independent of the brand's current pause state**: a
+brand's `is_paused` can flip after fan-out, so "is this cell at *its* default"
+is ambiguous and this formulation is not.
 
-Both counts derived, never literal (§0.3). This is **a label inside a form the
-admin already opened**, not a confirmation step: nothing extra to dismiss, no
-second modal, one prompt pattern preserved. It is the minimum that keeps a
-destructive effect from being invisible.
+When not movable, the `project_key` control renders **locked** — an inert
+`<span>` plus the derived reason, never `<button disabled>`:
 
-**Flagged for Lacey — the one item in this batch I would not ship unread:** the
-lock in §1 row B was chosen against a bespoke confirm dialog, and I have not
-added one. But cell destruction was not in view when it was chosen. If the
-inline warning is judged insufficient, the alternatives are (a) block
-`project_key` changes on directives holding any non-default cell, or (b) accept
-a confirm step for this field alone. Default if unanswered: ship the inline
-warning as specified.
+> Cannot move — 9 brand cells hold status beyond their defaults.
+
+Count derived, never literal (§0.3). Every other field stays editable; only
+`project_key` locks.
+
+#### What this buys, and it is more than it looks
+
+The move is still a re-fan-out — delete the old cells, insert fresh ones for the
+new project's active brands via the same `fanOutCells` create uses, audited as
+one summary row (`field_name = 'directive_brand_status'`, `new_value =
+'re-fanned to N brands on project move'`). **But the block makes that re-fan-out
+lossless BY CONSTRUCTION:** every cell it deletes was at a default carrying no
+information. §0.4's silent miscount is fixed *and* nothing can be destroyed —
+the two goals stop trading against each other.
+
+The lock in §1 row B also survives untouched: there is no new prompt, because
+there is nothing left to warn about.
+
+#### ⚠ The honest cost — measured, not estimated
+
+Probed 2026-08-15 across all 89 directives and 1,409 cells:
+
+| | |
+|---|---|
+| **Movable** (`project_key` editable) | **6 of 89 — 7%** |
+| Blocked (holds work) | 83 |
+| Cell statuses | `done` 586 · `todo` 451 · `n_a` 371 · `in_progress` 1 |
+| Cells carrying a note | 23 |
+
+**So `project_key` editing is a create-time correction, not a general repair.**
+The 6 movable directives are the never-worked ones — the five chat goals added
+2026-08-12 and one sibling. That is precisely the case decision B exists for
+("a directive created against the wrong project must be correctable"), and it is
+well-targeted rather than accidentally narrow. But do not describe this feature
+to anyone as "project can be edited": it can be edited *until someone works the
+directive*, which in practice means the same session.
+
+**Escape hatch, deliberately not built:** an admin who genuinely must move a
+worked directive archives it (§4.1) and creates a replacement in the right
+project. That path is lossy too, but it is visible, audited, and chosen.
 
 ---
 
@@ -295,33 +334,35 @@ the message.
   create route has carried since Phase A — it performs **no** duplicate check
   today, which is why `countHiddenByFilters` had to mitigate on the render side.
 
-### 5.1 Scope: across ALL statuses. Recommended, with the trade stated.
+### 5.1 Scope: across ALL statuses — DECIDED
 
-Uniqueness spans archived rows too. **Why, and it is not the obvious reason:** a
+**DECIDED by Lacey 2026-08-15: all statuses, exact match.** Both halves below are
+settled; neither is an open question.
+
+Uniqueness spans archived rows. **Why, and it is not the obvious reason:** a
 partial index on `status='active'` would let a duplicate title exist while
 archived, and then **restore (§4.1) would fail at the database** with a
 constraint error on an operation the user has every reason to expect to work.
-Full uniqueness makes restore always safe.
+Full uniqueness makes restore always safe — which matters more here than
+elsewhere, because §4.1 made restore the only undo path for a soft-delete.
 
-The cost: archiving `X` no longer frees the name `X`. An admin retiring a
-directive and creating a same-named replacement is blocked and must rename. Prod
-already shows the workaround in use — `Submits Form Lead - Combined` (archived)
-sits beside `Remove Submits Form Lead - Combined` (active).
+The accepted cost: archiving `X` no longer frees the name `X`. An admin retiring
+a directive and creating a same-named replacement must rename. Prod already
+shows that workaround in use — `Submits Form Lead - Combined` (archived) sits
+beside `Remove Submits Form Lead - Combined` (active), so the rename convention
+predates the constraint rather than being imposed by it.
 
-**Open for Lacey.** Default if unanswered: full uniqueness across all statuses.
+### 5.2 Exact match — DECIDED
 
-### 5.2 Exact-match only
+The index is on the raw `title`. Case/whitespace variants are **not** blocked:
+`"Chat Started"` and `"chat  started"` can coexist. §0.2 confirms zero such
+near-duplicates exist today, so the stricter functional index
+(`lower(regexp_replace(title,'\s+',' ','g'))`) would also have landed cleanly and
+remains available later against the same clean data.
 
-The index is on the raw `title`. Case/whitespace variants are **not** blocked —
-`"Chat Started"` and `"chat  started"` would both be allowed. §0.2 confirms zero
-such near-duplicates exist today, so a stricter functional index
-(`lower(regexp_replace(title,'\s+',' ','g'))`) would also land cleanly and is the
-better guard.
-
-**Open for Lacey.** Default if unanswered: exact-match, because it is what the
-handoff says and the stricter form can be added later against the same clean
-data. Recorded here so "we only blocked exact duplicates" is a decision rather
-than an oversight.
+Recorded so that "we only blocked exact duplicates" reads as a decision rather
+than an oversight — and so a future near-duplicate is understood as in-scope for
+a follow-up, not as this constraint failing.
 
 ---
 
@@ -383,13 +424,21 @@ Behavioural, in the order a reviewer can actually run them.
 - `description` and `title` persist.
 
 **`project_key` (§4.4)**
-- Moving a directive moves it between projects.
-- Its cells are **re-fanned to the new project's brands** — verify by direct
-  query, not by the UI.
-- Its old cells are gone — again by direct query.
-- The inline warning renders with **derived** counts while the change is unsaved.
+- A directive holding **any** cell outside `{todo, n_a}`, or **any** cell with a
+  note, renders `project_key` **locked** with a derived reason. Inert markup,
+  never `<button disabled>`.
+- A directive whose cells are all at fan-out defaults **is** movable.
+- Moving it re-fans the cells to the new project's brands, and the old cells are
+  gone — **verify both by direct query, not by the UI.**
 - **The §0.4 regression test:** after a move, the destination project's KPI strip
   contains no cell belonging to a brand outside that project.
+- **The movability predicate is unit-tested with an independent oracle**, and
+  must be tested at each boundary separately — a cell in `in_progress` blocks; a
+  cell in `todo` **with a note** blocks; a whitespace-only note does **not**
+  block. A fixture where both halves of the `∧` are false the same way cannot
+  discriminate them (r38 mechanism (c)), so build fixtures that isolate each.
+- Mutate to confirm: dropping the note clause, and widening the status set to
+  include `done`, must each fail a test.
 
 **Archive**
 - Delete archives; the row leaves the default view; **all 16 cells survive** —
