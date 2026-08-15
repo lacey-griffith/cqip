@@ -12,6 +12,21 @@ export type DirectiveType = (typeof DIRECTIVE_TYPES)[number];
 export const DIRECTIVE_STATUSES = ['active', 'archived'] as const;
 export type DirectiveStatus = (typeof DIRECTIVE_STATUSES)[number];
 
+// Human labels for the directive lifecycle states. ONE definition, for the same
+// reason CELL_STATUS_LABEL below is one: the editor's State dropdown renders
+// these, and a second spelling elsewhere would let one surface call a directive
+// "Archived" while another calls it "Retired".
+//
+// NOTE the vocabulary boundary this deliberately does NOT cross: `active` here
+// is a LIFECYCLE state, and `active` in DIRECTIVE_RESOLVE_STATES
+// (matrix-controls.ts) is a DERIVED state meaning "has outstanding cells". Same
+// word, different question, different number. Neither may be relabelled to match
+// the other — see the §A6 note on the matrix page for what that ambiguity costs.
+export const DIRECTIVE_STATUS_LABEL: Record<DirectiveStatus, string> = {
+  active: 'Active',
+  archived: 'Archived',
+};
+
 // Cell-level status (the matrix cells).
 export const CELL_STATUSES = ['todo', 'in_progress', 'done', 'blocked', 'n_a'] as const;
 export type CellStatus = (typeof CELL_STATUSES)[number];

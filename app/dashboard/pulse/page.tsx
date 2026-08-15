@@ -28,9 +28,17 @@
 // TODO(follow-on): directive edit/archive UI; brand-target picker (fan-out is
 //   all-active-brands in Phase A).
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -261,6 +269,23 @@ export default function ClientLibraryPage() {
   // two open editors in one row would compete for the same expansion slot, and
   // the row would have two Save buttons meaning different things.
   const [editingDirectiveId, setEditingDirectiveId] = useState<string | null>(null);
+  // ⚠ THE DIRTY GUARD LIVES HERE, NOT IN THE STRIP — and that is the whole
+  // point of it living here. When the strip owned it, the guard covered only the
+  // two dismissals the strip knows about (Esc, Cancel), while the PAGE closed the
+  // editor in three more places by calling setEditingDirectiveId(null) directly:
+  // clicking a cell dot, switching project, and the pulse:project nav event. So
+  // editing a title and clicking any status dot discarded the edit silently —
+  // the exact loss the guard exists to prevent, on the most natural interaction
+  // on this page. A guard covering two of five paths is not a guard.
+  //
+  // The strip reports dirtiness up via onDirtyChange (from its single update()),
+  // and every close route below goes through attemptCloseEditor.
+  const [editorDirty, setEditorDirty] = useState(false);
+  const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
+  // What to run once the user confirms discarding. A ref, not state: it is never
+  // read during render, and holding a function in state means fighting the
+  // updater-function overload of setState for no benefit.
+  const pendingAfterCloseRef = useRef<(() => void) | null>(null);
   const [expandedCell, setExpandedCell] = useState<{
     directiveId: string;
     brandId: string;
@@ -345,6 +370,35 @@ export default function ClientLibraryPage() {
 
   // Fetch brands + directives + cells for a project. RLS allows authenticated
   // SELECT on both new tables, so direct client queries are fine (spec §4).
+  // Force-close: no prompt. Used after a SUCCESSFUL save, where by definition
+  // nothing is unsaved, and by the confirm dialog's Discard branch.
+  const closeDirectiveEditor = useCallback(() => {
+    setEditingDirectiveId(null);
+    setEditorDirty(false);
+    pendingAfterCloseRef.current = null;
+  }, []);
+
+  // THE single guarded close. Every user-initiated dismissal routes through
+  // here — Esc, Cancel, clicking a cell dot, switching project — so the guard
+  // cannot be true of one and false of another.
+  //
+  // `after` is what the user was actually trying to do (open a cell editor,
+  // switch project). It runs only once the close is agreed, so answering "keep
+  // editing" cancels the whole interaction rather than closing the editor and
+  // doing the thing anyway.
+  const attemptCloseDirectiveEditor = useCallback(
+    (after?: () => void) => {
+      if (!editorDirty) {
+        closeDirectiveEditor();
+        after?.();
+        return;
+      }
+      pendingAfterCloseRef.current = after ?? null;
+      setConfirmDiscardOpen(true);
+    },
+    [editorDirty, closeDirectiveEditor],
+  );
+
   const loadProject = useCallback(async (key: string) => {
     if (!key) return;
     // Single data load per §4: brands + directives + monitoring findings.
@@ -479,10 +533,15 @@ export default function ClientLibraryPage() {
   }, [loadProject]);
 
   function handleProjectChange(key: string) {
+    // GUARDED: switching project while an edit is unsaved is the same loss as
+    // any other dismissal, so the whole switch becomes the continuation and
+    // "keep editing" cancels it — the picker stays where it was.
+    attemptCloseDirectiveEditor(() => applyProjectChange(key));
+  }
+
+  function applyProjectChange(key: string) {
     setProjectKey(key);
     setExpandedCell(null); // stale across a project switch
-    setEditingDirectiveId(null); // ditto — and an open editor would submit a
-    // PATCH for a directive the user is no longer looking at.
     setPinned(null); // ditto — a pinned readout from another client is nonsense
     setHover(null);
     // Part C. Harmless if left set — an unrendered brand id bands nothing — but
@@ -519,7 +578,19 @@ export default function ClientLibraryPage() {
       if (typeof detail === 'string' && detail && detail !== projectKey) {
         setProjectKey(detail);
         setExpandedCell(null); // symmetric with handleProjectChange — no stale open editor across a switch
-        setEditingDirectiveId(null);
+        // ⚠ THE ONE CLOSE PATH THAT IS NOT GUARDED, deliberately, and it is the
+        // fifth rather than one of the four.
+        //
+        // This fires when the user picks a client in the NAV, which has already
+        // broadcast the change. Prompting here could only end one of two ways:
+        // proceed (identical to force-closing, but with an extra click), or
+        // refuse — leaving the nav showing one client while this page renders
+        // another. A guard whose "cancel" branch desynchronises the UI is worse
+        // than no guard, so this closes and the edit is lost.
+        //
+        // Recorded rather than quietly accepted: if nav-away needs guarding, the
+        // fix is upstream — the nav asking before it broadcasts — not here.
+        closeDirectiveEditor();
         setPinned(null);
         setHover(null);
         setHighlightBrandId(null);
@@ -528,7 +599,13 @@ export default function ClientLibraryPage() {
     }
     window.addEventListener(PULSE_PROJECT_EVENT, onProject);
     return () => window.removeEventListener(PULSE_PROJECT_EVENT, onProject);
-  }, [projectKey, loadProject]);
+    // closeDirectiveEditor is a useCallback with an EMPTY dep array — it only
+    // ever calls setState and clears a ref, all of which are stable — so its
+    // identity never changes and adding it would re-subscribe this listener for
+    // nothing. Listed here rather than suppressed silently, because "the linter
+    // was noisy" and "the dependency genuinely cannot change" are different
+    // claims and only one of them is safe.
+  }, [projectKey, loadProject, closeDirectiveEditor]);
 
   // ⚠ §4.2's MECHANISM. "Filter at render" is a phrase; this is the thing.
   //
@@ -1992,17 +2069,26 @@ export default function ClientLibraryPage() {
                                       // The other direction of the mutual
                                       // exclusion: a row has one expansion slot,
                                       // so opening the cell editor closes the
-                                      // directive editor. Unconditional rather
-                                      // than row-scoped — only one directive
-                                      // editor is ever open, and if it belongs
-                                      // to another row it is being replaced by
-                                      // this one anyway.
-                                      setEditingDirectiveId(null);
-                                      setExpandedCell((cur) =>
+                                      // directive editor.
+                                      //
+                                      // GUARDED, and this is the path Karen's
+                                      // MEDIUM-4 was about: it used to call
+                                      // setEditingDirectiveId(null) directly, so
+                                      // editing a title and then clicking any
+                                      // status dot threw the edit away with no
+                                      // prompt. Opening the cell editor is now
+                                      // the CONTINUATION — it happens only once
+                                      // the close is agreed, so "keep editing"
+                                      // cancels the click entirely rather than
+                                      // closing the editor and opening the cell
+                                      // one anyway.
+                                      attemptCloseDirectiveEditor(() => {
+                                        setExpandedCell((cur) =>
                                         cur && cur.directiveId === directive.id && cur.brandId === brand.id
-                                          ? null
-                                          : { directiveId: directive.id, brandId: brand.id },
-                                      );
+                                            ? null
+                                            : { directiveId: directive.id, brandId: brand.id },
+                                        );
+                                      });
                                       return;
                                     }
                                     setPinned((cur) =>
@@ -2209,7 +2295,9 @@ export default function ClientLibraryPage() {
                                   projectOptions={projectOptions}
                                   cells={cellsByDirective.get(directive.id) ?? []}
                                   onSave={(body) => handleDirectiveSave(directive.id, body)}
-                                  onClose={() => setEditingDirectiveId(null)}
+                                  onRequestClose={() => attemptCloseDirectiveEditor()}
+                                  onClose={closeDirectiveEditor}
+                                  onDirtyChange={setEditorDirty}
                                 />
                               </div>
                             </td>
@@ -2287,6 +2375,56 @@ export default function ClientLibraryPage() {
         </section>
       ) : null}
 
+      {/* THE one discard prompt, for all four guarded close paths (Esc, Cancel,
+          cell-dot click, project switch). It lives HERE rather than inside the
+          editor because the page owns two of those paths — with the dialog in
+          the strip, those two silently bypassed it.
+
+          Mounted outside the matrix so it survives the editor unmounting: the
+          Discard branch closes the editor and THEN runs the continuation, and a
+          dialog owned by the thing being closed cannot do that. */}
+      <Dialog
+        open={confirmDiscardOpen}
+        onOpenChange={(open) => {
+          if (open) return;
+          // Dismissing the prompt itself — Esc, overlay click, Keep editing —
+          // means KEEP EDITING. Cancelling the pending action is the whole
+          // point: the user asked to stay, so the click that triggered this
+          // must not complete afterwards.
+          setConfirmDiscardOpen(false);
+          pendingAfterCloseRef.current = null;
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Discard your changes?</DialogTitle>
+            <DialogDescription>
+              This directive has unsaved edits. Closing now loses them.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setConfirmDiscardOpen(false);
+                pendingAfterCloseRef.current = null;
+              }}
+            >
+              Keep editing
+            </Button>
+            <Button
+              onClick={() => {
+                const after = pendingAfterCloseRef.current;
+                setConfirmDiscardOpen(false);
+                closeDirectiveEditor(); // also clears the ref
+                after?.();
+              }}
+            >
+              Discard
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
