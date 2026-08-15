@@ -84,6 +84,53 @@ export function fanOutCells(directiveId: string, activeBrands: ReadonlyArray<Fan
 }
 
 // -------------------------------------------------------------------------
+// Field diff for the directive PATCH route.
+//
+// Pure, and in lib rather than inline in the route, because it decides TWO
+// things at once and getting either wrong is silent: which columns are written,
+// and which audit_log rows are emitted. A field that diffs when it should not
+// writes a false row into the permanent trail; a field that fails to diff writes
+// no row at all, which reads as "nothing happened" — the §13 r37 shape.
+//
+// `before` always comes from the STORED row (the route re-reads it server-side)
+// and never from the client, per §13 r19's reasoning one field over.
+// -------------------------------------------------------------------------
+export const DIRECTIVE_EDITABLE_FIELDS = [
+  'title',
+  'description',
+  'directive_type',
+  'status',
+  'project_key',
+] as const;
+export type DirectiveEditableField = (typeof DIRECTIVE_EDITABLE_FIELDS)[number];
+
+export type DirectiveFieldValues = Partial<Record<DirectiveEditableField, string | null>>;
+
+export interface DirectiveFieldChange {
+  field: DirectiveEditableField;
+  before: string | null;
+  after: string | null;
+}
+
+export function diffDirectiveFields(
+  stored: Record<DirectiveEditableField, string | null>,
+  next: DirectiveFieldValues,
+): DirectiveFieldChange[] {
+  const changes: DirectiveFieldChange[] = [];
+  for (const field of DIRECTIVE_EDITABLE_FIELDS) {
+    // `undefined` means "absent from the PATCH body" and is NOT the same as
+    // null, which means "clear this field". Collapsing the two would make every
+    // partial PATCH null out the fields it did not mention.
+    if (!(field in next)) continue;
+    const after = next[field] ?? null;
+    const before = stored[field] ?? null;
+    if (after === before) continue;
+    changes.push({ field, before, after });
+  }
+  return changes;
+}
+
+// -------------------------------------------------------------------------
 // Movability — may a directive's project_key be changed?
 //
 // Moving a directive between projects MUST re-fan-out its cells, because cells

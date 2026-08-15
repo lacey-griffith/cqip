@@ -4130,7 +4130,8 @@ unique index on data proven non-violating. The privileged surface worth a
 pre-flight is the **new PATCH route** — it can move a directive between projects
 and destroy cells. Karen post-flight. **DO NOT PUSH** — Lacey smokes.
 
-**Phase status: COMMITS 1–3 built** (spec · migration 029 · the pure layer);
+**Phase status: COMMITS 1–4 built** (spec · migration 029 · the pure layer ·
+`PATCH /api/admin/directives/[id]`);
 Jenny pre-flight DONE across TWO passes and folded as spec rev 3. **Migration NOT
 yet applied — Lacey runs it.** Remaining: the PATCH route, the row editor, the
 `Hide archived` wiring, Karen.
@@ -4148,6 +4149,32 @@ without which the KPI filter is unreachable. **8 of 8 mutations caught**,
 including all four half-applied-filter variants and all three predicate-clause
 drops. tsc 0 · ESLint 0 on all five files · 343/343 · build 0 with
 `/dashboard/pulse` still `○` and no new routes.
+
+**COMMIT 4 — `PATCH /api/admin/directives/[id]`**, one route for edit / archive /
+restore / move, mirroring the two Phase A routes' shape. Archive is an ORDINARY
+field change (`status`), not a special action, which is what keeps the delete
+control and the editor's status field on one code path and one audit row. The
+movability re-check runs **only when `project_key` actually changes** — checking
+unconditionally would 409 every title edit on the ~88 directives that hold work.
+Order is load-bearing throughout: destination cells are **upserted first**
+(`ignoreDuplicates`, so a failed move is genuinely re-runnable rather than
+wedged on `UNIQUE (directive_id, brand_id)`), stale cells are deleted **with the
+predicate carried into the `WHERE`** so a cell written inside the race *survives*
+instead of being destroyed, the surviving-count mismatch is **actually compared**
+and returns 409, and the `directives` row UPDATE goes **last** — first would land
+the §0.4 state via this route's own repair path. Brand-scoped exclusion is exact
+because a brand carries a single `project_key`, so source and destination brand
+sets are disjoint by construction. `diffDirectiveFields` was extracted to lib and
+tested: it decides both what is written and what is audited, and a missing diff
+writes no audit row at all — the §13 r37 shape. **⚠ NO ROUTE-LEVEL TEST EXISTS**
+— this repo has no route harness (every test is a pure function over lib), so
+the spec's CRITICAL-1 assertion (*PATCH a move on a worked directive → 409, cells
+unchanged by direct query*) is **a Lacey-smoke item, not an automated one**. Said
+plainly because the spec asks for it as a test. **13 of 14 mutations caught; the
+survivor was verified an EQUIVALENT mutant** (`field in next` vs
+`next[field] !== undefined` cannot diverge — the route only assigns `string |
+null`, and `JSON.parse` never yields `undefined`), and the overclaiming test
+comment was corrected rather than the test bent to catch it.
 
 **Jenny's re-gate on rev 2: APPROVE-WITH-FINDINGS (1 HIGH · 10 MEDIUM · 4 LOW),
 no third gate needed.** She closed CRITICAL-1 as genuinely fixed and confirmed

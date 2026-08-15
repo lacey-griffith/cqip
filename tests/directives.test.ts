@@ -3,7 +3,9 @@ import { strict as assert } from 'node:assert';
 
 import {
   CELL_STATUSES,
+  DIRECTIVE_EDITABLE_FIELDS,
   DIRECTIVE_TYPES,
+  diffDirectiveFields,
   fanOutCells,
   isDirectiveMovable,
   initialCellStatus,
@@ -198,4 +200,81 @@ test('isDirectiveMovable: fanOutCells output satisfies it (the two cannot drift)
     updated_by: (c as { updated_by?: string | null }).updated_by ?? null,
   }));
   assert.equal(isDirectiveMovable(asMovability).movable, true);
+});
+
+// -------------------------------------------------------------------------
+// diffDirectiveFields — decides BOTH what gets written and what gets audited.
+// A false diff writes a false row into the permanent trail; a missing diff
+// writes no row at all, which reads as "nothing happened".
+// -------------------------------------------------------------------------
+const STORED = {
+  title: 'Chat Started',
+  description: null,
+  directive_type: 'goal',
+  status: 'active',
+  project_key: 'NBLYCRO',
+} as const;
+
+test('diffDirectiveFields: absent keys are untouched, not nulled', () => {
+  // A PATCH is partial. Without the absent-key guard every field missing from
+  // the body reads as null → diffs against its stored value → gets WRITTEN, each
+  // wipe carrying a real audit row, so the trail would look deliberate. Verified
+  // by mutation: deleting that guard fails four tests here.
+  //
+  // HONEST LIMIT, recorded rather than papered over: the guard is spelled
+  // `field in next`, and rewriting it as `next[field] !== undefined` is an
+  // EQUIVALENT MUTANT — no test here catches it, and none can. The two diverge
+  // only on a key present with an explicitly `undefined` value, which the route
+  // cannot produce (every assignment into `next` is `string | null`, and
+  // JSON.parse never yields undefined). So the `in` form is chosen for saying
+  // what it means, not because behaviour depends on it.
+  assert.deepEqual(diffDirectiveFields(STORED, {}), []);
+  assert.deepEqual(diffDirectiveFields(STORED, { title: 'Chat Started' }), []);
+});
+
+test('diffDirectiveFields: only genuinely changed fields diff', () => {
+  assert.deepEqual(diffDirectiveFields(STORED, { title: 'Chat Engaged' }), [
+    { field: 'title', before: 'Chat Started', after: 'Chat Engaged' },
+  ]);
+  // Archive is an ordinary field change — it is NOT a special action, which is
+  // what keeps the delete control and the editor's status field on one path.
+  assert.deepEqual(diffDirectiveFields(STORED, { status: 'archived' }), [
+    { field: 'status', before: 'active', after: 'archived' },
+  ]);
+});
+
+test('diffDirectiveFields: clearing a set field IS a change, present-but-null', () => {
+  const withDesc = { ...STORED, description: 'some text' };
+  assert.deepEqual(diffDirectiveFields(withDesc, { description: null }), [
+    { field: 'description', before: 'some text', after: null },
+  ]);
+  // ...but a null on an already-null field is not a change, so it emits no row.
+  assert.deepEqual(diffDirectiveFields(STORED, { description: null }), []);
+});
+
+test('diffDirectiveFields: multi-field edit emits one row per field, in order', () => {
+  const changes = diffDirectiveFields(STORED, {
+    title: 'Renamed',
+    directive_type: 'trigger',
+    project_key: 'SPLCRO',
+  });
+  assert.deepEqual(
+    changes.map((c) => c.field),
+    ['title', 'directive_type', 'project_key'],
+  );
+  assert.equal(changes.length, 3, 'one audit row per changed field, per §13 r2');
+});
+
+test('diffDirectiveFields: covers every editable field and nothing else', () => {
+  // Pins the set itself. If a column is added to the route without being added
+  // here it silently writes with no audit row — the sync-guard defect's shape.
+  const all = diffDirectiveFields(STORED, {
+    title: 'x',
+    description: 'x',
+    directive_type: 'audience',
+    status: 'archived',
+    project_key: 'SPLCRO',
+  });
+  assert.equal(all.length, 5);
+  assert.deepEqual(DIRECTIVE_EDITABLE_FIELDS.length, 5, 'DIRECTIVE_EDITABLE_FIELDS drift');
 });
