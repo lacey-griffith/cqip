@@ -30,6 +30,13 @@ function asTrimmedString(value: unknown): string | null {
   return trimmed.length === 0 ? null : trimmed;
 }
 
+// Kept verbatim in step with the PATCH route's copy: the two surfaces reject the
+// same thing for the same reason, and a user who hits one and then the other
+// must not be told two different stories about the same rule.
+const duplicateMessage = (title: string, projectKey: string) =>
+  `A directive titled "${title}" already exists in ${projectKey}. ` +
+  'Titles must be unique within a project, including archived directives.';
+
 export async function POST(req: NextRequest) {
   const supabase = await createSupabaseRouteClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -100,6 +107,38 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Project "${projectKey}" is not active` }, { status: 400 });
   }
 
+  // ---------------------------------------------------------------------
+  // Duplicate title — added by directive CRUD (spec §5), and NOT optional once
+  // migration 029 exists.
+  //
+  // Before 029 this route silently minted duplicates (the long-standing backlog
+  // gap, and the reason countHiddenByFilters had to mitigate on the render
+  // side). After 029 the index rejects them — but the insert-error path below
+  // returns `insertErr.message` with a 500, so without this the inline create
+  // strip would surface `duplicate key value violates unique constraint
+  // "idx_directives_project_title"` to an admin who simply retyped a title.
+  //
+  // Two layers, because a pre-check is NOT a lock: two concurrent creates both
+  // pass it and the index catches one. The pre-check gives the good message;
+  // the 23505 mapping below makes the race land on the same answer.
+  //
+  // Spans ARCHIVED titles too, matching the index (§5.1) — so the message says
+  // so, otherwise "already exists" is baffling when no such directive is
+  // visible on the matrix.
+  const { data: clash, error: clashErr } = await supabaseAdmin
+    .from('directives')
+    .select('id')
+    .eq('project_key', projectKey)
+    .eq('title', title)
+    .maybeSingle();
+  if (clashErr) {
+    console.error('[admin/directives POST] duplicate pre-check failed', clashErr);
+    return NextResponse.json({ error: 'Failed to check for duplicate title' }, { status: 500 });
+  }
+  if (clash) {
+    return NextResponse.json({ error: duplicateMessage(title, projectKey) }, { status: 409 });
+  }
+
   const changedBy = await getChangedBy(supabase);
 
   // Insert the directive.
@@ -118,6 +157,11 @@ export async function POST(req: NextRequest) {
     .select('id, project_key, title, directive_type, description, status, created_by, created_at, updated_at')
     .single();
   if (insertErr || !inserted) {
+    // The race the pre-check above cannot close. Same 409, same message — an
+    // admin must never see a Postgres constraint name.
+    if (insertErr?.code === '23505') {
+      return NextResponse.json({ error: duplicateMessage(title, projectKey) }, { status: 409 });
+    }
     console.error('[admin/directives POST] insert failed', insertErr);
     return NextResponse.json({ error: insertErr?.message ?? 'Failed to insert directive' }, { status: 500 });
   }

@@ -265,6 +265,31 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     }
     const destBrandIds = new Set((destBrands ?? []).map((b) => b.id as string));
 
+    // ⚠ A DESTINATION WITH NO ACTIVE BRANDS IS REFUSED.
+    //
+    // Otherwise the fan-out produces nothing, the delete removes every existing
+    // cell, and the directive lands in the destination holding ZERO cells:
+    // renders `unstarted`, all hollow, Outstanding 0 — and §7 declines to build
+    // a re-fan-out affordance precisely on the grounds that this state is
+    // unreachable. It is reachable: prod created HDCRO / Heartland CRO on
+    // 2026-07-31 with 0 brands, and validating the project is ACTIVE does not
+    // imply it has brands.
+    //
+    // The state would self-heal (moving back re-fans, and nothing was lost since
+    // every deleted cell was provably work-free), but an admin who does not know
+    // that sees a directive with no cells and no way to fix it. Refusing is one
+    // check; explaining an escape hatch afterwards is not.
+    if (destBrandIds.size === 0) {
+      return NextResponse.json(
+        {
+          error:
+            `Project "${targetProjectKey}" has no active brands, so a directive there ` +
+            'would have no brand cells. Add a brand to that project first.',
+        },
+        { status: 400 },
+      );
+    }
+
     const { data: liveCells, error: cellsErr } = await supabaseAdmin
       .from('directive_brand_status')
       .select('id, brand_id, status, note, updated_by')
@@ -317,25 +342,40 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     }
     movedCellCount = freshCells.length;
 
-    // ⚠ THE PREDICATE IS CARRIED INTO THE DELETE'S WHERE, not merely checked
-    // before it. A cell written between the movability check and this statement
-    // then SURVIVES rather than being destroyed. That degrades the residual race
-    // from silent data loss to a partial apply with a signal — which is what
-    // lets "lossless" be literally true instead of nearly true.
+    // ⚠ DELETE BY THE EXACT IDS THE PREDICATE APPROVED, guarded by the one clause
+    // that detects a concurrent write.
     //
-    // Scoped by brand, not by id: the destination rows are fresh fan-out output
-    // (updated_by NULL, note NULL, status todo/n_a) and match the predicate
-    // exactly, so without this exclusion they would delete themselves.
-    const destList = [...destBrandIds];
-    let del = supabaseAdmin
-      .from('directive_brand_status')
-      .delete()
-      .eq('directive_id', id)
-      .is('updated_by', null)
-      .is('note', null)
-      .in('status', ['todo', 'n_a']);
-    if (destList.length > 0) del = del.not('brand_id', 'in', `(${destList.join(',')})`);
-    const { data: deleted, error: deleteErr } = await del.select('id');
+    // An earlier version re-expressed the whole predicate in the WHERE
+    // (`updated_by IS NULL AND note IS NULL AND status IN (...)`). That was not
+    // the predicate: `isDirectiveMovable` treats a WHITESPACE-ONLY note as
+    // non-blocking (tests/directives.test.ts pins that deliberately), while
+    // `note IS NULL` does not. A cell holding `'   '` therefore passed the check
+    // and then survived the delete, tripping the count mismatch below — which
+    // reported "someone else edited this" when nobody had, permanently, on every
+    // retry. Nothing was destroyed, but the directive was left in the old project
+    // holding cells for BOTH, which is §0.4's counted-but-invisible state
+    // arriving through this route's own repair path.
+    //
+    // Ids are exact: `staleCells` IS the set the predicate approved, so no
+    // second expression of the rule can disagree with it. `updated_by IS NULL`
+    // stays as the race guard — the cell PATCH route always sets it, so a write
+    // landing inside the window drops that row out of this delete and it
+    // SURVIVES rather than being destroyed. That is what keeps the residual race
+    // a partial-apply-with-a-signal instead of silent loss.
+    //
+    // No brand exclusion is needed any more: the destination rows are not in
+    // `staleCells` by construction (it filters them out above), where the old
+    // brand-scoped form relied on source and destination brand sets being
+    // disjoint.
+    const staleIds = staleCells.map((c) => c.id as string);
+    const { data: deleted, error: deleteErr } = staleIds.length === 0
+      ? { data: [] as { id: string }[], error: null }
+      : await supabaseAdmin
+          .from('directive_brand_status')
+          .delete()
+          .in('id', staleIds)
+          .is('updated_by', null)
+          .select('id');
     if (deleteErr) {
       console.error(`${ROUTE} stale cell delete failed`, deleteErr);
       return NextResponse.json(
@@ -396,9 +436,22 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   // If it went first and the cell work then failed, we would land in exactly the
   // state this route exists to prevent: directive in the new project, OLD cells
   // intact, loaded by directive_id and counted into the destination's KPIs while
-  // rendering nowhere. The defect produced by its own repair path. Row-last
-  // means a cell failure leaves the directive in the old project — visible, and
-  // fixed by re-running the move.
+  // rendering nowhere. The defect produced by its own repair path.
+  //
+  // ⚠ ROW-LAST IS THE RIGHT ORDER, BUT IT IS NOT FREE, AND THE EARLIER WORDING
+  // HERE DESCRIBED ONLY THE HALF THAT IS. There is no transaction, so if the
+  // cell work SUCCEEDS and this UPDATE then fails, the directive sits in the OLD
+  // project holding ONLY the DESTINATION project's cells — so in the old project
+  // it renders entirely hollow while its Outstanding pill counts cells for
+  // brands that are not in it. That is the same §0.4 symptom in mirror image,
+  // and the previous comment's "a cell failure leaves the directive in the old
+  // project — visible" covered the delete-failure case only.
+  //
+  // It is still the better order: this state is RECOVERABLE BY RE-RUNNING (a
+  // second attempt sees `staleCells` empty → movable → the upsert is a no-op →
+  // the delete is a no-op → the UPDATE is retried), whereas row-first can leave
+  // real cells stranded and counted. The error path below says so explicitly
+  // rather than reporting a bare failure.
   const updatePayload: Record<string, unknown> = { updated_at: new Date().toISOString() };
   for (const change of changes) updatePayload[change.field] = change.after;
 
@@ -407,14 +460,22 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     .update(updatePayload)
     .eq('id', id);
   if (updateErr) {
+    // On a MOVE the cell work has already committed, so the directive is now in
+    // the old project holding the destination's cells. Say that, and say the
+    // remedy — a bare error would leave an admin staring at a hollow row with no
+    // idea it is a half-applied move rather than lost data.
+    const moveSuffix = isMoving
+      ? ' Its brand cells were already rebuilt for the destination, so the row will ' +
+        'render empty until you re-run the move — re-running is safe and completes it.'
+      : '';
     if (isUniqueViolation(updateErr)) {
       return NextResponse.json(
-        { error: DUPLICATE_MESSAGE(targetTitle, targetProjectKey) },
+        { error: DUPLICATE_MESSAGE(targetTitle, targetProjectKey) + moveSuffix },
         { status: 409 },
       );
     }
     console.error(`${ROUTE} update failed`, updateErr);
-    return NextResponse.json({ error: updateErr.message }, { status: 500 });
+    return NextResponse.json({ error: updateErr.message + moveSuffix }, { status: 500 });
   }
 
   // §13 r2 — one audit row per changed field, plus a summary row for the

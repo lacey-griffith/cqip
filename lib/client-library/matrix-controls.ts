@@ -597,6 +597,43 @@ export function computeMatrixKpis<D extends MatrixDirectiveLike>(
   };
 }
 
+// -------------------------------------------------------------------------
+// The result-count line.
+//
+// Pure, and extracted AFTER it shipped wrong — which is exactly why it is pure
+// now. The first version read `${visibleDirectives.length} directives` and
+// appended `+ N archived`. With Hide-archived OFF, `visibleDirectives` IS the
+// all-status array, so the suffix was added to a base that already contained it:
+// "88 directives + 1 archived", reading as 89, beside a KPI card saying 87. Two
+// numbers on one screen, both labelled "directives in NBLYCRO". Nothing could
+// catch it, because the string was assembled inline in JSX where no test reaches.
+//
+// THE INVARIANT, which is the whole point: the FIRST figure is always the ACTIVE
+// count, in BOTH toggle states, so it always equals computeMatrixKpis' `total`.
+// Archived directives are named as a separate addend or not at all — never
+// folded into the base.
+// -------------------------------------------------------------------------
+export function buildResultCountLabel(args: {
+  /** Rows actually rendered (may include archived rows when they are shown). */
+  shown: number;
+  /** Rows renderable before search/filters — `visibleDirectives.length`. */
+  renderable: number;
+  /** ACTIVE directives in the project, independent of the toggle. */
+  activeCount: number;
+  /** Archived directives in the project. */
+  archivedCount: number;
+  hideArchived: boolean;
+  projectLabel: string;
+}): string {
+  const { shown, renderable, activeCount, archivedCount, hideArchived, projectLabel } = args;
+  const base =
+    shown === renderable
+      ? `${activeCount} directive${activeCount === 1 ? '' : 's'}`
+      : `${shown} of ${activeCount} directives`;
+  const archived = !hideArchived && archivedCount > 0 ? ` + ${archivedCount} archived` : '';
+  return `${base}${archived} in ${projectLabel}`;
+}
+
 // NOTE: `countHiddenByStatus` (status-group-only) was REPLACED by
 // countHiddenByFilters above when the second and third filter groups landed.
 // Keeping both would have left two ways to compute nearly the same number —

@@ -60,6 +60,7 @@ import {
 } from '@/lib/client-library/cell-note';
 import {
   buildMatrixRows,
+  buildResultCountLabel,
   computeMatrixKpis,
   countArchivedMatchingSearch,
   countByType,
@@ -868,6 +869,13 @@ export default function ClientLibraryPage() {
     () => directives.filter((d) => d.status === 'archived').length,
     [directives],
   );
+  // The ACTIVE total for this project, independent of the toggle. This is the
+  // figure the KPI strip's `total` reports, so the result line quoting the same
+  // number is what keeps the two from contradicting each other on one screen.
+  const activeCount = useMemo(
+    () => directives.filter((d) => d.status === 'active').length,
+    [directives],
+  );
 
   const projectOptions = useMemo(
     () => projects.map((p) => ({ key: p.jira_project_key, label: p.display_name })),
@@ -1256,14 +1264,25 @@ export default function ClientLibraryPage() {
                     And when archived rows ARE shown, the line names both
                     figures rather than merging them: the first still matches the
                     KPI card, so neither number has to be wrong. */}
+                {/* ⚠ THE DENOMINATOR IS THE ACTIVE COUNT, ALWAYS — never
+                    `visibleDirectives.length`, which with the toggle OFF is the
+                    ALL-STATUS count. Using it there produced "88 directives +
+                    1 archived" (reading as 89) beside a KPI card saying 87:
+                    HIGH-3 reintroduced in exactly the state the both-figures
+                    decision was written to close, because the suffix was
+                    appended to a base that already contained it.
+                    Keeping the base on activeCount means the first figure
+                    ALWAYS equals the KPI strip's `total`, in both toggle
+                    states, which is the invariant §8 asserts. */}
                 <span className="tabular-nums">
-                  {matrixRows.length === visibleDirectives.length
-                    ? `${visibleDirectives.length} directive${visibleDirectives.length === 1 ? '' : 's'}`
-                    : `${matrixRows.length} of ${visibleDirectives.length} directives`}
-                  {!hideArchived && archivedCount > 0
-                    ? ` + ${archivedCount} archived`
-                    : ''}
-                  {` in ${projectLabel}`}
+                  {buildResultCountLabel({
+                    shown: matrixRows.length,
+                    renderable: visibleDirectives.length,
+                    activeCount,
+                    archivedCount,
+                    hideArchived,
+                    projectLabel,
+                  })}
                 </span>
 
                 {/* Never let "I searched and found nothing" read as "it doesn't
