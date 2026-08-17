@@ -106,6 +106,39 @@ export function DirectiveEditStrip({
     rootRef.current?.focus();
   }, []);
 
+  // ⚠ CLEAR THE PAGE'S DIRTY FLAG ON UNMOUNT — a MECHANISM, not another
+  // enumerated path (Karen fold re-gate MEDIUM-2, path 8).
+  //
+  // This strip renders inside the matrix row map, gated on the row being in
+  // `matrixRows`. So it can disappear with NO setter running at all: type in the
+  // search box, or switch a State/Status/Type tab, and if the edited directive
+  // falls out of the filtered set its row unmounts. `editingDirectiveId` then
+  // still points at a row that is not rendered, and `editorDirty` STAYS TRUE —
+  // which re-creates HIGH-2(b)'s exact symptom by a different route: the next
+  // cell-dot click raises "Discard your changes?" for an editor that is not on
+  // screen, and "Keep editing" makes that click silently do nothing.
+  //
+  // The page's six-path enumeration could not cover this, because its unit is
+  // "something assigns editingDirectiveId" and nothing here does. Rather than
+  // add paths 7, 8, 9… as they are discovered, clearing on unmount covers EVERY
+  // disappearance including ones nobody has thought of yet — the same reason the
+  // movability predicate is a conjunction rather than a list of known-bad cases.
+  //
+  // Redundant on the guarded paths (closeDirectiveEditor already cleared it) and
+  // deliberately so: redundant-and-correct beats exhaustive-and-hopeful.
+  //
+  // ⚠ WHAT THIS DOES NOT DO: it does not save the edit, and it does not prompt.
+  // Filtering the row away still discards unsaved work. Prompting was rejected
+  // because the trigger is a SEARCH KEYSTROKE — a confirm dialog per character
+  // is worse than the loss it prevents. Recorded as a known limitation rather
+  // than fixed, and it is the one remaining way to lose an edit without being
+  // asked.
+  useEffect(() => {
+    return () => {
+      onDirtyChange(false);
+    };
+  }, [onDirtyChange]);
+
   async function handleSave() {
     if (submitting) return;
     const body = directivePatchBody(snapshot, form);

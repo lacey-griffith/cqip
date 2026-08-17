@@ -642,6 +642,36 @@ export function computeMatrixKpis<D extends MatrixDirectiveLike>(
 // `hideArchived` and the project's archived total are gone too: `shownArchived`
 // already answers "are archived rows on screen, and how many", so a hidden
 // archived row cannot leak into the label through a second input that disagrees.
+// Split the RENDERED rows by lifecycle, for buildResultCountLabel's two inputs.
+//
+// ⚠ THIS IS IN LIB BECAUSE THE "UNCONSTRUCTABLE" CLAIM BELOW STOPPED ONE LINE
+// SHORT. Splitting the populations makes the mixed form unconstructable INSIDE
+// buildResultCountLabel — but the split itself lived in `page.tsx`, which has no
+// test coverage, so two one-line edits there (counting all rendered rows as
+// `active`, or keying the count off `hideArchived`) reinstated the residual
+// HIGH-1 with all 362 tests green. Karen fold re-gate MEDIUM-1. The defect
+// surface had moved from the function into its caller, which is not the same as
+// removing it.
+//
+// Counts BOTH statuses explicitly rather than deriving `archived` by
+// subtraction: subtraction silently absorbs any future third DIRECTIVE_STATUSES
+// value into the archived figure, quietly picking a side of exactly the polarity
+// question computeMatrixKpis reasons about out loud. A test pins
+// active + archived === rows.length against today's closed set, so adding a
+// third status FAILS rather than being absorbed — which forces the decision
+// instead of making it silently.
+export function splitShownByLifecycle<D extends { status: DirectiveStatus }>(
+  rows: ReadonlyArray<{ directive: D }>,
+): { active: number; archived: number } {
+  let active = 0;
+  let archived = 0;
+  for (const row of rows) {
+    if (row.directive.status === 'active') active += 1;
+    else if (row.directive.status === 'archived') archived += 1;
+  }
+  return { active, archived };
+}
+
 export function buildResultCountLabel(args: {
   /** ACTIVE directives currently rendered. NEVER includes archived rows. */
   shownActive: number;

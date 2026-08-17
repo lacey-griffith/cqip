@@ -419,14 +419,29 @@ reach. Two numbers on one screen, both meaning "directives in NBLYCRO".
 **Decision: the result line names both quantities when archived rows are shown**,
 so neither number has to be wrong and the first figure always matches the KPI:
 
-| `Hide archived` | Result line |
-|---|---|
-| ON (default) | `87 directives in NBLYCRO` |
-| OFF | `87 directives + 1 archived in NBLYCRO` |
-| ON, filtered | `12 of 87 directives in NBLYCRO` |
-| OFF, filtered | `12 of 87 directives + 1 archived in NBLYCRO` |
+| `Hide archived` | Filters | Result line |
+|---|---|---|
+| ON (default) | none | `87 directives in NBLYCRO` |
+| OFF | none | `87 directives + 1 archived in NBLYCRO` |
+| ON | active row(s) filtered out | `12 of 87 directives in NBLYCRO` |
+| OFF | filters keep the archived row | `12 of 87 directives + 1 archived in NBLYCRO` |
+| OFF | filters EXCLUDE the archived row | `12 of 87 directives in NBLYCRO` |
 
-Both figures derived. The archived count is the row-2 helper with an empty query.
+**⚠ THE LAST ROW IS THE CORRECTION** (Karen fold re-gate LOW-1). This table
+originally had four rows and implied the addend was the project's ARCHIVED TOTAL,
+which would render `+ 1 archived` even when the filters had excluded that row —
+claiming an archived directive the user cannot see.
+
+The shipped addend is **`shownArchived`: archived rows that survived the
+filters**, so it goes to zero and the suffix disappears. That is the better
+semantics and the reason is the same one §4.3 gates the archived-search signal
+on: **both figures must describe the screen.** The table is corrected to the
+implementation rather than the implementation to the table.
+
+**Neither figure is the project's total any more.** The first is active rows
+*rendered*; the second is archived rows *rendered*. `activeCount` remains the
+denominator, and it alone is a project-wide figure — which is what keeps it equal
+to `computeMatrixKpis().total`.
 
 **Flagged for Lacey — a copy call, not a correctness one.** The alternative is to
 scope the KPI card's label instead. Either works; leaving it unstated does not,

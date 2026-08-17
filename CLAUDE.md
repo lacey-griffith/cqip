@@ -4142,14 +4142,57 @@ the FIXES, not the core machinery — which held a third time** (the eight-consu
 wiring, the archive/KPI barrier, the move's race handling and re-runnability all
 re-confirmed). All re-gate findings folded; see below.
 
-**Remaining before push: nothing in code.** **Migration 029 is NOT applied —
-Lacey runs it**, and it carries its own pre-flight query. Nothing has been
-rendered in a browser, and there is no route-level test harness in this repo, so
-the CRITICAL-1-shaped assertion (*PATCH a move on a worked directive → 409, cells
-unchanged by direct query*) is a Lacey-smoke item. **Karen's closing observation
-is worth keeping: both re-gate HIGHs are render/interaction defects, so a browser
-pass would likely have caught both — they live precisely in the gap the unrendered
-gate leaves open.**
+**KAREN FOLD RE-GATE on `862d621`: PASS-WITH-FINDINGS — 0 CRITICAL · 0 HIGH ·
+2 MEDIUM · 2 LOW.** All seven prior findings verified closed, and she re-derived
+the close-path count by **AST rather than a literal grep** — the instrument whose
+absence caused HIGH-2. Both MEDIUMs folded below.
+
+**⚠ MIGRATION 029 IS APPLIED AND VERIFIED** (`idx_directives_project_title`,
+UNIQUE on `(project_key, title)`). **Browser smoke PASSED, both themes, all five
+items, including both re-gate HIGH paths** — closing the gap Karen's earlier
+report named. **Still true:** no route-level test harness, so *PATCH a move on a
+worked directive → 409, 16 cells unchanged by direct query* is a manual item,
+being run separately.
+
+**FOLD RE-GATE MEDIUM-1 — "unconstructable" held inside the function and stopped
+one line short of the boundary feeding it.** Splitting the populations made the
+mixed form unconstructable inside `buildResultCountLabel` — but the split itself
+lived in `page.tsx`, which has **no test coverage**, and two one-line edits there
+(counting every rendered row as active, or keying the count off `hideArchived`)
+**reinstated the residual HIGH-1 with all 362 tests green**. The defect surface had
+MOVED, which is not the same as removed. Now a pure `splitShownByLifecycle` in
+lib with its own tests; both of Karen's surviving mutations fail.
+
+**FOLD RE-GATE MEDIUM-2 — the eight-path enumeration was itself the second
+defect, because its UNIT was wrong.** It counted *"something assigns
+`editingDirectiveId`"*, so it structurally could not see paths where the strip
+simply **disappears**:
+- **Path 4** — the same Edit toggle on a DIFFERENT row takes the open branch,
+  replacing the id rather than clearing it. Row A's editor unmounts, its edits
+  gone, and the `setEditorDirty(false)` added to fix HIGH-2(c) is exactly what
+  made the discard silent. Every row shows an enabled Edit button while another
+  editor is open, so it was one click away at all times. Now routed through the
+  same guard, with the open as the continuation.
+- **Path 8** — a search keystroke or a filter-tab change that drops the edited row
+  unmounts it with **no setter at all**, leaving `editorDirty` stuck true and
+  re-creating HIGH-2(b)'s symptom by another route. **Fixed by a MECHANISM, not a
+  ninth entry:** the strip clears the flag on unmount, covering every
+  disappearance including unenumerated ones — the same reasoning that makes the
+  movability predicate a conjunction rather than a list of known-bad cases.
+  **The edit is still lost on that path, deliberately:** the trigger is a
+  keystroke, and a confirm dialog per character is worse than the loss. That is
+  now the one remaining way to lose an edit without being asked, and it is
+  recorded rather than papered over.
+
+**LOWs folded.** Spec §4.2's table gained a fifth row: the addend is
+`shownArchived` (archived rows *surviving the filters*), not the project total, so
+it correctly disappears when filters exclude the archived row — both figures
+describe the screen, the same rule §4.3 gates the archived-search signal on. And
+`archived` is counted **explicitly** rather than by subtraction or an else-branch,
+either of which silently files a future third `DIRECTIVE_STATUSES` value as
+archived. **That distinction survived a mutation until pinned by a cast-based
+test** — the else-branch form behaves identically on today's closed set, so no
+ordinary fixture can see it.
 
 **⚠ RE-GATE HIGH-1 — the original HIGH-1 SURVIVED IN THE OTHER BRANCH, and my fix
 for it was half a fix.** Putting `activeCount` in the base corrected the

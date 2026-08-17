@@ -1,11 +1,12 @@
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
 
-import type { DirectiveStatus } from '../lib/client-library/directives';
+import { DIRECTIVE_STATUSES, type DirectiveStatus } from '../lib/client-library/directives';
 
 import {
   buildMatrixRows,
   buildResultCountLabel,
+  splitShownByLifecycle,
   classifyDirectiveCells,
   compareMatrixRows,
   countArchivedMatchingSearch,
@@ -903,4 +904,76 @@ test('buildResultCountLabel: singular only at exactly one', () => {
     buildResultCountLabel({ activeCount: 0, shownActive: 0, shownArchived: 0, projectLabel: 'NBLYCRO' }),
     '0 directives in NBLYCRO',
   );
+});
+
+// -------------------------------------------------------------------------
+// splitShownByLifecycle — the boundary that feeds buildResultCountLabel.
+//
+// Extracted from page.tsx after Karen's fold re-gate MEDIUM-1: making the mixed
+// form unconstructable INSIDE buildResultCountLabel left the split itself in an
+// untested file, where two one-line edits reinstated the residual HIGH-1 with
+// every gate green. The defect surface had moved, not gone.
+// -------------------------------------------------------------------------
+const lifecycleRow = (status: DirectiveStatus) => ({
+  directive: { id: `d-${status}-${Math.random()}`, title: 't', directive_type: 'goal' as const, status },
+  outstanding: 0,
+  resolveState: 'unstarted' as const,
+});
+
+test('splitShownByLifecycle: counts each lifecycle independently', () => {
+  const rows = [
+    lifecycleRow('active'),
+    lifecycleRow('active'),
+    lifecycleRow('archived'),
+  ];
+  assert.deepEqual(splitShownByLifecycle(rows), { active: 2, archived: 1 });
+  assert.deepEqual(splitShownByLifecycle([]), { active: 0, archived: 0 });
+});
+
+test('splitShownByLifecycle: archived rows NEVER land in the active count', () => {
+  // THE MUTATION THAT SURVIVED IN page.tsx — counting every rendered row as
+  // active. That reinstates the mixed numerator, which is the residual HIGH-1.
+  const rows = [lifecycleRow('active'), ...Array.from({ length: 5 }, () => lifecycleRow('archived'))];
+  const split = splitShownByLifecycle(rows);
+  assert.equal(split.active, 1, 'active must not absorb archived rows');
+  assert.equal(split.archived, 5);
+  assert.notEqual(split.active, rows.length, 'active must never equal the rendered total here');
+});
+
+test('splitShownByLifecycle: the two counts account for EVERY row today', () => {
+  // Pins the closed set. archived is counted explicitly rather than derived by
+  // subtraction, so a future third DIRECTIVE_STATUSES value lands in NEITHER
+  // figure — and this assertion FAILS, forcing a decision about where it belongs
+  // instead of silently absorbing it into "archived".
+  const rows = DIRECTIVE_STATUSES.map((st) => lifecycleRow(st));
+  const { active, archived } = splitShownByLifecycle(rows);
+  assert.equal(
+    active + archived,
+    rows.length,
+    'a DIRECTIVE_STATUSES value is unaccounted for — decide which figure it belongs in',
+  );
+});
+
+test('splitShownByLifecycle: an UNKNOWN status lands in neither count', () => {
+  // Pins EXPLICIT counting against an else-branch "simplification".
+  //
+  // `if active / else archived` behaves identically on today's closed two-value
+  // set, so every other test here passes under both — verified by mutation, it
+  // survived. The forms diverge only once a third DIRECTIVE_STATUSES value
+  // exists, at which point the else-branch silently files it as archived: the
+  // exact quiet side-taking Karen's LOW-2 raised, and the polarity question
+  // computeMatrixKpis reasons about out loud.
+  //
+  // Reached by cast, because the union makes it unconstructable for a
+  // type-checked caller — the same technique the fail-closed updated_by branch
+  // uses, and for the same reason: no other test can see this.
+  const rows = [
+    lifecycleRow('active'),
+    lifecycleRow('archived'),
+    { ...lifecycleRow('active'), directive: { ...lifecycleRow('active').directive, status: 'superseded' as unknown as DirectiveStatus } },
+  ];
+  const { active, archived } = splitShownByLifecycle(rows);
+  assert.equal(active, 1, 'unknown status must not be counted as active');
+  assert.equal(archived, 1, 'unknown status must not be absorbed into archived');
+  assert.equal(active + archived, 2, 'unknown status is counted by NEITHER figure, visibly');
 });

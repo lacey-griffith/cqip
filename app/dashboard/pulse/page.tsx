@@ -69,6 +69,7 @@ import {
 import {
   buildMatrixRows,
   buildResultCountLabel,
+  splitShownByLifecycle,
   computeMatrixKpis,
   countArchivedMatchingSearch,
   countByType,
@@ -288,14 +289,30 @@ export default function ClientLibraryPage() {
   //
   //   1. Esc inside the editor            -> onRequestClose  (guarded)
   //   2. the editor's Cancel button       -> onRequestClose  (guarded)
-  //   3. the row's Edit/Close toggle      -> guarded         (was NOT)
-  //   4. clicking any cell dot            -> guarded, cell editor is the `after`
-  //   5. switching project in the picker  -> guarded, the switch is the `after`
-  //   6. the pulse:project NAV event      -> deliberately UNGUARDED, see below
+  //   3. the row's Edit/Close toggle, CLOSE half   -> guarded
+  //   4. the same toggle on ANOTHER row, OPEN half -> guarded (was NOT)
+  //   5. clicking any cell dot            -> guarded, cell editor is the `after`
+  //   6. switching project in the picker  -> guarded, the switch is the `after`
+  //   7. the pulse:project NAV event      -> deliberately UNGUARDED, see below
+  //   8. the row UNMOUNTING with no setter at all -> see the note below
+  //
+  // ⚠ AND THE ENUMERATION ITSELF WAS THE SECOND DEFECT. Its unit is "something
+  // assigns editingDirectiveId", so it structurally could not see paths where
+  // the strip simply DISAPPEARS: the toggle's open-half replaces the id rather
+  // than clearing it (4), and a search keystroke or filter-tab change that drops
+  // the edited row unmounts it with no setter running at all (8). Both discarded
+  // unsaved edits silently; the second also left editorDirty stuck true, which
+  // is HIGH-2(b) by another route. Karen fold re-gate MEDIUM-2.
+  //
+  // Path 8 is NOT fixed by adding a ninth entry here — it is covered by a
+  // MECHANISM: the strip clears the flag on unmount (see directive-edit-strip),
+  // which catches every disappearance including ones nobody has enumerated. The
+  // edit is still lost on that path, deliberately: the trigger is a keystroke,
+  // and a confirm dialog per character is worse than the loss.
   //
   // The strip reports dirtiness up via onDirtyChange (from its single update()).
-  // Paths 1-5 route through attemptCloseDirectiveEditor; only 6 does not, and
-  // the reason lives at that call site rather than being asserted here.
+  // Paths 1-6 route through attemptCloseDirectiveEditor; 7 is deliberate and
+  // argued at its call site; 8 is structural.
   const [editorDirty, setEditorDirty] = useState(false);
   const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
   // What to run once the user confirms discarding. A ref, not state: it is never
@@ -594,8 +611,8 @@ export default function ClientLibraryPage() {
       if (typeof detail === 'string' && detail && detail !== projectKey) {
         setProjectKey(detail);
         setExpandedCell(null); // symmetric with handleProjectChange — no stale open editor across a switch
-        // ⚠ THE ONE CLOSE PATH THAT IS NOT GUARDED, deliberately — path 6 of the
-        // six enumerated where editorDirty is declared.
+        // ⚠ THE ONE CLOSE PATH THAT IS NOT GUARDED, deliberately — path 7 of the
+        // eight enumerated where editorDirty is declared.
         //
         // Stronger than first argued (Karen re-gate): setProjectKey(detail) runs
         // ABOVE this line, and the nav broadcasts before it navigates, so a
@@ -977,11 +994,7 @@ export default function ClientLibraryPage() {
   // combined count compared against an active-only total mixes populations —
   // which is the residual half of the original HIGH-1 (Karen re-gate). Splitting
   // here is what makes the mixed form unconstructable downstream.
-  const shownCounts = useMemo(() => {
-    let active = 0;
-    for (const row of matrixRows) if (row.directive.status === 'active') active += 1;
-    return { active, archived: matrixRows.length - active };
-  }, [matrixRows]);
+  const shownCounts = useMemo(() => splitShownByLifecycle(matrixRows), [matrixRows]);
 
   // The ACTIVE total for this project, independent of the toggle. This is the
   // figure the KPI strip's `total` reports, so the result line quoting the same
@@ -2025,12 +2038,36 @@ export default function ClientLibraryPage() {
                                       attemptCloseDirectiveEditor();
                                       return;
                                     }
-                                    setExpandedCell(null);
-                                    setEditingDirectiveId(directive.id);
-                                    // Opening is not a close, but the flag must
-                                    // start clean: a previous editor's dirtiness
-                                    // must not carry into this one.
-                                    setEditorDirty(false);
+                                    // ⚠ PATH 7 — THE OTHER HALF OF THIS TOGGLE,
+                                    // and the enumeration missed it because the
+                                    // enumeration counted SETTER CALL SITES.
+                                    //
+                                    // `isEditingDirective` is per-row, so on any
+                                    // OTHER row this branch runs while row A's
+                                    // editor is open: A's strip unmounts and its
+                                    // unsaved edits are gone. No setter "closes"
+                                    // anything — one assignment simply replaces
+                                    // the id — and the setEditorDirty(false)
+                                    // added to fix HIGH-2(c) is precisely what
+                                    // made the discard SILENT. Every row renders
+                                    // its own enabled Edit button while another
+                                    // editor is open, so this is one click away
+                                    // at all times.
+                                    //
+                                    // Routing through the same guard makes
+                                    // opening-elsewhere a close-then-open. When
+                                    // nothing is open, editorDirty is false and
+                                    // the continuation runs immediately — so
+                                    // there is no special case for the common
+                                    // path, which is why this is not an `if`.
+                                    attemptCloseDirectiveEditor(() => {
+                                      setExpandedCell(null);
+                                      setEditingDirectiveId(directive.id);
+                                      // Opening is not a close, but the flag must
+                                      // start clean: a previous editor's dirtiness
+                                      // must not carry into this one.
+                                      setEditorDirty(false);
+                                    });
                                   }}
                                   aria-expanded={isEditingDirective}
                                   className="w-fit text-xs font-medium text-[color:var(--f92-orange)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-focus-ring)]"
