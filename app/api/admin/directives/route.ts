@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseRouteClient, supabaseAdmin } from '@/lib/supabase/server';
 import { getChangedBy } from '@/lib/audit/get-changed-by';
-import { fanOutCells, isDirectiveType, type DirectiveType } from '@/lib/client-library/directives';
+import {
+  duplicateTitleMessage,
+  fanOutCells,
+  isDirectiveType,
+  type DirectiveType,
+} from '@/lib/client-library/directives';
 
 // Batch 012 — Client Library, Phase A. Admin-only: create a directive and
 // fan out one directive_brand_status cell per ACTIVE brand in the project
@@ -29,13 +34,6 @@ function asTrimmedString(value: unknown): string | null {
   const trimmed = value.trim();
   return trimmed.length === 0 ? null : trimmed;
 }
-
-// Kept verbatim in step with the PATCH route's copy: the two surfaces reject the
-// same thing for the same reason, and a user who hits one and then the other
-// must not be told two different stories about the same rule.
-const duplicateMessage = (title: string, projectKey: string) =>
-  `A directive titled "${title}" already exists in ${projectKey}. ` +
-  'Titles must be unique within a project, including archived directives.';
 
 export async function POST(req: NextRequest) {
   const supabase = await createSupabaseRouteClient();
@@ -136,7 +134,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to check for duplicate title' }, { status: 500 });
   }
   if (clash) {
-    return NextResponse.json({ error: duplicateMessage(title, projectKey) }, { status: 409 });
+    return NextResponse.json({ error: duplicateTitleMessage(title, projectKey) }, { status: 409 });
   }
 
   const changedBy = await getChangedBy(supabase);
@@ -160,7 +158,7 @@ export async function POST(req: NextRequest) {
     // The race the pre-check above cannot close. Same 409, same message — an
     // admin must never see a Postgres constraint name.
     if (insertErr?.code === '23505') {
-      return NextResponse.json({ error: duplicateMessage(title, projectKey) }, { status: 409 });
+      return NextResponse.json({ error: duplicateTitleMessage(title, projectKey) }, { status: 409 });
     }
     console.error('[admin/directives POST] insert failed', insertErr);
     return NextResponse.json({ error: insertErr?.message ?? 'Failed to insert directive' }, { status: 500 });

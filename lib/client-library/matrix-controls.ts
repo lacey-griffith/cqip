@@ -620,24 +620,45 @@ export function computeMatrixKpis<D extends MatrixDirectiveLike>(
 // Archived directives are named as a separate addend or not at all — never
 // folded into the base.
 // -------------------------------------------------------------------------
+// ⚠ THERE IS NO COMBINED `shown` PARAMETER, AND THAT IS THE FIX.
+//
+// The first version took one `shown` (matrixRows.length) plus `renderable`,
+// `archivedCount` and `hideArchived`. Two bugs lived in that shape, and the
+// second survived the first fix:
+//
+//   1. The base used `renderable`, which with the toggle off is the ALL-STATUS
+//      count, so `+ N archived` was appended to a number already containing it.
+//   2. Fixed by putting `activeCount` in the base — but `shown` STILL counted
+//      archived rows, so the `N of M` branch compared a mixed numerator against
+//      an active-only denominator and the addend double-counted a row already
+//      inside the numerator. On an archive-heavy project that produced a
+//      numerator LARGER than its denominator ("7 of 3 directives + 5 archived").
+//
+// Both are the same defect: one number carrying two populations. So the caller
+// now splits them at the boundary, and the mixed form is UNCONSTRUCTABLE rather
+// than watched — the same repair this batch applied to the delete's `staleIds`
+// and to the movability reason string.
+//
+// `hideArchived` and the project's archived total are gone too: `shownArchived`
+// already answers "are archived rows on screen, and how many", so a hidden
+// archived row cannot leak into the label through a second input that disagrees.
 export function buildResultCountLabel(args: {
-  /** Rows actually rendered (may include archived rows when they are shown). */
-  shown: number;
-  /** Rows renderable before search/filters — `visibleDirectives.length`. */
-  renderable: number;
-  /** ACTIVE directives in the project, independent of the toggle. */
+  /** ACTIVE directives currently rendered. NEVER includes archived rows. */
+  shownActive: number;
+  /** ACTIVE directives in the project. The KPI strip's `total`. */
   activeCount: number;
-  /** Archived directives in the project. */
-  archivedCount: number;
-  hideArchived: boolean;
+  /** ARCHIVED directives currently rendered — 0 whenever they are hidden. */
+  shownArchived: number;
   projectLabel: string;
 }): string {
-  const { shown, renderable, activeCount, archivedCount, hideArchived, projectLabel } = args;
+  const { shownActive, activeCount, shownArchived, projectLabel } = args;
+  // Unfiltered means every ACTIVE directive is on screen. Comparing like with
+  // like: both sides count the same population.
   const base =
-    shown === renderable
+    shownActive === activeCount
       ? `${activeCount} directive${activeCount === 1 ? '' : 's'}`
-      : `${shown} of ${activeCount} directives`;
-  const archived = !hideArchived && archivedCount > 0 ? ` + ${archivedCount} archived` : '';
+      : `${shownActive} of ${activeCount} directives`;
+  const archived = shownArchived > 0 ? ` + ${shownArchived} archived` : '';
   return `${base}${archived} in ${projectLabel}`;
 }
 

@@ -6,6 +6,7 @@ import {
   DIRECTIVE_EDITABLE_FIELDS,
   DIRECTIVE_TYPES,
   diffDirectiveFields,
+  duplicateTitleMessage,
   fanOutCells,
   isDirectiveMovable,
   initialCellStatus,
@@ -292,4 +293,18 @@ test('isDirectiveMovable: a MISSING updated_by fails CLOSED (Karen LOW-5)', () =
   const missing = [{ status: 'todo', note: null } as unknown as MovabilityCell];
   assert.equal(isDirectiveMovable(missing).movable, false);
   assert.equal(isDirectiveMovable(missing).blockingCells, 1);
+});
+
+test('duplicateTitleMessage: ONE definition, so POST and PATCH cannot drift', () => {
+  // Karen re-gate LOW-2: this string used to be a literal in both routes under a
+  // comment asserting they were "kept verbatim in step". Nothing enforced it —
+  // her drift mutation survived with zero failures. Both routes now import this,
+  // so drift is unconstructable rather than watched; the assertions below pin the
+  // two things the message must carry.
+  const msg = duplicateTitleMessage('Chat Started', 'NBLYCRO');
+  assert.match(msg, /"Chat Started"/, 'names the offending title');
+  assert.match(msg, /NBLYCRO/, 'names the project, since uniqueness is per-project');
+  // The archived clause is load-bearing: without it "already exists" is baffling
+  // when the colliding directive is archived and therefore not on screen.
+  assert.match(msg, /including archived directives/);
 });

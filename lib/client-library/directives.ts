@@ -98,6 +98,25 @@ export function fanOutCells(directiveId: string, activeBrands: ReadonlyArray<Fan
   }));
 }
 
+// The duplicate-title rejection, shared by POST and PATCH.
+//
+// ONE definition, imported by both, because it was previously a literal copied
+// into each route under a comment asserting they were "kept verbatim in step" —
+// and nothing enforced that: a drift mutation survived with zero test failures
+// (Karen re-gate LOW-2). Same second-spelling defect this module removed for
+// CELL_STATUS_LABEL, and the same repair the movability reason string already
+// uses: return it from here so the two surfaces cannot tell different stories
+// about one rule.
+//
+// It names the archived-inclusion explicitly, because "already exists" is
+// baffling when the colliding directive is archived and therefore not on screen.
+export function duplicateTitleMessage(title: string, projectKey: string): string {
+  return (
+    `A directive titled "${title}" already exists in ${projectKey}. ` +
+    'Titles must be unique within a project, including archived directives.'
+  );
+}
+
 // -------------------------------------------------------------------------
 // Field diff for the directive PATCH route.
 //

@@ -4,6 +4,7 @@ import { getChangedBy } from '@/lib/audit/get-changed-by';
 import {
   DIRECTIVE_STATUSES,
   diffDirectiveFields,
+  duplicateTitleMessage,
   fanOutCells,
   isDirectiveMovable,
   isDirectiveType,
@@ -64,9 +65,6 @@ function isUniqueViolation(err: { code?: string } | null): boolean {
   return err?.code === UNIQUE_VIOLATION;
 }
 
-const DUPLICATE_MESSAGE = (title: string, projectKey: string) =>
-  `A directive titled "${title}" already exists in ${projectKey}. ` +
-  'Titles must be unique within a project, including archived directives.';
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
@@ -227,7 +225,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     }
     if (clash) {
       return NextResponse.json(
-        { error: DUPLICATE_MESSAGE(targetTitle, targetProjectKey) },
+        { error: duplicateTitleMessage(targetTitle, targetProjectKey) },
         { status: 409 },
       );
     }
@@ -363,6 +361,16 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     // SURVIVES rather than being destroyed. That is what keeps the residual race
     // a partial-apply-with-a-signal instead of silent loss.
     //
+    // ⚠ SCOPE OF THAT GUARD, stated precisely (Karen re-gate LOW-1): it covers
+    // THE APP'S WRITERS. A write that skips `updated_by` — direct SQL, which this
+    // project demonstrably uses — would have been excluded by the old
+    // `note IS NULL AND status IN (...)` form and is deleted by this one. The
+    // trade is deliberate: the whitespace-note wedge those clauses caused was
+    // reachable and PERMANENT, whereas a direct-SQL write landing inside a single
+    // request is not. But do not read this as "no write can slip through": that
+    // is the shape of the LOW-8 claim this batch already had to falsify, and the
+    // omission there was direct SQL too.
+    //
     // No brand exclusion is needed any more: the destination rows are not in
     // `staleCells` by construction (it filters them out above), where the old
     // brand-scoped form relied on source and destination brand sets being
@@ -470,7 +478,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       : '';
     if (isUniqueViolation(updateErr)) {
       return NextResponse.json(
-        { error: DUPLICATE_MESSAGE(targetTitle, targetProjectKey) + moveSuffix },
+        { error: duplicateTitleMessage(targetTitle, targetProjectKey) + moveSuffix },
         { status: 409 },
       );
     }

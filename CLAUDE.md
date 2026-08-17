@@ -4136,11 +4136,84 @@ editor · the `Hide archived` control + consumer wiring · the MEDIUM-4 close-pa
 unification · this fold). Jenny pre-flight DONE across TWO passes (spec rev 3);
 Karen post-flight PASS-WITH-FINDINGS, all folded.
 
+**KAREN RE-GATE on `b42c4f3..e5d8e34`: PASS-WITH-FINDINGS — 2 HIGH · 1 MEDIUM ·
+4 LOW.** Nine of eleven post-flight findings verified closed. **Both HIGHs were in
+the FIXES, not the core machinery — which held a third time** (the eight-consumer
+wiring, the archive/KPI barrier, the move's race handling and re-runnability all
+re-confirmed). All re-gate findings folded; see below.
+
 **Remaining before push: nothing in code.** **Migration 029 is NOT applied —
 Lacey runs it**, and it carries its own pre-flight query. Nothing has been
 rendered in a browser, and there is no route-level test harness in this repo, so
 the CRITICAL-1-shaped assertion (*PATCH a move on a worked directive → 409, cells
-unchanged by direct query*) is a Lacey-smoke item.
+unchanged by direct query*) is a Lacey-smoke item. **Karen's closing observation
+is worth keeping: both re-gate HIGHs are render/interaction defects, so a browser
+pass would likely have caught both — they live precisely in the gap the unrendered
+gate leaves open.**
+
+**⚠ RE-GATE HIGH-1 — the original HIGH-1 SURVIVED IN THE OTHER BRANCH, and my fix
+for it was half a fix.** Putting `activeCount` in the base corrected the
+unfiltered form and left `shown` — `matrixRows.length`, which **includes archived
+rows when the toggle is off** — as the numerator of the `N of M` form. So a mixed
+numerator ran against an active-only denominator while `+ N archived` re-counted a
+row already inside it: *"68 of 87 directives + 1 archived"* where 68 already
+contained the 1, and on an archive-heavy project **a numerator larger than its
+denominator** (*"7 of 3 directives + 5 archived"*). Reachable on the first *Show
+archived* click, because the State group defaults to `open`.
+**Fixed by deleting the mixed input rather than guarding it:** the function now
+takes `shownActive` and `shownArchived` separately, and `hideArchived` /
+`archivedCount` are gone — `shownArchived` already answers "are any on screen",
+so there is no second input to disagree with it. The combined form is
+unconstructable, the same repair used for `staleIds` and the movability reason.
+
+**⚠ RE-GATE HIGH-2 — MY OWN AUDIT MISSED A CLOSE PATH, AND THE AUDIT'S SHAPE IS
+WHY.** COMMIT 7 claimed "exactly ONE `setEditingDirectiveId(null)` remains" on the
+strength of a grep for that **literal string**. The row's Edit/Close toggle
+assigns `setEditingDirectiveId(isEditingDirective ? null : directive.id)` — the
+**ternary form the literal could not match**. That is §13 r38 mechanism (a): a
+source-shape check that cannot distinguish what it was meant to protect, and I
+stated a count on it.
+Two defects followed. The button reads **"Close"** while the editor is open, so
+the *most discoverable* dismissal — the same control that opened it, one row above
+— stayed unguarded: MEDIUM-4's own scenario, unfixed on the primary path. And
+because it never reset `editorDirty`, it left the flag **stuck true**, so the next
+cell-dot click prompted over an editor that was not on screen and "Keep editing"
+made that click silently do nothing. **That second defect was created BY the
+MEDIUM-4 fix** — before it there was no page-level flag to strand.
+Fixed; the count is now re-derived without a literal match (one CLOSE assignment
+inside `closeDirectiveEditor`, one OPEN assignment, and every path touching
+`editingDirectiveId` also handles `editorDirty`). **There are SIX close paths, not
+five** — the miscount is what let one go unguarded, so they are now enumerated
+individually at the state declaration.
+
+**RE-GATE MEDIUM-1 — my property test could not fail on the numerator, and Karen
+demonstrated it passing on the broken outputs.** It pinned the denominator and the
+absence of the all-status literal; nothing constrained `shown`. r38 mechanism (c)
+again — right oracle, inputs that cannot discriminate — and my own bound comment
+("more rows rendered than renderable is not a state the page can produce") was
+true and irrelevant: the reachable bug was `shown > activeCount`. Tests now assert
+whole strings plus a property over an archive-heavy spread that pins numerator,
+denominator and addend independently. Mutating the numerator to the mixed form
+fails 3 tests where it previously passed.
+
+**RE-GATE LOWs folded:** the delete's race guard now states its scope honestly
+(it covers the APP's writers; a direct-SQL write skipping `updated_by` would have
+been caught by the clauses it replaced — the trade is deliberate but must not be
+described as total, which is the LOW-8 shape again); the duplicate-title message
+is **one exported function** rather than a literal in two routes under a comment
+claiming they were "kept verbatim in step" while **Karen's drift mutation survived
+with zero failures**; and a nav switch mid-confirm no longer orphans the dialog.
+LOW-4 (Radix restoring focus to the cell dot rather than the still-open editor) is
+recorded, not fixed — cosmetic, and the Esc-ordering guarantee does not depend on
+it.
+
+**Two things Karen found STRONGER than I argued.** The `pulse:project` path's
+justification is better than stated: `setProjectKey(detail)` runs *above* the
+close and the nav broadcasts before navigating, so a refuse branch could not
+prevent the switch **even in principle** — the desync is unavoidable, not merely
+undesirable. And Esc-at-the-prompt works for a different reason than the nested
+dialog gave: Radix's modal focus trap means the editor's `onKeyDown` never sees
+the Escape at all.
 
 *(This block previously said "ALL SIX BUILD COMMITS DONE" and then, five lines
 later in the same paragraph, listed three of those commits as "Remaining" — Karen

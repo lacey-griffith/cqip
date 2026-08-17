@@ -273,17 +273,29 @@ export default function ClientLibraryPage() {
   // two open editors in one row would compete for the same expansion slot, and
   // the row would have two Save buttons meaning different things.
   const [editingDirectiveId, setEditingDirectiveId] = useState<string | null>(null);
-  // ⚠ THE DIRTY GUARD LIVES HERE, NOT IN THE STRIP — and that is the whole
-  // point of it living here. When the strip owned it, the guard covered only the
-  // two dismissals the strip knows about (Esc, Cancel), while the PAGE closed the
-  // editor in three more places by calling setEditingDirectiveId(null) directly:
-  // clicking a cell dot, switching project, and the pulse:project nav event. So
-  // editing a title and clicking any status dot discarded the edit silently —
-  // the exact loss the guard exists to prevent, on the most natural interaction
-  // on this page. A guard covering two of five paths is not a guard.
+  // ⚠ THE DIRTY GUARD LIVES HERE, NOT IN THE STRIP.
   //
-  // The strip reports dirtiness up via onDirtyChange (from its single update()),
-  // and every close route below goes through attemptCloseEditor.
+  // When the strip owned it, the guard covered only the two dismissals the strip
+  // knows about (Esc, Cancel) while the PAGE closed the editor elsewhere by
+  // assigning editingDirectiveId directly — so editing a title and clicking a
+  // status dot discarded the edit silently.
+  //
+  // THERE ARE SIX CLOSE PATHS, not the five an earlier version of this comment
+  // claimed, and the miscount cost a real defect: the row's own Edit/Close
+  // toggle was omitted, so the fix shipped leaving the MOST discoverable
+  // dismissal unguarded AND stranding editorDirty true (Karen re-gate HIGH-2).
+  // Written out because getting the count wrong is how a path goes unguarded:
+  //
+  //   1. Esc inside the editor            -> onRequestClose  (guarded)
+  //   2. the editor's Cancel button       -> onRequestClose  (guarded)
+  //   3. the row's Edit/Close toggle      -> guarded         (was NOT)
+  //   4. clicking any cell dot            -> guarded, cell editor is the `after`
+  //   5. switching project in the picker  -> guarded, the switch is the `after`
+  //   6. the pulse:project NAV event      -> deliberately UNGUARDED, see below
+  //
+  // The strip reports dirtiness up via onDirtyChange (from its single update()).
+  // Paths 1-5 route through attemptCloseDirectiveEditor; only 6 does not, and
+  // the reason lives at that call site rather than being asserted here.
   const [editorDirty, setEditorDirty] = useState(false);
   const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
   // What to run once the user confirms discarding. A ref, not state: it is never
@@ -582,8 +594,13 @@ export default function ClientLibraryPage() {
       if (typeof detail === 'string' && detail && detail !== projectKey) {
         setProjectKey(detail);
         setExpandedCell(null); // symmetric with handleProjectChange — no stale open editor across a switch
-        // ⚠ THE ONE CLOSE PATH THAT IS NOT GUARDED, deliberately, and it is the
-        // fifth rather than one of the four.
+        // ⚠ THE ONE CLOSE PATH THAT IS NOT GUARDED, deliberately — path 6 of the
+        // six enumerated where editorDirty is declared.
+        //
+        // Stronger than first argued (Karen re-gate): setProjectKey(detail) runs
+        // ABOVE this line, and the nav broadcasts before it navigates, so a
+        // "refuse" branch could not prevent the switch even in principle. The
+        // desync is not merely undesirable, it is unavoidable.
         //
         // This fires when the user picks a client in the NAV, which has already
         // broadcast the change. Prompting here could only end one of two ways:
@@ -595,6 +612,11 @@ export default function ClientLibraryPage() {
         // Recorded rather than quietly accepted: if nav-away needs guarding, the
         // fix is upstream — the nav asking before it broadcasts — not here.
         closeDirectiveEditor();
+        // LOW-3: dismiss the prompt too, if it happens to be open. Without this a
+        // nav switch mid-confirm leaves "Discard your changes?" floating over a
+        // page that has already changed project, asking about an editor that is
+        // already gone.
+        setConfirmDiscardOpen(false);
         setPinned(null);
         setHover(null);
         setHighlightBrandId(null);
@@ -950,6 +972,17 @@ export default function ClientLibraryPage() {
     () => directives.filter((d) => d.status === 'archived').length,
     [directives],
   );
+  // Rendered rows split by lifecycle. The result line needs these SEPARATE:
+  // matrixRows includes archived rows whenever the toggle is off, so a single
+  // combined count compared against an active-only total mixes populations —
+  // which is the residual half of the original HIGH-1 (Karen re-gate). Splitting
+  // here is what makes the mixed form unconstructable downstream.
+  const shownCounts = useMemo(() => {
+    let active = 0;
+    for (const row of matrixRows) if (row.directive.status === 'active') active += 1;
+    return { active, archived: matrixRows.length - active };
+  }, [matrixRows]);
+
   // The ACTIVE total for this project, independent of the toggle. This is the
   // figure the KPI strip's `total` reports, so the result line quoting the same
   // number is what keeps the two from contradicting each other on one screen.
@@ -1357,11 +1390,9 @@ export default function ClientLibraryPage() {
                     states, which is the invariant §8 asserts. */}
                 <span className="tabular-nums">
                   {buildResultCountLabel({
-                    shown: matrixRows.length,
-                    renderable: visibleDirectives.length,
+                    shownActive: shownCounts.active,
                     activeCount,
-                    archivedCount,
-                    hideArchived,
+                    shownArchived: shownCounts.archived,
                     projectLabel,
                   })}
                 </span>
@@ -1967,8 +1998,39 @@ export default function ClientLibraryPage() {
                                 <button
                                   type="button"
                                   onClick={() => {
+                                    // ⚠ THE SIXTH CLOSE PATH, and the one the
+                                    // MEDIUM-4 fix missed — while claiming to
+                                    // have unified them all.
+                                    //
+                                    // When the editor is open this button reads
+                                    // "Close", so it is the MOST discoverable
+                                    // dismissal: the same control the user
+                                    // clicked to open, sitting in the row
+                                    // directly above the editor. It used to set
+                                    // editingDirectiveId directly, which meant
+                                    // (a) no prompt on the likeliest path, and
+                                    // (b) editorDirty left STUCK TRUE, because
+                                    // only closeDirectiveEditor resets it and
+                                    // onDirtyChange never fires on mount — after
+                                    // which the next cell-dot click prompted
+                                    // over an editor that was not on screen, and
+                                    // "Keep editing" made that click silently do
+                                    // nothing.
+                                    //
+                                    // (b) was created BY the MEDIUM-4 fix: before
+                                    // it there was no page-level dirty flag to
+                                    // strand. A fix that introduces the state it
+                                    // then fails to maintain.
+                                    if (isEditingDirective) {
+                                      attemptCloseDirectiveEditor();
+                                      return;
+                                    }
                                     setExpandedCell(null);
-                                    setEditingDirectiveId(isEditingDirective ? null : directive.id);
+                                    setEditingDirectiveId(directive.id);
+                                    // Opening is not a close, but the flag must
+                                    // start clean: a previous editor's dirtiness
+                                    // must not carry into this one.
+                                    setEditorDirty(false);
                                   }}
                                   aria-expanded={isEditingDirective}
                                   className="w-fit text-xs font-medium text-[color:var(--f92-orange)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--f92-focus-ring)]"
