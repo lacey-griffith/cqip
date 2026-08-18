@@ -110,17 +110,17 @@ export function DirectiveEditStrip({
   // enumerated path (Karen fold re-gate MEDIUM-2, path 8).
   //
   // This strip renders inside the matrix row map, gated on the row being in
-  // `matrixRows`. So it can disappear with NO setter running at all: type in the
-  // search box, or switch a State/Status/Type tab, and if the edited directive
-  // falls out of the filtered set its row unmounts. `editingDirectiveId` then
-  // still points at a row that is not rendered, and `editorDirty` STAYS TRUE —
-  // which re-creates HIGH-2(b)'s exact symptom by a different route: the next
-  // cell-dot click raises "Discard your changes?" for an editor that is not on
-  // screen, and "Keep editing" makes that click silently do nothing.
+  // `matrixRows`. So it can disappear with NO setter running at all: if the edited
+  // directive falls out of the filtered set, its row unmounts.
+  // `editingDirectiveId` then still points at a row that is not rendered, and
+  // `editorDirty` STAYS TRUE — which re-creates HIGH-2(b)'s exact symptom by a
+  // different route: the next cell-dot click raises "Discard your changes?" for an
+  // editor that is not on screen, and "Keep editing" makes that click silently do
+  // nothing.
   //
-  // The page's six-path enumeration could not cover this, because its unit is
-  // "something assigns editingDirectiveId" and nothing here does. Rather than
-  // add paths 7, 8, 9… as they are discovered, clearing on unmount covers EVERY
+  // The page's path enumeration could not cover this, because its unit is
+  // "something assigns editingDirectiveId" and nothing here does. Rather than add
+  // paths 9, 10, 11… as they are discovered, clearing on unmount covers EVERY
   // disappearance including ones nobody has thought of yet — the same reason the
   // movability predicate is a conjunction rather than a list of known-bad cases.
   //
@@ -128,16 +128,43 @@ export function DirectiveEditStrip({
   // deliberately so: redundant-and-correct beats exhaustive-and-hopeful.
   //
   // ⚠ WHAT THIS DOES NOT DO: it does not save the edit, and it does not prompt.
-  // Filtering the row away still discards unsaved work. Prompting was rejected
-  // because the trigger is a SEARCH KEYSTROKE — a confirm dialog per character
-  // is worse than the loss it prevents. Recorded as a known limitation rather
-  // than fixed, and it is the one remaining way to lose an edit without being
-  // asked.
+  // An unmount still discards unsaved work.
+  //
+  // The DISCRETE-CLICK droppers are now guarded upstream — the Hide-archived
+  // checkbox and the State / Status / Type tabs go through guardFilterChange,
+  // which prompts only when the click would actually drop the edited row (Karen
+  // gate MEDIUM-1). An earlier version of this comment claimed the keystroke
+  // argument covered all of them; it covered one.
+  //
+  // SEARCH remains unguarded, and is now the ONLY way to lose an edit without
+  // being asked: a confirm dialog per character is worse than the loss it
+  // prevents. That is the whole of the remaining limitation.
+  // ⚠ THE CLEANUP DOES NOT DEPEND ON `onDirtyChange`'s IDENTITY, and that is a
+  // fix rather than a style choice (Karen gate LOW-1).
+  //
+  // Written as `useEffect(cleanup, [onDirtyChange])` it worked only because the
+  // page happens to pass a bare `setEditorDirty`, whose identity React
+  // guarantees. Wrap that prop in an inline arrow — `onDirtyChange={(d) =>
+  // setEditorDirty(d)}`, the most ordinary edit imaginable — and the deps change
+  // every render, so React runs the CLEANUP every render: a keystroke sets the
+  // flag true, the re-render immediately clears it, and THE ENTIRE DIRTY GUARD
+  // STOPS FIRING ON ALL EIGHT PATHS. With `exhaustive-deps` satisfied, tsc clean
+  // and every test green.
+  //
+  // A comment naming the requirement would have been the weaker fix — the
+  // mechanism claimed to cover "every disappearance including ones nobody has
+  // thought of yet" while resting on an undocumented property of its caller. So
+  // the latest callback goes in a ref and the cleanup depends on nothing: it now
+  // runs on unmount and only on unmount, whatever the caller passes.
+  const onDirtyChangeRef = useRef(onDirtyChange);
+  useEffect(() => {
+    onDirtyChangeRef.current = onDirtyChange;
+  }, [onDirtyChange]);
   useEffect(() => {
     return () => {
-      onDirtyChange(false);
+      onDirtyChangeRef.current(false);
     };
-  }, [onDirtyChange]);
+  }, []);
 
   async function handleSave() {
     if (submitting) return;

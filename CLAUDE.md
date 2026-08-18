@@ -4184,6 +4184,57 @@ simply **disappears**:
   now the one remaining way to lose an edit without being asked, and it is
   recorded rather than papered over.
 
+**KAREN GATE on `809ce8c`: PASS-WITH-FINDINGS — 0 CRITICAL · 0 HIGH · 1 MEDIUM ·
+2 LOW.** All four fold-re-gate findings closed. She confirmed the
+`splitShownByLifecycle` extraction is TOTAL, re-derived the close-path count by
+AST against the new unit, and — answering the question I flagged as least certain
+— confirmed **clear-on-unmount cannot create a silent-loss path**, because the
+unmount has already destroyed the form state, so clearing a page-level boolean
+afterwards cannot lose anything that was not already gone. Folded in COMMIT 11.
+
+**⚠ GATE MEDIUM-1 — the keystroke justification was applied to a bucket that also
+holds discrete single clicks.** Path 8's accepted limitation read *"the trigger is
+a SEARCH KEYSTROKE — a confirm dialog per character is worse than the loss"*. True
+of typing, and **not** true of the other members of that bucket: the
+**Hide-archived checkbox** and the **State / Status / Type tabs** are single
+clicks, and every other discrete-click close on the page was already guarded — so
+the inconsistency was internal to the batch, not a matter of taste. Karen's
+reachable scenario: uncheck *Hide archived*, click **Edit** on the archived row
+(**the Edit button has no status gate**), retype the title, re-check the box — the
+row leaves the rendered set and the edit is gone with **no prompt**. One
+deliberate click, one silent loss.
+Fixed with a new pure `editedRowSurvives`, which **reuses `buildMatrixRows`**
+rather than re-deriving "would this row show", so it cannot drift from what
+actually renders. The four discrete controls route through it and prompt **only
+when the click would actually drop the edited row** — prompting on every filter
+change would be safe but would train the user to click through a dialog that is
+usually wrong, which is how a guard stops working without breaking. **Sort is
+deliberately not a consumer:** it reorders and cannot drop a row.
+**Search stays unguarded, and is now the ONLY way to lose an edit unasked.**
+
+**⚠ GATE LOW-1 — clear-on-unmount silently rested on a property of its caller,
+and Karen showed the failure is total.** Written `useEffect(cleanup,
+[onDirtyChange])`, it worked only because the page passes a bare `setEditorDirty`
+whose identity React guarantees. Wrap that prop in an inline arrow — the most
+ordinary edit imaginable — and the deps change every render, so the CLEANUP runs
+every render: a keystroke sets the flag, the re-render clears it, and **the entire
+dirty guard stops firing on all eight paths**, with `exhaustive-deps` satisfied,
+tsc clean and every test green. A comment naming the requirement would have been
+the weaker fix, since the mechanism claimed to cover "every disappearance
+including ones nobody has thought of yet" while resting on something undocumented.
+**The dependency is now removed rather than documented:** the latest callback
+lives in a ref and the cleanup depends on nothing.
+
+**GATE LOW-2 — a claim of mine was imprecise and is corrected.** I wrote "both of
+Karen's surviving mutations fail". One does (count-all-as-active, 3 failures). The
+other — keying the split off `hideArchived` — **cannot be written in lib at all**,
+since `hideArchived` is not in scope there, which is stronger than "caught"; but in
+its only remaining constructible form, wrapping the call at the caller, **it still
+survives with every gate green.** The extraction narrowed the untested surface from
+three lines of logic to a single call expression; it did not make the caller
+covered. Stated because the same phrasing is what made MEDIUM-1 look closed a
+round earlier.
+
 **LOWs folded.** Spec §4.2's table gained a fifth row: the addend is
 `shownArchived` (archived rows *surviving the filters*), not the project total, so
 it correctly disappears when filters exclude the archived row — both figures

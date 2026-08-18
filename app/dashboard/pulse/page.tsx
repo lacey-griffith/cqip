@@ -69,6 +69,7 @@ import {
 import {
   buildMatrixRows,
   buildResultCountLabel,
+  editedRowSurvives,
   splitShownByLifecycle,
   computeMatrixKpis,
   countArchivedMatchingSearch,
@@ -86,6 +87,7 @@ import {
   MATRIX_TYPE_FILTERS,
   MATRIX_TYPE_FILTER_LABEL,
   type MatrixCellSelection,
+  type MatrixControls,
   type MatrixSortKey,
   type MatrixStatusFilter,
   type MatrixTypeFilter,
@@ -932,6 +934,32 @@ export default function ClientLibraryPage() {
     [projectKey, loadProject, toast],
   );
 
+  // Guard a DISCRETE filter click that would drop the row being edited.
+  //
+  // Path 8's "confirm per keystroke" justification covers typing in the search
+  // box and nothing else — the Hide-archived checkbox and the three filter tabs
+  // are single clicks, and every other discrete-click close on this page is
+  // guarded (Karen gate MEDIUM-1). Search stays unguarded, deliberately: a
+  // dialog per character is worse than the loss.
+  //
+  // Only prompts when the click ACTUALLY drops the edited row, computed through
+  // the real pipeline. Prompting on every filter change would be safe but would
+  // train the user to click through a dialog that is usually wrong — which is how
+  // a guard stops working without breaking.
+  const guardFilterChange = useCallback(
+    (apply: () => void, nextControls: MatrixControls, nextHideArchived: boolean) => {
+      if (
+        editorDirty &&
+        !editedRowSurvives(editingDirectiveId, directives, cells, nextControls, nextHideArchived)
+      ) {
+        attemptCloseDirectiveEditor(apply);
+        return;
+      }
+      apply();
+    },
+    [editorDirty, editingDirectiveId, directives, cells, attemptCloseDirectiveEditor],
+  );
+
   // Directive edit / archive / restore / move. Returns null on success or the
   // failure MESSAGE, which the strip renders inline — the route's 409s ("N brand
   // cells have been edited", "a directive titled X already exists") are the
@@ -1211,7 +1239,13 @@ export default function ClientLibraryPage() {
                 options={MATRIX_STATUS_FILTERS}
                 labels={MATRIX_STATUS_FILTER_LABEL}
                 value={statusFilter}
-                onChange={(v) => setStatusFilter(v)}
+                onChange={(v) =>
+                  guardFilterChange(
+                    () => setStatusFilter(v),
+                    { ...controls, statusFilter: v },
+                    hideArchived,
+                  )
+                }
                 active={statusFilter !== 'all'}
               />
               {/* Labels come STRAIGHT from CELL_STATUS_LABEL — the same export
@@ -1225,8 +1259,24 @@ export default function ClientLibraryPage() {
                 options={CELL_STATUSES}
                 labels={CELL_STATUS_LABEL}
                 selected={cellFilter}
-                onToggle={(s) => setCellFilter((cur) => toggleCellStatus(cur, s))}
-                onClear={() => setCellFilter([])}
+                onToggle={(st) => {
+                  // Computed rather than using the updater form, because the
+                  // guard needs the PROSPECTIVE value to decide whether this
+                  // click drops the edited row.
+                  const next = toggleCellStatus(cellFilter, st);
+                  guardFilterChange(
+                    () => setCellFilter(next),
+                    { ...controls, cellFilter: next },
+                    hideArchived,
+                  );
+                }}
+                onClear={() =>
+                  guardFilterChange(
+                    () => setCellFilter([]),
+                    { ...controls, cellFilter: [] },
+                    hideArchived,
+                  )
+                }
               />
             </div>
 
@@ -1243,7 +1293,13 @@ export default function ClientLibraryPage() {
                 options={MATRIX_TYPE_FILTERS}
                 labels={MATRIX_TYPE_FILTER_LABEL}
                 value={typeFilter}
-                onChange={(v) => setTypeFilter(v)}
+                onChange={(v) =>
+                  guardFilterChange(
+                    () => setTypeFilter(v),
+                    { ...controls, typeFilter: v },
+                    hideArchived,
+                  )
+                }
                 active={typeFilter !== 'all'}
               />
 
@@ -1307,7 +1363,14 @@ export default function ClientLibraryPage() {
                   <input
                     type="checkbox"
                     checked={hideArchived}
-                    onChange={(e) => setHideArchived(e.target.checked)}
+                    onChange={(e) => {
+                      // THE REACHABLE INSTANCE Karen named: uncheck this, edit an
+                      // archived row (the Edit button has no status gate), re-check
+                      // — the row leaves the rendered set and the edit was gone
+                      // with no prompt.
+                      const next = e.target.checked;
+                      guardFilterChange(() => setHideArchived(next), controls, next);
+                    }}
                     className="h-4 w-4 rounded border-[color:var(--f92-border)] text-[color:var(--f92-orange)] focus:ring-[color:var(--f92-focus-ring)]"
                   />
                   Hide archived ({archivedCount})

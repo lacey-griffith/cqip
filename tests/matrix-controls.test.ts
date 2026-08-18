@@ -6,6 +6,7 @@ import { DIRECTIVE_STATUSES, type DirectiveStatus } from '../lib/client-library/
 import {
   buildMatrixRows,
   buildResultCountLabel,
+  editedRowSurvives,
   splitShownByLifecycle,
   classifyDirectiveCells,
   compareMatrixRows,
@@ -976,4 +977,87 @@ test('splitShownByLifecycle: an UNKNOWN status lands in neither count', () => {
   assert.equal(active, 1, 'unknown status must not be counted as active');
   assert.equal(archived, 1, 'unknown status must not be absorbed into archived');
   assert.equal(active + archived, 2, 'unknown status is counted by NEITHER figure, visibly');
+});
+
+// -------------------------------------------------------------------------
+// editedRowSurvives — "is this filter click about to destroy an unsaved edit?"
+//
+// Added after Karen's gate MEDIUM-1: path 8's accepted limitation was justified
+// with "the trigger is a SEARCH KEYSTROKE", and that reasoning was applied to a
+// bucket also containing discrete single clicks (Hide-archived, State/Status/Type
+// tabs) where it does not hold. This is what lets those clicks prompt WITHOUT
+// prompting on changes that would have lost nothing — a false prompt trains the
+// user to click through, which is how a guard stops working without breaking.
+// -------------------------------------------------------------------------
+const lifeDirective = (id: string, status: DirectiveStatus, type: 'goal' | 'trigger' = 'goal') => ({
+  id, title: `title-${id}`, directive_type: type, status,
+});
+
+test('editedRowSurvives: nothing being edited is always safe', () => {
+  // Returning true for null is what keeps the caller free of a null-check
+  // special case — it asks "would this destroy an edit?", and with no edit open
+  // the answer is no.
+  assert.equal(
+    editedRowSurvives(null, [lifeDirective('d1', 'active')], [], controls(), true),
+    true,
+  );
+});
+
+test('editedRowSurvives: Hide-archived re-check drops an edited ARCHIVED row', () => {
+  // KAREN'S EXACT SCENARIO: uncheck Hide archived, edit the archived row (the
+  // Edit button has no status gate), re-check. Before the guard this discarded
+  // the edit with no prompt.
+  const directives = [lifeDirective('dA', 'active'), lifeDirective('dZ', 'archived')];
+  const cells = [cell('dA', 'todo'), cell('dZ', 'todo')];
+  assert.equal(
+    editedRowSurvives('dZ', directives, cells, controls(), false),
+    true,
+    'archived row survives while archived rows are shown',
+  );
+  assert.equal(
+    editedRowSurvives('dZ', directives, cells, controls(), true),
+    false,
+    're-checking Hide archived DROPS it — this is the prompt case',
+  );
+  // And the active row is unaffected by the same click: no prompt for it.
+  assert.equal(editedRowSurvives('dA', directives, cells, controls(), true), true);
+});
+
+test('editedRowSurvives: a Type-tab change drops a non-matching edited row', () => {
+  const directives = [lifeDirective('dG', 'active', 'goal'), lifeDirective('dT', 'active', 'trigger')];
+  const cells = [cell('dG', 'todo'), cell('dT', 'todo')];
+  assert.equal(editedRowSurvives('dG', directives, cells, controls({ typeFilter: 'goal' }), true), true);
+  assert.equal(
+    editedRowSurvives('dG', directives, cells, controls({ typeFilter: 'trigger' }), true),
+    false,
+    'switching Type away from the edited row drops it',
+  );
+});
+
+test('editedRowSurvives: a change that keeps the row must NOT prompt', () => {
+  // The half that stops the guard becoming noise. Most filter clicks do not drop
+  // the edited row, and a "Discard your changes?" on those is worse than useless.
+  const directives = [lifeDirective('dG', 'active', 'goal'), lifeDirective('dT', 'active', 'trigger')];
+  const cells = [cell('dG', 'todo'), cell('dT', 'todo')];
+  for (const type of ['goal', 'all'] as const) {
+    assert.equal(
+      editedRowSurvives('dG', directives, cells, controls({ typeFilter: type }), true),
+      true,
+      `Type=${type} keeps the edited row, so no prompt`,
+    );
+  }
+});
+
+test('editedRowSurvives: reads the REAL pipeline, so a status filter drops too', () => {
+  // Reuses buildMatrixRows rather than re-deriving "would this show", so it
+  // cannot drift from what actually renders. A resolved directive under the
+  // default `open` filter is the proof: only the real pipeline knows that.
+  const directives = [lifeDirective('dR', 'active')];
+  const cells = [cell('dR', 'done')]; // 0 outstanding + 1 done => resolved
+  assert.equal(editedRowSurvives('dR', directives, cells, controls({ statusFilter: 'resolved' }), true), true);
+  assert.equal(
+    editedRowSurvives('dR', directives, cells, controls({ statusFilter: 'open' }), true),
+    false,
+    'the derived resolve state is what drops it — only the real pipeline knows',
+  );
 });

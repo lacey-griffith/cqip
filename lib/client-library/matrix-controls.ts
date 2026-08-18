@@ -642,6 +642,47 @@ export function computeMatrixKpis<D extends MatrixDirectiveLike>(
 // `hideArchived` and the project's archived total are gone too: `shownArchived`
 // already answers "are archived rows on screen, and how many", so a hidden
 // archived row cannot leak into the label through a second input that disagrees.
+// Would the row currently being edited still render under a PROSPECTIVE filter
+// state? Answers "is this click about to destroy an unsaved edit?"
+//
+// ⚠ WHY THIS EXISTS RATHER THAN PROMPTING ON EVERY FILTER CLICK.
+// The editor lives inside the matrix row map, so any filter change that drops the
+// edited row unmounts it and the edit is gone. Path 8's accepted limitation
+// justified that with "the trigger is a SEARCH KEYSTROKE — a confirm dialog per
+// character is worse than the loss" — true of typing, and NOT true of the bucket
+// it was applied to, which also holds discrete single clicks: the Hide-archived
+// checkbox, and the State / Status / Type tabs. Every other discrete-click close
+// on the page is guarded, so leaving those unguarded was internally inconsistent
+// (Karen gate MEDIUM-1).
+//
+// Prompting on every filter click would be safe but wrong in the other
+// direction: most changes do not drop the edited row, and a false "Discard your
+// changes?" on a tab that would have lost nothing trains the user to click
+// through the prompt — which is how a guard stops working without breaking.
+//
+// SORT IS DELIBERATELY NOT A CONSUMER. It reorders (`rows.sort` on the built
+// set) and cannot drop a row, so there is nothing to lose and nothing to ask.
+//
+// Reuses buildMatrixRows rather than re-deriving "would this row show", so there
+// is no second spelling of the pipeline to drift from the real one.
+export function editedRowSurvives<D extends MatrixDirectiveLike>(
+  editedId: string | null,
+  /** ALL loaded directives, raw — both lifecycles. */
+  directives: ReadonlyArray<D>,
+  cells: ReadonlyArray<MatrixCellLike>,
+  controls: MatrixControls,
+  hideArchived: boolean,
+): boolean {
+  // Nothing open, or nothing unsaved: there is no edit to protect, so every
+  // change is free. Returning true here is what keeps the caller free of a
+  // null-check special case.
+  if (!editedId) return true;
+  const visible = hideArchived
+    ? directives.filter((d) => d.status === 'active')
+    : directives;
+  return buildMatrixRows(visible, cells, controls).some((r) => r.directive.id === editedId);
+}
+
 // Split the RENDERED rows by lifecycle, for buildResultCountLabel's two inputs.
 //
 // ⚠ THIS IS IN LIB BECAUSE THE "UNCONSTRUCTABLE" CLAIM BELOW STOPPED ONE LINE
