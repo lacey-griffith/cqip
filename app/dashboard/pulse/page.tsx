@@ -69,8 +69,9 @@ import {
 import {
   buildMatrixRows,
   buildResultCountLabel,
-  editedRowSurvives,
+  shouldPromptForFilterChange,
   splitShownByLifecycle,
+  visibleForLifecycle,
   computeMatrixKpis,
   countArchivedMatchingSearch,
   countByType,
@@ -664,7 +665,11 @@ export default function ClientLibraryPage() {
   // Everything else — the rendered rows, the hidden-by-filters correction, the
   // type-tab empty state, and every `.length` readout — takes visibleDirectives.
   const visibleDirectives = useMemo(
-    () => (hideArchived ? directives.filter((d) => d.status === 'active') : directives),
+    // ONE definition of the lifecycle-visibility rule, shared with
+    // editedRowSurvives — which must evaluate it against a PROSPECTIVE flag and so
+    // cannot reuse this memo. Spelling it twice let the guard predict against a
+    // rule the page no longer used (Karen fold gate LOW-3).
+    () => visibleForLifecycle(directives, hideArchived),
     [directives, hideArchived],
   );
 
@@ -948,9 +953,19 @@ export default function ClientLibraryPage() {
   // a guard stops working without breaking.
   const guardFilterChange = useCallback(
     (apply: () => void, nextControls: MatrixControls, nextHideArchived: boolean) => {
+      // The DECISION is shouldPromptForFilterChange's, in lib, where it is
+      // mutation-tested. This function is deliberately a call plus two branches:
+      // when the conditional lived here, `if (false)` disabled the whole guard
+      // with every gate green, because this file has no coverage.
       if (
-        editorDirty &&
-        !editedRowSurvives(editingDirectiveId, directives, cells, nextControls, nextHideArchived)
+        shouldPromptForFilterChange(
+          editorDirty,
+          editingDirectiveId,
+          directives,
+          cells,
+          nextControls,
+          nextHideArchived,
+        )
       ) {
         attemptCloseDirectiveEditor(apply);
         return;

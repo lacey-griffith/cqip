@@ -4161,7 +4161,10 @@ lived in `page.tsx`, which has **no test coverage**, and two one-line edits ther
 (counting every rendered row as active, or keying the count off `hideArchived`)
 **reinstated the residual HIGH-1 with all 362 tests green**. The defect surface had
 MOVED, which is not the same as removed. Now a pure `splitShownByLifecycle` in
-lib with its own tests; both of Karen's surviving mutations fail.
+lib with its own tests. **⚠ "both of Karen's surviving mutations fail" — the
+sentence that stood here — WAS FALSE; corrected in place, see GATE LOW-2 below.**
+One fails; the other cannot be written in lib at all but still survives at the
+caller, because `page.tsx` remains uncovered.
 
 **FOLD RE-GATE MEDIUM-2 — the eight-path enumeration was itself the second
 defect, because its UNIT was wrong.** It counted *"something assigns
@@ -4234,6 +4237,47 @@ survives with every gate green.** The extraction narrowed the untested surface f
 three lines of logic to a single call expression; it did not make the caller
 covered. Stated because the same phrasing is what made MEDIUM-1 look closed a
 round earlier.
+
+**KAREN FOLD GATE on `3129800`: PASS-WITH-FINDINGS — 0 CRITICAL · 0 HIGH ·
+0 MEDIUM · 3 LOW.** The cleanest round of the chain. All three prior findings
+closed, two by mechanisms stronger than she asked for. She re-derived the consumer
+set **independently from every setter feeding `matrixRows`** and found **no missed
+dropper**; confirmed `editedRowSurvives` genuinely REUSES `buildMatrixRows` rather
+than reimplementing it (proven load-bearing — a naive membership test fails 2
+tests, the resolved-under-`open` case among them); and confirmed clear-on-unmount
+is **immune by construction** with **no stale closure**. All three LOWs folded in
+COMMIT 12.
+
+She also strengthened one classification of mine: the monitoring-panel
+`loadProject` refetch loses **nothing at all**, because rows are keyed on
+`directive.id` so the strip does not unmount, and the snapshot was captured by a
+`useState` initialiser on first mount. I had filed it as "same class as search".
+
+- **FOLD GATE LOW-1 — a known-false sentence was still standing in this file, 64
+  lines above its own retraction.** *"Both of Karen's surviving mutations fail"* sat
+  verbatim and unmarked under the FOLD RE-GATE MEDIUM-1 heading — the natural place
+  to look for "did the extraction cover the caller?" — so a reader got "yes" with
+  no reason to read on. **This is the trap §16 already records as having burned
+  this file twice**, and the batch's better practice is used correctly elsewhere in
+  the same entry (the delete-control paragraph, the movability block, the §4.2
+  table all mark the superseded claim IN PLACE). Now marked in place.
+- **FOLD GATE LOW-2 — the guard's DECISION was tested; its WIRING was not.**
+  `editedRowSurvives` was mutation-proof, but `page.tsx` still held the conditional
+  deciding whether to call it — and both `if (false)` and dropping the
+  `editorDirty` gate **disabled the entire MEDIUM-1 fix with every gate green.**
+  Now a pure `shouldPromptForFilterChange`, leaving the page a call plus two
+  branches. Both halves fail in opposite directions and both are pinned: drop the
+  dirty gate and it prompts over a **pristine** form (the false-prompt outcome the
+  predictive design exists to avoid); invert it and the loss is silent again.
+  **Karen's two surviving page-side mutations are now caught.**
+- **FOLD GATE LOW-3 — the lifecycle-visibility rule was spelled twice**, character
+  for character, in `page.tsx` and `matrix-controls.ts`. The duplication was
+  *necessary* (the guard evaluates a PROSPECTIVE flag a memo cannot supply) but
+  nothing pinned the two as one rule — so extending the page's copy would leave the
+  guard predicting against the old one, prompting on a click that keeps the row or
+  staying silent on one that drops it. Now one exported `visibleForLifecycle`
+  called by both. This batch has now removed this same shape three times
+  (`CELL_STATUS_LABEL`, the duplicate-title message, this).
 
 **LOWs folded.** Spec §4.2's table gained a fifth row: the addend is
 `shownArchived` (archived rows *surviving the filters*), not the project total, so

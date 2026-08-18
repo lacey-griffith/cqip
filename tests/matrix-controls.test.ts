@@ -7,7 +7,9 @@ import {
   buildMatrixRows,
   buildResultCountLabel,
   editedRowSurvives,
+  shouldPromptForFilterChange,
   splitShownByLifecycle,
+  visibleForLifecycle,
   classifyDirectiveCells,
   compareMatrixRows,
   countArchivedMatchingSearch,
@@ -1059,5 +1061,65 @@ test('editedRowSurvives: reads the REAL pipeline, so a status filter drops too',
     editedRowSurvives('dR', directives, cells, controls({ statusFilter: 'open' }), true),
     false,
     'the derived resolve state is what drops it — only the real pipeline knows',
+  );
+});
+
+// -------------------------------------------------------------------------
+// visibleForLifecycle + shouldPromptForFilterChange (Karen fold gate LOW-2/LOW-3)
+//
+// LOW-3: the lifecycle rule was spelled identically in two files, and nothing
+// pinned them together — extend one and the guard predicts against the other.
+// LOW-2: the DECISION to prompt lived in page.tsx, which has no coverage, so
+// `if (false)` disabled the entire filter guard with every gate green.
+// -------------------------------------------------------------------------
+test('visibleForLifecycle: hides archived only when asked', () => {
+  const ds = [lifeDirective('dA', 'active'), lifeDirective('dZ', 'archived')];
+  assert.deepEqual(visibleForLifecycle(ds, true).map((d) => d.id), ['dA']);
+  assert.deepEqual(visibleForLifecycle(ds, false).map((d) => d.id), ['dA', 'dZ']);
+  // Returns the input array when nothing is hidden — no needless copy, and the
+  // caller must not rely on identity either way.
+  assert.equal(visibleForLifecycle(ds, false).length, 2);
+});
+
+test('shouldPromptForFilterChange: a PRISTINE form never prompts', () => {
+  // The half that keeps the guard from becoming noise. Dropping this gate makes
+  // every filter click prompt over a form with no edits — the false-prompt
+  // outcome the predictive design exists to avoid.
+  const ds = [lifeDirective('dZ', 'archived')];
+  const cs = [cell('dZ', 'todo')];
+  assert.equal(
+    shouldPromptForFilterChange(false, 'dZ', ds, cs, controls(), true),
+    false,
+    'not dirty => never prompt, even though this click WOULD drop the row',
+  );
+  // ...and the same click with a dirty form DOES prompt, so the fixture proves
+  // the gate is what made the difference rather than the click being harmless.
+  assert.equal(shouldPromptForFilterChange(true, 'dZ', ds, cs, controls(), true), true);
+});
+
+test('shouldPromptForFilterChange: dirty + row survives => no prompt', () => {
+  const ds = [lifeDirective('dA', 'active')];
+  const cs = [cell('dA', 'todo')];
+  assert.equal(
+    shouldPromptForFilterChange(true, 'dA', ds, cs, controls(), true),
+    false,
+    'dirty but the click keeps the row => nothing to lose, so no prompt',
+  );
+});
+
+test('shouldPromptForFilterChange: dirty + row dropped => prompt', () => {
+  // Karen's reachable scenario, end to end: an archived row being edited, and the
+  // Hide-archived box being re-checked.
+  const ds = [lifeDirective('dA', 'active'), lifeDirective('dZ', 'archived')];
+  const cs = [cell('dA', 'todo'), cell('dZ', 'todo')];
+  assert.equal(shouldPromptForFilterChange(true, 'dZ', ds, cs, controls(), true), true);
+  assert.equal(shouldPromptForFilterChange(true, 'dZ', ds, cs, controls(), false), false);
+});
+
+test('shouldPromptForFilterChange: nothing open never prompts', () => {
+  assert.equal(
+    shouldPromptForFilterChange(true, null, [lifeDirective('dA', 'active')], [], controls(), true),
+    false,
+    'a dirty flag with no open editor is a stale flag, not a reason to prompt',
   );
 });

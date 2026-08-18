@@ -642,6 +642,27 @@ export function computeMatrixKpis<D extends MatrixDirectiveLike>(
 // `hideArchived` and the project's archived total are gone too: `shownArchived`
 // already answers "are archived rows on screen, and how many", so a hidden
 // archived row cannot leak into the label through a second input that disagrees.
+// The lifecycle-visibility rule: which directives may render at all.
+//
+// ⚠ ONE DEFINITION, because it was briefly TWO (Karen fold gate LOW-3). The page's
+// `visibleDirectives` memo and editedRowSurvives below spelled it
+// character-for-character identically in two files. The duplication was
+// NECESSARY — the guard must evaluate a PROSPECTIVE flag, which a memo over
+// current state cannot supply — but nothing pinned the two as the same rule, and
+// this batch has already removed exactly this shape twice (CELL_STATUS_LABEL, the
+// duplicate-title message).
+//
+// The failure it prevents is subtle: extend the page's copy (a third lifecycle
+// state, or a different polarity) and the guard keeps predicting against the OLD
+// rule — so it prompts on a click that would have kept the row, or stays silent on
+// one that drops it. Both directions are wrong and neither is visible.
+export function visibleForLifecycle<D extends { status: DirectiveStatus }>(
+  directives: ReadonlyArray<D>,
+  hideArchived: boolean,
+): ReadonlyArray<D> {
+  return hideArchived ? directives.filter((d) => d.status === 'active') : directives;
+}
+
 // Would the row currently being edited still render under a PROSPECTIVE filter
 // state? Answers "is this click about to destroy an unsaved edit?"
 //
@@ -677,9 +698,7 @@ export function editedRowSurvives<D extends MatrixDirectiveLike>(
   // change is free. Returning true here is what keeps the caller free of a
   // null-check special case.
   if (!editedId) return true;
-  const visible = hideArchived
-    ? directives.filter((d) => d.status === 'active')
-    : directives;
+  const visible = visibleForLifecycle(directives, hideArchived);
   return buildMatrixRows(visible, cells, controls).some((r) => r.directive.id === editedId);
 }
 
@@ -740,3 +759,33 @@ export function buildResultCountLabel(args: {
 // status-only version would under-report the moment a Type or Status(cell) tab
 // was the thing hiding rows, which is the false-negative the guard exists to
 // stop. Its rationale is preserved verbatim on the replacement.
+
+
+// Should a discrete filter click prompt before it lands?
+//
+// ⚠ THE DECISION LIVES HERE BECAUSE THE WIRING CANNOT BE TESTED (Karen fold gate
+// LOW-2). `editedRowSurvives` is mutation-proof, but the page still held the
+// conditional that decides whether to CALL it — and both `if (false)` and dropping
+// the `editorDirty` gate disabled the entire MEDIUM-1 fix with tsc, ESLint and
+// every test green, because `page.tsx` has no coverage. This batch's own pattern,
+// applied twice already for this reason, is to reduce the page to a call
+// expression; the guard had kept logic there.
+//
+// Both halves are load-bearing and fail in opposite directions:
+//   • drop the `editorDirty` gate  -> prompts over a PRISTINE form, which is the
+//     false-prompt outcome the predictive design exists to avoid, and which trains
+//     the user to click through the dialog.
+//   • drop the survives check      -> prompts on every filter click, same outcome
+//     by a different route.
+//   • drop either and invert       -> silent loss, the original defect.
+export function shouldPromptForFilterChange<D extends MatrixDirectiveLike>(
+  editorDirty: boolean,
+  editedId: string | null,
+  directives: ReadonlyArray<D>,
+  cells: ReadonlyArray<MatrixCellLike>,
+  nextControls: MatrixControls,
+  nextHideArchived: boolean,
+): boolean {
+  if (!editorDirty) return false;
+  return !editedRowSurvives(editedId, directives, cells, nextControls, nextHideArchived);
+}
