@@ -1,9 +1,10 @@
 # CQIP Batch Priority Outline
 
-**Updated:** 2026-08-15 (rev 6 — six discrepancies SETTLED; three batches folded; defect record extended)
-**Supersedes:** the 2026-07-29 rev-4 copy. **Delete rev 4 from project knowledge — this file replaces it.**
+**Updated:** 2026-08-19 (rev 7 — Batch 012 directive CRUD shipped + deployed; rev 6's backlog reconciled against its own DONE list; the CLAUDE.md size limit sequenced as a batch)
+**Supersedes:** the 2026-08-15 rev-6 copy, which predates this entire batch. **Delete rev 6 from project knowledge — this file replaces it.**
 **Canonical source:** CLAUDE.md §15/§16 wins; CROSS_CLAUDE.md §5 mirrors it; this file mirrors both.
-**Current deployed state:** Worker `5795a89` (verified via `/api/health` 2026-08-15) · **v2.9** · edge function `jira-sync` deployed 2026-08-09 23:22 UTC · **migrations 001–028, all applied**.
+**Current deployed state:** Worker `e518624` (verified via `/api/health` 2026-08-18) · **v3.0** · edge function `jira-sync` deployed 2026-08-09 23:22 UTC · **migrations 001–029, ALL APPLIED** — 029 (`idx_directives_project_title`, UNIQUE `(project_key, title)`, spanning archived rows) applied to **PRODUCTION** and verified by direct query in the prod Supabase SQL editor 2026-08-18.
+**⚠ DECLARED v3.0 ≠ DEPLOYED `e518624`.** The version bump and the r34 reconcile were a docs-only commit, so the Worker SHA deliberately did not advance. A new version beside an unchanged SHA is correct here — see the `/api/health` warning below, which is the same confusion in a different direction.
 **⚠ `/api/health` reports the WORKER ONLY** — it does not reflect Supabase edge-function deploys, so a matching SHA says nothing about `jira-sync`. This SHA has now misled twice; see settled discrepancy 6.
 **This revision:** the sync skip-if-empty guard batch recorded as shipped + verified; the sync-overwrite defect recorded with its full blast radius; keep-both-and-flag scoped as a new Jenny-gated batch; QMS Recs 1–3 sequenced for the first time; AI root-cause classifier parked with a stated reason; two render-only UI defects captured.
 
@@ -36,15 +37,33 @@ recorded here rather than deleted, so the next reader can see what was checked.
    ergonomics** batch (08-14, prod `5795a89`). **Remaining: restyle batch 4 of 4,
    NOT STARTED** — its Gate 0 audit-coverage count is done and recorded in §15, and
    it carries the G7 tab-stop item, which must not be folded earlier.
-4. **Directive count — SETTLED: 86 per project, 87 global.** NBLYCRO holds **86
-   ACTIVE** directives; the 87th active is **SPLCRO's**.
-   > **⚠ THE COINCIDENCE IS THE TRAP.** 87 is *also* NBLYCRO's ALL-STATUS count
-   > (86 active + 1 archived). Two different quantities landing on one number, and
-   > neither of them the per-project active figure that §15's render-ceiling
-   > derivations need — those are **86 × 13 = 1,118** under defaults and
-   > **86 × 16 = 1,376** paused-shown. Total cells are **1,393**, which counts the
-   > archived directive's 16. A cross-project product is meaningless here; group by
-   > `project_key` AND filter on `status`.
+4. **Directive count — rev 6's answer (86 / 87) IS NOW STALE. RE-DERIVED
+   2026-08-18**, grouped by `project_key` **and** filtered on `status`:
+
+   | Quantity | Figure |
+   |---|---|
+   | **NBLYCRO active directives** | **87** |
+   | NBLYCRO archived | 1 |
+   | SPLCRO active | 1 |
+   | Global active | 88 |
+   | All rows | 89 |
+
+   > **⚠ THE APPARENT THREE-WAY DISAGREEMENT WAS ONE STALE FIGURE PLUS ONE
+   > MISLABELLED COMPARISON — not three readings of one number.**
+   > · **"NBLYCRO active directives" = 87** — the live matrix header. **Correct.**
+   > · **"directives holding cell work" = 88 of 89 rows** — the 409 runbook's
+   >   figure. **A DIFFERENT QUANTITY**, and never in conflict once named: 88 of the
+   >   89 rows hold cell work, which is why exactly **1** is movable.
+   > · rev 6's **86 / 87** — genuinely **stale 2026-08-14 data**, superseded before
+   >   rev 6 shipped.
+   >
+   > **THE LABEL IS THE FIX.** Unlabelled, "88 of 89" reads as a contradiction again
+   > the next time someone opens the runbook — which is exactly what happened here.
+   > Rev 6's own warning still stands and is now sharper: 87 is *also* NBLYCRO's
+   > all-status count was true on 08-14 and is not today (all-status is 88), so even
+   > the coincidence has moved. **Group by `project_key` AND filter on `status`, and
+   > stamp the date** — this count has moved on every single probe, and every figure
+   > written into a doc has been wrong by the next one.
    >
    > **The matrix result count now renders the per-project figure**, so the number
    > is visible in the UI rather than only derivable — which is the dated-series
@@ -66,6 +85,18 @@ recorded here rather than deleted, so the next reader can see what was checked.
 ## DONE (recent, for context)
 
 ```
+✅ 012 directive CRUD (edit·soft-delete·archive)      SHIPPED + PUSHED + DEPLOYED 2026-08-18
+                                                      15 commits 887f55e → e518624 · v2.9 → v3.0
+                                                      migration 029 APPLIED TO PRODUCTION
+                                                      Jenny ×2 · FIVE Karen rounds:
+                                                        2H/7M/5L → 2H/1M/4L → 0/2M/2L
+                                                        → 0/1M/2L → 0/0/3L
+                                                      Read the SHAPE: the build's HIGHs were
+                                                      round-one only; EVERY round-two HIGH was
+                                                      in a FIX; rounds 3-5 found nothing above
+                                                      MEDIUM. Core machinery re-confirmed at
+                                                      three separate trees — what kept failing
+                                                      was the CLAIMS.
 ✅ 005.1  Coverage redesign + BrandAdminDrawer        SHIPPED 2026-07-03
 ✅ auth chain + login-events + create-flow            SHIPPED + PUSHED 2026-07-06/07
 ✅ Brand Wellness (report + Reggie CTA)               SHIPPED + PUSHED 2026-07-07
@@ -215,8 +246,21 @@ Rec 2   Version the requirement set        closes G1 + G4a. Small schema → Jen
 Rec 3   Split 010.1 (target vs alerting)   closes G4. Forward-compat work already done.
 ```
 
-**Cheap, ride along on the next render batch:** rename Quality Score → "Clean
-delivery rate" *(already shipped per working notes — confirm and strike)* ·
+**⚠ REC 1 STATUS (new in rev 7) — the `audit_log` evidence half is EXHAUSTED.**
+**REPORTED BY LACEY, not derived here, and deliberately not re-probed:** the
+`audit_log` route to bounding the ticket-lag threat is exhausted at **n=4** — too
+few rows to carry a provability-to-client claim. **The remaining path is SharePoint
+screenshot metadata, by hand.** Rev 6 does not record this, and it changes Rec 1
+from "cheapest item on the board" to "cheapest *remaining* path is manual" — which
+is still worth doing first under the locked Q1, but is no longer nearly free. The
+figure is marked unverified on purpose: an unverified number labelled unverified is
+correct, while the same number written as derived is the **G5a** failure this file
+already tracks.
+
+**Cheap, ride along on the next render batch:** ~~rename Quality Score → "Clean
+delivery rate"~~ **✅ STRUCK — SHIPPED at `9088343`**, as rev 6's own DONE list
+records; rev 6 nonetheless still said *"confirm and strike"*, which is the same
+self-contradiction as the two backlog items above ·
 answer Q6 (composite weights or separate the domains) · promote the claims-tense
 rule (G5a) to a standing rule · specs cited by section number, never paraphrased.
 
@@ -228,7 +272,34 @@ one external human review. Do not bring another self-review as evidence against 
 ## OPEN SEQUENCE
 
 ```
- 1  QMS Rec 1        Ticket-lag sample analysis    No build, no schema, no gate. Cheapest
+ 1  CLAUDE.md SPLIT  §16 archive by month          ⚠ QMS FINDING G5, ARRIVING AS A HARD
+                                                    FAILURE RATHER THAN A PREDICTION. The
+                                                    file is 631,560 chars against a 150k
+                                                    read limit, so it can no longer be read
+                                                    whole by the tool that is instructed to
+                                                    treat it as ground truth. The r34
+                                                    reconcile was only completable by grep +
+                                                    targeted replacement with uniqueness
+                                                    assertions; a single truncating read
+                                                    mid-commit would have been unrecoverable.
+                                                    SCOPE CONSTRAINTS, all three load-bearing:
+                                                    (a) split §16 BY MONTH — one archive file
+                                                        fails the same limit on the same
+                                                        trajectory;
+                                                    (b) the archive is APPEND-ONLY HISTORY and
+                                                        NEVER authority for current state —
+                                                        wants a §13 rule, or it becomes a new
+                                                        drift surface, which is trading one G5
+                                                        for one G1;
+                                                    (c) define WHERE NEW ENTRIES GO, not just
+                                                        where old ones move. Growth is the
+                                                        reason this is now urgent, so a batch
+                                                        that only relocates history buys
+                                                        months, not a fix.
+                                                    Sequenced at #1 ahead of restyle batch 4:
+                                                    every batch after this one pays the same
+                                                    tax, and the tax is now a hard failure.
+ 2  QMS Rec 1        Ticket-lag sample analysis    No build, no schema, no gate. Cheapest
                                                     item with the highest review credibility
                                                     per hour. Q1 = provability makes it
                                                     mandatory. Do this first.
@@ -236,7 +307,7 @@ one external human review. Do not bring another self-review as evidence against 
                                                     (cdb2cc6, v2.9) + the portal fix
                                                     (9a65bb6 → 211e237). Shipped as ONE
                                                     batch as specified.
- 2  012 ▸ PULSE      restyle batch 4 of 4          Discrepancy 3 settled: the parity +
+ 3  012 ▸ PULSE      restyle batch 4 of 4          Discrepancy 3 settled: the parity +
                                                     restyle SERIES is otherwise complete.
                                                     Batch 4 NOT STARTED; Gate 0 done.
                                                     Carries G7 tab-stops — do not fold
@@ -350,14 +421,16 @@ here on. Scope it that way or it won't justify itself.
 ## BACKLOG
 
 ```
-- Logs page filter bar                    Add search input. Brand dropdown renders wrong
-                                           (needs a UI read to characterize). Reduce
-                                           vertical space, usability pass. Render-only.
-                                           SHIP WITH the modal guard below.
-- Edit-log modal dirty-state dismiss      Outside-click / Esc discards unsaved edits with
-                                           no warning. Block dismiss when dirty; confirm to
-                                           discard; X and Cancel still close; pristine
-                                           closes freely. Render-only.
+- ~~Logs page filter bar~~                 ✅ STRUCK — SHIPPED 2026-08-14 (cdb2cc6) +
+                                           the portal fix (9a65bb6 → 211e237).
+                                           ⚠ REV 6 CARRIED THIS IN BACKLOG WHILE ITS OWN
+                                           DONE LIST RECORDED IT SHIPPED. An internal
+                                           contradiction in one file is worse than a stale
+                                           entry, because both halves look authoritative.
+- ~~Edit-log modal dirty-state dismiss~~   ✅ STRUCK — SHIPPED 2026-08-14 (cdb2cc6),
+                                           same batch as the filter bar, as rev 6's own
+                                           DONE list records. Second half of the same
+                                           contradiction.
                                            REJECTED alternative: 1-min autosave — partial
                                            writes to prod, audit-log noise in the exact
                                            trail the guard batch just started producing,
@@ -406,15 +479,27 @@ here on. Scope it that way or it won't justify itself.
                                            ambiguity (same changed_by). Four options costed
                                            in §15; keying the seeding effect on log.id is the
                                            most promising and is a design change.
-- Archived directives invisible to search  loadProject loads status='active' only, so an
-                                           archived directive counts 0 toward hiddenByStatus
-                                           and an exists-but-archived title reads as "found
-                                           nothing". Now LIVE — see the defect record.
+- ~~Archived directives invisible to search~~ ✅ STRUCK — CLOSED by 012 directive CRUD
+                                           2026-08-18. `loadProject` now loads ALL statuses
+                                           and filters at render; archived rows are VIEWABLE
+                                           behind a `Hide archived` toggle rather than merely
+                                           counted, and the archived-search signal is gated on
+                                           that toggle so its "…are not shown" wording cannot
+                                           be false.
 - G7 grid tab-stop burden                  ~1,300 tab stops for read-only users. Wants a
                                            roving tabindex over role="grid". Recorded
                                            against restyle batch 4 — do NOT fold earlier.
-- Duplicate-title check on POST /api/admin/directives
-- LOW-8 archive-UI signal obligation
+- ~~Duplicate-title check on POST /api/admin/directives~~  ✅ STRUCK — CLOSED 2026-08-18.
+                                           Migration 029 UNIQUE (project_key, title) applied
+                                           to PRODUCTION + a 409 from POST *and* PATCH. The
+                                           POST half was missed by the build and caught by
+                                           Karen round 1 — without it, 029 would have turned a
+                                           retyped title into a raw Postgres constraint error.
+- ~~LOW-8 archive-UI signal obligation~~   ✅ STRUCK — paid in full 2026-08-18 by the same
+                                           batch. Standing lesson kept: a "no writer exists"
+                                           claim must state WHICH SURFACES were checked — that
+                                           audit read `app/api/` only, and direct SQL was
+                                           outside its scope.
 - MLY FLF dual-mapping                     Convert-side tracking, not a code fix.
 - Unmapped-active goals → future CREATE batch
 - Paused-brand reconciliation re-run
@@ -426,11 +511,61 @@ here on. Scope it that way or it won't justify itself.
 - Coverage "true all-time incl. pre-Jira"  parked: coverage surface, or archive-only?
 - login_events read side                   count column + heatmap; all-admins-vs-owner-only
                                            still open
+- ⚠ POSITIVE CASE UNRUN                    The movability guard has been observed REFUSING
+                                           but NEVER PERMITTING. §8's "a freshly created
+                                           directive is movable" was deliberately skipped: it
+                                           writes a permanent directive to prod, and per §5.1
+                                           archiving does not free the title. That half rests
+                                           on unit tests, the fanOutCells-anchored one being
+                                           the real evidence since it pins the predicate to
+                                           its actual producer rather than to a fixture that
+                                           agrees with it by construction. THE BATCH'S OLDEST
+                                           OPEN ITEM — the two halves of the feature have
+                                           asymmetric evidence.
+- ⚠ clearAllFilters CORRECT BY ACCIDENT    It resets statusFilter to 'all', which strictly
+                                           WIDENS and therefore cannot drop the row being
+                                           edited — which is the only reason it is not a
+                                           consumer of the filter guard. NOTHING PINS THAT. A
+                                           "restore defaults" edit resetting it to 'open'
+                                           reinstates the MEDIUM-1 silent-loss path in ONE
+                                           LINE with every gate green. Wants a mutation test,
+                                           or a comment at the reset site saying why the value
+                                           is load-bearing.
+- splitShownByLifecycle caller UNCOVERED   One call expression in page.tsx; one surviving
+                                           mutation; all gates green. The extraction NARROWED
+                                           the untested surface from three lines of logic to a
+                                           single call — it did NOT make the caller covered.
+                                           Do not record it as closing the caller.
+- SAME-SHAPE DUPLICATION ×3 IN ONE BATCH   RULE CANDIDATE, not promoted. CELL_STATUS_LABEL
+                                           (three private copies), the duplicate-title message
+                                           (two literals under a comment asserting verbatim
+                                           parity, WHOSE DRIFT MUTATION SURVIVED), and
+                                           visibleForLifecycle (two character-identical
+                                           filters, nothing pinning them). Operative clause:
+                                           THE COMMENT IS THE TELL — all three carried a
+                                           comment asserting parity and one was demonstrably
+                                           FALSE with every gate green. That makes it a
+                                           FALSIFIABILITY rule, not a DRY preference, which is
+                                           the framing that would justify promoting it.
+                                           Third instance ⇒ standing-rule candidate rather
+                                           than a per-batch fix. §13 unchanged; propose only.
 ```
 
 ---
 
 ## OPEN THREADS (not sequenced — hygiene / external)
+
+**⚠ OWED, AC-FACING — `CROSS_CLAUDE.md` is stale against its OWN content.** Its
+footer reads **2026-07-17** while its §6 event log already carries **2026-08-07**
+and **2026-08-08** entries. So it is not merely behind the August run: **the file
+disagrees with itself**, and its footer is the line a reader uses as a state read.
+A mirror that cannot be trusted as a state read by its own reader is worse than an
+absent one, because it is consulted with confidence. It has also missed this entire
+batch — a contract-surface-free batch, so no §3 change is owed, but the §6 event log
+and the footer both are. **NOT written in this revision, deliberately:** it is the
+joint DC/AC doc, and per CC1–CC8 an AC-facing mirror update is coordinated rather
+than unilateral. Flagged here so it is owed on the record rather than remembered.
+
 
 ```
 - Azure client secret re-rotation      DELIBERATE HOLD (Lacey's call) + blocked on Carl.
@@ -452,6 +587,7 @@ here on. Scope it that way or it won't justify itself.
 
 ## CHANGE LOG
 
+- **2026-08-19 (rev 7)** — **Batch 012 directive CRUD recorded as shipped, pushed and DEPLOYED** (15 commits `887f55e` → `e518624`, v2.9 → v3.0, migration 029 applied to **PRODUCTION** and verified by direct query — stated with its environment and method, because *deployed* and *migrated* are independent facts and `/api/health` reports the Worker only). **Five Karen rounds recorded with the finding progression rather than a total**, because the shape is the evidence: the build's HIGHs were round-one only, **every round-two HIGH was inside a FIX**, and rounds 3-5 found nothing above MEDIUM. **The CLAUDE.md size limit is now sequenced as batch #1, ahead of restyle batch 4** — QMS **G5** arriving as a HARD FAILURE, not a prediction: 631,560 chars against a 150k read limit, so the r34 reconcile was only completable by grep plus targeted replacement with uniqueness assertions. Three scope constraints recorded, all load-bearing: split §16 **by month** (one archive file fails the same limit on the same trajectory), the archive is **append-only history and never authority for current state** (wants a §13 rule, or it trades one G5 for one G1), and the batch must define **where new entries go**, not only where old ones move. **Growth DERIVED rather than estimated: ~6.1k chars/day since 2026-07-09 and ~6.8k/day over the last month — NOT the ~9k/day working figure — and the series is non-monotonic**, because r34 moves reclaim space, which is itself evidence the split works. **OPEN SEQUENCE renumbered:** rev 6 ran `1, ✅, 2, 4, 5` with no 3. **Six items struck from backlog**, and **two of them rev 6's own DONE list already contradicted** (logs-page filter bar, edit-modal dirty-state dismiss — both shipped at `cdb2cc6`), plus a third self-contradiction in the QMS block (*"confirm and strike"* on a rename shipped at `9088343`). An internal contradiction in one file is worse than a stale entry, because both halves read as authoritative. **Four items added:** the positive case unrun (**the guard has been observed REFUSING but never PERMITTING** — the batch's oldest open item) · `clearAllFilters` **correct by accident**, resetting `statusFilter` to `'all'` with nothing pinning it, so a "restore defaults" edit to `'open'` reinstates the silent-loss path in one line with every gate green · the `splitShownByLifecycle` caller **uncovered** · and same-shape duplication removed **three times in one batch**, recorded as a **rule CANDIDATE only** whose operative clause is *the comment is the tell* — all three carried a comment asserting parity and one was demonstrably false with every gate green, which makes it a falsifiability rule rather than a DRY preference. **Rec 1 downgraded from "nearly free":** the `audit_log` evidence half is **exhausted at n=4 (REPORTED BY LACEY, not derived, not re-probed)** and the remaining path is SharePoint screenshot metadata by hand — an unverified figure marked unverified is correct, whereas the same figure written as derived is the G5a failure. **The directive count is recorded as ONE STALE FIGURE PLUS ONE MISLABELLED COMPARISON, not a three-way disagreement:** "NBLYCRO active directives" = **87** (matrix header, correct) versus "directives holding cell work" = **88 of 89 rows** (the 409 runbook's figure — a *different quantity*, never in conflict once named); rev 6's 86/87 was stale 08-14 data, superseded before rev 6 shipped. **The label is the fix** — unlabelled, 88/89 reads as a contradiction again the next time someone opens the runbook. **`CROSS_CLAUDE.md` recorded as OWED and AC-facing:** its footer reads 2026-07-17 while its own §6 carries 08-07 and 08-08 entries, so it disagrees with itself and its footer is the line used as a state read; not written here, because an AC-facing mirror update is coordinated rather than unilateral.
 - **2026-08-15 (rev 6)** — **All six rev-5 discrepancies SETTLED against CLAUDE.md §15/§16, with answers recorded rather than the questions deleted.** Settling #1 exposed an error in §16 itself: two batches were recorded making the same v2.7 → v2.8 bump, so classifier-1's entry was corrected to "shipped at v2.8, no bump" — a version line is exactly the kind of claim that reads as verified and is never re-derived. #4 answered as **86 per project / 87 global**, with the coincidence flagged as the trap: 87 is also NBLY's all-status count, and neither quantity is the per-project active figure the render-ceiling derivations need. #5 settled as **nothing to correct** — the "daily" claim was verbal, never written. #6 recorded in both this file and CLAUDE.md. Twelve batches added to DONE, closing the 07-29 → 08-09 gap. **The PARKED classifier section was superseded, not edited:** it shipped, the park reason changed from "no answer key" to "no credential / unresolved spend", and the free Rovo-by-hand alternative is recorded as the thing to try first. Defect record extended with **directive archiving reachable via direct SQL**, falsifying LOW-8's "verified unreachable" — plus the standing lesson that a "no writer exists" claim must state which surfaces were checked. Five items added to backlog.
 - **2026-08-10 (rev 5)** — Sync field-guard batch recorded as shipped, deployed, and verified (`ae3e2f3` → `756c871`); guard observed holding against a live sync run. Sync-overwrite defect recorded with blast radius (27 field-values, 5 rows, all recovered) and with the four pre-ship catches. §13 r37 rule change recorded. Keep-both-and-flag scoped as a new Jenny-gated batch. QMS Recs 1–3 sequenced for the first time, with Rec 1 at #1 on the strength of the locked Q1 = provability-to-client. AI root-cause classifier parked with a stated unpark condition. Two render-only UI defects captured and paired. Six discrepancies against rev 4 flagged for settlement rather than silently resolved.
 - **2026-07-29 (rev 4)** — Reconciled to CLAUDE.md §15/§16. Eight Pulse batches moved to DONE. Brand-page parity and restyle inserted ahead of Phase C. Cell-status vocabulary and the two-different-filters distinction recorded canonically.
