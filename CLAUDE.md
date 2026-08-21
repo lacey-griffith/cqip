@@ -11,6 +11,13 @@ starts here. Before writing any code, read this file completely. When in doubt a
 a decision, check this file before asking the user. All major decisions are recorded
 here so they don't need to be re-explained.
 
+**Prod right now:** Worker **`d5e5703`**, declared **v3.0** — verified via
+`/api/health` 2026-08-21. Migrations 001–029 all applied. The SHA moved on a
+docs-only push; §16's Batch 012 directive-CRUD entry, block **⚠ 0**, carries why,
+and why "declared ≠ deployed" no longer describes it. **Every other SHA in this
+section is a dated ship record, not a current-state claim — read this line for
+current state.**
+
 **Current deployed state:** Live at https://cqip.l-hay.workers.dev.
 All Batch 001-002.5b features shipped. Recent shipped (April-May
 2026): Batch 003 (branded exports + dashboard click-drill), Batch
@@ -4077,6 +4084,21 @@ open — recorded so they are not re-discovered from scratch.
       logs dropdown), which touches the same component.
 
 ### Ops / deferred
+- [ ] **Ten stale present-tense prod-SHA claims remain in CLAUDE.md — three of
+      them inside §0.** Each reads `prod /api/health reports version: <sha>` in the
+      PRESENT tense inside a batch entry dated months ago: `dc377df` ×2,
+      `9088343`, `d21ceea` ×2, `5795a89`, `cdb2cc6`, `d03f319`, `2826f4b`,
+      `72bb2a0`. (The footer's `d5e5703` is correct and current; so is §0's new
+      "Prod right now" line.) None is *false in place* — each is scoped by its own
+      batch date — **but §0 is titled "Current deployed state" and holds three of
+      them, which is exactly how `e518624` came to be re-asserted as current.**
+      Fix the way commit `f2359e8` fixed the four `e518624` ones: `reports` →
+      `reported … as of <that batch's date>`. **Separate pass, deliberately not
+      bundled** into the 2026-08-21 correction chain, which was scoped to the
+      claims that were actually wrong rather than merely aging. **Found adjacent
+      in the same pass:** the title block at line 3 still reads
+      `### Fusion92 | CRO Department | v2.8` while the repo declares **v3.0** —
+      same class, one line, fix it with these.
 - [ ] **Confirm `test_milestones` backfill (§13 r18) runs on a cadence**
       (from Brand Wellness follow-up, 2026-07-07). Null-`brand_id`
       milestones persist until `scripts/backfill-milestones.ts` /
@@ -4404,15 +4426,22 @@ enumeration by **AST**, the instrument whose absence caused round 2's HIGH.
 > surface from three lines of logic to a single call; it did **not** make the caller
 > covered. Do not read it as closing the caller.
 >
-> **⚠ 0. DECLARED VERSION ≠ DEPLOYED BUILD — and the prediction below was WRONG.
-> It is struck rather than deleted, because the way it failed is the lesson.**
+> **⚠ 0. THIS BLOCK'S VERSION/SHA CLAIMS WERE WRONG TWICE — the prediction
+> below, and then the "bundle is identical" repair that replaced it. Both are
+> struck rather than deleted, because the way each failed is the lesson.**
 >
 > ~~The footer and `package.json` now read **v3.0** while prod `/api/health`
 > reports **`e518624`** — and it will keep reporting `e518624` after the reconcile
 > commit lands, because this is a **docs + version commit and the Worker SHA must
 > not advance** (`paths-ignore` covers `**.md`; `package.json` is not a deploy
 > trigger on its own, and nothing in it changes the bundle's behaviour). **That is
-> correct, not drift.**~~
+> correct, not drift.** Said explicitly because a new version number sitting beside
+> an unchanged SHA is exactly the shape that has misled twice — see §4's
+> Worker-only limitation — and the next reader will otherwise try to reconcile the
+> two. They advance on different triggers and are deliberately not in step.~~
+> *(Those last two clauses were deleted rather than struck when this block was
+> first corrected — restored here inside the strike, because a summary of a wrong
+> belief is part of the wrong belief.)*
 >
 > **What actually happened — verified 2026-08-20 by reading
 > `.github/workflows/deploy.yml`, and by probing prod.** That workflow's
@@ -4423,19 +4452,46 @@ enumeration by **AST**, the instrument whose absence caused round 2's HIGH.
 > and `scripts/gen-build-info.js` stamped the tip's SHA — so prod reported
 > **`d5e5703`**, the docs-only rev-7 outline commit, not `e518624`.
 >
+> **Evidence split, because one word should not cover both halves.** **VERIFIED:**
+> the `paths-ignore` list and `package.json`'s absence from it (read from
+> `deploy.yml`); that prod serves `d5e5703` (probed); that the remote went
+> `e518624` → `d5e5703` in **ONE push**, since `git reflog show origin/main`
+> carries **no `f6f63db` entry at all** — which is what makes "CI built the tip"
+> a local fact rather than an assumption; and that `git diff --name-only
+> e518624..d5e5703` returns only `CLAUDE.md`, the outline and `package.json`, so
+> the bump was that push's **SOLE** non-ignored path. **INFERRED, not read:** that
+> a `push` event is what fired this particular run. `gh` is not installed here, so
+> the Actions log is uninspectable, and a `workflow_dispatch` at the same tip
+> stamps a byte-identical SHA (§13 **r31** records dispatch as established
+> practice). The mechanism holds either way — which is why the inference is
+> labelled rather than removed.
+>
 > **The version bump WAS the deploy trigger.** That is the part worth carrying:
 > a bump is the one edit guaranteed to ride along with a docs-only reconcile
 > (§13 r23) and the one edit `paths-ignore` does not cover — so "docs + version
 > commit" is not the shape that stays put, it is precisely the shape that ships.
 >
-> **No code was deployed.** Only Markdown and `package.json` moved between
-> `e518624` and `d5e5703`, so the bundle's behaviour is identical; what advanced
-> is the reported SHA. **v3.0 is what this repo DECLARES itself to be;
-> `d5e5703` is what production is RUNNING.** Said explicitly because a version
-> number sitting beside a SHA has misled twice already — see §4's Worker-only
-> limitation — and this entry has now supplied a third way for the pair to
-> disagree: not "the SHA did not move", but **"the SHA moved for a reason the
-> entry said it could not."**
+> **No APPLICATION code was deployed** — no `.ts`/`.tsx` moved between `e518624`
+> and `d5e5703`, so there is no functional delta. But the clause that stood here
+> was wrong a second time, and is struck for the same reason as the first:
+> ~~only Markdown and `package.json` moved, so the bundle's behaviour is
+> identical; what advanced is the reported SHA.~~
+>
+> **It was wrong by the very mechanism this correction had just established.**
+> `package.json` is not only a deploy TRIGGER, it is also a build INPUT:
+> `scripts/gen-build-info.js:58` stamps `NEXT_PUBLIC_APP_VERSION` from it, and
+> `app/dashboard/settings/system/page.tsx:20` reads that at module scope in a
+> `'use client'` component. **So Settings → System Info now renders `3.0.0` where
+> it rendered `2.9.0`**, and `NEXT_PUBLIC_BUILD_COMMIT` moved with it. Two
+> build-metadata strings changed; the bundle is therefore NOT identical.
+>
+> **Which retires this block's original headline instead of patching it: v3.0 IS
+> DEPLOYED.** The declared version reached production on this push, so
+> "DECLARED ≠ DEPLOYED" is now stale in the *opposite* direction from the one it
+> was written to warn about. Stated plainly: **prod runs `d5e5703`, and that
+> build both declares and renders v3.0.** The durable lesson is not that the
+> version and the SHA disagree — it is that **`package.json` is a deploy trigger
+> AND a build input, so a version bump is never inert on either axis.**
 >
 > **4. `clearAllFilters` is correct BY ACCIDENT.** It resets `statusFilter` to
 > `'all'`, which strictly widens and therefore cannot drop the edited row — which is
@@ -10245,4 +10301,4 @@ demo blocker.
 
 ---
 
-*Last updated: 2026-08-21 | CQIP v3.0 — **BATCH 012 PULSE DIRECTIVE CRUD (edit · soft-delete · archive) — SHIPPED + PUSHED + DEPLOYED 2026-08-18; prod `/api/health` now reports `version: d5e5703`** — the docs-only rev-7 outline commit, carrying a bundle identical to `e518624` (only Markdown + `package.json` moved). **The §16 entry's ⚠ 0 predicted the SHA would hold at `e518624` and that was WRONG**: `deploy.yml`'s `paths-ignore` is `**.md` / `docs/**` / `.github/**` and does NOT cover `package.json`, so the version bump itself triggered CI, which stamped the pushed tip — struck in place there, not deleted. Migration 029 (`idx_directives_project_title`, UNIQUE `(project_key, title)`, spanning archived rows) is **APPLIED TO PRODUCTION**, verified by direct query in the prod Supabase SQL editor 2026-08-18 — stated with its environment and method because *deployed* and *migrated* are independent facts and `/api/health` reports the **Worker only**. **Jenny pre-flight ×2** (rev 1 DO-NOT-BUILD-YET: 1 CRITICAL · 3 HIGH · 6 MEDIUM · 10 LOW → rev 2 APPROVE-WITH-FINDINGS: 1 HIGH · 10 MEDIUM · 4 LOW), **FIVE Karen rounds** (2H/7M/5L → 2H/1M/4L → 0/2M/2L → 0/1M/2L → 0/0/3L). **Read that progression, not the total:** the original build's HIGHs were found in round one and never recurred, **every HIGH in round two was in a FIX**, and rounds three-to-five found nothing above MEDIUM — the core machinery was re-confirmed three times against three different trees, while what kept failing was the *claims*. Jenny's CRITICAL changed the design: the `project_key` block was specified only as a render-layer lock, so ordinary two-admin concurrency would have destroyed 16 cells including notes **with no `old_value` anywhere in the trail** (§13 r37's shape); the route now re-runs the **same shared predicate** against freshly-read cells. The predicate is a **three-clause conjunction** — the two-clause version would have wrongly allowed moving **5 of its 6 "movable"** directives, because `n_a` is not machine-only and **620 prod cells** that looked like fan-out output had in fact been written. It is kept fail-safe **by construction**: every clause can only SHRINK the movable set, so `project_key` being editable on **1 of 89** directives is the predicate working, not failing — and every directive created from now on is movable until someone works it. **⚠ My own audit caused a HIGH:** COMMIT 7 claimed "exactly ONE `setEditingDirectiveId(null)` remains" on a grep for that **literal string**, which cannot match the **ternary** form the row's Edit/Close toggle uses — §13 r38 mechanism (a), a count stated on an instrument that could not see the case. Karen later re-derived it by **AST**. Three defects in this chain were created **by** the fix before them, and each was closed with a **mechanism rather than a longer list**: clear-on-unmount over a ninth enumeration entry, then its prop-identity dependency **removed** rather than documented, and a prompt that fires only when the click would actually drop the edited row — because a dialog that is usually wrong trains the user to click through, which is how a guard stops working without breaking. **Same-shape duplication removed THREE times in one batch** (`CELL_STATUS_LABEL`, the duplicate-title message whose drift mutation *survived*, `visibleForLifecycle`) — recorded as a rule CANDIDATE, **not promoted**: *the comment is the tell*, since all three carried a comment asserting parity and one was demonstrably false with every gate green. **Directive count re-derived 2026-08-18 grouped by `project_key` AND `status`:** NBLYCRO active **87** · archived **1** · SPLCRO active **1** · global active **88** · all rows **89**. The apparent three-way conflict was **one stale figure plus one MISLABELLED comparison** — "NBLYCRO active" = 87 (matrix header, correct) versus "directives holding cell work" = 88 of 89 (the runbook's, a *different quantity*); rev 6's 86/87 was stale 08-14 data. **The label is the fix.** Gates at five trees: tsc 0 · ESLint 0 · **376/376** (from 333) · build 0 · **44 mutations run, 42 caught**, both survivors verified equivalent mutants. **⚠ NOT VERIFIED, carried forward: there is NO route-level test harness** — Lacey's Scenario A result (`a059d078`, 409 with `blocking_cells: 16`, hash `a2808d54…`, SPLCRO 0, still `NBLYCRO`, zero audit rows) is a **HAND-RUN OBSERVATION, NOT COVERAGE**; **the guard has been observed REFUSING but never PERMITTING**, since the positive case was deliberately skipped (it writes a permanent prod directive and archiving does not free the title) — **the batch's oldest open item**; the `splitShownByLifecycle` **caller remains UNCOVERED** (one call expression, one surviving mutation, all gates green — the extraction narrowed the surface, it did not close the caller); and **`clearAllFilters` is correct BY ACCIDENT**, resetting `statusFilter` to `'all'` which strictly widens — nothing pins that, and a "restore defaults" edit to `'open'` reinstates the silent-loss path in one line.*
+*Last updated: 2026-08-21 | CQIP v3.0 — **BATCH 012 PULSE DIRECTIVE CRUD (edit · soft-delete · archive) — SHIPPED + PUSHED + DEPLOYED 2026-08-18; prod `/api/health` now reports `version: d5e5703`** — the docs-only rev-7 outline commit. **No application code changed** (no `.ts`/`.tsx` moved from `e518624`), but the bundle is NOT identical: `package.json` is a build input as well as a deploy trigger, so `gen-build-info.js` stamped the bump into `NEXT_PUBLIC_APP_VERSION` and **v3.0 IS live — Settings → System Info renders `3.0.0`**, which retires the entry's own "declared ≠ deployed" framing rather than patching it. **The §16 entry's ⚠ 0 predicted the SHA would hold at `e518624` and that was WRONG**: `deploy.yml`'s `paths-ignore` is `**.md` / `docs/**` / `.github/**` and does NOT cover `package.json`, so the version bump itself triggered CI, which stamped the pushed tip — struck in place there, not deleted. Migration 029 (`idx_directives_project_title`, UNIQUE `(project_key, title)`, spanning archived rows) is **APPLIED TO PRODUCTION**, verified by direct query in the prod Supabase SQL editor 2026-08-18 — stated with its environment and method because *deployed* and *migrated* are independent facts and `/api/health` reports the **Worker only**. **Jenny pre-flight ×2** (rev 1 DO-NOT-BUILD-YET: 1 CRITICAL · 3 HIGH · 6 MEDIUM · 10 LOW → rev 2 APPROVE-WITH-FINDINGS: 1 HIGH · 10 MEDIUM · 4 LOW), **FIVE Karen rounds** (2H/7M/5L → 2H/1M/4L → 0/2M/2L → 0/1M/2L → 0/0/3L). **Read that progression, not the total:** the original build's HIGHs were found in round one and never recurred, **every HIGH in round two was in a FIX**, and rounds three-to-five found nothing above MEDIUM — the core machinery was re-confirmed three times against three different trees, while what kept failing was the *claims*. Jenny's CRITICAL changed the design: the `project_key` block was specified only as a render-layer lock, so ordinary two-admin concurrency would have destroyed 16 cells including notes **with no `old_value` anywhere in the trail** (§13 r37's shape); the route now re-runs the **same shared predicate** against freshly-read cells. The predicate is a **three-clause conjunction** — the two-clause version would have wrongly allowed moving **5 of its 6 "movable"** directives, because `n_a` is not machine-only and **620 prod cells** that looked like fan-out output had in fact been written. It is kept fail-safe **by construction**: every clause can only SHRINK the movable set, so `project_key` being editable on **1 of 89** directives is the predicate working, not failing — and every directive created from now on is movable until someone works it. **⚠ My own audit caused a HIGH:** COMMIT 7 claimed "exactly ONE `setEditingDirectiveId(null)` remains" on a grep for that **literal string**, which cannot match the **ternary** form the row's Edit/Close toggle uses — §13 r38 mechanism (a), a count stated on an instrument that could not see the case. Karen later re-derived it by **AST**. Three defects in this chain were created **by** the fix before them, and each was closed with a **mechanism rather than a longer list**: clear-on-unmount over a ninth enumeration entry, then its prop-identity dependency **removed** rather than documented, and a prompt that fires only when the click would actually drop the edited row — because a dialog that is usually wrong trains the user to click through, which is how a guard stops working without breaking. **Same-shape duplication removed THREE times in one batch** (`CELL_STATUS_LABEL`, the duplicate-title message whose drift mutation *survived*, `visibleForLifecycle`) — recorded as a rule CANDIDATE, **not promoted**: *the comment is the tell*, since all three carried a comment asserting parity and one was demonstrably false with every gate green. **Directive count re-derived 2026-08-18 grouped by `project_key` AND `status`:** NBLYCRO active **87** · archived **1** · SPLCRO active **1** · global active **88** · all rows **89**. The apparent three-way conflict was **one stale figure plus one MISLABELLED comparison** — "NBLYCRO active" = 87 (matrix header, correct) versus "directives holding cell work" = 88 of 89 (the runbook's, a *different quantity*); rev 6's 86/87 was stale 08-14 data. **The label is the fix.** Gates at five trees: tsc 0 · ESLint 0 · **376/376** (from 333) · build 0 · **44 mutations run, 42 caught**, both survivors verified equivalent mutants. **⚠ NOT VERIFIED, carried forward: there is NO route-level test harness** — Lacey's Scenario A result (`a059d078`, 409 with `blocking_cells: 16`, hash `a2808d54…`, SPLCRO 0, still `NBLYCRO`, zero audit rows) is a **HAND-RUN OBSERVATION, NOT COVERAGE**; **the guard has been observed REFUSING but never PERMITTING**, since the positive case was deliberately skipped (it writes a permanent prod directive and archiving does not free the title) — **the batch's oldest open item**; the `splitShownByLifecycle` **caller remains UNCOVERED** (one call expression, one surviving mutation, all gates green — the extraction narrowed the surface, it did not close the caller); and **`clearAllFilters` is correct BY ACCIDENT**, resetting `statusFilter` to `'all'` which strictly widens — nothing pins that, and a "restore defaults" edit to `'open'` reinstates the silent-loss path in one line.*

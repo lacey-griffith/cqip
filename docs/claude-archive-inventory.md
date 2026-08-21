@@ -2,6 +2,31 @@
 
 Read-only survey. No §16 content was moved, reformatted, or rewritten.
 
+> **⚠ THE LINE NUMBERS IN THIS FILE ARE A SNAPSHOT, NOT AN ADDRESS.** They were
+> indexed against `CLAUDE.md` at commit **`5265227`**, where the file was **10,227
+> lines**. The two commits that followed in the same chain — **`06067b4`** (+20
+> lines at 4403) and **`f2359e8`** (+1 at 4139) — shifted **every reference of
+> 4403 or higher by +21** (and each one in the 4139–4402 band by +1), and the file
+> is now **10,248 lines**.
+>
+> **220 of the 457 numeric line references in this file are stale** — 219 by +21
+> and one by +1 — counting every bare-integer table cell of three or more digits
+> plus every inline `L####` citation. **That tally is definition-dependent:**
+> distinct values only gives 207 of 414, and the entry table's own `start`/`end`
+> cells account for 163 of it. A review of this chain reported 143 of 288, which
+> none of those definitions reproduces — so **treat the +21 OFFSET as the
+> load-bearing fact and re-derive any tally you actually need.**
+>
+> **So: re-derive line numbers at execution time, and never read them from this
+> inventory. This file is authority for WHAT exists and HOW BIG it is — never for
+> WHERE it lives.** Locate an entry by grepping its `### ` heading text, which is
+> stable, rather than by the `start`/`end` columns, which are not.
+>
+> The entry table's `start`/`end` pair is the sharp edge: a `sed -n` window taken
+> from it now lands 21 lines early, dragging in the tail of the previous entry and
+> truncating the intended one — and **it fails silently, because a mis-sliced
+> window is still valid Markdown.**
+
 - Source: `CLAUDE.md`, §16 heading at line **4131**, last content line **10223** (followed by `---` + footer, both excluded).
 - Entry = one `### ` heading at column 0. Blockquoted `> ### ` sub-headings are NOT entries. Code fences in range (4189/4191, 5031/5034) contain no headings.
 - `start` = heading line. `end` = last non-blank line before the next heading. `chars` = characters from start through end inclusive (newlines counted, trailing blanks trimmed).
