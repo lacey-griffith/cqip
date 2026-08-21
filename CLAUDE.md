@@ -12,9 +12,11 @@ a decision, check this file before asking the user. All major decisions are reco
 here so they don't need to be re-explained.
 
 **Prod right now:** Worker **`d5e5703`**, declared **v3.0** — verified via
-`/api/health` 2026-08-21. Migrations 001–029 all applied. The SHA moved on a
-docs-only push; §16's Batch 012 directive-CRUD entry, block **⚠ 0**, carries why,
-and why "declared ≠ deployed" no longer describes it. **Every other SHA in this
+`/api/health` 2026-08-20, re-probed 2026-08-21. Migrations 001–029 all applied.
+The SHA moved on a **docs + version-bump** push — `package.json` was the trigger,
+NOT a docs-only push, which is the very framing §16 records as wrong; that entry
+(Batch 012 directive CRUD, block **⚠ 0**) carries the mechanism, and why
+"declared ≠ deployed" no longer describes this repo. **Every other SHA in this
 section is a dated ship record, not a current-state claim — read this line for
 current state.**
 
@@ -4438,13 +4440,17 @@ enumeration by **AST**, the instrument whose absence caused round 2's HIGH.
 > correct, not drift.** Said explicitly because a new version number sitting beside
 > an unchanged SHA is exactly the shape that has misled twice — see §4's
 > Worker-only limitation — and the next reader will otherwise try to reconcile the
-> two. They advance on different triggers and are deliberately not in step.~~
-> *(Those last two clauses were deleted rather than struck when this block was
-> first corrected — restored here inside the strike, because a summary of a wrong
-> belief is part of the wrong belief.)*
+> two. **v3.0 is what this repo DECLARES itself to be; `e518624` is what production
+> is RUNNING.** They advance on different triggers and are deliberately not in
+> step.~~
+> *(All THREE of those trailing clauses were deleted rather than struck when this
+> block was first corrected, and a first repair restored only two of them —
+> the sentence in the middle was still missing, so the strike read as continuous
+> prose where the original had three sentences. Restored in full here, because a
+> summary of a wrong belief is part of the wrong belief.)*
 >
 > **What actually happened — verified 2026-08-20 by reading
-> `.github/workflows/deploy.yml`, and by probing prod.** That workflow's
+> `.github/workflows/deploy.yml` and probing prod, and re-probed 2026-08-21.** That workflow's
 > `paths-ignore` is exactly `**.md`, `docs/**`, `.github/**`, and
 > **`package.json` is NOT in it.** So the r34 reconcile commit `f6f63db`, which
 > touched `CLAUDE.md` *and* `package.json`, touched a non-ignored path and **did**
@@ -4472,18 +4478,33 @@ enumeration by **AST**, the instrument whose absence caused round 2's HIGH.
 > commit" is not the shape that stays put, it is precisely the shape that ships.
 >
 > **No APPLICATION code was deployed** — no `.ts`/`.tsx` moved between `e518624`
-> and `d5e5703`, so there is no functional delta. But the clause that stood here
-> was wrong a second time, and is struck for the same reason as the first:
+> and `d5e5703`, so there is no functional delta. But the clauses that stood here
+> were wrong a second time, and are struck for the same reason as the first:
 > ~~only Markdown and `package.json` moved, so the bundle's behaviour is
-> identical; what advanced is the reported SHA.~~
+> identical; what advanced is the reported SHA. **v3.0 is what this repo DECLARES
+> itself to be; `d5e5703` is what production is RUNNING.** Said explicitly because
+> a version number sitting beside a SHA has misled twice already — see §4's
+> Worker-only limitation — and this entry has now supplied a third way for the pair
+> to disagree: not "the SHA did not move", but **"the SHA moved for a reason the
+> entry said it could not."**~~
 >
 > **It was wrong by the very mechanism this correction had just established.**
 > `package.json` is not only a deploy TRIGGER, it is also a build INPUT:
-> `scripts/gen-build-info.js:58` stamps `NEXT_PUBLIC_APP_VERSION` from it, and
+> `scripts/gen-build-info.js` reads `package.json.version` (line 35) and stamps it
+> as `NEXT_PUBLIC_APP_VERSION` (line 58), and
 > `app/dashboard/settings/system/page.tsx:20` reads that at module scope in a
-> `'use client'` component. **So Settings → System Info now renders `3.0.0` where
-> it rendered `2.9.0`**, and `NEXT_PUBLIC_BUILD_COMMIT` moved with it. Two
-> build-metadata strings changed; the bundle is therefore NOT identical.
+> `'use client'` component, rendering it at line 243. **THREE** build-metadata
+> strings move, not two — `NEXT_PUBLIC_APP_VERSION`, `NEXT_PUBLIC_BUILD_COMMIT`
+> and `NEXT_PUBLIC_BUILD_TIME`, the last of which differs on *every* build — and
+> all three are read at module scope in that same page. The bundle is therefore
+> NOT identical, by a wider margin than first stated.
+>
+> **"Settings → System Info renders `3.0.0`" belongs on the VERIFIED side, not the
+> inferred one, and nobody had to load the page.** `gen-build-info.js` writes all
+> three variables in a SINGLE `fs.writeFileSync` (lines 55–63). Prod answering
+> `d5e5703` therefore proves that script ran in that build — so it proves
+> `NEXT_PUBLIC_APP_VERSION=3.0.0` was emitted by the same run that produced the
+> SHA already probed. One write, one proof, both strings.
 >
 > **Which retires this block's original headline instead of patching it: v3.0 IS
 > DEPLOYED.** The declared version reached production on this push, so
