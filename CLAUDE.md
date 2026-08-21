@@ -366,9 +366,9 @@ toggle, duplicate-title blocking; migration 029 `idx_directives_project_title`
 UNIQUE `(project_key, title)` spanning archived rows, **APPLIED TO PRODUCTION**
 and verified by direct query in the prod Supabase SQL editor 2026-08-18;
 Jenny pre-flight ×2, **FIVE Karen rounds**, browser smoke both themes,
-Scenario A 409 hand-run; **PUSHED + deployed 2026-08-18, prod `/api/health`
-reports `version: e518624`** — 15-commit chain 887f55e → e518624, v2.9 → v3.0
-— 2026-08-18).
+Scenario A 409 hand-run; **PUSHED + deployed 2026-08-18; prod `/api/health`
+reported `version: e518624` as of 2026-08-18** — 15-commit chain
+887f55e → e518624, v2.9 → v3.0 — 2026-08-18).
 All migrations 001-025 have run against production (022 + 023 applied with
 the auth-chain deploy on 2026-07-07; 024 + 025 with the Batch 012 deploys
 2026-07-17).
@@ -4139,7 +4139,8 @@ change → Jenny pre-flight (TWO passes) + FIVE Karen rounds.** Spec
 the build opened**, per the §15 PROCESS note. **v2.9 → v3.0**; `package.json`
 bumped in the same commit as the doc, because §16 has already recorded two
 batches making one bump when nobody re-derived it. **PUSHED + deployed
-2026-08-18 — prod `/api/health` reports `version: e518624`** — 15-commit chain
+2026-08-18 — prod `/api/health` reported `version: e518624` as of
+2026-08-18** — 15-commit chain
 `887f55e` → `d4a3283` → `ac95c08` → `6c54b3e` → `6ba1e93` → `ed67861` →
 `24aa83b` → `b42c4f3` → `5edc7d8` → `bcb5cfe` → `e5d8e34` → `862d621` →
 `809ce8c` → `3129800` → `e518624`.
