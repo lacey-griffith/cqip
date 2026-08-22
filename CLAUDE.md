@@ -1344,9 +1344,6 @@ moved out of Planned. See §16.)
 
 ## 15. Pending / Active TODOs
 
-### Pre-demo / immediate
-(Empty — all demo-prep items shipped via Batch 004 series, including
-Batch 004.10 UX polish on 2026-05-01.)
 
 ### Awaiting external action
 
@@ -1385,52 +1382,11 @@ Batch 004.10 UX polish on 2026-05-01.)
       "Pending rotations (live, both sides)" — relay
       2026-05-12.
 
-### Batch 004.99 (post-Batch-004) — Multi-Client Readiness Review — shipped 2026-05-06
-Discovery batch. Identifies all NBLY-hardcoded assumptions in CQIP
-and produces a remediation plan. Doesn't ship code itself — produced
-a markdown report at `docs/multi-client-readiness.md`. See §16 for
-the shipped-log entry.
-
-**Immediate downstream consumer:** SPL (second CRO client) onboarding.
-Project info ready as of 2026-05-06. The 004.99 output is the
-playbook SPL onboarding follows. Subsequent client onboardings
-follow the same playbook.
-
-**Hard prerequisite for Batch 007 (Custom Jira Boards)** — boards
-are multi-client from day one; building them on a single-client
-foundation would mean refactoring after onboarding. 004.99 → SPL
-→ Batch 007 is the locked sequence.
-
-Deliverables (all complete):
-- [x] Audit `JIRA_FIELD_MAP` for NBLY-specific fields (e.g.,
-      `nbly_brand`) → §3 of report. Result: instance-global,
-      `nbly_brand` key name is cosmetic.
-- [x] Audit jira-webhook JQL filter (currently `project = NBLYCRO`)
-      → §4.1. Result: Critical operational item; Lacey adds a
-      second webhook for SPLCRO (Option A recommended).
-- [x] Audit brand extraction logic in jira-webhook → §4.2 + §4.5.
-      Three sub-cases for SPL's brand field shape.
-- [x] Audit Coverage page filters/labels for hardcoded NBLY
-      assumptions → §5. Result: clean (filters populate from
-      brands table).
-- [x] Audit CSV import script for NBLY-specific column mappings
-      → §2 (one-shot scripts, NBLY-frozen).
-- [x] Document onboarding playbook (how to add a new CRO client)
-      → §8 (10 steps, ~45 min day-of).
-- [x] Document offboarding playbook (deactivate without losing
-      history) → §9.
-- [x] Identify any UI labels/copy that say "NBLY" → §5 (5 strings
-      across 4 files; all Medium severity copy fixes).
 
 ### Batch 005 (post-demo) — Backlog cleanup, scope-locked
 Strict rule: only items already in scope at lock time. No new
 additions.
 
-- [x] **5.1 Coverage + Settings UX redesign** — **SHIPPED 2026-07-03 as
-      Batch 005.1; see §16.** Delivered the unified `BrandAdminDrawer`
-      (tabs Details / QA Config / Milestones / Pause) on the Coverage
-      page, reorged the KPI row with 3 new program-health cards, and
-      deleted the standalone `/dashboard/settings/coverage` page.
 - [ ] **5.2 Jira token-expiry monitoring** — Teams alert when Jira
       API returns 401/404 from sync or webhook. Calendar-style
       early warning. Prevents silent breakage like the 2026-04-23
@@ -1519,78 +1475,6 @@ additions.
       quarterly `SELECT count(*) FROM quality_logs WHERE is_deleted =
       FALSE`. Currently ~50 logs at NBLY pilot rate; revisit when
       multi-client work (Batch 004.99) starts onboarding.
-- [x] **5.19 SPL multi-page presence sweep** — verify SPL appears
-      correctly on every dashboard surface that displays project /
-      brand context. Specifically check:
-      - `/dashboard/coverage` — does the SPL brand row appear? Does
-        the per-column sort + sparkline render once milestones land?
-      - `/dashboard/logs` — filter pills, brand selector, project
-        filter, sendback grouping behavior
-      - Active alerts panel — brand-code rendering for SPL-scoped
-        alerts (none exist yet, but verify the code path doesn't
-        assume NBLY-prefixed `client_brand` strings)
-      - `/dashboard/reports` — filter dropdowns, saved-report scoping
-      - Dashboard chart drilldowns (`LogDrawer`, `LogDetailDrawer`)
-        — chart row activation should respect SPL ticket prefixes
-      - `/dashboard/settings/audit` — ticket-filter prefix
-        recognition for `SPLCRO-` (now generic post-Batch-005.9; this
-        verifies the search behavior, not the placeholder)
-      Anywhere a hardcoded brand or project list might exist should
-      be verified. Most surfaces auto-populate from the
-      brands/projects tables and should "just work," but a sweep
-      confirms nothing was missed. Pairs with audit Section 6.5
-      (settings UI gaps — brand-create UI, brand-aliases admin) —
-      consider fixing those at the same time to avoid multiple
-      cleanup batches. See `docs/multi-client-readiness.md` §6.5
-      for the full settings-UI gap list.
-
-      **Shipped 2026-05-12.** Sweep findings:
-      - PASS: /dashboard/coverage (SPL row + drawer + sparkline
-        render correctly), Active alerts panel (NBLY drought
-        pills render cleanly via extractBrandCode), Dashboard
-        chart drilldowns (no SPL data; NBLY renders unaffected),
-        /dashboard/settings/audit (ticket filter recognizes
-        SPLCRO- prefix, returns matching audit rows).
-      - FAIL: /dashboard/logs and /dashboard/reports brand
-        dropdowns. Two findings captured for Batch 005.25:
-        (F1 HIGH) dropdowns populate from DISTINCT client_brand
-        in quality_logs, excluding any brand without active
-        non-deleted logs — SPL invisible; (F2 MEDIUM) historical
-        pre-Phase-1 quality_logs rows have raw brand codes
-        (e.g., 'ASV'), post-Phase-1 rows have full Phase-1
-        format (e.g., 'ASV - Aire Serv') — surface as duplicate
-        dropdown entries.
-      - DEFERRED: code-grep verification of extractBrandCode()
-        prefix-agnosticism and chart drilldown routing
-        hardcoded-NBLYCRO check — folded into Batch 005.25
-        scope.
-
-      F1 + F2 closed by Batch 005.25 (2026-05-13).
-- [~] **5.21 Cron-silence monitor** — **ABSORBED into Batch 006
-      (Teams dispatch, EXPANDED) on 2026-07-03.** Now framed as
-      evaluator-health alerting inside the dispatcher: a broken/failing
-      evaluator produces an ALERT, not suppression. Original rationale
-      (the 2026-05-07 drought-evaluator 7-day silent failure — pg_cron's
-      `cron.job_run_details` only logs HTTP response receipt, not function
-      correctness) carries into the Batch 006 scope. See the Batch 006
-      entry below.
-- [x] **5.22 Phase 1: Project-aware brand resolution** — schema +
-      webhook + sync refactor making brand lookup per-project. Closes
-      audit Q2 + SPL ingestion gap. **Shipped 2026-05-07**; see §16.
-- [x] **5.22 Phase 2: Coverage filter pills** — Coverage page gains
-      a project filter (All / NBLY / SPL) so the brand table can be
-      scoped to a single client at a time. Pairs with the existing
-      brand search/sort affordances; no schema change.
-      **Shipped 2026-05-19** as Cluster A Phase 2 (proposed batch
-      number 005.26 — Lacey may renumber). New shared component
-      `components/filters/project-brand-filter.tsx` with
-      sessionStorage persistence per `storageKey`; Coverage mount
-      keys at `cqip-filter-coverage`. KPI cards stay full-scope
-      (program-health boundary, locked with Lacey); table re-scopes.
-      See §16.
-- [x] **5.22 Phase 3: Dashboard filter pills** — Dashboard charts
-      gain the shared project + brand filter; KPIs + Active Alerts
-      stay full-scope. **Shipped 2026-05-20.** See §16.
 - [ ] **5.22 Phase 4: Logs filter pills** — `/dashboard/logs` brand
       dropdown becomes project-aware (group by project; default
       "All projects"). Saved-report `filters` jsonb gains a
@@ -1602,6 +1486,22 @@ additions.
       through as multi-brand). `AddBrandDrawer` adds a single-brand
       affordance that auto-syncs `default_brand_id` on the parent
       project. Closes the Phase 1 deferred-affordances gap.
+
+---
+
+## §15 Ops/deferred — completed item: /api/health deploy smoke check (Batch 011)
+
+Completed §15 checklist items, moved by the CLAUDE.md split batch 2026-08-22. Each was already `[x]`/`[~]` with a ship date or an absorbed-into marker, so each is history under cut-rule clause 1: no unmet future action. The unchecked siblings in the same subsections stayed in §15.
+
+- [x] **Deploy smoke check via `/api/health`** — **shipped Batch 011
+      (2026-05-27).** `app/api/health/route.ts` added (public,
+      dependency-free, always-200 JSON probe); `deploy.yml` smoke
+      check swapped from `/login` to `/api/health` and now asserts
+      both 200 AND `{"status":"ok"}` in the body. v1 scope is
+      deliberately "app responds, env loaded" — NO Supabase
+      reachability ping (the original sketch above mentioned one;
+      explicitly out of scope per the Batch 011 spec to keep the
+      probe fast and dependency-free). See §16.
 - [ ] **5.29 Taxonomy admin UI** — managing `quality_log_taxonomy`
       rows from the dashboard instead of via SQL editor. Add an
       admin surface (likely `/dashboard/settings/taxonomy` or a tab
@@ -1616,80 +1516,7 @@ additions.
       taxonomy table could land first and prove itself in
       production; the admin UI is purely operational on top of it.
 
-### Batch 005.25 — Brand dropdown fix + client_brand normalization
 
-Closes 5.19 sweep findings F1 + F2. Small targeted batch.
-Scoped 2026-05-12; not yet started.
-
-- [x] Refactor /dashboard/logs brand dropdown to source
-      from brands table (filtered by is_active = TRUE),
-      not from DISTINCT client_brand in quality_logs.
-- [x] Same refactor for /dashboard/reports brand dropdown.
-- [x] Consider a shared <BrandSelector> component if /logs
-      and /reports dropdowns warrant consolidation
-      (decision at implementation — not pre-locking).
-- [x] One-shot script: scripts/normalize-client-brand.ts —
-      backfills historical quality_logs.client_brand strings
-      to the canonical brands.jira_value format (CODE -
-      Display Name). Uses brand_code lookup via brands
-      table. Logs unmatched rows for manual review.
-      Idempotent.
-- [x] Code-grep verification: extractBrandCode() helper is
-      prefix-agnostic (handles 'SPL - Spotloan' as well as
-      'MRR - Mr Rooter Plumbing'). Add a regression test
-      if one doesn't exist.
-- [x] Code-grep verification: LogDrawer / LogDetailDrawer
-      routing has zero hardcoded 'NBLYCRO' references.
-      Should pass; this is a sanity check after the §13
-      rule 28 work.
-
-Realistic scope: half-day. No migration. No schema change.
-
-Pairs with: Batch 005.22 Phase 4 (Logs filter pills),
-which builds project-aware filtering on top of the now-
-clean brand dropdown.
-
-Does NOT address: future /dashboard/reports redesign
-vision (pre-built templates, chart picker, component
-library). That's its own future batch when scoped.
-
-**Shipped 2026-05-13** as commit 35f0dfc.
-See §16 entry below.
-
-### auth.1 / auth.2 — Identity migration + admin password reset (scoped 2026-07-03)
-Own session; Jenny pre-flight required despite small size (touches
-`user_profiles` / Supabase Auth / the §13 r22 trigger-protected column
-neighborhood). Build order within the session: auth.2 first
-(self-contained), then auth.1. Effort S–MED. Spec: `docs/batch-auth-spec.md`
-(v3, Jenny PASS-WITH-FINDINGS folded). First-priority upcoming work — the
-only operational-risk item on the board (zero password-recovery path today).
-
-**auth.2 — SHIPPED 2026-07-05 (committed, not pushed); see §16.** Admin
-temp-password reset for read-only users + forced change + admin-account
-immutability + full user-mutation audit trail. Migration 022, the
-`/api/admin/users` guards/actions/audit, the middleware forced-change
-gate + `/api/account/password-changed` flag-clear route, and the
-users-page UI all landed. UI-only follow-up (`d5fae92`) made the
-forced-change form a non-dismissable modal.
-
-**auth.1 — SHIPPED 2026-07-05 (committed, not pushed); see §16.** Email
-migration + email-primary login. Dual-mode login (`input.includes('@')`
-→ email, else legacy `@cqip.local` synthesis kept as a TODO-marked
-fallback + a static "enter your email" hint on failed sign-in; the
-earlier `user_profiles` username lookup was dropped in the Karen-HIGH
-Approach-C fix — dead from the unauthenticated login screen under
-authenticated-only RLS), `assertTargetIsReadOnlyOrSelf`-guarded
-`set_email` PATCH action (ordered two-write, retry-once, loud-fail, no
-rollback; dup pre-check `.eq` not `.ilike`), the "Last active" column +
-email-drift indicator (new `GET /api/admin/users` via `listUsers()`), and
-a repair of the pre-existing reset flow (`@`-input →
-`resetPasswordForEmail` directly). No migration — the `email` audit row
-reuses `action='UPDATE'` + `field_name='email'` (same CHECK reason as
-auth.2). **Rollout DONE (Lacey, 2026-07-05):** all 7 accounts migrated to
-real emails (no `@cqip.local` left; drift check confirmed clean).
-**Cleanup SHIPPED as Batch auth-cleanup (2026-07-06; see §16)** — the
-legacy `@cqip.local` synthesis fallback is removed, login is now
-email-only. **The auth chain is complete.**
 
 ### Login-activity read side (count + heatmap) — backlog (recording LIVE 2026-07-06)
 `login_events` recording is **LIVE** — the table + fire-and-forget write
@@ -1724,25 +1551,7 @@ compare.) Note: Batch 005.2
 (Coverage Ledger redesign) will re-home the Brand Wellness drawer CTA when
 the drawer is rebuilt.
 
-### Batch 005.2 — Coverage Ledger redesign — SHIPPED 2026-07-08 (see §16)
-Merged the Batch 010 split Output + Pipeline tables into one accordion
-"Coverage Ledger". Read-only render redesign; all four scope forks resolved and
-the LOCKED §15 four-chip set wired (verbatim `Awaiting client input`). Deferred
-follow-up (spec §6): the Reggie-drawer fold-in + Brand Wellness CTA re-home
-(kept as a "Full detail →" link this batch). Optional polish (Karen L2/L3:
-drought/active summary-numeral coloring + a "Paused" legend swatch) shipped in
-**Batch 005.3 — SHIPPED 2026-07-08 (see §16)**. A further polish pass from
-Lacey's 2026-07-09 review shipped as **Batch 005.4 — SHIPPED 2026-07-09 (see
-§16)** (incl. the Karen 005.3 L1 `LedgerRow.live` prune). Next: **Batch 005.5**
-(Reggie drawer polish).
 
-### Batch 005.5 — Reggie brand-detail drawer polish — SHIPPED 2026-07-09 (see §16)
-Read-only, no Jenny. On the all-user brand-detail (Reggie) drawer: a
-**6/12-month range dropdown** (reuses the 005.4 `monthly12` field alongside the
-existing 6mo `monthly`) · **click-a-month → filter the ticket list** to that
-month · **drop the "This Month" KPI** (keep This Week / Last Week / Rolling 28D).
-Spec: `docs/batch-005.5-brand-detail-drawer-spec.md`. **Dep:** 005.4 lands
-`monthly12` (done — shipped with 005.4's build). Next after 005.4 (priority #1).
 
 ### Admin drawer changes (`brand-admin-drawer.tsx`) (scoped 2026-07-09)
 Two items:
@@ -1882,36 +1691,7 @@ the new public surface at Phase D; Karen post-flight. **DO NOT PUSH** — Lacey
 reviews. Effort: LG (multi-phase).
 
 **Phase status:**
-- **Phase A (Directive Matrix MVP) — SHIPPED 2026-07-17** (see §16). Migration
-  024 + directives/directive_brand_status + matrix page.
-- **Phase B (Monitoring Ingest) — SHIPPED 2026-07-17** (see §16). Migration 025
-  + `monitoring_findings` + Bearer ingest + admin status route + "Needs action"
-  panel. This is the surface Batch 008 (Convert/Pulse) consumes.
 - **Phase E — Pulse shell/UX track** (distinct from the C/D feature track):
-  - **E1 (Pulse shell: rename + brand pages + nav) — SHIPPED 2026-07-21**
-    (see §16). Renamed Client Library → Pulse, moved the route (with redirect),
-    added deep-linkable per-brand pages + a contextual client nav. Render/
-    routing only; no migration, no new mutation route, no Jenny. Karen
-    PASS-WITH-FINDINGS (LOW-1 folded).
-  - **E1 follow-on (cross-project client nav) — SHIPPED 2026-07-21** (see §16).
-    Made the client list cross-project (single-brand clients collapse to one
-    entry) so single-brand clients are discoverable without switching the
-    picker. Render/nav only; logic in the pure `toClientNavGroups`; reuses the
-    extracted `pulse:project` channel; folded Karen E1 observation-B. Karen PASS
-    (3 rounds).
-  - **Inline directive editing (kill both modals) — SHIPPED 2026-07-21** (see
-    §16). Both matrix-page modals (create + cell edit) became inline; cell edit
-    is a row-expansion strip (the E3 seam), later compacted to a single dense
-    row. Render/interaction only; Karen PASS-WITH-FINDINGS (LOW folded).
-  - **Inline directive editing on the BRAND PAGE — SHIPPED 2026-07-25** (see
-    §16), sibling of the matrix work above. Admins edit a directive's
-    status/note for one brand in place; the matrix's save orchestration and
-    `CellEditStrip` were extracted to shared modules both pages call (local
-    copies deleted). Render/interaction only, same PATCH route, no Jenny. Karen
-    PASS-WITH-FINDINGS → 2 MEDIUM folded → re-confirm CONFIRMED; 3 LOW noted (2
-    are Lacey click-through items). **PUSHED** — `52dc69d` is in `origin/main`
-    (corrected 2026-08-15; this line and §0's entry for the same batch both still
-    read "COMMITTED, NOT PUSHED").
   - **V2.1 trigger backport — LOADER ABANDONED 2026-07-30; 8 items move to UI
     hand-entry.** Not an E-phase and no longer a scripted load at all — see the
     §15 backlog entry for why (superseded brief, inverted polarity) and for the
@@ -1922,34 +1702,6 @@ reviews. Effort: LG (multi-phase).
     for the 13 active NBLY brands (207 todo→done, 8 done→todo). Data-only; no
     migration/route/app-code. Lacey approves + runs per the §16 checklist. Not an
     E-phase — a data correction riding alongside the E track.
-  - **Brand-page parity + matrix paused default — SHIPPED 2026-07-31** (see §16).
-    The brand-page edit target became the leading status DOT (matrix consistency,
-    24×24 hit area, right-hand label inert), a client-side brand-page status filter
-    landed (`Open` default, defined as an EXCLUSION of done/n_a so a future status
-    defaults to visible), and the matrix's *Hide paused brands* now defaults ON —
-    justified by a re-measured prod probe and, since a measurement is only a
-    snapshot, ALSO checked at runtime by `countHiddenOwedCells`. Render-only, no
-    Jenny, no version bump. Karen PASS-WITH-FINDINGS ×2, all folded.
-    **Two open items carried out of it, neither settled by the ship:** the app-wide
-    orange focus ring is **2.76:1 in light mode** and is now the dot's *sole*
-    affordance (hover-only was Lacey's accepted call), so it is a **token-level
-    decision flagged for Lacey**; and the `--f92-lgray` dot fill at 2.54:1 light,
-    which does not bite 1.4.11 because the status is also text in the same row.
-  - **HOTFIX Pulse cell pagination — SHIPPED 2026-07-31** (see §16). Read-path
-    correctness bug, live 2026-07-22 → 07-31. Not an E-phase.
-  - **Restyle core (batch 2 of 4) — SHIPPED 2026-08-02** (see §16). Reskinned both
-    surfaces onto the Claude Design mockup (cells → rounded squares in a shared
-    component, a new 5-swatch legend, a six-card all-derived KPI strip), replaced the
-    single status filter with THREE independent AND'd groups (State derived / Status
-    per-cell / Type from the real column), and raised the focus ring to ≥3:1 in both
-    themes at the token level. Karen PASS-WITH-FINDINGS, 2 HIGH + 2 MEDIUM + 4 LOW all
-    folded. v2.5 → v2.6.
-  - **Restyle batch 3 (hover-inspect + note surfacing) — SHIPPED 2026-08-03** (see §16;
-    PUSHED + deployed, prod `version: dc377df`). Cell notes are FINDABLE on the matrix,
-    not merely reachable: a rendered marker plus a hover/focus readout bar. Also removed
-    `<button disabled>` for non-admins — and `aria-disabled` with it — and dropped the
-    native `title` note. Render/interaction only; no Jenny. Karen PASS-WITH-FINDINGS
-    then CONFIRMED on the delta; v2.6 → v2.7.
   - **Restyle batch 4 — NOT STARTED. Gate 0 (MEDIUM-6 audit-coverage count) DONE
     2026-08-03, read-only — figures below.** The Change Log widget, which needs a NEW
     `audit_log` read — and `audit_log` is **already over the PostgREST 1,000-row cap
@@ -2130,22 +1882,6 @@ bullets is not.** That is worth more than the ordering rule it sits under.
   a real family column lands (the mockup's nine families are invented client-side).
 
 **Matrix-controls deferred follow-ons (backlog, from the 2026-07-29 ship):**
-- **Duplicate-title check on `POST /api/admin/directives`** — the route trims and
-  inserts `title` with **no duplicate check**, and migration 024 puts **no unique
-  constraint** on `(project_key, title)` (only plain indexes), so the live inline
-  create strip can mint two directives with the same title. A duplicate makes any
-  title→id resolver silently pick the wrong one and **still pass post-verify** —
-  already recorded as a folded Karen MEDIUM on the Convert-reconciliation batch,
-  and the reason the matrix-controls batch had to mitigate its search on the
-  render side (Karen MEDIUM-1 → `countHiddenByStatus`). This is the **durable**
-  fix. Route change (+ optionally a unique index → migration), so it needs its
-  own gate profile — likely Jenny. Decide whether to reject outright or warn.
-  **✅ SHIPPED 2026-08-18 — Batch 012 directive CRUD (see §16); this item is
-  CLOSED.** Rejected outright at BOTH layers: migration 029's
-  `idx_directives_project_title` UNIQUE `(project_key, title)` **applied to
-  production**, plus a 409 from POST *and* PATCH — the POST half was missed by the
-  build and caught by Karen round 1, which is why 029 would otherwise have turned
-  a retyped title into a raw Postgres constraint error.
 - **Archive-UI signal obligation (Karen LOW-8)** — `loadProject` only loads
   `status='active'` directives, so an ARCHIVED directive is invisible to the
   matrix search and counts 0 toward `hiddenByStatus`: an exists-but-archived title
@@ -2494,40 +2230,8 @@ Realistic scope: 2-4 week build, not a weekend project. The
 "single push" hides a multi-step orchestrator with error handling,
 idempotency, and rollback semantics.
 
-### Batch 009 — SharePoint integration — SHIPPED 2026-05-29
-Read-only Microsoft Graph proxy. Three GET routes under
-`/api/sharepoint/*` (`/folder`, `/xlsx`, `/image`),
-`Sites.Selected` scope, 60s in-memory cache, share-id folder
-resolution. See §16 for the full shipped-log entry and the
-four SHIP-day deviations (D1-D4). Full spec at
-`docs/batch-009-sharepoint-spec.md` (status header now
-SHIPPED). Day-one consumer AC's Phase 2 is unblocked.
 
-**Canonical priority order moved.** It is live sequencing authority and no
-longer sits inside this closed batch entry — see **§0.1 Priority Order** near the
-top of this file. The shipped-batch roll-call that travelled with it is history
-and is in `docs/claude-archive/CLAUDE-16-2026-07.md`.
 
-**SHIP-day open questions resolved:** multi-site support
-stays deferred (single Fusion92 tenant via env-config, per
-spec §8/§12); 25 MB image cap retained as a proxy-side
-Worker-memory guard.
-
-### Drought predicate off-by-one check (Path 2) — DISSOLVED into Batch 010.1
-Folded into Batch 010.1 (Pipeline alerts, merged) on 2026-07-03. The
-`<= 2` vs `< 2` question stops being a standalone predicate fix and becomes
-"define the comparison against the configured per-brand target once,
-correctly." **SETTLED 2026-08-03 on both sides:** the render layer moved to
-`COVERAGE_TARGET = 4` with `count < target`, and Lacey edited
-`alert_rules.config.threshold` 2 → 3 the same day — `count <= 3` is the same
-predicate as `count < 4` over integers, so the pill and the cron now agree
-exactly. What 010.1 still owns is the STRUCTURAL collapse (per-brand targets, one
-spelling, no `DEFAULT_THRESHOLD = 2` fallback left to silently reopen it), not a
-number mismatch. See the Batch 010.1 entry below.
-
-### Batch 010.2 — Brand contract management — MERGED into Batch 010.1
-Merged 2026-07-03. Per-brand contract targets are now part of Batch 010.1's
-scope (below), not a separate batch.
 
 ### Batch 010.1 — Pipeline alerts (MERGED: 010.1 + 010.2 + Path 2)
 Sequenced after Batch 006. Collapses the three formerly-separate items
@@ -2634,46 +2338,6 @@ its reason so nobody re-derives the analysis.
       runs at row creation, where there is no prior value to destroy. It is the same
       shape as the defect that cost five rows; do not assume it stays harmless if the
       webhook ever updates an existing row.
-- [x] **`root_cause_description` — GUARDED as of 2026-08-09 (Lacey's call).** The
-      guard was widened to seven fields rather than only correcting the prose, so
-      a `null` Jira `customfield_12909` can no longer null the CSV-imported
-      "Issue Details" text — **contingent on Jira sending literal `null`; see the
-      empty-ADF gap in the still-open half below** — and any real change to it now writes an audit row
-      where there was none. **The decision rule changed with it** — see §13 r37:
-      it is no longer `ALLOWED_FIELDS ∩ updateData` but "can this column hold
-      human work the sync can destroy", because editability turned out to be an
-      incomplete proxy for that. **Still open below: the ADF hazard only.**
-      Original finding, kept for the reasoning:
-      **32 non-deleted rows hold human-authored text** there, imported from the
-      CSV's "Issue Details" column (§11) — e.g. `92111cdb` / NBLYCRO-101. All 38
-      CSV-imported rows are `Resolved`, and that is the **only** thing keeping them
-      out of the sync's working set. **`log_status` IS in `ALLOWED_FIELDS`**, so an
-      admin reopening a resolved log — supported, and something the `f44754df` trail
-      shows Lacey doing in both directions — pulled the row in; the sync then
-      wrote `root_cause_description: null` **unguarded and unaudited**. Silent, and
-      the same shape as the defect this batch fixed. It escaped the original guard
-      because it is not human-*editable* in CQIP and so failed the
-      `ALLOWED_FIELDS ∩ updateData` rule — **not** because it was empty of human
-      work, which an earlier draft of this entry and of the code comments claimed
-      and which was false (Karen post-flight MEDIUM-2). **Nothing is owed here now;
-      the guard covers it.**
-      **STILL OPEN — the latent ADF hazard**, which widening the guard does NOT
-      address, and which has TWO faces. **(i) The write:** an ADF object into a
-      `TEXT` column. **(ii) The guard's blind spot (Karen re-check):**
-      `isEmptyForSync` treats any non-array object as non-empty, so a field
-      *cleared in Jira* that comes back as an empty ADF doc
-      (`{type:'doc',version:1,content:[]}`) rather than `null` is read as a real
-      value and written — which is why the protection above is contingent. Both
-      fail SAFE (the TEXT write errors, the log counts failed, the prose
-      survives) and both are latent: 0 of 33 working-set tickets return a
-      non-empty `customfield_12909`. Deliberately not patched with a speculative
-      ADF-shape heuristic — that would buy sync throughput, not data safety.
-      Mechanically: `mapJiraFields` does
-      `fields[customfield_12909] ?? null` with **no ADF extraction**, while §7
-      documents that field as a Jira **Paragraph** (API v3 returns an ADF *object*)
-      into a `TEXT` column. Probed 2026-08-08: all 33 working-set tickets return
-      `null`, so that half is latent. Now that the update error is checked, a future
-      non-empty value fails loudly instead of corrupting silently.
 - [ ] **§13 r29 — the sync writes taxonomy values unvalidated.** The edit route
       validates every value against `quality_log_taxonomy`
       (`app/api/logs/edit/route.ts:86–137`); the sync validates none. Post-guard a
@@ -2716,57 +2380,6 @@ hypothesis is available would be waiting for the wrong gate.
 as UNEXERCISED for this reason, and that wording should survive until a real run
 exists.
 
-### ⚠ Brand dropdown panel CLIPPED — FIXED, committed, NOT YET PUSHED
-
-**Found by Lacey in smoke 2026-08-13 (test 4). STILL LIVE IN PRODUCTION:** prod serves
-`cdb2cc6`, which contains the defect, and the fix is committed locally but **not
-pushed**. Two docs-only pushes since (`1d816f1`, `ee9d782`) correctly skipped a deploy
-via `paths-ignore`, so prod has not moved. **Lacey smokes on localhost, then pushes.**
-
-**Characterised, not assumed** — the first two hypotheses were both wrong, which is
-why this is written down rather than left as "probably the spacing":
-- **NOT B3's spacing change.** `overflow-hidden` on the collapsible filter body is
-  **pre-existing** (`f2f9511^:550`, before this batch) and is load-bearing: it is what
-  makes the `grid-rows-[0fr]→[1fr]` collapse animate instead of popping. B3 only
-  changed `pt-3→pt-2`, `mt-3→mt-2` and label classes.
-- **NOT the filtering.** Verified: an empty query returns all options, and `aire`,
-  `ASV` and `Aire Serv` all match. This is **purely a clipping/overflow defect.**
-- **NOT `/dashboard/reports`.** That page's `BrandSelector` has **zero** `overflow-*`
-  ancestors — plain Card — so only `/dashboard/logs` is affected.
-- **The actual cause:** the Combobox panel is `absolute` in-flow, so it cannot escape
-  a clipping ancestor. Its row-mates Severity and Status were never affected because
-  shadcn's Select renders through `SelectPrimitive.Portal` (`select.tsx:74`). **Brand
-  was the only control in that row that did not portal.**
-
-**Fix:** portal the panel to `document.body` with fixed positioning from the trigger
-rect, via a pure tested `computePopoverPosition`. This makes Combobox behave like its
-row-mates rather than making the page accommodate it.
-
-**Karen post-flight PASS-WITH-FINDINGS; MEDIUM-1 folded.** `PANEL_MAX_HEIGHT` was 240
-with a comment claiming to match "the panel's own `max-h-60`" — but that class is on
-the **LIST**, and the outer panel had **no max-height at all**, so the constant
-understated the real box (~279px) by ~39px. Two consequences, both invisible without
-rendering: in the 240–279px band the flip never fired, so the panel overhung the
-viewport and — being `position: fixed` — **could not be scrolled to**, which is the
-same symptom as the defect being fixed; and worse, **a flipped panel overlapped its own
-trigger** by ~35px of a 40px control, in exactly the long-list case where flip fires.
-**Karen's mutation proved it unpinned: changing the number failed zero tests** — the
-`COVERAGE_TARGET_EFFECTIVE` shape, a constant describing a value nothing couples it to.
-**Repaired by coupling rather than a better estimate:** the panel's own `maxHeight` IS
-the constant (with `overflow: hidden` so the cap is real, not advisory), which makes it
-true by construction — there is no "correct value" left to drift from. The
-flip-never-overlaps-the-trigger invariant is now asserted over the returned geometry for
-any panel height. **LOW-1 folded** (position cleared on close, so a reopen cannot paint
-one frame at the previous coordinates). **`aria-controls` + a panel `id` added** — and
-recorded honestly as an improvement, NOT a regression repair: the association never
-existed, since the panel was always a sibling of the button rather than a descendant.
-**Two traps it creates and must keep handling:** the outside-click check must consult
-the PANEL ref as well as the trigger root, or every click inside the open panel closes
-it instantly; and position must be recomputed on scroll **with capture** and on resize,
-or a fixed panel detaches from its trigger. `MultiCombobox` has the identical in-flow
-pattern (`multi-combobox.tsx:149`) and is used inside the edit dialog's
-`overflow-y-auto` — degraded but scrollable there rather than hidden, so recorded, not
-bundled.
 
 ### ⚠ Directive archiving is REACHABLE after all — a recorded claim is falsified
 
@@ -2800,16 +2413,6 @@ why total cells (**1,393**) exceed rendered cells (86 × 16 + 1 = **1,377**).
 Both were FOUND and CHARACTERISED during the B2 investigation and deliberately left
 open — recorded so they are not re-discovered from scratch.
 
-- [x] **The brand dropdown's `<Label>` was orphaned on both pages — FIXED
-      2026-08-12** in the Karen fold, at Lacey's direction. An optional `id` is
-      threaded `BrandSelector` → `Combobox` onto the trigger button, and both call
-      sites pass `id="clientBrand"`. **Note it does NOT change the accessible name:**
-      a `<button>` names itself from its content, so the trigger still announces the
-      selected value — exactly as `SelectTrigger` does for Severity and Status. What
-      the fix buys is the association itself (click-to-focus) and parity across the
-      row. An earlier note here said screen readers got "an unlabelled button";
-      that was **wrong** and is corrected rather than deleted, because the
-      overstatement is what made the defect sound like a different problem.
 - [ ] **A ruling followed by "Save changes" writes TWO `audit_log` rows for one
       `root_cause_final` change, the second carrying a stale `old_value`.**
       `applyEditedLog` deliberately never updates `editingLog` — that is what keeps
@@ -2883,15 +2486,6 @@ open — recorded so they are not re-discovered from scratch.
       cadence, and pair with the 010.1 scheduled orphan alert.
 - [ ] **Radara Edge Function deploy** — code committed at
       `supabase/functions/radara-sweep/index.ts` but not deployed.
-- [x] **Deploy smoke check via `/api/health`** — **shipped Batch 011
-      (2026-05-27).** `app/api/health/route.ts` added (public,
-      dependency-free, always-200 JSON probe); `deploy.yml` smoke
-      check swapped from `/login` to `/api/health` and now asserts
-      both 200 AND `{"status":"ok"}` in the body. v1 scope is
-      deliberately "app responds, env loaded" — NO Supabase
-      reachability ping (the original sketch above mentioned one;
-      explicitly out of scope per the Batch 011 spec to keep the
-      probe fast and dependency-free). See §16.
 
 ### Randy items (Cloudflare org-level — when he's back)
 - [ ] Cloudflare Workers Paid billing transfer (currently Lacey
