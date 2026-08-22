@@ -62,3 +62,55 @@ const next = [
 
 fs.writeFileSync(envPath, next);
 console.log(`[build-info] commit=${sha} time=${timestamp} version=${appVersion}`);
+
+// ---------------------------------------------------------------------------
+// CLAUDE.md size ceiling — §13 r41. WARN ONLY, NEVER FAIL THE BUILD.
+//
+// A gate is the wrong instrument here twice over: docs-only commits skip CI via
+// paths-ignore (§13 r30/r31), so a failing gate is unreachable on exactly the
+// commits that grow this file — and destructive on the ones it does catch,
+// since it would block a deploy over a documentation size.
+//
+// Unit is CHARACTERS, not bytes. This file's bytes run ~+1.0% over its
+// characters (it is dense with em dashes, §, ⚠, ·), which is over a thousand
+// at the boundary.
+//
+// The PER-SECTION breakdown is the load-bearing part: without it the reflex on
+// a tripped ceiling is to roll §16 over, which does nothing when the growth was
+// in §15 or the header.
+// ---------------------------------------------------------------------------
+const CLAUDE_MD_CEILING = 120000; // characters — §13 r41
+try {
+  const mdPath = path.join(__dirname, '..', 'CLAUDE.md');
+  const md = fs.readFileSync(mdPath, 'utf8');
+  const total = md.length;
+
+  const lines = md.split('\n');
+  const heads = [];
+  lines.forEach((l, i) => { if (l.startsWith('## ')) heads.push([i, l.slice(3).trim()]); });
+  const sections = heads.map(([i, name], n) => {
+    const end = n + 1 < heads.length ? heads[n + 1][0] : lines.length;
+    return { name, chars: lines.slice(i, end).join('\n').length };
+  }).sort((a, b) => b.chars - a.chars);
+
+  const pct = ((total / CLAUDE_MD_CEILING) * 100).toFixed(0);
+  console.log(`[claude-md] ${total.toLocaleString()} chars / ${CLAUDE_MD_CEILING.toLocaleString()} ceiling (${pct}%)`);
+  for (const s of sections.slice(0, 5)) {
+    console.log(`[claude-md]   ${s.chars.toLocaleString().padStart(9)}  ${s.name.slice(0, 58)}`);
+  }
+  if (total > CLAUDE_MD_CEILING) {
+    const over = total - CLAUDE_MD_CEILING;
+    console.warn('');
+    console.warn('  ⚠  CLAUDE.md IS OVER ITS SIZE CEILING (§13 r41)');
+    console.warn(`     ${total.toLocaleString()} chars, ${over.toLocaleString()} over the ${CLAUDE_MD_CEILING.toLocaleString()} limit.`);
+    console.warn(`     Largest section: ${sections[0].name} at ${sections[0].chars.toLocaleString()} chars.`);
+    console.warn('     Roll the OLDEST §16 month out to docs/claude-archive/ — but check');
+    console.warn('     the breakdown above first: if the growth is in §15 or the header,');
+    console.warn('     rolling §16 over will not move the number.');
+    console.warn('     Not failing the build — this is a warning by design (r41).');
+    console.warn('');
+  }
+} catch (err) {
+  // Never let a measurement break a build.
+  console.warn(`[claude-md] size check skipped: ${err.message}`);
+}

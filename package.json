@@ -13,7 +13,9 @@
     "build:worker": "opennextjs-cloudflare build",
     "preview": "opennextjs-cloudflare build && wrangler dev",
     "deploy": "opennextjs-cloudflare build && wrangler deploy",
-    "deploy:dry-run": "opennextjs-cloudflare build && wrangler deploy --dry-run --outdir .wrangler/dry-run"
+    "deploy:dry-run": "opennextjs-cloudflare build && wrangler deploy --dry-run --outdir .wrangler/dry-run",
+    "archive:index": "node scripts/gen-archive-index.js",
+    "archive:index:check": "node scripts/gen-archive-index.js --check"
   },
   "dependencies": {
     "@opennextjs/cloudflare": "^1.19.3",

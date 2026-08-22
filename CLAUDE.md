@@ -2527,17 +2527,22 @@ true on its ship date. For current state read the `Prod right now` stanza at
 the top of this file, and `docs/schema.md` for schema — never an archive entry.
 
 **Index generated, not hand-maintained** — `npm run archive:index` rewrites it
-from the archive files. A hand-kept index would be a third copy of state and
-would drift from the two it indexes, which is the failure this batch existed to
-remove.
+from the archive files; `npm run archive:index:check` fails if it is stale. A
+hand-kept index would be a third copy of state and would drift from the two it
+indexes, which is the failure this batch existed to remove.
+
+**It lists 87 items, not 77.** 77 are the shipped §16 entries; the other 10 are
+whole §15 subsections that were closed and archived by the same batch. Both live
+in the month files, so both are indexed — the count is of items in the archive,
+not of shipped batches.
 
 ### Archive index
 
-**[`CLAUDE-16-2026-pre-04.md`](docs/claude-archive/CLAUDE-16-2026-pre-04.md)** — 1 entries
+**[`CLAUDE-16-2026-pre-04.md`](docs/claude-archive/CLAUDE-16-2026-pre-04.md)** — 1 item
 
 - v1.0 — Foundation (pre-April 2026)
 
-**[`CLAUDE-16-2026-04.md`](docs/claude-archive/CLAUDE-16-2026-04.md)** — 16 entries
+**[`CLAUDE-16-2026-04.md`](docs/claude-archive/CLAUDE-16-2026-04.md)** — 16 items
 
 - Batch 001 — April 2026
 - Batch 001.5 — April 2026
@@ -2556,8 +2561,12 @@ remove.
 - Batch 004.6 — Pre-demo security batch — 2026-04-28
 - Batch 004.5 — Brands QA-config extension — 2026-04-26
 
-**[`CLAUDE-16-2026-05.md`](docs/claude-archive/CLAUDE-16-2026-05.md)** — 27 entries
+**[`CLAUDE-16-2026-05.md`](docs/claude-archive/CLAUDE-16-2026-05.md)** — 31 items
 
+- Pre-demo / immediate
+- Batch 004.99 (post-Batch-004) — Multi-Client Readiness Review — shipped 2026-05-06
+- Batch 005.25 — Brand dropdown fix + client_brand normalization
+- Batch 009 — SharePoint integration — SHIPPED 2026-05-29
 - Batch 009 — SharePoint integration LIVE — 2026-05-29
 - Batch 011 — Node 24 upgrade + /api/health endpoint — 2026-05-27
 - Azure prereqs verification + docs cleanup — 2026-05-26
@@ -2586,12 +2595,16 @@ remove.
 - Batch 004.11 — Saturday code pull-forward — 2026-05-01
 - Batch 004.10 — Pre-demo UX polish — 2026-05-01
 
-**[`CLAUDE-16-2026-06.md`](docs/claude-archive/CLAUDE-16-2026-06.md)** — 1 entries
+**[`CLAUDE-16-2026-06.md`](docs/claude-archive/CLAUDE-16-2026-06.md)** — 1 item
 
 - Batch 010 — Coverage pipeline visibility — 2026-06-03
 
-**[`CLAUDE-16-2026-07.md`](docs/claude-archive/CLAUDE-16-2026-07.md)** — 21 entries
+**[`CLAUDE-16-2026-07.md`](docs/claude-archive/CLAUDE-16-2026-07.md)** — 25 items
 
+- auth.1 / auth.2 — Identity migration + admin password reset (scoped 2026-07-03)
+- Batch 005.2 — Coverage Ledger redesign — SHIPPED 2026-07-08 (see §16)
+- Batch 005.5 — Reggie brand-detail drawer polish — SHIPPED 2026-07-09 (see §16)
+- Batch 010.2 — Brand contract management — MERGED into Batch 010.1
 - Batch 012 — Pulse: brand-page parity + matrix paused default — 2026-07-31
 - HOTFIX — paginate the Pulse cell reads (PostgREST 1,000-row cap) — 2026-07-31
 - Batch 012 — Pulse: directive matrix controls (search · status filter · sort · hide paused) — 2026-07-29
@@ -2614,8 +2627,10 @@ remove.
 - Batch auth.2 — Admin temp-password reset + account-recovery hardening — 2026-07-05
 - Batch 005.1 — Coverage redesign + BrandAdminDrawer — 2026-07-03
 
-**[`CLAUDE-16-2026-08.md`](docs/claude-archive/CLAUDE-16-2026-08.md)** — 11 entries
+**[`CLAUDE-16-2026-08.md`](docs/claude-archive/CLAUDE-16-2026-08.md)** — 13 items
 
+- Drought predicate off-by-one check (Path 2) — DISSOLVED into Batch 010.1
+- ⚠ Brand dropdown panel CLIPPED — FIXED, committed, NOT YET PUSHED
 - Batch 012 — Pulse: directive CRUD (edit · soft-delete · archive) — 2026-08-18
 - Batch 012 — Pulse matrix: filter reorg + grid ergonomics — 2026-08-14
 - Batch logs-page — dismiss guard + filter bar + AI suggestion strip — 2026-08-14
@@ -2627,7 +2642,6 @@ remove.
 - Coverage metric honesty — target 4 + metric rename — 2026-08-03
 - Batch 012 — Pulse: restyle batch 3 of 4 — hover-inspect + note surfacing — 2026-08-03
 - Batch 012 — Pulse: restyle core (batch 2 of 4) — 2026-08-02
-
 ---
 
 *Last updated: 2026-08-21 | CQIP v3.0 — **BATCH 012 PULSE DIRECTIVE CRUD (edit · soft-delete · archive) — SHIPPED + PUSHED + DEPLOYED 2026-08-18; prod `/api/health` now reports `version: d5e5703`** — the docs-only rev-7 outline commit. **No application code changed** (no `.ts`/`.tsx` moved from `e518624`), but the bundle is NOT identical: `package.json` is a build input as well as a deploy trigger, so `gen-build-info.js` stamped the bump into `NEXT_PUBLIC_APP_VERSION` and **v3.0 IS live — Settings → System Info renders `3.0.0`**, which retires the entry's own "declared ≠ deployed" framing rather than patching it. **The §16 entry's ⚠ 0 predicted the SHA would hold at `e518624` and that was WRONG**: `deploy.yml`'s `paths-ignore` is `**.md` / `docs/**` / `.github/**` and does NOT cover `package.json`, so the version bump itself triggered CI, which stamped the pushed tip — struck in place there, not deleted. Migration 029 (`idx_directives_project_title`, UNIQUE `(project_key, title)`, spanning archived rows) is **APPLIED TO PRODUCTION**, verified by direct query in the prod Supabase SQL editor 2026-08-18 — stated with its environment and method because *deployed* and *migrated* are independent facts and `/api/health` reports the **Worker only**. **Jenny pre-flight ×2** (rev 1 DO-NOT-BUILD-YET: 1 CRITICAL · 3 HIGH · 6 MEDIUM · 10 LOW → rev 2 APPROVE-WITH-FINDINGS: 1 HIGH · 10 MEDIUM · 4 LOW), **FIVE Karen rounds** (2H/7M/5L → 2H/1M/4L → 0/2M/2L → 0/1M/2L → 0/0/3L). **Read that progression, not the total:** the original build's HIGHs were found in round one and never recurred, **every HIGH in round two was in a FIX**, and rounds three-to-five found nothing above MEDIUM — the core machinery was re-confirmed three times against three different trees, while what kept failing was the *claims*. Jenny's CRITICAL changed the design: the `project_key` block was specified only as a render-layer lock, so ordinary two-admin concurrency would have destroyed 16 cells including notes **with no `old_value` anywhere in the trail** (§13 r37's shape); the route now re-runs the **same shared predicate** against freshly-read cells. The predicate is a **three-clause conjunction** — the two-clause version would have wrongly allowed moving **5 of its 6 "movable"** directives, because `n_a` is not machine-only and **620 prod cells** that looked like fan-out output had in fact been written. It is kept fail-safe **by construction**: every clause can only SHRINK the movable set, so `project_key` being editable on **1 of 89** directives is the predicate working, not failing — and every directive created from now on is movable until someone works it. **⚠ My own audit caused a HIGH:** COMMIT 7 claimed "exactly ONE `setEditingDirectiveId(null)` remains" on a grep for that **literal string**, which cannot match the **ternary** form the row's Edit/Close toggle uses — §13 r38 mechanism (a), a count stated on an instrument that could not see the case. Karen later re-derived it by **AST**. Three defects in this chain were created **by** the fix before them, and each was closed with a **mechanism rather than a longer list**: clear-on-unmount over a ninth enumeration entry, then its prop-identity dependency **removed** rather than documented, and a prompt that fires only when the click would actually drop the edited row — because a dialog that is usually wrong trains the user to click through, which is how a guard stops working without breaking. **Same-shape duplication removed THREE times in one batch** (`CELL_STATUS_LABEL`, the duplicate-title message whose drift mutation *survived*, `visibleForLifecycle`) — recorded as a rule CANDIDATE, **not promoted**: *the comment is the tell*, since all three carried a comment asserting parity and one was demonstrably false with every gate green. **Directive count re-derived 2026-08-18 grouped by `project_key` AND `status`:** NBLYCRO active **87** · archived **1** · SPLCRO active **1** · global active **88** · all rows **89**. The apparent three-way conflict was **one stale figure plus one MISLABELLED comparison** — "NBLYCRO active" = 87 (matrix header, correct) versus "directives holding cell work" = 88 of 89 (the runbook's, a *different quantity*); rev 6's 86/87 was stale 08-14 data. **The label is the fix.** Gates at five trees: tsc 0 · ESLint 0 · **376/376** (from 333) · build 0 · **44 mutations run, 42 caught**, both survivors verified equivalent mutants. **⚠ NOT VERIFIED, carried forward: there is NO route-level test harness** — Lacey's Scenario A result (`a059d078`, 409 with `blocking_cells: 16`, hash `a2808d54…`, SPLCRO 0, still `NBLYCRO`, zero audit rows) is a **HAND-RUN OBSERVATION, NOT COVERAGE**; **the guard has been observed REFUSING but never PERMITTING**, since the positive case was deliberately skipped (it writes a permanent prod directive and archiving does not free the title) — **the batch's oldest open item**; the `splitShownByLifecycle` **caller remains UNCOVERED** (one call expression, one surviving mutation, all gates green — the extraction narrowed the surface, it did not close the caller); and **`clearAllFilters` is correct BY ACCIDENT**, resetting `statusFilter` to `'all'` which strictly widens — nothing pins that, and a "restore defaults" edit to `'open'` reinstates the silent-loss path in one line.*
