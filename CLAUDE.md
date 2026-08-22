@@ -150,6 +150,13 @@ settle the question with `ls`; §13 encodes judgement that exists nowhere else.
 **Not because it is "regenerable"** — the annotations on that tree carry batch
 provenance and design reasoning no regeneration would reproduce.
 
+**Reading older citations:** §16 entries dated before 2026-08-22 refer to this
+content as **"§3"** / **"the §3 file tree"** — dated records, deliberately not
+rewritten (§13 r40). Read any pre-split `§3` in §16 as pointing here. Note that
+**most `§3` and `§5` tokens elsewhere in this file point at OTHER documents**
+(`CROSS_CLAUDE.md §3`, `spec §5.1`, `HANDOFF … §3`, the multi-client audit's
+§5); those were classified individually during the split and left alone.
+
 ---
 
 ## 4. Environment Variables
@@ -239,6 +246,12 @@ It is a curated document that now lives beside its sources, not a build artifact
 
 **Known pre-existing gap, carried across unchanged:** `monitoring_findings`
 (migration 025) is still undocumented there.
+
+**Reading older citations:** §16 entries dated before 2026-08-22 refer to this
+content as **"§5"** / **"the §5 schema doc"**. Those are dated records of what
+each batch updated at the time and were deliberately **not rewritten** — editing
+a record to match today's layout falsifies the record (§13 r40). Read any
+pre-split `§5` in §16 as pointing here.
 
 ---
 
@@ -1305,7 +1318,8 @@ Resolved             → green-500
 
 - Email notifications (Teams + in-app only)
 - ~~AI root cause classification (data model is ready; feature is not built)~~ —
-  **SUPERSEDED 2026-08-10: Phase 1 is IN FLIGHT as Batch classifier-1 (see §15.5).**
+  **SUPERSEDED 2026-08-10: Phase 1 SHIPPED as Batch classifier-1 (see §16) — and
+  has never run; see the §15 "AI root-cause classifier — PARKED" entry.**
   Note what is and is not in scope: the classifier *suggests* into separate AI
   columns and **never writes `root_cause_final`** — a human confirm is the only
   path into the canonical field. Rovo, Copilot, auto-confirm-above-a-threshold,
@@ -2297,7 +2311,7 @@ off-by-one) into one coherent build.
 - Effort: MED. PM consult on contract verbiage / monthly-vs-28d window
   semantics still owed (Lacey).
 
-### Sync-guard deferred follow-ons (from the 2026-08-08 batch — see §15.5 / §16)
+### Sync-guard deferred follow-ons (from the 2026-08-08 batch — see §16)
 
 Eight items the skip-if-empty batch deliberately did NOT do. Each is recorded with
 its reason so nobody re-derives the analysis.
@@ -3971,8 +3985,9 @@ no idea which brand; and a padding mutation (`". No note"` on ~1,300 names) that
 past `!includes('Note')` because that string carries no capital-N `"Note"`. Also removed a
 **dead assertion** of mine that could not fail while the line above it passed — found by
 deleting it and seeing nothing change. **An assertion that cannot fail while its
-predecessor passes is not a check** — sibling of §15's "if a check can only be satisfied
-by the same artifact that produced the value, it is not a check."
+predecessor passes is not a check** — sibling of the shared-oracle rule, now
+**§13 r38** (it lived in §15 prose when this entry was written; inlined into r38
+by the CLAUDE.md split batch, 2026-08-22).
 
 **Two gates were NOT self-satisfiable and were disclosed rather than claimed:** "both
 themes by eye" and "the non-admin path exercised as a non-admin". Karen confirmed nothing
@@ -4305,8 +4320,10 @@ sixth status joins `CELL_STATUSES`, which a compile-time const makes unconstruct
 So it is a **review-level invariant** and the comment on `TERMINAL_CELL_STATUSES` is
 its only enforcement. An earlier draft of that test comment claimed the fail-safe test
 DID catch it; mutation run 3 disproved it and the claim was corrected rather than left
-standing — the §15 shape *"if a check can only be satisfied by the same artifact that
-produced the value, it is not a check."*
+standing — the shared-oracle shape, now **§13 r38** *("if a check can only be
+satisfied by the same artifact that produced the value, it is not a check")*; it
+lived in §15 prose when this entry was written and was inlined into r38 by the
+CLAUDE.md split batch, 2026-08-22.
 
 **Out of scope, not snuck in:** search/sort on the brand page · KPI strip ·
 hover-inspect · Change Log widget · family/grouping · hiding paused CLIENTS from the
