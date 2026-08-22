@@ -1198,10 +1198,23 @@ Resolved             → green-500
     "this route is never called from here"), keep it NARROW: assert the one token
     that matters, never a whole expression, and pair it with a behavioural test of
     the value. **Mutate to confirm**, and count a survivor only after verifying the
-    patch actually applied. Note the sibling rule this generalises: §15's *"if a
-    check can only be satisfied by the same artifact that produced the value, it is
-    not a check"* covers a shared **oracle**; this covers a test that is
-    independent and still wrong.
+    patch actually applied.
+
+    **The sibling rule this generalises — inlined here 2026-08-22 by the CLAUDE.md
+    split batch, because it used to live in §15 prose and was cited from three
+    places.** Both halves are needed and only one used to be quoted:
+
+    - **The mechanism.** When the reference value and the value under test share a
+      **common ancestor**, agreement is guaranteed regardless of correctness —
+      *the oracle is not independent.*
+    - **The test.** *If a check can only be satisfied by the same artifact that
+      produced the value, it is not a check.* Anchor mapping assertions to the
+      external source of truth, or state plainly that they are unanchored.
+
+    Quoting only the test left this rule drawing its distinction against
+    **"a shared oracle"** — a term the quoted sentence never uses and the
+    mechanism is what defines. **That** rule covers a shared oracle; **this** one
+    covers a test that is independent and still wrong.
 
 39. **Check for a concurrent session at session open, before touching the tree.**
     (Recorded 2026-08-14, after it cost a clean gate run.)
@@ -2195,9 +2208,11 @@ bullets is not.** That is worth more than the ordering rule it sits under.
   this entry exists to record.) When the authority for a mapping lives outside the
   repo, no amount of in-repo verification reaches it — and no reviewer's scope note
   substitutes for checking it.
-  **This is now the FOURTH defect of the same shape across this run of work** — the reference value and the value under test share a common ancestor, so
-  agreement is guaranteed regardless of correctness (the oracle is not
-  independent). Described inline rather than by finding-number, because bare
+  **This is now the FOURTH defect of the same shape across this run of work** —
+  the shared-ancestor / non-independent-oracle shape, now stated as a rule at
+  **§13 r38** (inlined there 2026-08-22; the running count is deliberately not,
+  since it goes stale on the fifth). Described inline rather than by
+  finding-number, because bare
   "MEDIUM-n" citations are dead links here: those reviews were of code now dropped
   from history, and "MEDIUM-1" alone collides with several unrelated findings
   elsewhere in this file.
@@ -2231,10 +2246,8 @@ bullets is not.** That is worth more than the ordering rule it sits under.
   **Note the layer difference:** (1) and (2) are defects *in a script's guards*,
   fixed by writing a better assertion. (3) is a gap in the *verification process*
   and **cannot be fixed by any assertion at all** — do not go hunting for a code
-  fix for it. **Rule of thumb going forward: if a check can
-  only be satisfied by the same artifact that produced the value, it is not a
-  check.** Anchor mapping assertions to the external source of truth, or state
-  plainly that they are unanchored.
+  fix for it. **The rule of thumb this produced now lives at §13 r38** — a check
+  satisfiable only by the artifact that produced the value is not a check.
 - **Entry gotcha for the hand-entry (do NOT skip):** the create form defaults to
   `directive_type: 'goal'` (`app/dashboard/pulse/page.tsx:977`,
   `useState<DirectiveType>('goal')`). **All eight of these are `[Trigger]`
