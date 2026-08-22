@@ -2010,12 +2010,28 @@ Resolved             → green-500
 23. **CLAUDE.md is updated atomically with every ship.** Every batch
     that touches code, schema, or behavior must include CLAUDE.md
     updates in the same commit:
-    - Header "Current deployed state" line — append the new batch.
-    - §5 schema doc — any new table, column, RLS policy, trigger.
+    - Header **"Prod right now"** stanza — update the one-line
+      current-state claim **in place. NEVER append to a running
+      history.** (Amended by the CLAUDE.md split batch, 2026-08-22.)
+      This bullet used to read *"Header 'Current deployed state' line —
+      append the new batch"*, and **77 batches complied**: that
+      paragraph reached **24,792 characters** and was the single
+      largest reason this file outgrew the 150k read limit. It now
+      lives at `docs/claude-archive/CLAUDE-critical-history.md`.
+      **This bullet was the regrowth engine — appending restarts the
+      growth the split existed to stop.**
+    - **Schema — `docs/schema.md`**, not a CLAUDE.md section: any new
+      table, column, RLS policy, trigger. (§5 moved out in the same
+      batch; CLAUDE.md keeps a pointer stub.)
     - §13 — new business rule if behavior changed.
     - §15 — remove anything that just shipped from Pending; add new
-      backlog items.
-    - §16 — new batch entry with date, what shipped, why.
+      backlog items. **§15 holds live obligations only**; the shipped
+      or post-mortem half of a subsection belongs in the archive, per
+      rule 41.
+    - §16 — new batch entry with date, what shipped, why. **§16 holds
+      the current window only.** A new entry always lands in §16; when
+      rule 41's ceiling fires, the oldest month moves to
+      `docs/claude-archive/`.
     - Footer date stamp; version bump only on structural changes.
 
     **Why:** drift compounds. Future Claude Code sessions reading
@@ -2231,6 +2247,12 @@ Resolved             → green-500
     update §15 + the relevant CROSS_CLAUDE.md section (§3
     contract surfaces or §4 pending rotations) + any spec doc
     that propagated the gate, atomically, per §13 rule 23.
+    **If the re-check resolves the blocker, the item stops being a
+    live obligation** — record the outcome and move it to the archive
+    under rule 41 rather than leaving a resolved gate sitting in §15.
+    A resolved blocker left in place reads as live to the next
+    session, which is the same failure this rule exists to catch.
+    (Amended by the CLAUDE.md split batch, 2026-08-22.)
     **Why this entry exists in §13 too:** the originating
     incident was Dashboard-side (Batch 009 treated as "Azure
     prereqs blocked" for 23 days, 2026-05-03 → 2026-05-26, when
@@ -2291,6 +2313,12 @@ Resolved             → green-500
     §15 backlog item gets a one-line "IN FLIGHT — see §15.5"
     annotation; when it ships, the §15.5 entry is deleted in the same
     commit that writes the §16 entry (atomically, per rule 23).
+    **§16 is the current window, not the whole history** (rule 41):
+    a shipped entry is always written to §16, and ages out to
+    `docs/claude-archive/` on rollover. The archive is never a fourth
+    lifecycle stage a batch can sit in — it is where §16 entries go to
+    stop being read as current, per rule 40. (Amended by the CLAUDE.md
+    split batch, 2026-08-22.)
 
 35. **The app never mutates an admin account; every user-account
     mutation is audited and admin-issued temp passwords force a change.**
@@ -2479,6 +2507,54 @@ Resolved             → green-500
     compiling intermediate or stash, and if you cannot, say so where the other
     session will see it. A rule that only tells you how to react to someone else's
     mess describes half the problem.
+
+40. **`docs/claude-archive/` is append-only HISTORY. It is NEVER authority for
+    current state.** (CLAUDE.md split batch, 2026-08-22.) Every state read —
+    what is deployed, what is pending, what a rule requires, what a table looks
+    like — resolves against **CLAUDE.md**, and against `docs/schema.md` for
+    schema. An archive file records what was true on a ship date and is correct
+    *as a record* while being stale *as a claim*; those are different things and
+    the archive only ever offers the first.
+
+    **Why:** this file has been misled twice by exactly that confusion — a dated
+    ship record read as a current-state claim (`e518624` re-asserted as prod;
+    §16's own ⚠ 0 block). Splitting history into its own files makes the
+    distinction physical instead of a matter of the reader noticing a date.
+
+    **How to apply:** every archive file opens with a non-authority banner, and
+    **the banner is the mechanism while this rule is only the contract** — §16
+    already records that *proximity is not protection*, so a rule the reader may
+    never reach cannot be the only guard. Do not cite an archive file as evidence
+    for a present-tense claim. If you find yourself needing to, the fact belongs
+    in CLAUDE.md and has not been carried across — fix that instead. Never edit
+    an archive entry to make it current; write the current fact where current
+    facts live.
+
+41. **Rollover triggers on a SIZE CEILING, never on the calendar.**
+    (CLAUDE.md split batch, 2026-08-22.)
+
+    - **CLAUDE.md: 120,000 characters.** Hard rule. When it trips, move §16's
+      oldest month to `docs/claude-archive/` until it clears.
+    - **Archive files: 150,000 characters, advisory.** They are never read whole
+      by the ground-truth reader, so size is only a tool-convenience concern.
+    - **Unit is CHARACTERS, stated here because it matters:** this file's bytes
+      run **~+1.0%** over its characters (it is dense with `—`, `§`, `⚠`, `·`),
+      so an unqualified number is wrong by over a thousand at the boundary.
+    - **Measure CLAUDE.md alone — never the sum of CLAUDE.md plus the archive.**
+      The sum only ever grows, so an assertion on it fires forever and gets muted.
+
+    **Why not "current month only":** month is not a size unit. Shipped months
+    in this repo span **7,737 to 118,698 characters — a 15× spread** — so a
+    calendar rule bounds the file somewhere in a range an order of magnitude
+    wide, depending only on which month it happens to be.
+
+    **How to apply:** `scripts/gen-build-info.js` measures at every prebuild and
+    **warns loudly; it must never fail the build.** Docs-only commits skip CI via
+    `paths-ignore` (r30/r31), so a gate is unreachable on exactly the commits that
+    grow this file, and destructive on the ones it does catch. The check records a
+    **per-section breakdown alongside the total**, so a tripped ceiling routes to
+    the section that actually grew — without it the reflex is to roll §16 over,
+    which does nothing when the growth was in §15 or the header.
 
 ---
 
