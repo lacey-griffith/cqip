@@ -39,6 +39,53 @@ it, and it has been rewritten.
 
 ---
 
+## 0.1 Priority Order — CANONICAL
+
+**This is live sequencing authority.** It was promoted out of the CLOSED
+`Batch 009` entry in §15 by the CLAUDE.md split batch (2026-08-22), where it had
+been sitting inside a shipped batch — a live decision filed under finished work.
+Nothing about the ordering changed in the move.
+
+The roll-call of already-shipped batches that used to travel with this block was
+history, not sequencing, and is now in
+[`docs/claude-archive/CLAUDE-16-2026-07.md`](docs/claude-archive/CLAUDE-16-2026-07.md).
+It made the block ~40% history; keeping it here would have shipped a new
+authority section already four-tenths stale.
+
+**Priority order (resequenced 2026-07-15, confirmed with Lacey; mirrors
+CROSS_CLAUDE.md §5. Canonical — the `CQIP Batch Outline` project file mirrors
+this; "CLAUDE.md wins"):**
+
+```
+NEXT (resequenced 2026-07-15 with Lacey — Batch 012 Client Library
+      inserted; the polish/drawer cluster [005.4, 005.5, admin
+      filter-by-brand ride-along] all SHIPPED 2026-07-09, see §16)
+  1  012     Client Library — Phase C (Jira ticketing) NEXT; A + B SHIPPED
+             2026-07-17 (see §16). Phase C gated on §1 Jira-create-permission
+             verify (write path = §13 r5 scope expansion). Phase D (public bug
+             form) after C.
+  2  008     Convert.com integration   (consumes the SHIPPED 012 Phase B ingest; discovery-first)
+  3  006     Teams dispatch (expanded) ← unblocks 010.1 live pings
+  4  010.1   Pipeline alerts (merged 010.2 + Path 2)  — behind 006; PM consult owed
+  5  007     Custom Jira Boards
+
+  •  ClickUp Client Archive — Phase 2 ETL + Phase 3 page; behind 006
+  •  Admin QA-URL editor removal — HOLD (no Forge write path; AC gate RED)
+  •  Per-brand config pages — ABSORBED into Batch 012 (no longer a standalone item)
+```
+
+Rationale (Lacey 2026-07-15): Client Library leads — it's the new cross-brand
+experimentation surface (directive × brand status matrix + monitoring ingest +
+Jira ticketing + public bug form), Phase A is a shippable MVP. Convert (008)
+follows because it consumes the Phase B monitoring-ingest surface rather than
+rebuilding it; per-brand config pages (formerly the 008 prereq) are absorbed
+into Batch 012, so 008 no longer needs a standalone prereq batch. Teams dispatch
+(006) drops below 008 — it's externally parked on the alerts-channel build — and
+010.1 stays behind 006 (dependency preserved), moving down with it. 007 follows
+010.1. ClickUp Client Archive Phase 2 ETL + Phase 3 page stay behind 006.
+
+---
+
 ## 1. What This Project Is
 
 CQIP is an automated quality tracking and intelligence dashboard for the Fusion92 CRO
@@ -2443,59 +2490,10 @@ four SHIP-day deviations (D1-D4). Full spec at
 `docs/batch-009-sharepoint-spec.md` (status header now
 SHIPPED). Day-one consumer AC's Phase 2 is unblocked.
 
-**Priority order (resequenced 2026-07-15, confirmed with Lacey; mirrors
-CROSS_CLAUDE.md §5. Canonical — the `CQIP Batch Outline` project file mirrors
-this; "CLAUDE.md wins"):**
-
-```
-NEXT (resequenced 2026-07-15 with Lacey — Batch 012 Client Library
-      inserted; the polish/drawer cluster [005.4, 005.5, admin
-      filter-by-brand ride-along] all SHIPPED 2026-07-09, see §16)
-  1  012     Client Library — Phase C (Jira ticketing) NEXT; A + B SHIPPED
-             2026-07-17 (see §16). Phase C gated on §1 Jira-create-permission
-             verify (write path = §13 r5 scope expansion). Phase D (public bug
-             form) after C.
-  2  008     Convert.com integration   (consumes the SHIPPED 012 Phase B ingest; discovery-first)
-  3  006     Teams dispatch (expanded) ← unblocks 010.1 live pings
-  4  010.1   Pipeline alerts (merged 010.2 + Path 2)  — behind 006; PM consult owed
-  5  007     Custom Jira Boards
-
-  •  ClickUp Client Archive — Phase 2 ETL + Phase 3 page; behind 006
-  •  Admin QA-URL editor removal — HOLD (no Forge write path; AC gate RED)
-  •  Per-brand config pages — ABSORBED into Batch 012 (no longer a standalone item)
-```
-
-Rationale (Lacey 2026-07-15): Client Library leads — it's the new cross-brand
-experimentation surface (directive × brand status matrix + monitoring ingest +
-Jira ticketing + public bug form), Phase A is a shippable MVP. Convert (008)
-follows because it consumes the Phase B monitoring-ingest surface rather than
-rebuilding it; per-brand config pages (formerly the 008 prereq) are absorbed
-into Batch 012, so 008 no longer needs a standalone prereq batch. Teams dispatch
-(006) drops below 008 — it's externally parked on the alerts-channel build — and
-010.1 stays behind 006 (dependency preserved), moving down with it. 007 follows
-010.1. ClickUp Client Archive Phase 2 ETL + Phase 3 page stay behind 006.
-
-(SHIPPED, no longer upcoming — all in §16: 5.19, Batch 005.25, Batch 011,
-Batch 009, Batch 010, Batch 005.1, Batch auth.2, Batch auth.1 [+
-Approach-C fix + auth-cleanup], Batch login-events, Brand Wellness,
-Batch 005.2, Batch 005.3, Batch 005.4, Batch 005.5, Batch 012 Phase A,
-Batch 012 Phase B, Batch 012 Phase E1, Batch 012 Pulse E1 follow-on
-(cross-project client nav), Batch 012 Pulse inline directive editing,
-Batch 012 Pulse inline directive editing on the brand page, Batch 012
-Convert reconciliation backfill (BUILT, awaiting Lacey's run), Batch 012
-Pulse directive matrix controls (search · status filter · sort · hide
-paused — PUSHED + deployed 2026-07-29; also committed the
-cited-but-missing `docs/HANDOFF-goal-directives-load.md`), HOTFIX Pulse
-cell pagination (PUSHED + deployed 2026-07-31), Batch 012 Pulse
-brand-page parity + matrix paused default (PUSHED + deployed
-2026-07-31, prod `version: 5870dae`), Batch 012 Pulse restyle core — batch 2 of 4
-(PUSHED + deployed 2026-08-02, prod `version: 2826f4b`), Batch 012 Pulse restyle batch 3
-of 4 — hover-inspect + note surfacing (PUSHED + deployed 2026-08-03, prod
-`version: dc377df`), Coverage metric honesty — target 4 + metric rename (PUSHED +
-deployed 2026-08-03, prod `version: 9088343`).
-DISSOLVED: Batch 010.2
-and the standalone Path 2 off-by-one item are folded into Batch 010.1; backlog
-5.21 is absorbed into Batch 006.)
+**Canonical priority order moved.** It is live sequencing authority and no
+longer sits inside this closed batch entry — see **§0.1 Priority Order** near the
+top of this file. The shipped-batch roll-call that travelled with it is history
+and is in `docs/claude-archive/CLAUDE-16-2026-07.md`.
 
 **SHIP-day open questions resolved:** multi-site support
 stays deferred (single Fusion92 tenant via env-config, per
