@@ -28,3 +28,22 @@ Bounded-before file: everything shipped prior to April 2026.
 ---
 
 _No entries yet — populated by the CLAUDE.md split batch, steps 6 and 8._
+
+---
+
+# §16 shipped entries — 2026-pre-04
+
+Moved verbatim from CLAUDE.md §16 by the split batch, 2026-08-22. Order preserved exactly as it stood in §16 — note §16's head was reverse-chronological and its tail batch-number ordered, so this file is not strictly sorted. Anchors are ship date + slug, never batch number.
+
+### v1.0 — Foundation (pre-April 2026)
+Initial schema, auth, Jira webhook, dashboard KPIs + charts, logs table,
+reports with CSV/XLSX export, saved reports, projects/alerts/users settings,
+RLS, CSP, rate limiting, session timeout, soft-delete, grouped logs with
+sortable columns, mobile responsive, WCAG accessibility, easter eggs,
+docs page, password-gated /array-of-sunshine dossier, Konami code,
+logo rainbow, sun→clouds, moon→stars, loading messages, missing-info
+tooltip, clean-streak badge, matrix rain, avatar slot machine, admin
+badge titles, on-demand Jira sync, batch log deletion, soft-delete
+individual log entries with confirm + audit trail, compact dashboard,
+avatar photo upload, avatar pattern refresh (migration 007), docs
+rewrite with Jira QA tab guide.
