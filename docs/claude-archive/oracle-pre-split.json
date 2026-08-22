@@ -1,0 +1,173 @@
+{
+  "commit": "a0fab19",
+  "total_chars": 631268,
+  "total_bytes": 639028,
+  "unchecked_checkbox_tokens_in_s15": 49,
+  "sections": [
+    {
+      "start": 2,
+      "end": 6,
+      "chars": 78,
+      "name": "## Claude Code Project Context File"
+    },
+    {
+      "start": 7,
+      "end": 388,
+      "chars": 24792,
+      "name": "## CRITICAL: Read This First"
+    },
+    {
+      "start": 389,
+      "end": 408,
+      "chars": 946,
+      "name": "## 1. What This Project Is"
+    },
+    {
+      "start": 409,
+      "end": 440,
+      "chars": 2126,
+      "name": "## 2. Tech Stack — Simplified & Final"
+    },
+    {
+      "start": 441,
+      "end": 713,
+      "chars": 18658,
+      "name": "## 3. Repository Structure"
+    },
+    {
+      "start": 714,
+      "end": 780,
+      "chars": 5622,
+      "name": "## 4. Environment Variables"
+    },
+    {
+      "start": 781,
+      "end": 1514,
+      "chars": 33604,
+      "name": "## 5. Database Schema"
+    },
+    {
+      "start": 1515,
+      "end": 1623,
+      "chars": 4538,
+      "name": "## 6. Jira Workflow & Trigger Logic"
+    },
+    {
+      "start": 1624,
+      "end": 1665,
+      "chars": 2071,
+      "name": "## 7. Jira Custom Field ID Mapping"
+    },
+    {
+      "start": 1666,
+      "end": 1709,
+      "chars": 1054,
+      "name": "## 8. Jira API Integration"
+    },
+    {
+      "start": 1710,
+      "end": 1727,
+      "chars": 575,
+      "name": "## 9. User Accounts"
+    },
+    {
+      "start": 1728,
+      "end": 1756,
+      "chars": 1528,
+      "name": "## 10. Alert Rules — Default Configuration"
+    },
+    {
+      "start": 1757,
+      "end": 1788,
+      "chars": 1213,
+      "name": "## 11. Historical Data Import"
+    },
+    {
+      "start": 1789,
+      "end": 1827,
+      "chars": 1019,
+      "name": "## 12. Design System — Fusion92 Brand"
+    },
+    {
+      "start": 1828,
+      "end": 2484,
+      "chars": 39827,
+      "name": "## 13. Key Business Rules"
+    },
+    {
+      "start": 2485,
+      "end": 2525,
+      "chars": 1902,
+      "name": "## 14. What Is NOT In Scope for V1"
+    },
+    {
+      "start": 2526,
+      "end": 4135,
+      "chars": 104471,
+      "name": "## 15. Pending / Active TODOs"
+    },
+    {
+      "start": 4136,
+      "end": 4154,
+      "chars": 1072,
+      "name": "## 15.5. In-Flight Batches"
+    },
+    {
+      "start": 4155,
+      "end": 10326,
+      "chars": 386111,
+      "name": "## 16. Shipped Features Log"
+    }
+  ],
+  "unchecked_lines": [
+    2535,
+    2544,
+    2555,
+    2615,
+    2619,
+    2621,
+    2625,
+    2628,
+    2633,
+    2640,
+    2654,
+    2665,
+    2677,
+    2686,
+    2695,
+    2775,
+    2779,
+    2786,
+    3512,
+    3515,
+    3516,
+    3517,
+    3518,
+    3519,
+    3520,
+    3523,
+    3525,
+    3528,
+    3531,
+    3535,
+    3831,
+    3839,
+    3848,
+    3854,
+    3862,
+    3907,
+    3913,
+    4017,
+    4043,
+    4066,
+    4078,
+    4089,
+    4104,
+    4114,
+    4127,
+    4129,
+    4130,
+    4131,
+    4132
+  ]
+}
