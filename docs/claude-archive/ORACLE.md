@@ -26,6 +26,17 @@ and the MIXED content in §15 is ~84k chars of mostly prose. The cut rule's
 asymmetric default (§13, when uncertain it stays) is the primary control; these
 two invariants are the backstop, not the other way round.
 
+## Post-split result (recorded 2026-08-22)
+
+**Conservation delta: +42,837 characters**, against a pre-split total of
+631,268. That figure **includes the two oracle artifacts themselves** —
+`ORACLE.md` and `oracle-pre-split.json`, **exactly 4,510 characters**. An earlier
+statement of +38,327 excluded them as measurement rather than content; the
+exclusion was defensible but unstated, so it read as a 4,510-character
+discrepancy (Karen M13). **Both figures are now given, with the difference
+named.** The remainder is new banners, pointer stubs, r40/r41/r42, the r23/r32/r34
+amendments, the §16 index and the per-move archive notes.
+
 ## Baseline (characters, not bytes — bytes run ~+1.0% here)
 
 | Section | Chars |

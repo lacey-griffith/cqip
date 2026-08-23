@@ -7,7 +7,8 @@
 
 ```
 cqip/
-├── CLAUDE.md                    # This file
+├── CLAUDE.md                    # Project context: rules, live TODOs, §16 index
+├── CLAUDE_RULES.md              # Behavior rules companion (see CLAUDE.md §13 r32)
 ├── .env.local                   # Local dev secrets (gitignored)
 ├── .env.example                 # Template for env vars (committed)
 ├── package.json
@@ -254,9 +255,19 @@ cqip/
 │   │                                   root_cause_initial / root_cause_final /
 │   │                                   resolution_type to Jira-verbatim canonicals.
 │   │                                   Idempotent, audit-logged, --dry-run default.
-│   └── gen-build-info.js             # Prebuild: stamps build metadata for Settings → System
+│   ├── gen-build-info.js             # Prebuild: stamps build metadata + warns on the
+│   │                                   CLAUDE.md size ceiling (§13 r41)
+│   └── gen-archive-index.js          # Regenerates CLAUDE.md §16's archive index
+│                                       (npm run archive:index / archive:index:check)
 │
 ├── docs/
+│   ├── schema.md                      # §5 extracted here 2026-08-22 (current authority)
+│   ├── repo-structure.md              # This file — §3 extracted here 2026-08-22
+│   ├── claude-archive/                # §13 r40: append-only HISTORY, never authority
+│   │   ├── ORACLE.md                  # pre-split invariants + char baseline
+│   │   ├── oracle-pre-split.json
+│   │   ├── CLAUDE-critical-history.md # the old CRITICAL deployed-state paragraph
+│   │   └── CLAUDE-16-2026-{pre-04,04,05,06,07,08}.md   # §16 entries by ship date
 │   ├── multi-client-readiness.md      # Batch 004.99: multi-client audit + SPL onboarding/offboarding playbooks
 │   ├── batch-009-sharepoint-spec.md   # Batch 009: SharePoint integration SPEC (DESIGN locked 2026-05-13)
 │   ├── CROSS_CLAUDE.md                # Joint coordination doc for DC + AC (Batch 005.24)

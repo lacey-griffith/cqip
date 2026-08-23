@@ -6,7 +6,9 @@
 # Database Schema
 
 All tables in Supabase Postgres. UUIDs for all IDs. RLS enabled on all tables.
-Migrations 001–015 have all run against the production project.
+Migrations **001–029** have all run against production (verified 2026-08-18; the
+line here read `001–015` from Batch 004.4 until 2026-08-22 — a pre-existing carry
+that became the first factual line of the schema authority when §5 moved out).
 
 ### quality_logs
 Primary table. One row = one rework event.

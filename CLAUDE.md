@@ -766,6 +766,14 @@ Resolved             → green-500
     - **Schema — `docs/schema.md`**, not a CLAUDE.md section: any new
       table, column, RLS policy, trigger. (§5 moved out in the same
       batch; CLAUDE.md keeps a pointer stub.)
+    - **Repo tree — `docs/repo-structure.md`**: any new route, script,
+      component directory, migration or docs artifact. (§3 moved out in
+      the same batch. **Added to this list 2026-08-22, Karen H4** — that
+      file's header had *claimed* r23 named it when r23 did not, and with
+      no obligation behind it the tree had already gone stale, omitting
+      every artifact the split itself created. Making the claim true was
+      chosen over deleting it: the file is current authority and needs a
+      writer, not a disclaimer.)
     - §13 — new business rule if behavior changed.
     - §15 — remove anything that just shipped from Pending; add new
       backlog items. **§15 holds live obligations only**; the shipped
@@ -1289,8 +1297,18 @@ Resolved             → green-500
 41. **Rollover triggers on a SIZE CEILING, never on the calendar.**
     (CLAUDE.md split batch, 2026-08-22.)
 
-    - **CLAUDE.md: 120,000 characters.** Hard rule. When it trips, move §16's
-      oldest month to `docs/claude-archive/` until it clears.
+    - **CLAUDE.md: 120,000 characters.** Hard rule.
+    - **The remedy is whichever section actually grew — read the breakdown
+      first.** (Amended 2026-08-22, Karen H1.) This bullet used to say only
+      *"move §16's oldest month to the archive until it clears"*, and **that
+      prescription is now spent: §16 holds zero entries.** A rule whose sole
+      remedy is exhausted while its ceiling is permanently tripped is worse than
+      no rule — it reads as actionable and is not. The ordered remedies are:
+      (1) roll §16's oldest month out, **if §16 has entries**; (2) apply **r42**
+      (clause 3) to §15 — relocate post-mortem narrative, keep the actions;
+      (3) extract a whole low-authority-density section, as the split did with
+      §3 and §5. **§13 is not a candidate** — highest authority density, and it
+      is the thing r40 exists to protect.
     - **Archive files: 150,000 characters, advisory.** They are never read whole
       by the ground-truth reader, so size is only a tool-convenience concern.
     - **Unit is CHARACTERS, stated here because it matters:** this file's bytes
@@ -1311,6 +1329,32 @@ Resolved             → green-500
     **per-section breakdown alongside the total**, so a tripped ceiling routes to
     the section that actually grew — without it the reflex is to roll §16 over,
     which does nothing when the growth was in §15 or the header.
+
+42. **§15 holds ACTIONS. A sentence that does not name an action must name where
+    its substance now lives.** (Karen post-flight on the CLAUDE.md split,
+    2026-08-22 — the cut rule's **clause 3**.)
+
+    - **The rule:** a §15 sentence either names a thing someone must do, or it
+      carries a pointer — a §13 rule number or an archive filename. **Neither an
+      action nor a citation is a violation.**
+    - **It relocates, never deletes.** If the substance generalises beyond its
+      batch it becomes a §13 rule; if it is batch-specific narrative it goes to
+      the archive. §15 keeps the action plus a one-line citation.
+    - **The check a non-cutter can run**, which is the whole point: for each
+      retained §15 paragraph ask *"does this name a thing someone must do?"* If
+      no, look for the pointer. No pointer, no action → violation. That needs no
+      re-reading of source material and no trust in whoever made the cut, which
+      is the property clauses 1 and 2 have and a bare "cut harder" would not.
+
+    **Why:** clauses 1 and 2 catch obligations and stale status lines. Neither
+    can see **post-mortem narrative** — a batch's measurements, lessons and
+    process notes carry no checkbox and no status claim, so both clauses pass
+    over them silently. The split's first pass left §15 at **74,120 characters**
+    against a 34,000 budget, and Batch 012's live subsection alone held
+    **15,483 characters** of exactly that material with zero unchecked boxes.
+
+    **Precedent:** step 7 of the split is this rule working — it pulled the
+    shared-oracle lesson out of §15 prose into **r38** and left §15 citing it.
 
 ---
 
@@ -1591,53 +1635,25 @@ token handled out-of-band, still sequenced behind 006. **FPOO** is a real but
 active-client and live-coverage views; it carried 268 of the 1,232 Step-A
 tickets. Active CRO projects: NBLYCRO · SPLCRO. All CRO projects incl. archived:
 NBLYCRO · SPLCRO · FPOO.
-**Discovery COMPLETE (Step B + B′ DONE 2026-07-11; see the HANDOFF doc):** headline
-**16,761 worked-on / 15,827 delivered** (ideation stripped; `orderindex` best-effort
-floor accepted). The **importer batch is now being drafted phase-by-phase** (Phase 1
-schema → Phase 2 ETL → Phase 3 page/live-read → Karen/smoke/push). **Phase 1 (schema +
-migration spec) LANDED:** `docs/importer-spec-phase1-schema.md` — `client_archive` +
-`parent_clients` tables, the twin-fix dedup (twins are imported WITH their true ClickUp
-dates and deduped by the Step-A **1,153-id allowlist**, NOT by a date cutoff — the
-migration ran rolling Sep–Nov 2025 with genuinely-new Jira work in the same window, so
-there is no clean date seam), the isolation contract, and the classification rules.
-The spec is **docs-only**; the importer itself is **Jenny-gated** (migration + mutation
-+ new route) and still **sequenced behind 006**. Phase 2 (ETL) not yet drafted. **Twin
-allowlist COMMITTED (2026-07-12):** the Step-A **1,153-id twin allowlist** is now a
-committed artifact at `docs/clickup-archive/jira-twin-allowlist.json` (verified valid /
-1,153 unique / 0 dupes) — Phase 2's ETL reads it directly, **no re-scan needed** (Phase 1
-spec §6 open item #1 → CLEARED). Provenance is honest: this is the **original 2026-07-10
-extraction RECOVERED**, not a fresh re-scan — so it matches the discovery numbers exactly
-and is **not** re-derivable from *current* live Jira (which has drifted since 07-10).
-**FREEZER CRAWL DONE (2026-07-12):** the full raw ClickUp source is now snapshotted before
-decommission — read-only crawl, 07-11 method (`include_closed=true&subtasks=false`, no
-status prefilter, no bucketing in raw), 4 CRO-archive spaces, **36,922 tasks / 337 lists /
-545 calls / 0 errors**. Three artifacts (see `docs/clickup-archive/README.md`): **raw**
-full task objects `docs/clickup-archive/raw/clickup-full-crawl-2026-07-12.jsonl` (~464 MB,
-**GITIGNORED — descriptions + assignee PII; must be moved to durable storage, NOT
-committed**); **metadata** PII-free projection `crawl-metadata-2026-07-12.json` (~16 MB,
-committable — Lacey's call); **manifest** `crawl-manifest-2026-07-12.json` (~4 KB,
-committable). **CANONICAL & 🔒 LOCKED HEADLINE — corrected footprint (Lacey-confirmed
-2026-07-12): 14,785 worked-on / 13,858 delivered** — this is the number that goes to the
-page, NOT 15,681 (wrong scope) and NOT 16,761 (transcribed, wrong scope). **LOCKED footprint
-(authoritative — any future crawl must reproduce exactly; source of truth =
-`scope_rules_authoritative` in `crawl-manifest-corrected-2026-07-12.json`):** ADM `ADM - CRO`
-folderless list ONLY (NEW crawl, 207 tasks/64 worked-on; excl. ADM-SEO/ADM-Design) + CRO
-Projects 4 client lists DWH/FPOO/LF/SPL (702/450; **excl. Conversion Fanatics + both New
-Client Template lists**) + CRO Internal Projects **Client Archive folder ONLY** (31,009/12,757;
-excl. 12 other folders) + Neighborly all (2,869/1,342) + Sonrava all (344/172) = **35,131
-tasks / 14,785 worked-on**; `needs_review` 47 (clean); **262 client-codes / 267 list surfaces
-worked-on** (264/269 all); worked-on by year 2019→2026 peaking 2022 (3,678). Page source =
-`crawl-metadata-corrected-2026-07-12.json` (35,131 rows) + `crawl-manifest-corrected-2026-07-12.json`;
-full-capture metadata + gitignored raw retained as freezer (ADM-CRO appended to both). Client
-Archive completeness verified (248 folder lists, 3 zero-task). Final lock dropped the 2 New
-Client Template lists (53 setup tasks, 0 worked-on → headline unchanged). **Why the earlier numbers were wrong = SCOPE, not classification** (Neighborly
-1,342 + Sonrava 172 reproduce exactly; the prior 15,681 counted the whole CRO Internal space
-incl. 12 non-CRO folders + Conversion Fanatics and missed ADM-CRO; 16,761 was transcribed off
-a mutating source whose raw is gone). Archived state + pagination both ruled out as factors
-(count-only probe: 450 archived total, 70 in Client Archive). Optional pre-shutdown,
-owner-run: a ClickUp workspace export could add per-task **status history** (API exposes only
-current status + `orderindex`; `time_in_status` 403 on this plan) — non-blocking, not
-attempted.
+**Discovery is COMPLETE; the importer is the open work.** The full discovery
+record — Step A/B/B′, the freezer crawl, the corrected scope rules and the
+locked headline — is in `docs/claude-archive/CLAUDE-16-2026-07.md` (r42), with
+the machine-readable source of truth in `docs/clickup-archive/`.
+- **🔒 LOCKED HEADLINE — 14,785 worked-on / 13,858 delivered** (Lacey-confirmed
+  2026-07-12). **NOT 15,681** (wrong scope) and **NOT 16,761** (transcribed,
+  wrong scope). This is the number that goes to the page.
+- **Authoritative scope rules:** `scope_rules_authoritative` in
+  `docs/clickup-archive/crawl-manifest-corrected-2026-07-12.json`. Any future
+  crawl must reproduce the footprint exactly.
+- [ ] **Phase 2 ETL** — reads the committed 1,153-id twin allowlist at
+      `docs/clickup-archive/jira-twin-allowlist.json` directly; **no re-scan**
+      (it is the recovered 2026-07-10 extraction and is NOT re-derivable from
+      today's drifted Jira). Jenny-gated: migration + mutation + new route.
+- [ ] **Phase 3** — the Client Archive page. Isolation contract: the page may
+      read a live Jira aggregate; **coverage KPIs never read the archive.**
+- [ ] **Move the gitignored raw crawl** (~464 MB, descriptions + assignee PII)
+      to durable storage. It must never be committed.
+Both phases stay sequenced behind Batch 006.
 
 ### Later / deferred — ledger + coverage (from Lacey's 2026-07-09 review)
 - **Resizable ledger columns (#6b)** — a real feature (width state + drag +
@@ -1699,93 +1715,34 @@ reviews. Effort: LG (multi-phase).
   - **Convert reconciliation backfill — BUILT 2026-07-25, NOT YET RUN** (see §16).
     One-off data pass flipping existing matrix cells to match real Convert config
     for the 13 active NBLY brands (207 todo→done, 8 done→todo). Data-only; no
-    migration/route/app-code. Lacey approves + runs per the §16 checklist. Not an
+    migration/route/app-code. **Run procedure: the 6-step pre-run checklist is at
+    `docs/batch-012-convert-reconciliation-spec.md` §Pre-run (the batch spec, live
+    authority). A verbatim copy of the original checklist also sits in
+    `docs/claude-archive/CLAUDE-16-2026-07.md`, but that is an r40 history file and
+    **must not be the cited procedure for a production UPDATE** — repointed
+    2026-08-22, Karen H3.** Lacey approves + runs. Not an
     E-phase — a data correction riding alongside the E track.
   - **Restyle batch 4 — NOT STARTED. Gate 0 (MEDIUM-6 audit-coverage count) DONE
-    2026-08-03, read-only — figures below.** The Change Log widget, which needs a NEW
-    `audit_log` read — and `audit_log` is **already over the PostgREST 1,000-row cap
-    (1,438 rows as of 2026-08-03; it was 1,336 on 07-31, so ~+100 in three days)**, so
-    it must use `fetchAllPaged()` from the outset.
+    2026-08-03**; the probe figures are in
+    `docs/claude-archive/CLAUDE-16-2026-08.md` (r42). Three actions come out of it:
+    the Change Log widget needs a NEW `audit_log` read and **`audit_log` is already
+    over the PostgREST 1,000-row cap**, so it must use `fetchAllPaged()` **from the
+    outset**; only **52.7%** of done cells hold a per-cell audit row, so the
+    honest-degradation path is the load-bearing half of the widget, not an edge
+    case; and **attribution can distinguish script vs human, NOT which human pass**
+    — do not write copy claiming finer provenance.
 
-    **GATE 0 RESULT — per-cell audit coverage of DONE cells (probed 2026-08-03; every
-    row-returning query paged AND count-verified against a separate
-    `count:'exact', head:true`, with a guard that aborts rather than reporting a short
-    read):**
-    - **539 cells are currently `done`.** Of those, **284 (52.7%) have a per-cell
-      `audit_log` row** (`target_type='directive_brand_status'`), **255 (47.3%) have
-      only directive-level summary rows**, and **0 have neither**. So a Change Log
-      scoped to per-cell rows can show a resolve moment for **just over half** of
-      finished work, and the honest-degradation path is the load-bearing half of the
-      widget, not an edge case.
-    - **By writer** (distinct done cells holding a per-cell row): 
-      `system:convert-reconciliation` **199** · `l.hay@fusion92.com` (UI edits) **86**.
-      Those sum to 285 against a population of 284, so **exactly one cell was touched
-      by both**. All per-cell rows: 206 convert-reconciliation `status`, 135 UI
-      `status`, 11 UI `note` = 352 total.
-    - **The goal load's shape is confirmed exactly as described:**
-      `system:nbly-goal-load` wrote **65 `title` + 65 `directive_brand_status` = 130
-      directive-level rows — precisely 2 per directive for 65 directives, and zero
-      per-cell rows.** The other 108 directive-level rows are UI creates
-      (18 directives × 6 fields). All 83 directives hold ≥1 summary row.
-    - **PREMISE CORRECTION — the V2.1 attribution does not hold.** There is **no
-      `system:v21-trigger-backport` writer in `audit_log` at all**, consistent with
-      §15 recording that the loader was ABANDONED and never run and the 8 items moved
-      to UI hand-entry. So the "V2.1 entries" with per-cell rows are **not separable
-      from any other UI edit** — both go through the same PATCH route with
-      `changed_by = l.hay@fusion92.com`. Attribution can distinguish *script vs human*,
-      **not** *which human pass*. Any batch-4 copy that names a provenance finer than
-      that is claiming something the data cannot support.
-    - **Also relevant to the widget:** **344 `audit_log` rows carry
-      `target_type IS NULL`** (all 344 *do* have `log_entry_id` set, so they are
-      quality-log rows that migration 017's backfill did not reach). A Change Log
-      filtering on `target_type` will silently exclude them; that is correct for a
-      Pulse widget, but it means `target_type`-filtered counts never sum to the table
-      total, and anything that reconciles them will look broken. Composition verified
-      to sum exactly: 386 quality_log · 352 directive_brand_status · 238 directive ·
-      69 alert_event · 16 brand · 13 test_milestone · 12 user · 8 monitoring_finding ·
-      344 null = **1,438**.
-
-    **VINTAGE — RE-MEASURED 2026-08-14, and the numbers moved AGAIN.** Prod now holds
-    **87 active directives GLOBALLY / 17 active brands / 1,393 cells**, up from
-    83 / 17 / 1,313 on 08-03 and 82 / 16 / 1,312 on 07-31. **The numbers have moved on
-    every single re-probe**, which is the LOW-D2 lesson holding for the third time.
-
-    **USE THE PER-PROJECT FIGURE, AND IT IS 86, NOT 87.** NBLYCRO holds **86 active
-    directives × 16 active brands (3 paused → 13 visible)**; the 87th active directive
-    is **SPLCRO's** (1 × 1 = 1 cell). So the memo follow-on is judged against
-    **86 × 13 = 1,118 under defaults / 86 × 16 = 1,376 paused-shown.**
-
-    > **⚠ "87" IS AMBIGUOUS AND MUST NOT BE PASTED INTO A PER-PROJECT LINE.** It is the
-    > GLOBAL active count (86 NBLY + 1 SPL) — and, by coincidence, also NBLY's
-    > ALL-STATUS count (86 active + 1 archived). Two different quantities, same number,
-    > neither of them the per-project active count these derivations need. **A
-    > cross-project product is meaningless here**: a first pass of the 08-03 probe
-    > computed one and reported "98 missing cells". Per project both grids are complete
-    > with zero gaps. Group by `project_key` first, and filter on `status`.
-
-    **Total cells (1,393) counts the ARCHIVED directive's 16 cells too** — 87 × 16 + 1,
-    where that 87 is NBLY's all-status count. Rendered cells are 86 × 16 + 1 = 1,377,
-    because `loadProject` loads `status='active'` only.
-    Held out of the restyle deliberately; do not half-build it. **Inherits one open
-    question from batch 3:** a read-only user now has ~1,300 tab stops on the matrix
-    (§2.6 locks one per cell, which is what makes focus-driven inspection work), and
-    a grid that size conventionally wants a roving tabindex over `role="grid"`. Decide
-    before adding another focusable surface to the same page. **Karen 2026-08-03
-    endorsed shipping it but corrected the framing:** "admins always had those stops"
-    elides that each admin stop *does something*, while a read-only keyboard user
-    could previously Tab past the whole table in one step and now cannot — a real
-    traversal regression not shared with admins. It is a sighted-keyboard-user
-    problem, not an AT one, because the note now lives in the accessible name and
-    browse mode does not use Tab. **Interim: a skip-the-matrix link** (a handful of
-    lines, none of the roving-tabindex blast radius) — do that rather than deferring
-    the whole thing; the `role="grid"` decision stays here.
-    **Also inherits the memoized-row follow-on** (batch 3 MEDIUM-4 option 1 made
-    BOTH crosshair axes state-driven, so vertical crossings cost a render too).
-    Judge it against **~1,118** = 86 × 13 under defaults (re-probed 2026-08-14) —
-    **NOT 1,066** (82 × 13, stale as of 08-12) and **NOT 650** (50 × 13, when prod held
-    69). **Probe the resolved-directive count; do not scale any of the old ratios.** The row component was deliberately not
-    extracted in batch 3 to keep the sticky editor strip and the E3 seam out of a
-    render-only batch; that reasoning expires once a batch is already touching them.
+    **VINTAGE — the counts have moved on EVERY re-probe (three times running), so
+    RE-PROBE, never scale an old ratio.** Figures as of 2026-08-14 and the
+    "87 is ambiguous" trap are in `docs/claude-archive/CLAUDE-16-2026-08.md` (r42).
+    **The actions they imply:** use the **per-project active** figure and group by
+    `project_key` *and* filter on `status` before computing anything — a
+    cross-project product is meaningless and one pass of it reported "98 missing
+    cells" against two complete grids. Judge the memoized-row follow-on against a
+    freshly probed `active directives × visible brands`, not a written-down number.
+    Two obligations still ride here: a **skip-the-matrix link** as the cheap interim
+    for the ~1,300 read-only tab stops (the `role="grid"` roving-tabindex decision
+    stays with batch 4), and the **memoized-row follow-on** from batch 3 MEDIUM-4.
   - **E2 (Convert config sync)** — fills the brand-page "Convert configuration"
     placeholder with synced Convert data. Couples to Batch 008.
   - **E3 (rich directive rows)** — swaps the read-only brand-page directive rows
@@ -1831,27 +1788,11 @@ reviews. Effort: LG (multi-phase).
   (renders hollow n_a, non-interactive). Backfill on brand-add or a target
   picker at directive-create.
 
-**PROCESS — commit the spec BEFORE the build session opens, not during it
-(recorded 2026-08-02; candidate for a §13 rule).** Restyle batch 3 opened against
-`docs/batch-012-pulse-restyle-3-spec.md`, which the prompt called canonical and
-cited by section (`§2.6` for a locked shape, `§4` for the test list) — and which
-did not exist in the repo, in git history on any ref, or anywhere on disk. The
-companion `docs/HANDOFF-pulse-design-restyle-review.md` was likewise absent, and
-the prompt's claim that it was "cited by path elsewhere" was **not true of the
-repo** — the by-path citation lives in a planning doc in **project knowledge**, so
-a repo grep correctly returned zero. Both were supplied on request and committed as
-that batch's commit 1; nothing was reconstructed. **This is the SECOND time a Pulse
-batch has opened against an authority that existed only outside the repo.** The
-first was the abandoned V2.1 trigger loader (see the entry above), where the
-mapping was wrong in four independent ways, **every in-repo check passed anyway**,
-and the durable lesson was that no in-repo verification can reach an out-of-repo
-authority. The cheap corrective is ordering, not more checks: **the spec is commit
-1, and commit 1 lands before the build starts.** Note the shape difference, because
-it is the reason this one cost minutes instead of a batch — V2.1's authority was
-*absent and silently substituted for*; here it was *absent and the absence was
-detected*, because the prompt cited sections that could be looked for and found
-missing. **A spec cited by section number is falsifiable; a spec paraphrased into
-bullets is not.** That is worth more than the ordering rule it sits under.
+**PROCESS — the spec is commit 1, and commit 1 lands before the build starts.**
+Twice a Pulse batch opened against an authority that existed only outside the repo.
+Both narratives are in `docs/claude-archive/CLAUDE-16-2026-08.md` (r42); the
+transferable half is: **a spec cited by section number is falsifiable, a spec
+paraphrased into bullets is not.** Cite specs by section so absence is detectable.
 
 **Restyle-core follow-ons (backlog, from the 2026-08-02 ship):**
 - **Sweep the remaining 32 `ring-[color:var(--f92-orange)]` call sites onto
@@ -1925,64 +1866,14 @@ bullets is not.** That is worth more than the ordering rule it sits under.
   *outstanding* work. Its `EXPECTED` totals (112 / 18·61·33) are **void**. Prod was
   never touched: it holds no `[Trigger]` directives and 0 rows under
   `system:v21-trigger-backport`.
-- **⚠ THE DURABLE LESSON — worth more than the code that was dropped.**
-  **`EXPECTED`-totals assertions verify ENCODING FIDELITY, not mapping
-  CORRECTNESS.** They prove the rules were transcribed as written; they cannot
-  prove the rules were right. Every one of the wrong mappings above still summed to
-  exactly 112 / 18·61·33, so **no guard in the script could ever have caught it** —
-  and a green dry-run that matched the spec "brand-by-brand" gave real, misplaced
-  confidence. The review was **scoped** to **script ↔ spec §2**;
-  **nobody compared spec ↔ Lacey's brief**, because the brief was not in the repo —
-  and **the review did not flag that gap as a hazard.** (Stated this precisely on
-  Karen's own insistence. An earlier draft said she "named this boundary … and it
-  should have been read as a stop sign", which promoted a routine scope disclaimer
-  — *"here is what I checked, here is what I didn't"*, boilerplate in nearly every
-  review — into prescience, and quietly moved the miss onto whoever read the
-  review. If a scope disclaimer counts as a warning, the next reviewer's disclaimer
-  gets read as one too, and it will not be. That is a worse lesson than the one
-  this entry exists to record.) When the authority for a mapping lives outside the
-  repo, no amount of in-repo verification reaches it — and no reviewer's scope note
-  substitutes for checking it.
-  **This is now the FOURTH defect of the same shape across this run of work** —
-  the shared-ancestor / non-independent-oracle shape, now stated as a rule at
-  **§13 r38** (inlined there 2026-08-22; the running count is deliberately not,
-  since it goes stale on the fifth). Described inline rather than by
-  finding-number, because bare
-  "MEDIUM-n" citations are dead links here: those reviews were of code now dropped
-  from history, and "MEDIUM-1" alone collides with several unrelated findings
-  elsewhere in this file.
-  1. **The abandoned loader's `EXPECTED` totals were permutation-invariant** —
-     reordering the directive list changed *which* directives were marked Done
-     while the totals held at 112/18·61·33, so the assertion could not see it.
-  2. **The Convert-reconciliation backfill's audit verification** — a *different*
-     batch (2026-07-25, see §16), where the check printed a cumulative audit count
-     that could not be compared against any expected value, and a later variant
-     compared a possibly-short count against itself.
-  3. **The abandoned loader** — the totals matched a spec that was itself wrong.
-  4. **The Pulse cell truncation (live 2026-07-22, found 07-31)** — the worst of
-     the four, because here the bad verification **actively suppressed a correct
-     bug report**, and it is the reason this one ran for nine days.
-     A §15.5 note had observed that `Chat Appointment Made` / `Chat Started` /
-     `Chat Lead Submitted` showed **zero cells**. On 2026-07-25 that was
-     **retracted** as stale, citing a prod check: *"69 directives × 16 brands =
-     1,104 cells with zero gaps (verified 2026-07-25)"*.
-     **1,104 > 1,000 — the page was already truncating when that retraction was
-     written.** The check ran through a **SCRIPT**, which pages correctly; the
-     **PAGE** it vouched for did not. Those three directives today read 13/16,
-     12/16 and 13/16 — and directive #63, the one that crossed the cap on 07-22,
-     **is `Chat Started` itself.** The original sighting was almost certainly true
-     and was dismissed with a check that could not see the failure.
-     **The rule, sharper than "use the same client":** a DB-level check must never
-     be used to OVERTURN a symptom reported at the render layer. The check answers
-     *"do the rows exist"*; the report asked *"does the page show them"*. Those two
-     diverged for nine days while the check kept answering yes. When a render-layer
-     symptom conflicts with a data-layer check, the check has not disproved the
-     symptom — it has only proved the data exists.
-  **Note the layer difference:** (1) and (2) are defects *in a script's guards*,
-  fixed by writing a better assertion. (3) is a gap in the *verification process*
-  and **cannot be fixed by any assertion at all** — do not go hunting for a code
-  fix for it. **The rule of thumb this produced now lives at §13 r38** — a check
-  satisfiable only by the artifact that produced the value is not a check.
+- **⚠ THE DURABLE LESSON.** `EXPECTED`-totals assertions verify ENCODING
+  FIDELITY, not mapping CORRECTNESS — every wrong mapping still summed to
+  112 / 18·61·33, so no in-script guard could have caught it. **When the
+  authority for a mapping lives outside the repo, no in-repo verification
+  reaches it.** The generalised rule is now **§13 r38** (shared oracle); the four
+  worked instances behind it — including the Pulse cell truncation, where a
+  DB-level check overturned a correct render-layer bug report for nine days —
+  are in `docs/claude-archive/CLAUDE-16-2026-07.md` (r42).
 - **Entry gotcha for the hand-entry (do NOT skip):** the create form defaults to
   `directive_type: 'goal'` (`app/dashboard/pulse/page.tsx:977`,
   `useState<DirectiveType>('goal')`). **All eight of these are `[Trigger]`
@@ -1992,49 +1883,20 @@ bullets is not.** That is worth more than the ordering rule it sits under.
   that default should be unset/required rather than `'goal'`** — deliberately NOT
   changed as part of the abandonment; it needs its own decision.
 
-**Unranged-select audit (2026-07-31, from the Pulse cell-truncation hotfix) —
-row counts measured against prod, NOT fixed in the hotfix (kept narrow):**
-PostgREST caps an unranged select at 1,000 and returns the short result with **no
-error**, so every fetch-all that can cross 1,000 is a silent-truncation risk.
-Measured today:
-- **`audit_log` — 1,336 rows total, ALREADY OVER THE CAP.** Three consumers:
-  - **`/dashboard/logs` sendback-count badge** (`app/dashboard/logs/page.tsx:161`,
-    `.in('log_entry_id', ids)`, unranged) reads the audit rows for the **89
-    non-deleted** quality logs = **646 rows, ~354 of headroom** (an earlier draft
-    said 730/~270 — that was `log_entry_id IS NOT NULL`, which includes rows for
-    soft-deleted logs the page never asks about, and overstated the urgency).
-    **Still the nearest thing to firing by row count** — same bug class as the
-    hotfix, and when it crosses 1,000 the per-log audit counts silently
-    under-report with no error. Fix with the same `fetchAllPaged()`.
-  - `/dashboard/settings/audit` uses `.limit(500)` on 1,336 rows. Deliberate
-    (newest-first event view), but **silent**: an admin searching for an older
-    event gets "not found" rather than "truncated". Different class — a UX/signal
-    gap, not a data bug — but worth a "showing most recent 500" note.
-  - `/dashboard/logs/[id]` is `.eq('log_entry_id', id)`-scoped → safe.
-- **`test_milestones` — 357 non-deleted, and FOUR unranged consumers** (an earlier
-  draft named only the first two; someone working this list would have paged half
-  of them and believed they were done — the exact error this section exists to
-  prevent):
-  `app/dashboard/coverage/page.tsx:105` · `components/reports/brand-wellness-report.tsx:101`
-  · `app/dashboard/page.tsx:356` (tests-this-week KPI) ·
-  `components/coverage/manage-milestones-dialog.tsx:102`.
-  All fetch-all-then-filter by design; fine at this size (~640 headroom), but this
-  is the next table to cross and it must be fixed at all four sites.
-- **`monitoring_findings` — 0 rows today, and the ONE to watch.** Unranged at
-  `app/dashboard/pulse/page.tsx:250` (`.eq('status','new')`) — the same
-  `loadProject` as the cell read this hotfix paged, twelve lines above it; it was
-  missed in the first sweep. Row count says "no risk", **growth shape says
-  otherwise**: this is the only table in the app fed **in bulk by an external
-  machine caller** — `POST /api/monitoring/findings` accepts `MAX_BATCH=500` per
-  request — so it can go 0 → over-cap in **two API calls**, on the day Batch 008
-  starts posting. Every other table here grows at human or webhook pace. **Rank by
-  time-to-fire, not current rows:** `audit_log` is nearest by count,
-  `monitoring_findings` is nearest by step-function growth.
-- **`sync_runs` 358** (already ranged), **`quality_logs` 120**,
-  **`quality_log_taxonomy` 78**, **`directives` 77**, everything else ≤ 38 — large
-  headroom, no action.
-Everything above is read-path; none indicates wrong data in the DB. Fix the
-`audit_log` badge query first; the rest is monitoring.
+**Unranged-select audit — the ACTION; measurements relocated.** PostgREST caps an
+unranged select at 1,000 and returns the short result with **no error**. Full
+per-table row counts as measured 2026-07-31 are in
+`docs/claude-archive/CLAUDE-16-2026-07.md` (r42) — **re-probe rather than trusting
+them**; every figure in this file has moved on re-probe.
+- [ ] **Page the `/dashboard/logs` sendback-count badge** (`app/dashboard/logs/page.tsx`,
+      `.in('log_entry_id', ids)`, unranged) with `fetchAllPaged()`. `audit_log` is
+      already over the cap; nearest to firing by row count.
+- [ ] **Watch `monitoring_findings`** — nearest by *step-function* growth, not by
+      count: `POST /api/monitoring/findings` accepts `MAX_BATCH=500`, so it can go
+      0 → over-cap in two API calls the day Batch 008 starts posting.
+- [ ] **Fix `test_milestones` at ALL FOUR unranged call sites** when it next crosses
+      — coverage page, brand-wellness report, dashboard KPI, manage-milestones dialog.
+      An earlier draft named only two, which is how half a fix ships.
 
 **Convert historical-data remediation — 5 misnamed goals (from the 7/30 list,
 item 2):** historical data on these five Convert goals is **misnamed**:
@@ -2150,33 +2012,12 @@ DISCOVERY DECISIONS STILL OPEN AT IMPLEMENTATION:
 - Whether "View All" collapses to a single combined column
   set or shows per-client column groups
 
-IMPLEMENTATION SKETCH (post-discovery):
-- New migration: `jira_tickets` cache table — id, jira_ticket_id
-  (unique), project_key, status, summary, severity, brand_id,
-  assignee, custom_field_tags (jsonb), updated_at, raw_payload
-  (jsonb for forward compat)
-- New migration: `board_views` table for saved per-user filter
-  configs (optional v1, possible v2 punt)
-- Extend `jira-webhook/index.ts` with a third branch (after
-  milestone + rework branches) — upsert into jira_tickets cache
-  on every ticket update, not just sendbacks
-- One-time backfill script: `scripts/backfill-jira-tickets.ts`
-  pulling current state of all active tickets per project
-- New page: `/dashboard/board` with Kanban UI
-  (likely dnd-kit for v2 read-write groundwork even though v1
-  doesn't ship drag-drop)
-- New components: `BoardColumn`, `TicketCard`, `BoardFilters`,
-  `TicketDetailDrawer` (wraps existing LogDetailDrawer for
-  the logs section)
-- Filter system: extensible config-driven filter UI matching
-  Jira's filter pattern (built-in filters + user-custom saved
-  filters)
-- Nav update: add "Boards" entry to main navigation
-
-Realistic scope: 3-5 weeks for read-only v1 (lower than original
-2-4 week estimate because decisions are locked upfront vs.
-greenfield discovery during build). Read-write follow-on adds
-2-4 weeks on top.
+IMPLEMENTATION SKETCH — relocated to `docs/claude-archive/CLAUDE-16-2026-07.md`
+(r42). It is an unbuilt design sketch, not an obligation; **re-derive it against
+the codebase as it stands when 007 actually starts** rather than treating a
+2026-05-06 sketch as a plan. The parts that bind are the locked decisions above,
+not the sketch. Effort was estimated at 3-5 weeks for read-only v1, +2-4 for the
+read-write follow-on — an estimate, never validated.
 
 **Why high priority:** team request, replaces a daily-use external
 tool with a CRO-context-aware view, reuses CQIP's existing data
@@ -2256,31 +2097,19 @@ off-by-one) into one coherent build.
 - **Both evaluators (milestone-drought + pipeline-drought) read per-brand
   config.** Batch 005.1's aggregators were deliberately written so the
   flat→per-brand swap is a one-line change inside the per-brand loop.
-- **Path 2 off-by-one — SETTLED 2026-08-03, both sides. Nothing about parity is
-  owed to this batch any more; what remains is STRUCTURAL.** The number lived in
-  three places; two now agree by value and the third is an unused fallback:
-  1. `lib/coverage/queries.ts` — `COVERAGE_TARGET = 4` with `count < target`.
-     Named a TARGET on purpose: writing 4 into the old `<= threshold` spelling
-     makes 4 read as DROUGHT (`4 <= 4`). **Do not reintroduce a
-     threshold-and-`<=` shape here.**
-  2. `alert_rules.config.threshold` — **3** as of 2026-08-03 (row
-     `7cb81a7a-0571-44b1-a90a-75ef6a02ed2b`, edited by Lacey; that table has no
-     audit trail and cannot have one, so the §16 "Coverage metric honesty" entry
-     is the only record — see it before assuming anything about this value).
-  3. `drought-evaluator/index.ts` — `DEFAULT_THRESHOLD = 2` + `count <= threshold`.
-     **Unused today** because config supplies 3.
-
-  `count < 4` and `count <= 3` are the same predicate over integers, so render and
-  cron agree exactly: drought at 0,1,2,3. **WHAT 010.1 STILL OWNS IS NOT A NUMBER
-  MISMATCH.** It is (a) per-brand contracted targets, and (b) the fact that the
-  drought threshold is currently expressed as **two values in two spellings**
-  (`< 4` here, `<= 3` there) that happen to coincide — plus a **third** value, the
-  `DEFAULT_THRESHOLD = 2` fallback, which would **silently** reopen the divergence
-  if that config row were ever deleted, deactivated, or stripped of its
-  `threshold` key. Collapse all of it to one per-brand target compared with
-  strict-less-than in one place, so a contracted "4 a month" drops in with no
-  mental −1 and there is no second number to fall back to. Standalone Path 2 item
-  KILLED; standalone 010.2 DISSOLVED.
+- **Path 2 off-by-one — SETTLED 2026-08-03 on both sides; the parity narrative is
+  relocated** to `docs/claude-archive/CLAUDE-16-2026-08.md` (r42). **No parity work
+  is owed.** What 010.1 still owns is STRUCTURAL, and it is an action:
+  - [ ] **Collapse the drought threshold to ONE per-brand target compared with
+        strict-less-than, in one place.** It is currently two spellings that happen
+        to coincide — `COVERAGE_TARGET = 4` with `count < target` in
+        `lib/coverage/queries.ts`, and `alert_rules.config.threshold = 3` with
+        `count <= threshold` in the cron — **plus a third value**, the evaluator's
+        unused `DEFAULT_THRESHOLD = 2` fallback, which would **silently** reopen the
+        divergence if that config row were ever deleted, deactivated or stripped of
+        its `threshold` key. Removing that fallback is the load-bearing half.
+        **Do not reintroduce a threshold-and-`<=` shape** in `queries.ts`: writing 4
+        into the old spelling makes 4 read as DROUGHT.
 - **`contract_status` ≠ `is_paused` (locked):** separate fields.
   `is_paused` = operational state (mid-contract hold) → drives
   alert-skipping (r20 precedent). `contract_status` = commercial state →
@@ -2337,6 +2166,30 @@ its reason so nobody re-derives the analysis.
       runs at row creation, where there is no prior value to destroy. It is the same
       shape as the defect that cost five rows; do not assume it stays harmless if the
       webhook ever updates an existing row.
+- [ ] **The latent ADF hazard on `root_cause_description` — STILL OPEN.**
+      **Restored to §15 on 2026-08-22 by Karen's H2**: the CLAUDE.md split batch
+      archived this whole bullet on the strength of its `[x]` FIRST half
+      (*"Nothing is owed here now; the guard covers it"*) and carried its
+      still-open SECOND half out with it. `grep ADF CLAUDE.md` returned 0 for
+      several commits; the closed half is at
+      `docs/claude-archive/CLAUDE-16-2026-08.md`, and under §13 r40 an archive
+      file is never authority — so a live production hazard had formally ceased
+      to exist as a live fact. **The `Eight items` count above IS the regression
+      test for this bullet; it is not reworded to seven.**
+      **TWO faces.** **(i) The write:** an ADF object into a `TEXT` column —
+      `mapJiraFields` does `fields[customfield_12909] ?? null` with **no ADF
+      extraction**, while §7 documents that field as a Jira **Paragraph** (API v3
+      returns an ADF *object*). **(ii) The guard's blind spot:**
+      `isEmptyForSync` treats any non-array object as non-empty, so a field
+      *cleared in Jira* returning an empty ADF doc
+      (`{type:'doc',version:1,content:[]}`) rather than `null` reads as a real
+      value and is written — which is why the r37 guard's protection on this
+      column is **contingent on Jira sending literal `null`**.
+      Both fail SAFE (the TEXT write errors, the log counts failed, the prose
+      survives) and both are latent: probed 2026-08-08, 0 of 33 working-set
+      tickets return a non-empty `customfield_12909`. Deliberately **not**
+      patched with a speculative ADF-shape heuristic — that buys sync
+      throughput, not data safety.
 - [ ] **§13 r29 — the sync writes taxonomy values unvalidated.** The edit route
       validates every value against `quality_log_taxonomy`
       (`app/api/logs/edit/route.ts:86–137`); the sync validates none. Post-guard a
@@ -2351,24 +2204,24 @@ its reason so nobody re-derives the analysis.
 
 ### AI root-cause classifier — PARKED, not dropped (2026-08-14)
 
-**The surface shipped; the path has never run.** Batch classifier-1 and the Batch
-logs-page suggestion strip are both in production (§16), so the columns, the routes,
-the review UI and the whole confirm/reject/correct flow exist and are tested. **What
-does not exist is a single classified row.** `ai_review_pending` is true on **0 of
-122**, `ai_suggested_root_cause` is non-null on **0 of 122**, and the route answers
-**500 `not_configured`** by design until a key exists.
-
-- **Blocker: no credential.** `CQIP_ANTHROPIC_API_KEY` is unminted. API usage is
-  **paid**, and the spend question is **unresolved at F92**. This is a commercial
-  decision, not an engineering one — nothing in the codebase is waiting on code.
-- **Free alternative, not yet tried — do this BEFORE paying for anything.** Use
-  **Rovo in the Jira UI** to classify **~10 logs by hand**, entering the results
-  through the existing edit modal. **No build, no credential, no spend.** It tests
-  the thing the money would buy — *are the suggestions good enough to be worth
-  confirming?* — against the one population that matters, and it produces real
-  correction-rate data rather than an estimate.
-- **Unparks on EITHER:** the credential being minted, **or** the manual pass showing
-  suggestion quality good enough to justify automation.
+**The surface shipped; the path has never run.** Batch classifier-1 and the
+logs-page suggestion strip are both in production, so the columns, routes, review
+UI and the whole confirm/reject/correct flow exist and are tested. **Not one row
+has been classified** — `ai_review_pending` true on **0 of 122**,
+`ai_suggested_root_cause` non-null on **0 of 122**, and the route answers **500
+`not_configured`** by design until a key exists. Full rationale in
+`docs/claude-archive/CLAUDE-16-2026-08.md` (r42). The two actions:
+- [ ] **Run the FREE test first — do this BEFORE paying for anything.** Classify
+      **~10 logs by hand with Rovo in the Jira UI**, entering results through the
+      existing edit modal. No build, no credential, no spend. It tests the thing
+      the money would buy — *are the suggestions good enough to be worth
+      confirming?* — and produces real correction-rate data, which spec §2 makes
+      the batch's ONLY validation.
+- [ ] **Blocked on a commercial decision, not an engineering one:**
+      `CQIP_ANTHROPIC_API_KEY` is unminted and the spend question is unresolved at
+      F92. Nothing in the codebase is waiting.
+**Unparks on EITHER** the credential being minted **or** the manual pass showing
+quality good enough to justify automation.
 
 **Why this framing and not "blocked":** the classifier spec's §2 makes the correction
 rate the batch's ONLY validation, and a manual pass generates exactly that signal at
@@ -2382,19 +2235,12 @@ exists.
 
 ### ⚠ Directive archiving is REACHABLE after all — a recorded claim is falsified
 
-§15 carried Karen's LOW-8 finding that archiving was **verified unreachable** on
-2026-07-29: no archive writer anywhere in `app/api/`, create never sets `status`, and
-directive edit/archive UI still an open TODO. **Re-probed 2026-08-14: prod contains one
-`archived` directive — `Submits Form Lead - Combined`** — alongside a replacement
-`Remove Submits Form Lead - Combined`. It was archived by **direct SQL**, a path the
-LOW-8 audit did not consider because it only looked at application routes.
-
-**The consequence LOW-8 predicted is therefore LIVE, not hypothetical.**
-`loadProject` loads `status='active'` only, so an archived directive is invisible to
-the matrix search and counts **0** toward `hiddenByStatus` — an exists-but-archived
-title reads as "found nothing", which is the duplicate-creation hazard the
-`countHiddenByStatus` mitigation was built for. It also keeps its 16 cells, which is
-why total cells (**1,393**) exceed rendered cells (86 × 16 + 1 = **1,377**).
+**The lesson, kept; the narrative relocated** to
+`docs/claude-archive/CLAUDE-16-2026-08.md` (r42). A 2026-07-29 audit recorded
+archiving as *verified unreachable* on the strength of `grep` over `app/api/`
+alone; prod then turned out to hold an archived directive written by **direct
+SQL**. **A "no writer exists" claim must state which surfaces were checked** —
+that half generalises and is why this stays in §15 rather than leaving entirely.
 
 - [ ] **Give the matrix a signal for archived directives.** Either include them in the
       duplicate-risk count, or land the `POST /api/admin/directives` duplicate-title
@@ -2422,19 +2268,17 @@ open — recorded so they are not re-discovered from scratch.
       `app/api/admin/logs/ai-review/route.ts:227` has already audited.
       **PRE-EXISTING on the `correct` path since COMMIT 4** — the Karen fold extended
       it to `confirm`, it did not create it.
-      **Not data loss and not a `who` ambiguity** (both rows carry the same
-      server-derived `changed_by`): what is duplicated is the *transition*, and what
-      is stale is `old_value` on the second row. Neither row was false when written.
-      **Four options, each with a real cost, none free:** refresh `editingLog` (re-fires
-      the effect, destroys unsaved edits); exclude `root_cause_final` from
-      `updates`/`diffs` after a ruling (a second piece of "already persisted" state to
-      keep honest); track it via the snapshot (conflates dirty-tracking with
-      persistence); or **key the seeding effect on `log.id` rather than `log` identity**
-      (Karen's — allows a refresh without clobbering, but needs a companion reset on the
-      `open` transition or close/reopen of the same row keeps stale form state). The
-      last is the most promising and is a design change, so it belongs in its own batch.
-      Nothing accrues meanwhile: the strip is unexercised in prod (0 pending rows, no
-      credential).
+      **Not data loss and not a `who` ambiguity** — both rows carry the same
+      server-derived `changed_by`; what is duplicated is the *transition*, and
+      what is stale is `old_value` on the second row. Neither row was false when
+      written. **Four candidate fixes, each with a real cost, none free** — the
+      analysis is in `docs/claude-archive/CLAUDE-16-2026-08.md` (r42). The one to
+      start from is **keying the seeding effect on `log.id` rather than `log`
+      identity**, which allows a refresh without clobbering but needs a companion
+      reset on the `open` transition or close/reopen of the same row keeps stale
+      form state. It is a design change, so it belongs in its own batch, and
+      **nothing accrues meanwhile**: the strip is unexercised in prod (0 pending
+      rows, no credential).
 - [ ] **SIX MORE orphaned labels on `/dashboard/reports`** — `severity`, `status`,
       `issueCategory`, `rootCauseFinal`, `testType`, `whoOwnsFix`. Found while
       investigating the brand one, **verified independently by Karen**. All six
@@ -2457,20 +2301,52 @@ open — recorded so they are not re-discovered from scratch.
       than invent a fourth. Decide alongside Batch 005.22 Phase 4 (project-aware
       logs dropdown), which touches the same component.
 
+### ⚠ The CLAUDE.md split did NOT reach the read limit on its first pass
+
+**Recorded explicitly rather than left implicit (Karen H1, 2026-08-22).** The
+batch existed to make this file readable whole by the tool that treats it as
+ground truth. **It did not achieve that on the first pass.**
+
+- **Before:** 631,268 characters. **After the split + the Karen fold + the
+  clause-3 (r42) pass: 152,830.** A **76% reduction**, every invariant intact —
+  and still **2,830 over the 150,000-character tool limit**, and **32,830 over
+  the 120,000 ceiling this batch set for itself in r41.** (This paragraph is
+  part of the number it reports: recording the miss cost ~1,700 characters, and
+  quoting a figure taken before the paragraph existed would have been exactly
+  the stale-count error §16 records twice.)
+- **Jenny's round-2 projection was ~106,490.** It assumed §15 would reach a
+  34,000-character budget. §15 finished the first pass at 74,120 and the
+  clause-3 pass at **59,172**. The budget was never reached and, on the evidence,
+  was never reachable under the cut rule.
+- **r42 has hit a floor.** The last three relocations netted **~36 characters
+  each**: below roughly 1,500 characters of narrative, the citation stub that
+  r42 requires costs as much as the prose it replaces. **Further size reduction
+  needs a different mechanism, not more clause 3.**
+- [ ] **Decide the second pass.** The remaining loads are §15 (59,172), §13
+      (~48,000, and r41 explicitly rules it out) and the §16 archive index
+      (~12,800). The index is the only untouched candidate; trimming it trades
+      "find a batch by name without grepping six files" for ~11,000 characters.
+      **That is a real trade and it is Lacey's call, not a cleanup.**
+
+**Do not let this entry be deleted when the file next comes under the limit.**
+It is the record that the ceiling in r41 was set by a batch that did not meet it.
+
 ### Ops / deferred
-- [ ] **Ten stale present-tense prod-SHA claims remain in CLAUDE.md — three of
-      them inside §0.** Each reads `prod /api/health reports version: <sha>` in the
-      PRESENT tense inside a batch entry dated months ago: `dc377df` ×2,
-      `9088343`, `d21ceea` ×2, `5795a89`, `cdb2cc6`, `d03f319`, `2826f4b`,
-      `72bb2a0`. (The footer's `d5e5703` is correct and current; so is §0's new
-      "Prod right now" line.) None is *false in place* — each is scoped by its own
-      batch date — **but §0 is titled "Current deployed state" and holds three of
-      them, which is exactly how `e518624` came to be re-asserted as current.**
-      Fix the way commit `f2359e8` fixed the four `e518624` ones: `reports` →
-      `reported … as of <that batch's date>`. **Separate pass, deliberately not
-      bundled** into the 2026-08-21 correction chain, which was scoped to the
-      claims that were actually wrong rather than merely aging. **Found adjacent
-      in the same pass:** the title block at line 3 still reads
+- [ ] **Stale present-tense prod-SHA claims — 8 of 10 RESOLVED BY RELOCATION
+      2026-08-22; only the version-line half is still actionable.** (Rewritten
+      per Karen H5: the CLAUDE.md split invalidated this item and it still said
+      "remain in CLAUDE.md".) The eight — `dc377df`, `9088343`, `d21ceea`,
+      `5795a89`, `cdb2cc6`, `d03f319`, `2826f4b`, `72bb2a0` — each read
+      `prod /api/health reports version: <sha>` in the present tense inside a
+      months-old batch entry. Every one of those entries moved to
+      `docs/claude-archive/`, where §13 r40 makes the whole file history rather
+      than a current-state claim, which is the fix this item asked for. Verified
+      2026-08-22: each SHA now appears **exactly once in CLAUDE.md — in this
+      list** — and **§0 holds none**, so the specific hazard named below (a
+      dated SHA read as current because §0 was titled "Current deployed state")
+      is gone: that paragraph is now
+      `docs/claude-archive/CLAUDE-critical-history.md`.
+      **Still actionable:** the title block at line 3 reads
       `### Fusion92 | CRO Department | v2.8` while the repo declares **v3.0** —
       same class, one line, fix it with these.
 - [ ] **Confirm `test_milestones` backfill (§13 r18) runs on a cadence**
@@ -2644,4 +2520,4 @@ not of shipped batches.
 - Batch 012 — Pulse: restyle core (batch 2 of 4) — 2026-08-02
 ---
 
-*Last updated: 2026-08-21 | CQIP v3.0 — **BATCH 012 PULSE DIRECTIVE CRUD (edit · soft-delete · archive) — SHIPPED + PUSHED + DEPLOYED 2026-08-18; prod `/api/health` now reports `version: d5e5703`** — the docs-only rev-7 outline commit. **No application code changed** (no `.ts`/`.tsx` moved from `e518624`), but the bundle is NOT identical: `package.json` is a build input as well as a deploy trigger, so `gen-build-info.js` stamped the bump into `NEXT_PUBLIC_APP_VERSION` and **v3.0 IS live — Settings → System Info renders `3.0.0`**, which retires the entry's own "declared ≠ deployed" framing rather than patching it. **The §16 entry's ⚠ 0 predicted the SHA would hold at `e518624` and that was WRONG**: `deploy.yml`'s `paths-ignore` is `**.md` / `docs/**` / `.github/**` and does NOT cover `package.json`, so the version bump itself triggered CI, which stamped the pushed tip — struck in place there, not deleted. Migration 029 (`idx_directives_project_title`, UNIQUE `(project_key, title)`, spanning archived rows) is **APPLIED TO PRODUCTION**, verified by direct query in the prod Supabase SQL editor 2026-08-18 — stated with its environment and method because *deployed* and *migrated* are independent facts and `/api/health` reports the **Worker only**. **Jenny pre-flight ×2** (rev 1 DO-NOT-BUILD-YET: 1 CRITICAL · 3 HIGH · 6 MEDIUM · 10 LOW → rev 2 APPROVE-WITH-FINDINGS: 1 HIGH · 10 MEDIUM · 4 LOW), **FIVE Karen rounds** (2H/7M/5L → 2H/1M/4L → 0/2M/2L → 0/1M/2L → 0/0/3L). **Read that progression, not the total:** the original build's HIGHs were found in round one and never recurred, **every HIGH in round two was in a FIX**, and rounds three-to-five found nothing above MEDIUM — the core machinery was re-confirmed three times against three different trees, while what kept failing was the *claims*. Jenny's CRITICAL changed the design: the `project_key` block was specified only as a render-layer lock, so ordinary two-admin concurrency would have destroyed 16 cells including notes **with no `old_value` anywhere in the trail** (§13 r37's shape); the route now re-runs the **same shared predicate** against freshly-read cells. The predicate is a **three-clause conjunction** — the two-clause version would have wrongly allowed moving **5 of its 6 "movable"** directives, because `n_a` is not machine-only and **620 prod cells** that looked like fan-out output had in fact been written. It is kept fail-safe **by construction**: every clause can only SHRINK the movable set, so `project_key` being editable on **1 of 89** directives is the predicate working, not failing — and every directive created from now on is movable until someone works it. **⚠ My own audit caused a HIGH:** COMMIT 7 claimed "exactly ONE `setEditingDirectiveId(null)` remains" on a grep for that **literal string**, which cannot match the **ternary** form the row's Edit/Close toggle uses — §13 r38 mechanism (a), a count stated on an instrument that could not see the case. Karen later re-derived it by **AST**. Three defects in this chain were created **by** the fix before them, and each was closed with a **mechanism rather than a longer list**: clear-on-unmount over a ninth enumeration entry, then its prop-identity dependency **removed** rather than documented, and a prompt that fires only when the click would actually drop the edited row — because a dialog that is usually wrong trains the user to click through, which is how a guard stops working without breaking. **Same-shape duplication removed THREE times in one batch** (`CELL_STATUS_LABEL`, the duplicate-title message whose drift mutation *survived*, `visibleForLifecycle`) — recorded as a rule CANDIDATE, **not promoted**: *the comment is the tell*, since all three carried a comment asserting parity and one was demonstrably false with every gate green. **Directive count re-derived 2026-08-18 grouped by `project_key` AND `status`:** NBLYCRO active **87** · archived **1** · SPLCRO active **1** · global active **88** · all rows **89**. The apparent three-way conflict was **one stale figure plus one MISLABELLED comparison** — "NBLYCRO active" = 87 (matrix header, correct) versus "directives holding cell work" = 88 of 89 (the runbook's, a *different quantity*); rev 6's 86/87 was stale 08-14 data. **The label is the fix.** Gates at five trees: tsc 0 · ESLint 0 · **376/376** (from 333) · build 0 · **44 mutations run, 42 caught**, both survivors verified equivalent mutants. **⚠ NOT VERIFIED, carried forward: there is NO route-level test harness** — Lacey's Scenario A result (`a059d078`, 409 with `blocking_cells: 16`, hash `a2808d54…`, SPLCRO 0, still `NBLYCRO`, zero audit rows) is a **HAND-RUN OBSERVATION, NOT COVERAGE**; **the guard has been observed REFUSING but never PERMITTING**, since the positive case was deliberately skipped (it writes a permanent prod directive and archiving does not free the title) — **the batch's oldest open item**; the `splitShownByLifecycle` **caller remains UNCOVERED** (one call expression, one surviving mutation, all gates green — the extraction narrowed the surface, it did not close the caller); and **`clearAllFilters` is correct BY ACCIDENT**, resetting `statusFilter` to `'all'` which strictly widens — nothing pins that, and a "restore defaults" edit to `'open'` reinstates the silent-loss path in one line.*
+*Last updated: 2026-08-22 | CQIP v3.0 — **BATCH 012 PULSE DIRECTIVE CRUD (edit · soft-delete · archive) — SHIPPED + PUSHED + DEPLOYED 2026-08-18; prod `/api/health` now reports `version: d5e5703`** — the docs-only rev-7 outline commit. **No application code changed** (no `.ts`/`.tsx` moved from `e518624`), but the bundle is NOT identical: `package.json` is a build input as well as a deploy trigger, so `gen-build-info.js` stamped the bump into `NEXT_PUBLIC_APP_VERSION` and **v3.0 IS live — Settings → System Info renders `3.0.0`**, which retires the entry's own "declared ≠ deployed" framing rather than patching it. **The §16 entry's ⚠ 0 predicted the SHA would hold at `e518624` and that was WRONG**: `deploy.yml`'s `paths-ignore` is `**.md` / `docs/**` / `.github/**` and does NOT cover `package.json`, so the version bump itself triggered CI, which stamped the pushed tip — struck in place there, not deleted. Migration 029 (`idx_directives_project_title`, UNIQUE `(project_key, title)`, spanning archived rows) is **APPLIED TO PRODUCTION**, verified by direct query in the prod Supabase SQL editor 2026-08-18 — stated with its environment and method because *deployed* and *migrated* are independent facts and `/api/health` reports the **Worker only**. **Jenny pre-flight ×2** (rev 1 DO-NOT-BUILD-YET: 1 CRITICAL · 3 HIGH · 6 MEDIUM · 10 LOW → rev 2 APPROVE-WITH-FINDINGS: 1 HIGH · 10 MEDIUM · 4 LOW), **FIVE Karen rounds** (2H/7M/5L → 2H/1M/4L → 0/2M/2L → 0/1M/2L → 0/0/3L). **Read that progression, not the total:** the original build's HIGHs were found in round one and never recurred, **every HIGH in round two was in a FIX**, and rounds three-to-five found nothing above MEDIUM — the core machinery was re-confirmed three times against three different trees, while what kept failing was the *claims*. Jenny's CRITICAL changed the design: the `project_key` block was specified only as a render-layer lock, so ordinary two-admin concurrency would have destroyed 16 cells including notes **with no `old_value` anywhere in the trail** (§13 r37's shape); the route now re-runs the **same shared predicate** against freshly-read cells. The predicate is a **three-clause conjunction** — the two-clause version would have wrongly allowed moving **5 of its 6 "movable"** directives, because `n_a` is not machine-only and **620 prod cells** that looked like fan-out output had in fact been written. It is kept fail-safe **by construction**: every clause can only SHRINK the movable set, so `project_key` being editable on **1 of 89** directives is the predicate working, not failing — and every directive created from now on is movable until someone works it. **⚠ My own audit caused a HIGH:** COMMIT 7 claimed "exactly ONE `setEditingDirectiveId(null)` remains" on a grep for that **literal string**, which cannot match the **ternary** form the row's Edit/Close toggle uses — §13 r38 mechanism (a), a count stated on an instrument that could not see the case. Karen later re-derived it by **AST**. Three defects in this chain were created **by** the fix before them, and each was closed with a **mechanism rather than a longer list**: clear-on-unmount over a ninth enumeration entry, then its prop-identity dependency **removed** rather than documented, and a prompt that fires only when the click would actually drop the edited row — because a dialog that is usually wrong trains the user to click through, which is how a guard stops working without breaking. **Same-shape duplication removed THREE times in one batch** (`CELL_STATUS_LABEL`, the duplicate-title message whose drift mutation *survived*, `visibleForLifecycle`) — recorded as a rule CANDIDATE, **not promoted**: *the comment is the tell*, since all three carried a comment asserting parity and one was demonstrably false with every gate green. **Directive count re-derived 2026-08-18 grouped by `project_key` AND `status`:** NBLYCRO active **87** · archived **1** · SPLCRO active **1** · global active **88** · all rows **89**. The apparent three-way conflict was **one stale figure plus one MISLABELLED comparison** — "NBLYCRO active" = 87 (matrix header, correct) versus "directives holding cell work" = 88 of 89 (the runbook's, a *different quantity*); rev 6's 86/87 was stale 08-14 data. **The label is the fix.** Gates at five trees: tsc 0 · ESLint 0 · **376/376** (from 333) · build 0 · **44 mutations run, 42 caught**, both survivors verified equivalent mutants. **⚠ NOT VERIFIED, carried forward: there is NO route-level test harness** — Lacey's Scenario A result (`a059d078`, 409 with `blocking_cells: 16`, hash `a2808d54…`, SPLCRO 0, still `NBLYCRO`, zero audit rows) is a **HAND-RUN OBSERVATION, NOT COVERAGE**; **the guard has been observed REFUSING but never PERMITTING**, since the positive case was deliberately skipped (it writes a permanent prod directive and archiving does not free the title) — **the batch's oldest open item**; the `splitShownByLifecycle` **caller remains UNCOVERED** (one call expression, one surviving mutation, all gates green — the extraction narrowed the surface, it did not close the caller); and **`clearAllFilters` is correct BY ACCIDENT**, resetting `statusFilter` to `'all'` which strictly widens — nothing pins that, and a "restore defaults" edit to `'open'` reinstates the silent-loss path in one line.*
