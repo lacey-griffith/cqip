@@ -1,12 +1,13 @@
 # CQIP Batch Priority Outline
 
-**Updated:** 2026-08-22 (rev 8 — Q1 RE-LOCKED; CLAUDE.md split shipped but MISSED ITS GOAL; restyle batch 4 DISSOLVED; Convert direct read SUPERSEDES 012 E2)
+**Updated:** 2026-08-22 (rev 8.1 — sequence reordered by DEPENDENCY with an agent-mode column; 006 UNBLOCKED; Change Log widget 47% decision MADE. Amends rev 8, same day: Q1 RE-LOCKED; CLAUDE.md split shipped but MISSED ITS GOAL; restyle batch 4 DISSOLVED; Convert direct read SUPERSEDES 012 E2)
 **Supersedes:** rev 7 (2026-08-19). **Delete rev 7 from project knowledge — this file replaces it.**
 **Canonical source:** CLAUDE.md §15/§16 wins; CROSS_CLAUDE.md §5 mirrors it; this file mirrors both.
 **Current deployed state:** Worker **`ab70878`** — verified via `/api/health` 2026-08-22, matching the pushed tip · **v3.0** · edge function `jira-sync` deployed 2026-08-09 23:22 UTC · **migrations 001–029, ALL APPLIED** (029 verified by direct query in the prod Supabase SQL editor 2026-08-18).
 **⚠ Rev 7's "DECLARED v3.0 ≠ DEPLOYED" headline is RETIRED.** Both halves were false and the whole framing is stale: **v3.0 is live and Settings → System Info renders `3.0.0`.** What survives is the mechanism, and it is worth keeping because it fired again on this very push: **`package.json` is NOT in `paths-ignore`** (`**.md` · `docs/**` · `.github/**`), so it is a deploy **TRIGGER**, and `gen-build-info.js` reads it, so it is also a build **INPUT**. A version bump is never inert on either axis. The 17-commit split chain moved `package.json` plus three files under `scripts/`, so CI fired as expected and the SHA advanced to `ab70878`.
 **⚠ `/api/health` reports the WORKER ONLY** — it does not reflect Supabase edge-function deploys, so a matching SHA says nothing about `jira-sync`. This SHA has misled twice; see settled discrepancy 6.
-**This revision:** Q1 re-locked (wording not final, QMS 25/32 target VOID); the CLAUDE.md split recorded as shipped **and as having missed its primary goal**, with a second extraction pass owed; restyle batch 4 dissolved into two unrelated items; Convert direct read added, superseding 012 E2; data insights and bulk cell edit added; QMS Recs 1–3 demoted with the Rec 2 open flag preserved.
+**This revision (8.1):** the OPEN SEQUENCE is reordered **by DEPENDENCY rather than need** and gains an **agent-mode column** (auto / accept-with-edits / manual) governed by one rule — *auto where failure is LOUD, manual where it is SILENT or writes to prod, Jenny-gated manual regardless*; **006's alerts channel is NO LONGER an external block** (Lacey has a channel cleared for testing), which unblocks 010.1 and ClickUp 2/3; and the **Change Log widget's 47% question is DECIDED** — the 255 uncovered cells render as *"Resolved — date unknown"* with the directive-level date marked approximate. **Two of the seven open decisions are now closed.**
+**Rev 8 (same day):** Q1 re-locked (wording not final, QMS 25/32 target VOID); the CLAUDE.md split recorded as shipped **and as having missed its primary goal**, with a second extraction pass owed; restyle batch 4 dissolved into two unrelated items; Convert direct read added, superseding 012 E2; data insights and bulk cell edit added; QMS Recs 1–3 demoted with the Rec 2 open flag preserved.
 
 ---
 
@@ -277,29 +278,64 @@ it.
 
 ---
 
-## OPEN SEQUENCE — reordered by NEED, 2026-08-22
+## OPEN SEQUENCE — reordered by DEPENDENCY, 2026-08-22 (rev 8.1)
+
+**Rev 8 ordered this by NEED. Rev 8.1 reorders it by DEPENDENCY** — need is a
+judgement that moves every session; a dependency is a fact about what cannot
+start until something else finishes. Ordering by the fact makes the parallelism
+visible: **six of the thirteen have no dependency at all.**
+
+The **MODE** column is the agent-autonomy setting, not a difficulty rating.
 
 ```
- 1  CLAUDE.md SPLIT        SHIPPED · 17 commits · ⚠ MISSED ITS GOAL
-                           163,228 chars vs 150k. Second pass required.
- 2  G7 TAB-STOPS           back-to-back with #1, SEPARATE PUSH
- 3  DATA INSIGHTS          NEW · reports page first · read-only, no Jenny
- 4  CONVERT DIRECT READ    NEW · ground-up · SUPERSEDES 012 E2
- 5  006 TEAMS DISPATCH     ⚠ external block (alerts channel, unverified)
- 6  KEEP-BOTH-AND-FLAG     Jenny
- 7  CHANGE LOG WIDGET      ⚠ waits on Lacey's 47%-render decision
- 8  012 PHASE C            ⚠ waits on Jira-create-permission verify
- 9  012 PHASE D            ⚠ waits on Phase C · Jenny
-10  008 CONVERT AUTOMATION ⚠ MAY FOLD INTO #4 — unresolved
-11  010.1 REMAINDER        ⚠ waits on 006
-12  CLICKUP PHASE 2/3      ⚠ waits on 006
-13  007 CUSTOM JIRA BOARDS no deps · lowest need
+     BATCH                     MODE     DEPENDS ON
+ 1   SECOND EXTRACTION PASS    manual   —
+ 2   G7 TAB-STOPS              auto     —
+ 3   CHANGE LOG WIDGET         auto     —          47% DECIDED (see below)
+ 4   DATA INSIGHTS             accept   —
+ 5   006 TEAMS DISPATCH        accept   —          NO LONGER BLOCKED
+ 6   010.1 REMAINDER           accept   #5
+ 7   CLICKUP PHASE 2/3         manual   #5 · Jenny
+ 8   CONVERT DIRECT READ       accept   —
+ 9   008 CONVERT AUTOMATION    accept   #8 — may fold in
+10   KEEP-BOTH-AND-FLAG        manual   Jenny
+11   012 PHASE C               accept   Jira-permission verify
+12   012 PHASE D               manual   #11 · Jenny · public surface
+13   007 JIRA BOARDS           auto     —
+ —   BULK CELL EDIT (backlog)  manual   Jenny
 ```
+
+**THE MODE RULE, and it is about the failure mode, not the risk:**
+
+> **`auto` where failure is LOUD. `manual` where failure is SILENT or where the
+> batch writes to production. Jenny-gated is `manual` regardless.**
+> `accept-with-edits` is the middle: review each edit, but the blast radius is
+> bounded and a mistake surfaces.
+
+Why that rule and not "manual for the scary ones": this file's whole defect
+record is **silent** failure — a sync that erased human classifications with no
+audit row, a paginated read that truncated at 1,000 with no error, a live hazard
+archived because its bullet was `[x]` on the half that was done. **Loud failure
+is safe to automate; a green run that is wrong is not.** So `007 Jira Boards` is
+`auto` despite being the largest item on the board (it is read-only against a
+cache, and a wrong board is visibly wrong), while the **second extraction pass is
+`manual` despite being docs-only** — its failure mode is dropping a live
+obligation into an archive where r40 makes it stop existing, which is exactly
+what the split's own oracle caught twice.
 
 **#1 and #2 ship back-to-back but in SEPARATE PUSHES.** Sharing a chain means a
-G7 revert drags the restructure with it. *(Note the rev-7 assumption that #1 is
-"docs-only and skips CI" proved WRONG in execution — the split moved
-`package.json` and three `scripts/` files, so it deployed. See the header.)*
+G7 revert drags the restructure with it. *(Note the rev-7 assumption that a
+CLAUDE.md batch is "docs-only and skips CI" proved WRONG in execution — the split
+moved `package.json` and three `scripts/` files, so it deployed. The second pass
+should stay genuinely docs-only, and that is now something to check rather than
+assume.)*
+
+**#1 detail — the second extraction pass.** Re-derived at write time: CLAUDE.md
+is **163,228 chars**, still **13,228 over** the 150,000 tool limit and **43,228
+over** the 120,000 r41 ceiling. §15 (**69,331**) and §13 (**50,212**) are the
+loads; **§16 is index-only at 12,812 and r41's remedy #1 is spent**, and r41
+explicitly rules §13 out as a candidate. That leaves **§15 via r42** and the §16
+archive index.
 
 ---
 
@@ -324,7 +360,14 @@ split because they share no dependency:
 - **Attribution ceiling: script vs human only — NOT which human pass.** Every UI
   edit writes `changed_by = l.hay@fusion92.com`. Any copy claiming finer
   provenance is unsupported by the data.
-- **Blocked on a Lacey decision:** what the 255 uncovered cells render as.
+- **✅ DECIDED 2026-08-22 (Lacey) — THE BATCH IS UNBLOCKED.** The 255 cells with
+  no per-cell audit row render as **"Resolved — date unknown"**, showing the
+  **directive-level date marked approximate**. This is the right shape: it shows
+  the row rather than hiding it, and it labels the date's provenance instead of
+  presenting a summary date as a per-cell fact. **Do not silently substitute the
+  directive-level date without the marker** — that would make 47% of the widget
+  quietly wrong in the same direction, which is the G5a claims-tense failure this
+  file already tracks.
 
 ### NEW — Convert direct read (sequence #4) · SUPERSEDES 012 E2
 
@@ -377,6 +420,15 @@ dates, so if Rec 2 is ever revived it should still land first.
 retained from rev 7. **The draft for rev 8 supplied no replacement for that
 section, so it was kept rather than deleted**; its one rev-8 change is that
 Rec 1, its free unpark path, is now BACKLOG rather than sequence #2.
+
+**✅ NO LONGER BLOCKED — 006 Teams dispatch (DECIDED 2026-08-22).** The alerts
+channel was an external block for months and nobody had re-verified it. **Lacey
+has a channel cleared for testing**, so the block is gone and **006 moves to
+sequence #5 with no dependency.** It **unblocks 010.1 (#6) and ClickUp Phase 2/3
+(#7)** with it — two items that had been parked behind it. *Struck from the open
+questions below.* This is §13 r32 / R21 working: a blocker carried past 7 days
+was re-checked and turned out not to be real, which is the second time in this
+file's history (Batch 009's phantom Azure gate ran 23 days).
 
 **HOLD (not sequenced):** Admin drawer change #4 (QA-URL-pattern editor removal)
 — AC gate RED, no Forge write path. Removing the editor strands the QA-URL
@@ -625,6 +677,7 @@ than unilateral. Flagged here so it is owed on the record rather than remembered
 
 ## CHANGE LOG
 
+- **2026-08-22 (rev 8.1)** — **Amends rev 8 the same day with three additions the rev-8 draft was missing.** **(1) OPEN SEQUENCE reordered by DEPENDENCY, not need**, and given an **agent-mode column**. Need is a judgement that moves every session; a dependency is a fact about what cannot start until something else finishes — and ordering by the fact makes the parallelism visible: **six of thirteen have no dependency at all.** The mode rule is about the FAILURE MODE, not difficulty: **`auto` where failure is LOUD, `manual` where failure is SILENT or the batch writes to production, Jenny-gated `manual` regardless**, with `accept-with-edits` as the bounded middle. That is why `007 Jira Boards` is `auto` despite being the largest item (read-only against a cache; a wrong board is visibly wrong) while the **second extraction pass is `manual` despite being docs-only** — its failure mode is dropping a live obligation into an archive where r40 makes it stop existing, which the split's own oracle caught twice. This file's entire defect record is silent failure, so the rule follows the record. **(2) 006 Teams dispatch is NO LONGER BLOCKED** — the alerts channel had been an external block for months with nobody re-verifying it; **Lacey has a channel cleared for testing**, so 006 moves to **#5 with no dependency and unblocks 010.1 (#6) and ClickUp Phase 2/3 (#7)**. That is §13 r32 / R21 working, and the **second** phantom gate this file has recorded (Batch 009's Azure block ran 23 days). **(3) The Change Log widget's 47% question is DECIDED** — the **255 of 539 done cells** with no per-cell audit row render as **"Resolved — date unknown"**, showing the **directive-level date marked approximate**. It shows the row instead of hiding it and labels the date's provenance instead of passing a summary date off as a per-cell fact; **substituting that date without the marker would make 47% of the widget quietly wrong in one direction**, the G5a failure this file tracks. The widget moves to **#3, unblocked**. **Two of rev 8's seven open decisions are closed by this amendment.** Figures re-derived at write time per r43: CLAUDE.md **163,228**, §15 **69,331**, §13 **50,212**, §16 **12,812** — unchanged from rev 8, which is expected: 8.1 is docs-only and touches no CLAUDE.md section.
 - **2026-08-22 (rev 8)** — **Q1 RE-LOCKED, the CLAUDE.md split shipped but MISSED ITS GOAL, restyle batch 4 dissolved, and Convert direct read supersedes 012 E2.** **Q1 is now operator load reduction · quantitative data for leadership · insight into the CRO department** — ⚠ **wording NOT final** (Lacey was mid-revision), and the **QMS 25/32 score target is VOID with no replacement; a rescore is owed.** Consequences applied anyway: G2 criterion validation → optional, **Recs 1 and 3 demoted to nice-to-have, Rec 2 demoted** — with the **open flag preserved intact**, because Rec 2 closes G1 and G1 is exactly the moving-denominator problem the new leadership-reporting Q1 depends on. **THE SPLIT MISSED ITS PRIMARY GOAL:** 163,228 chars against the **150,000 tool limit (13,228 over)** and the **120,000 r41 ceiling (43,228 over)**, so the file §0 tells every session to read completely still cannot be. **A second extraction pass is owed;** §15 (69,331) and §13 (50,212) are the loads, **§16 is index-only at 12,812 and r41's remedy #1 is therefore spent** — the rule was amended to say so rather than leave an exhausted prescription reading as actionable. Four new standing rules landed: **r40** (archive is history, never authority), **r41** (size ceiling, not calendar), **r42** (a §15 sentence names an action or names where its substance went), **r43** (re-derive every figure at write time, never transcribe). **Restyle batch 4 DISSOLVED** — it was two unrelated items sharing a name: **G7 tab-stops → #2**, **Change Log widget → #7**, which is blocked on Lacey deciding what the **255 of 539 done cells with no per-cell audit row** render as. **Convert direct read (#4) SUPERSEDES 012 E2 — E2 removed from BLOCKED**, and the enum decision becomes unilateral rather than a negotiation. **Data insights (#3)** added, scoped internally to Lacey and the CRO team so it stays small; **bulk cell edit** added to BACKLOG, Jenny-gated, evidenced by ~70 clicks of matrix paperwork for one MRR trigger ship. **Rev 7's "DECLARED v3.0 ≠ DEPLOYED" headline is RETIRED** — both halves were false, v3.0 is live, and the durable mechanism is that **`package.json` is a deploy TRIGGER and a build INPUT**, which is why this 17-commit chain deployed. **Prod is `ab70878`**, verified against the pushed tip. Every figure in this revision was re-derived at write time per r43; **the rev-8 draft's own numbers predated the final fold and were superseded**. KEPT from rev 7: the DONE list, the DEFECT RECORD, and the PARKED classifier section (the draft supplied no replacement, so it was retained rather than deleted).
 - **2026-08-19 (rev 7)** — **Batch 012 directive CRUD recorded as shipped, pushed and DEPLOYED** (15 commits `887f55e` → `e518624` — the prod stamp as of 2026-08-18 — v2.9 → v3.0, migration 029 applied to **PRODUCTION** and verified by direct query — stated with its environment and method, because *deployed* and *migrated* are independent facts and `/api/health` reports the Worker only). **Five Karen rounds recorded with the finding progression rather than a total**, because the shape is the evidence: the build's HIGHs were round-one only, **every round-two HIGH was inside a FIX**, and rounds 3-5 found nothing above MEDIUM. **The CLAUDE.md size limit is now sequenced as batch #1, ahead of restyle batch 4** — QMS **G5** arriving as a HARD FAILURE, not a prediction: 631,560 chars against a 150k read limit, so the r34 reconcile was only completable by grep plus targeted replacement with uniqueness assertions. Three scope constraints recorded, all load-bearing: split §16 **by month** (one archive file fails the same limit on the same trajectory), the archive is **append-only history and never authority for current state** (wants a §13 rule, or it trades one G5 for one G1), and the batch must define **where new entries go**, not only where old ones move. **Growth DERIVED rather than estimated: ~6.1k chars/day since 2026-07-09 and ~6.8k/day over the last month — NOT the ~9k/day working figure — and the series is non-monotonic**, because r34 moves reclaim space, which is itself evidence the split works. **OPEN SEQUENCE renumbered:** rev 6 ran `1, ✅, 2, 4, 5` with no 3. **Six items struck from backlog**, and **two of them rev 6's own DONE list already contradicted** (logs-page filter bar, edit-modal dirty-state dismiss — both shipped at `cdb2cc6`), plus a third self-contradiction in the QMS block (*"confirm and strike"* on a rename shipped at `9088343`). An internal contradiction in one file is worse than a stale entry, because both halves read as authoritative. **Four items added:** the positive case unrun (**the guard has been observed REFUSING but never PERMITTING** — the batch's oldest open item) · `clearAllFilters` **correct by accident**, resetting `statusFilter` to `'all'` with nothing pinning it, so a "restore defaults" edit to `'open'` reinstates the silent-loss path in one line with every gate green · the `splitShownByLifecycle` caller **uncovered** · and same-shape duplication removed **three times in one batch**, recorded as a **rule CANDIDATE only** whose operative clause is *the comment is the tell* — all three carried a comment asserting parity and one was demonstrably false with every gate green, which makes it a falsifiability rule rather than a DRY preference. **Rec 1 downgraded from "nearly free":** the `audit_log` evidence half is **exhausted at n=4 (REPORTED BY LACEY, not derived, not re-probed)** and the remaining path is SharePoint screenshot metadata by hand — an unverified figure marked unverified is correct, whereas the same figure written as derived is the G5a failure. **The directive count is recorded as ONE STALE FIGURE PLUS ONE MISLABELLED COMPARISON, not a three-way disagreement:** "NBLYCRO active directives" = **87** (matrix header, correct) versus "directives holding cell work" = **88 of 89 rows** (the 409 runbook's figure — a *different quantity*, never in conflict once named); rev 6's 86/87 was stale 08-14 data, superseded before rev 6 shipped. **The label is the fix** — unlabelled, 88/89 reads as a contradiction again the next time someone opens the runbook. **`CROSS_CLAUDE.md` recorded as OWED and AC-facing:** its footer reads 2026-07-17 while its own §6 carries 08-07 and 08-08 entries, so it disagrees with itself and its footer is the line used as a state read; not written here, because an AC-facing mirror update is coordinated rather than unilateral.
 - **2026-08-15 (rev 6)** — **All six rev-5 discrepancies SETTLED against CLAUDE.md §15/§16, with answers recorded rather than the questions deleted.** Settling #1 exposed an error in §16 itself: two batches were recorded making the same v2.7 → v2.8 bump, so classifier-1's entry was corrected to "shipped at v2.8, no bump" — a version line is exactly the kind of claim that reads as verified and is never re-derived. #4 answered as **86 per project / 87 global**, with the coincidence flagged as the trap: 87 is also NBLY's all-status count, and neither quantity is the per-project active figure the render-ceiling derivations need. #5 settled as **nothing to correct** — the "daily" claim was verbal, never written. #6 recorded in both this file and CLAUDE.md. Twelve batches added to DONE, closing the 07-29 → 08-09 gap. **The PARKED classifier section was superseded, not edited:** it shipped, the park reason changed from "no answer key" to "no credential / unresolved spend", and the free Rovo-by-hand alternative is recorded as the thing to try first. Defect record extended with **directive archiving reachable via direct SQL**, falsifying LOW-8's "verified unreachable" — plus the standing lesson that a "no writer exists" claim must state which surfaces were checked. Five items added to backlog.
