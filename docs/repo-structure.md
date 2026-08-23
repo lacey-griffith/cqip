@@ -208,11 +208,31 @@ cqip/
 │   │   │                                    reference table (61 seed rows across
 │   │   │                                    4 fields, Jira-verbatim) +
 │   │   │                                    quality_logs.needs_review column
-│   │   └── 021_client_request_taxonomy.sql # Batch 005.29: +8 taxonomy rows
+│   │   ├── 016_pre_demo_security.sql   # Batch 004.6: user_profiles privileged-column
+│   │   │                                  trigger; audit_log SELECT tightened to admin
+│   │   ├── 017_audit_log_backfill_target.sql # Batch 004.9: backfill target_type/target_id
+│   │   ├── 018_sync_runs.sql           # Batch 005.10: jira-sync pass/fail history
+│   │   ├── 019_project_brand_model.sql # Batch 005.22 P1: brand_model + per-project
+│   │   │                                  brand field + default_brand_id (§13 r28)
+│   │   ├── 021_client_request_taxonomy.sql # Batch 005.29: +8 taxonomy rows
 │   │                                        (1 Client Request category + 6
 │   │                                        client-change-request subtypes + 1
 │   │                                        unannounced "Base: New Account
 │   │                                        Support" category placeholder)
+│   │   ├── 022_auth2_recovery.sql      # Batch auth.2: must_change_password + audit
+│   │   │                                  target_type 'user' + r22 trigger extension
+│   │   ├── 023_login_events.sql        # Batch login-events: append-only login history
+│   │   ├── 024_client_library_phase_a.sql # Batch 012 A: directives +
+│   │   │                                  directive_brand_status (the Pulse matrix)
+│   │   ├── 025_monitoring_findings.sql # Batch 012 B: external monitoring ingest
+│   │   ├── 026_ac_telemetry.sql        # Batch telemetry-ac: ac_telemetry +
+│   │   │                                  ac_version_seen + ac_telemetry_rejects
+│   │   ├── 027_prune_grant_fix.sql     # revoke EXECUTE from anon/authenticated BY NAME
+│   │   │                                  (026's REVOKE FROM PUBLIC was insufficient)
+│   │   ├── 028_ai_review_pending.sql   # Batch classifier-1: ai_review_pending +
+│   │   │                                  ai_confidence_band
+│   │   └── 029_directives_unique_title.sql # Batch 012 CRUD: UNIQUE (project_key,title)
+│   │                                        spanning archived rows. APPLIED TO PROD.
 │   └── functions/               # Deno Edge Functions
 │       ├── jira-webhook/index.ts       # Receives Jira webhook events. Two branches:
 │       │                                 (1) milestone branch — first-time entry into
@@ -255,6 +275,10 @@ cqip/
 │   │                                   root_cause_initial / root_cause_final /
 │   │                                   resolution_type to Jira-verbatim canonicals.
 │   │                                   Idempotent, audit-logged, --dry-run default.
+│   ├── load-nbly-goal-directives.ts  # One-shot (2026-07-22): the 65-directive goal load
+│   ├── normalize-client-brand.ts     # One-shot (Batch 005.25): client_brand → canonical
+│   │                                   brands.jira_value ("CODE - Display Name")
+│   ├── smoke-graph-token.ts          # Ad-hoc: Azure AD client-credentials smoke check
 │   ├── gen-build-info.js             # Prebuild: stamps build metadata + warns on the
 │   │                                   CLAUDE.md size ceiling (§13 r41)
 │   └── gen-archive-index.js          # Regenerates CLAUDE.md §16's archive index

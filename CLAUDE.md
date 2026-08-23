@@ -1356,6 +1356,41 @@ Resolved             → green-500
     **Precedent:** step 7 of the split is this rule working — it pulled the
     shared-oracle lesson out of §15 prose into **r38** and left §15 citing it.
 
+43. **Re-derive every figure at the moment you write it. Never transcribe one —
+    including from your own verification earlier in the same session.**
+    (CLAUDE.md split batch, Karen re-review, 2026-08-22.)
+
+    **The rule:** if a number is going into a document, measure it at write time.
+    A figure copied from earlier output is a **record of a past state presented
+    as a present claim** — the same confusion r40 exists to stop, at the scale of
+    a single number.
+
+    **Why it needed a rule and not care: THREE instances in ONE fold, by someone
+    already watching for it.**
+    - The conservation delta went into `ORACLE.md` as **+42,837** when the
+      correct **+64,048** was already in that session's own verification output
+      *and had been quoted in the handoff*. Not a measurement error — a
+      transcription of a superseded number into the one document whose entire
+      job is measurement.
+    - §15 was written as **59,172** in two places, measured one commit earlier,
+      when it was **61,267**.
+    - "Exactly 4,510" for two files that were **5,144**.
+
+    **The trap that makes it worse: a figure can be part of what it measures.**
+    Recording CLAUDE.md's own size changed CLAUDE.md's size, three times in a
+    row (151,142 → 152,830 → 153,051). **Two escapes, and both are legitimate:**
+    - **Date it.** `+64,048 as measured at <sha>` is a stable, true record.
+    - **Point at a live measurement** instead of writing the number, e.g. the
+      `[claude-md]` prebuild line, which measures at run time.
+
+    **What does NOT work:** correcting the figure. Each correction moves it
+    again. That is a fixed point, and chasing it is how a stale number gets
+    written down with extra confidence.
+
+    **How to apply:** do the non-numeric edits first, measure last, write the
+    figures last. If a figure is self-referential, date it or replace it with a
+    pointer — do not iterate.
+
 ---
 
 ## 14. What Is NOT In Scope for V1
@@ -1651,6 +1686,15 @@ the machine-readable source of truth in `docs/clickup-archive/`.
       today's drifted Jira). Jenny-gated: migration + mutation + new route.
 - [ ] **Phase 3** — the Client Archive page. Isolation contract: the page may
       read a live Jira aggregate; **coverage KPIs never read the archive.**
+- [ ] **⚠ PRE-DECOMMISSION, IRREVERSIBLE — request the ClickUp workspace export
+      while the workspace still exists.** It is the only way to obtain
+      **per-task status history**: the API exposes only current status and
+      `orderindex`, and `time_in_status` returns 403 on this plan, so the
+      freezer crawl **cannot** capture it. Owner-run, non-blocking, not yet
+      attempted. **Restored to §15 2026-08-22 (Karen re-review MEDIUM-2)** — the
+      clause-3 pass carried it into the archive with its narrative, where §13
+      r40 makes it history rather than a live obligation. It is the one item on
+      this list with a deadline set by someone else.
 - [ ] **Move the gitignored raw crawl** (~464 MB, descriptions + assignee PII)
       to durable storage. It must never be committed.
 Both phases stay sequenced behind Batch 006.
@@ -1894,6 +1938,13 @@ them**; every figure in this file has moved on re-probe.
 - [ ] **Watch `monitoring_findings`** — nearest by *step-function* growth, not by
       count: `POST /api/monitoring/findings` accepts `MAX_BATCH=500`, so it can go
       0 → over-cap in two API calls the day Batch 008 starts posting.
+- [ ] **Add a "showing most recent 500" note to `/dashboard/settings/audit`.**
+      It uses `.limit(500)` against an `audit_log` well over that, which is
+      deliberate (a newest-first event view) but **silent**: an admin searching
+      for an older event gets "not found" rather than "truncated". A different
+      class from the others here — a signal gap, not a data bug. **Restored to
+      §15 2026-08-22 (Karen re-review MEDIUM-2)**; the clause-3 pass kept this
+      list's three checkboxes and carried this fourth item off with the prose.
 - [ ] **Fix `test_milestones` at ALL FOUR unranged call sites** when it next crosses
       — coverage page, brand-wellness report, dashboard KPI, manage-milestones dialog.
       An earlier draft named only two, which is how half a fix ships.
@@ -2318,23 +2369,43 @@ ground truth. **It did not achieve that on the first pass.**
   measures at run time and also names the section that grew.** Read that, not a
   figure in prose.
 - **Jenny's round-2 projection was ~106,490.** It assumed §15 would reach a
-  34,000-character budget. §15 finished the first pass at 74,120 and the
-  clause-3 pass at **59,172**. The budget was never reached and, on the evidence,
-  was never reachable under the cut rule.
-- **r42 has hit a floor.** The last three relocations netted **~36 characters
-  each**: below roughly 1,500 characters of narrative, the citation stub that
-  r42 requires costs as much as the prose it replaces. **Further size reduction
-  needs a different mechanism, not more clause 3.**
-- [ ] **Decide the second pass.** The remaining loads are §15 (59,172), §13
-      (~48,000, and r41 explicitly rules it out) and the §16 archive index
-      (~12,800). The index is the only untouched candidate; trimming it trades
-      "find a batch by name without grepping six files" for ~11,000 characters.
-      **That is a real trade and it is Lacey's call, not a cleanup.**
+  34,000-character budget. §15 finished the first pass at **74,120** and the
+  clause-3 pass at **63,551 as measured at `f374676`** — dated per r43, because
+  this paragraph sits inside §15 and is part of what it measures. The budget was
+  never reached and, on the evidence, was never reachable under the cut rule.
+  (Two earlier drafts said **59,172**, taken one commit before the text quoting
+  it existed — the r43 error, committed inside the entry about it.)
+- **r42 is NOT exhausted — an earlier draft of this entry claimed it was, and
+  that claim was false.** It said the last three relocations netted "~36
+  characters each" and concluded further reduction needed a different mechanism.
+  Measured per relocation, the range is **−36 to −848 characters (3% to 66%)**;
+  "~36" was true of **exactly one**, and that one had *added two new checkbox
+  actions* — r42 restructuring narrative into actions, which is the rule working,
+  not failing. **r42 remains available as r41 remedy #2.** (Karen re-review
+  HIGH-4, 2026-08-22.)
+- [ ] **Decide the second pass.** **Scope it off the live `[claude-md]` prebuild
+      breakdown, not off any figure written here** — every number in this
+      subsection is part of what it measures (r43). At `f374676` the loads were
+      §15, then §13 (which r41 explicitly rules out), then the §16 archive index.
+      The index is the only untouched candidate; trimming it trades "find a batch
+      by name without grepping six files" for roughly its own size. **That is a
+      real trade and it is Lacey's call, not a cleanup.**
 
 **Do not let this entry be deleted when the file next comes under the limit.**
 It is the record that the ceiling in r41 was set by a batch that did not meet it.
 
 ### Ops / deferred
+
+- [ ] **Finish paying off `docs/repo-structure.md`'s r23 obligation.**
+      §13 r23 was amended 2026-08-22 to name that file as a per-ship destination
+      (Karen H4 — its header had *claimed* r23 named it when r23 did not). The
+      same fold paid off the parts that were countable against a source of
+      truth: **all 29 migrations** (11 were missing, including **029**, applied
+      to production by that very chain) and three absent scripts. **Still short:
+      API routes (~16 of 24 present) and `docs/*.md` (~9 of 39).** Recorded as an
+      obligation rather than left silent, because the failure mode changed with
+      the amendment: before, the claim was false and *visibly* so; now the rule
+      is true and the file quietly fails it, which reads as maintained.
 - [ ] **Stale present-tense prod-SHA claims — 8 of 10 RESOLVED BY RELOCATION
       2026-08-22; only the version-line half is still actionable.** (Rewritten
       per Karen H5: the CLAUDE.md split invalidated this item and it still said

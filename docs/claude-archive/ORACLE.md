@@ -28,14 +28,28 @@ two invariants are the backstop, not the other way round.
 
 ## Post-split result (recorded 2026-08-22)
 
-**Conservation delta: +42,837 characters**, against a pre-split total of
-631,268. That figure **includes the two oracle artifacts themselves** —
-`ORACLE.md` and `oracle-pre-split.json`, **exactly 4,510 characters**. An earlier
-statement of +38,327 excluded them as measurement rather than content; the
-exclusion was defensible but unstated, so it read as a 4,510-character
-discrepancy (Karen M13). **Both figures are now given, with the difference
-named.** The remainder is new banners, pointer stubs, r40/r41/r42, the r23/r32/r34
-amendments, the §16 index and the per-move archive notes.
+**Conservation delta: +70,280 characters as measured at `f374676`**, against a
+pre-split total of 631,268 — CLAUDE.md plus `docs/schema.md`,
+`docs/repo-structure.md` and everything in `docs/claude-archive/`.
+
+**The figure carries a commit because it is part of what it measures.** This
+file is inside the sum, so editing it moves the number; dating is the escape,
+per §13 **r43**. Re-derive rather than quoting this line.
+
+The two oracle artifacts — `ORACLE.md` and `oracle-pre-split.json` — are
+**5,144 characters at `f374676`**, and are included above. The remainder is new
+banners, pointer stubs, r40/r41/r42/r43, the r23/r32/r34 amendments, the §16
+index, the per-move archive notes and the clause-3 citation stubs.
+
+> **⚠ THIS BLOCK WAS WRONG IN BOTH NUMBERS AND THE ERROR IS THE REASON r43
+> EXISTS.** It read **+42,837** and **"exactly 4,510"**. The correct delta was
+> already in that session's own verification output and had been quoted in the
+> Karen handoff — it was **transcribed from stale output, not re-derived**, into
+> the one document whose entire job is measurement. Wrong by ~21,000, it would
+> have manufactured a future false alarm about the thing the split most needs to
+> be trusted on: whether content was lost. Corrected 2026-08-22 (Karen re-review
+> HIGH-3). An earlier figure of **+38,327** also appears in the batch history; it
+> excluded the two artifacts deliberately but did not say so.
 
 ## Baseline (characters, not bytes — bytes run ~+1.0% here)
 

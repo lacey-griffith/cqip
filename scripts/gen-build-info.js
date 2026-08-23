@@ -104,9 +104,23 @@ try {
     console.warn('  ⚠  CLAUDE.md IS OVER ITS SIZE CEILING (§13 r41)');
     console.warn(`     ${total.toLocaleString()} chars, ${over.toLocaleString()} over the ${CLAUDE_MD_CEILING.toLocaleString()} limit.`);
     console.warn(`     Largest section: ${sections[0].name} at ${sections[0].chars.toLocaleString()} chars.`);
-    console.warn('     Roll the OLDEST §16 month out to docs/claude-archive/ — but check');
-    console.warn('     the breakdown above first: if the growth is in §15 or the header,');
-    console.warn('     rolling §16 over will not move the number.');
+    // Remedies, in r41 order. Each one STATES when it is unavailable rather
+    // than leaving the reader to discover it — a remedy that reads as
+    // actionable and is not is worse than no remedy (r41's own words).
+    const s16 = sections.find((x) => x.name.startsWith('16.'));
+    const s16Entries = s16
+      ? (md.slice(md.indexOf('## 16.')).match(/^### /gm) || []).length - 1
+      : 0;
+    console.warn('     Remedies, in r41 order — apply the one that fits the section above:');
+    console.warn(
+      s16Entries > 0
+        ? `     1. Roll §16's oldest month to docs/claude-archive/ (§16 holds ~${s16Entries} entries).`
+        : '     1. Roll §16 out — UNAVAILABLE: §16 holds no entries, it is index-only.'
+    );
+    console.warn('     2. Apply §13 r42 (clause 3) to §15 — relocate post-mortem narrative,');
+    console.warn('        keep the actions and leave a citation. Available.');
+    console.warn('     3. Extract a whole low-authority-density section, as §3 and §5 were.');
+    console.warn('        NOT §13 — highest authority density, ruled out by r41.');
     console.warn('     Not failing the build — this is a warning by design (r41).');
     console.warn('');
   }
