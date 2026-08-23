@@ -126,9 +126,14 @@ deliberately NOT run yet — Lacey approves + runs.
 
 Update existing `directive_brand_status` cells for 13 active brands where Convert's
 real state disagrees with what's currently loaded — **205** upgrades (To do → Done,
-confirmed live in Convert; was 207 before the addendum-6 MLY removal) and 8
+confirmed live in Convert; was 207 before the addendum-6 MLY removal) and **7**
 downgrades (Done → To do, false positives: dead
-placeholder goals, an archived goal, and one pending design decision). **Status
+placeholder goals, an archived goal, and one pending design decision — three
+categories covering seven rows, which is what this sentence always described).
+*(Read `8` until 2026-08-22: addendum 7 removed the MDG resolver-bug row and this
+opening summary was not updated, so §0 contradicted §3's explicit "7 downgrades,
+not the 8 listed below" thirty-nine lines further down. Karen delta review
+HIGH-2.)* **Status
 flips only — no new directives, no new brands, no schema.** Lighter than the
 original 65-directive bulk load: this is a targeted UPDATE pass, not a CREATE pass.
 
@@ -157,7 +162,12 @@ finds the directive_id + brand_id → updates `status` to `suggested_status` →
 writes the audit row (`old_value` = `our_status`, `new_value` = `suggested_status`,
 `notes` = "Convert reconciliation 2026-07-25 — {convert_name} (id {convert_id},
 Convert status: {convert_status})" or "no real Convert goal — placeholder/absent"
-for the 8 downgrade rows).
+for the downgrade rows without one). **Precisely: 6 of the 7 downgrades take the
+placeholder note; MRA "Submits Form Lead - Combined" carries a real archived goal
+(`1004101324`) and takes `auditNote`'s other branch. The branch keys on whether
+`convert_id` is present, NOT on the direction of the flip.** *(Read "the 8
+downgrade rows" until 2026-08-22 — stale after addendum 7, and imprecise before
+it. Karen delta review HIGH-2.)*
 
 **Idempotency:** re-running is safe — an update to the same value is a no-op
 (the existing PATCH route already reports `changed: 0` in that case; a direct
@@ -220,3 +230,58 @@ To do is a correction, not a regression -- flag to whoever smoke-tests that a
 No schema change, no new route -> likely no Jenny (Claudette confirms). Karen
 reviews the loader logic + spot-checks mapping parity against this doc. Lacey
 approves + runs, same as the original goal-directive bulk load. DO NOT auto-run.
+
+## 7. Run procedure (operator checklist)
+
+**Lacey runs this. It is the sanctioned procedure for the production UPDATE —
+cite THIS section, not the archive.**
+
+Lifted into the spec 2026-08-22 (Karen delta review HIGH-1). It previously
+existed only inside a `docs/claude-archive/` file, which §13 **r40** makes
+history and never authority — so a production write had no citable procedure at
+all, and two earlier attempts to point at one failed (the archive itself, then
+an invented `§Pre-run` section). **Every figure below was re-derived from
+`scripts/data/convert-reconciliation-backfill.csv` at the moment of writing, per
+§13 r43 — nothing was transcribed from the archived copy, which carried four
+stale values.**
+
+**Figures, and where each comes from — the two kinds are not interchangeable:**
+
+| Figure | Value | Source |
+|---|---:|---|
+| CSV rows | **212** | re-derived from the CSV, 2026-08-22 |
+| Upgrades (To do → Done) | **205** | re-derived from the CSV, 2026-08-22 |
+| Downgrades (Done → To do) | **7** | re-derived from the CSV, 2026-08-22 |
+| Active brands in scope | **13** | re-derived from the CSV, 2026-08-22 |
+| `changed` / `already at target` | **206 / 6** | **NOT CSV-derivable** — depends on live prod state; measured 2026-07-25 (§5). Treat as an expectation, not an invariant: if `already at target` has grown, someone flipped cells in the UI since, and that is fine. |
+
+1. **Dry run.**
+   ```
+   npx tsx --env-file=.env.local scripts/backfill-convert-reconciliation.ts --dry-run
+   ```
+   Confirm the parsed shape is **212 rows / 205 upgrades / 7 downgrades** — the
+   script hard-fails on any other shape against its `EXPECTED_TOTAL` /
+   `EXPECTED_UPGRADES` / `EXPECTED_DOWNGRADES` constants. Expect
+   **206 to change + 6 already at target = 212** and **0 drifted**. Read the
+   7 downgrades it prints with their reasons.
+   **STOP CONDITION:** if anything reports as **drifted**, a cell was edited
+   after 2026-07-25. Re-verify those cells against Convert before considering
+   `--allow-drift`. Do not pass that flag to get past a surprise.
+2. **Run for real** — same command without `--dry-run` — and answer `yes` at the
+   prompt.
+3. **Confirm BOTH post-verify lines**, not just the first:
+   `✓ Post-verify: all N cells hold their expected status` **and**
+   `✓ Post-verify: N audit row(s) present`.
+   Any non-zero exit means do **not** trust the matrix yet. The script exits
+   non-zero if the cells land but the audit trail does not (Karen 2026-07-25
+   HIGH — it previously warned and exited 0).
+4. **Smoke the live matrix** on `/dashboard/pulse`: spot-check a few upgrades,
+   then confirm **all 7 downgrades** now read **To do**. That is expected, not a
+   regression — see §3 for each one's reason.
+5. **Re-run the dry run.** It must report `Nothing to change` (idempotency).
+6. **~~Before running, check the MLY `FLF: Views Step #1` / `Step #2` pair
+   sharing Convert id `100480830`.~~ RESOLVED by addendum 6 — struck, not
+   deleted, so nobody re-opens it.** Both MLY rows were removed from the CSV on
+   2026-07-25. Verified again at write time, 2026-08-22: **0 rows in the CSV
+   cite `100480830`**, and MLY still participates with **27** other rows. There
+   is nothing left to check here.

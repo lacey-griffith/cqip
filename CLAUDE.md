@@ -1765,14 +1765,18 @@ reviews. Effort: LG (multi-phase).
     **This line read `215 / 207 / 8` until 2026-08-22** — the original CSV shape,
     left stale when spec addenda 6 and 7 corrected it on 2026-07-25 (two MLY rows
     removed; one MDG row removed as a resolver bug). Data-only; no
-    migration/route/app-code. **Run procedure — the batch spec
-    `docs/batch-012-convert-reconciliation-spec.md`, sections `## 5. Verification`
-    and `## 6. Gate`** (cited by their real names; an earlier repoint invented a
-    `§Pre-run` section that does not exist — Karen re-review HIGH-1). The
-    6-step operator checklist also survives verbatim in
-    `docs/claude-archive/CLAUDE-16-2026-07.md`, but that is an r40 history file
-    and **must not be the cited procedure for a production UPDATE**; it also
-    carries the superseded 215/209/8 counts. Lacey approves + runs. Not an
+    migration/route/app-code. **Run procedure —
+    `docs/batch-012-convert-reconciliation-spec.md`, section
+    `## 7. Run procedure (operator checklist)`.** That section was **lifted into
+    the spec on 2026-08-22** (Karen delta review HIGH-1) precisely so this write
+    has a citable procedure: it had existed only in
+    `docs/claude-archive/CLAUDE-16-2026-07.md`, which §13 r40 makes history and
+    never authority. **Two earlier repoints failed** — first at the archive
+    itself, then at `## 5. Verification` + `## 6. Gate`, which exist but are
+    post-run assertions and approval policy, containing no runnable command.
+    The archived copy remains as history and **must not be cited**: it carries
+    four stale values (215, 209, "8 downgrades" twice) and a step 6 that
+    addendum 6 had already resolved. Lacey approves + runs. Not an
     E-phase — a data correction riding alongside the E track.
   - **Restyle batch 4 — NOT STARTED. Gate 0 (MEDIUM-6 audit-coverage count) DONE
     2026-08-03**; the probe figures are in
@@ -1836,9 +1840,22 @@ reviews. Effort: LG (multi-phase).
         yields the same answer. No data impact.
       **UNKNOWN — stated as unknown, NOT inferred:** whether the resolver itself
       was ever fixed. **The tool that produced this CSV is not in this
-      repository**, so nothing here can answer it. The 2026-07-25 change
-      corrected the *output*; this repo holds no evidence either way about the
-      *generator*.
+      repository.** The 2026-07-25 change corrected the *output*; nothing found
+      so far speaks to the *generator*.
+      **Where to look first, and what has already been checked** (an earlier
+      draft said "nothing here can answer it", which told a future session not to
+      look — Karen delta review MEDIUM-1):
+      - **`docs/convert-reconciliation-2026-08-07/` — READ THIS FIRST.** It is a
+        later output of the same reconciliation workflow, 13 days on, carrying a
+        full-account 1,007-goal crawl, the live Convert API endpoints, and a
+        *"Handoffs / feature asks (Claudette, sent 2026-08-07)"* section — the
+        strongest in-repo lead on **who owns the tool**, which is exactly what
+        the action below needs. **Checked 2026-08-22 and INCONCLUSIVE, not
+        empty:** its backfill CSV is 4 rows with all-distinct names, so there is
+        no collision to observe either way.
+      - Already ruled out: no name-keyed resolution under `scripts/`, `lib/` or
+        `app/`; no generator, notebook or vendored export; no deleted tool in
+        history (`--diff-filter=D` over `*convert*` returns nothing).
       **Why this matters even though the CSV is now correct:** the spec instructs
       that a regenerated CSV be re-verified, and the script hard-fails on a shape
       change. If the resolver is still name-keyed, the next regeneration
