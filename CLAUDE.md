@@ -1,6 +1,6 @@
 # CQIP — CRO Quality Intelligence Platform
 ## Claude Code Project Context File
-### Fusion92 | CRO Department | v2.8
+### Fusion92 | CRO Department | v3.0
 
 ---
 
@@ -11,17 +11,20 @@ starts here. Before writing any code, read this file completely. When in doubt a
 a decision, check this file before asking the user. All major decisions are recorded
 here so they don't need to be re-explained.
 
-**Prod right now:** Worker **`d5e5703`**, declared **v3.0** — verified via
-`/api/health` 2026-08-20, re-probed 2026-08-21. Migrations 001–029 all applied.
-The SHA moved on a **docs + version-bump** push — `package.json` was the trigger,
-NOT a docs-only push, which is the very framing §16 records as wrong; that entry
-(Batch 012 directive CRUD, block **⚠ 0**) carries the mechanism, and why
-"declared ≠ deployed" no longer describes this repo. **This stanza is the ONLY
-current-state claim in the file. Every other SHA anywhere in CLAUDE.md or the
-archive is a dated ship record — read this line for current state.**
-(That sentence used to say "every other SHA *in this section*", which the
-2026-08-22 split falsified in the act of making it true: there are no other SHAs
-in this section now, because the history that held them moved out.)
+**Prod right now:** Worker **`ab70878`**, declared **v3.0** — verified via
+`/api/health` 2026-08-22 against the pushed tip (board rev 8.1), re-confirmed by
+Lacey 2026-08-23. Migrations 001–029 all applied. **`/api/health` reports the
+WORKER ONLY** — it says nothing about the Supabase edge function `jira-sync`,
+and that scope confusion has misled twice. The SHA also advances on **docs +
+version-bump** pushes: `package.json` is not in `paths-ignore`, so it is a
+deploy TRIGGER, and `gen-build-info.js` reads it, so it is also a build INPUT —
+which is why the 17-commit CLAUDE.md split chain deployed. **This stanza is the
+ONLY current-state claim in the file. Every other SHA anywhere in CLAUDE.md or
+the archive is a dated ship record — read this line for current state.**
+**Corrected 2026-08-23 by the second extraction pass:** it read `d5e5703` /
+08-20 for two days after the split chain moved prod, so the file's single
+current-state claim was the stale line. Whatever pushes next updates this stanza
+in the same commit.
 
 **Live measurement caveat (still current):** **Overall Health %** and **Brands
 Covered** are **not comparable across 2026-08-03** — the drought bar moved from
@@ -52,37 +55,41 @@ history, not sequencing, and is now in
 It made the block ~40% history; keeping it here would have shipped a new
 authority section already four-tenths stale.
 
-**Priority order (resequenced 2026-07-15, confirmed with Lacey; mirrors
-CROSS_CLAUDE.md §5. Canonical — the `CQIP Batch Outline` project file mirrors
-this; "CLAUDE.md wins"):**
+**Priority order — DEPENDENCY-ORDERED, board rev 8.1 (2026-08-22).**
+Supersedes the 2026-07-15 need-ordered list; that list and its rationale are in
+`docs/claude-archive/CLAUDE-16-2026-08.md` (r42). Canonical — the `CQIP Batch
+Outline` project file mirrors this. **⚠ `CROSS_CLAUDE.md` §5 is STALE against
+this** (last locked 2026-07-15; its footer reads 2026-07-17 while its own §6
+carries 2026-08-08 entries), and an AC-facing mirror update is owed and
+coordinated, not unilateral.
+
+The MODE column is the agent-autonomy setting, not a difficulty rating:
+**`auto` where failure is LOUD, `manual` where failure is SILENT or the batch
+writes to production, Jenny-gated `manual` regardless.** `accept-with-edits` is
+the bounded middle.
 
 ```
-NEXT (resequenced 2026-07-15 with Lacey — Batch 012 Client Library
-      inserted; the polish/drawer cluster [005.4, 005.5, admin
-      filter-by-brand ride-along] all SHIPPED 2026-07-09, see §16)
-  1  012     Client Library — Phase C (Jira ticketing) NEXT; A + B SHIPPED
-             2026-07-17 (see §16). Phase C gated on §1 Jira-create-permission
-             verify (write path = §13 r5 scope expansion). Phase D (public bug
-             form) after C.
-  2  008     Convert.com integration   (consumes the SHIPPED 012 Phase B ingest; discovery-first)
-  3  006     Teams dispatch (expanded) ← unblocks 010.1 live pings
-  4  010.1   Pipeline alerts (merged 010.2 + Path 2)  — behind 006; PM consult owed
-  5  007     Custom Jira Boards
-
-  •  ClickUp Client Archive — Phase 2 ETL + Phase 3 page; behind 006
-  •  Admin QA-URL editor removal — HOLD (no Forge write path; AC gate RED)
-  •  Per-brand config pages — ABSORBED into Batch 012 (no longer a standalone item)
+     BATCH                     MODE     DEPENDS ON
+ 1   SECOND EXTRACTION PASS    manual   —          ← this pass; see §15
+ 2   G7 TAB-STOPS              auto     —
+ 3   CHANGE LOG WIDGET         auto     —          47% render DECIDED
+ 4   DATA INSIGHTS             accept   —
+ 5   006 TEAMS DISPATCH        accept   —          no longer blocked
+ 6   010.1 REMAINDER           accept   #5
+ 7   CLICKUP PHASE 2/3         manual   #5 · Jenny
+ 8   CONVERT DIRECT READ       accept   —          supersedes 012 E2
+ 9   008 CONVERT AUTOMATION    accept   #8 — may fold in
+10   KEEP-BOTH-AND-FLAG        manual   Jenny
+11   012 PHASE C               accept   Jira-permission verify
+12   012 PHASE D               manual   #11 · Jenny · public surface
+13   007 JIRA BOARDS           auto     —
+ —   BULK CELL EDIT (backlog)  manual   Jenny
 ```
 
-Rationale (Lacey 2026-07-15): Client Library leads — it's the new cross-brand
-experimentation surface (directive × brand status matrix + monitoring ingest +
-Jira ticketing + public bug form), Phase A is a shippable MVP. Convert (008)
-follows because it consumes the Phase B monitoring-ingest surface rather than
-rebuilding it; per-brand config pages (formerly the 008 prereq) are absorbed
-into Batch 012, so 008 no longer needs a standalone prereq batch. Teams dispatch
-(006) drops below 008 — it's externally parked on the alerts-channel build — and
-010.1 stays behind 006 (dependency preserved), moving down with it. 007 follows
-010.1. ClickUp Client Archive Phase 2 ETL + Phase 3 page stay behind 006.
+**#1 and #2 ship back-to-back but in SEPARATE PUSHES** — a shared chain means a
+G7 revert drags the restructure with it. **Still true and not sequenced:** the
+Admin QA-URL editor removal is on HOLD (no Forge write path, AC gate RED), and
+per-brand config pages are ABSORBED into Batch 012.
 
 ---
 
@@ -161,70 +168,12 @@ rewritten (§13 r40). Read any pre-split `§3` in §16 as pointing here. Note th
 
 ## 4. Environment Variables
 
-### Required
-
-```
-# Supabase
-NEXT_PUBLIC_SUPABASE_URL=https://hupklpjruveleaahufmw.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=       # Server-side only, never expose to client
-
-# Jira
-JIRA_API_TOKEN=                  # Atlassian API token (NEVER commit this)
-JIRA_EMAIL=                      # Atlassian account email
-JIRA_BASE_URL=https://fusion92.atlassian.net
-
-# Teams
-TEAMS_WEBHOOK_URL=               # Incoming webhook URL for #cqip-alerts channel
-
-# App
-WEBHOOK_SECRET=                  # Random secret to validate Jira webhook payloads
-CQIP_SYNC_AUTH_KEY=              # Shared secret between Worker and jira-sync edge function. Can be any random string — generate with `openssl rand -hex 32`. Not a JWT.
-CQIP_BRANDS_API_TOKEN=           # Shared secret for the read-only /api/brands endpoints (consumed by the Forge QA-automation app). Same value must be set as an encrypted Forge variable on the Forge side. Generate with `openssl rand -hex 32`. Not a JWT.
-CQIP_DROUGHT_AUTH_KEY=           # Shared secret between the daily pg_cron job and the drought-evaluator edge function. Generate with `openssl rand -hex 32`. Not a JWT. Set on Supabase Edge Functions secrets only — Worker does not need this one.
-CQIP_CONVERT_MONITORING_TOKEN=   # Batch 012 Phase B — Bearer secret for the external POST /api/monitoring/findings ingest (Convert 008 + any monitoring tool post through it). Timing-safe compare in lib/api/monitoring-bearer-auth.ts. Separate blast radius from the other tokens per §13 rule 27. Generate with `openssl rand -hex 32`. Not a JWT. Set on the Worker via `wrangler secret put` and wherever the monitoring tool runs.
-CQIP_TELEMETRY_TOKEN=            # Batch telemetry-ac — Bearer secret for the external POST /api/telemetry/ac ingest (the AC Forge QA-automation app pushes draft/post events; DC renders them on Settings → System Info). Timing-safe compare in lib/api/telemetry-bearer-auth.ts. Separate blast radius per §13 rule 27 — rotating this cannot break drafting (SharePoint) or config reads (brands). Generate with `openssl rand -hex 32`. Not a JWT. Rotates atomically across THREE surfaces: Worker (`wrangler secret put`), Forge dev + Forge prod (`forge variables set --encrypt`). Until minted the route answers 500 not_configured — deployable and inert.
-
-CQIP_ANTHROPIC_API_KEY=          # Batch classifier-1 — Anthropic API key for the AI root-cause classifier route (POST /api/admin/logs/classify). Model is `claude-opus-5`, called over plain `fetch` (no SDK — every external call in this repo already works that way, and adding one would change the Worker bundle for a single endpoint). Read INSIDE the handler, never at module scope, so `next build`'s page-data collection cannot break on it. Worker-only rotation surface — one surface per §13 r27, unlike CQIP_SHAREPOINT_API_TOKEN's four — so rotating it cannot break sync, drafting, or config reads. **Until it is minted the route answers 500 `not_configured`: deployable and inert, the Batch telemetry-ac precedent.** Not a JWT.
-
-# SharePoint (Batch 009 — Microsoft Graph proxy)
-CQIP_SHAREPOINT_API_TOKEN=       # AC (Forge) ↔ Worker bearer for /api/sharepoint/* (timing-safe compare). Separate blast radius from CQIP_BRANDS_API_TOKEN — NOT shared. Generate with `openssl rand -hex 32`. Not a JWT. Rotates atomically across four surfaces (Worker · Forge dev · Forge prod · DC .env.local) per §13 rule 27.
-AZURE_CLIENT_ID=                 # Azure app registration "CQIP Dashboard - SharePoint Integration" (6aa464c1-4eb9-4d94-b087-6eebe4fa8cb6). Worker only.
-AZURE_CLIENT_SECRET=             # Azure app client secret (client-credentials flow). Worker only. Hygiene rotation pending (Worker-only; Carl-executable; non-blocking).
-AZURE_TENANT_ID=                 # Fusion92 Azure AD tenant. Worker only.
-SHAREPOINT_SITE_HOSTNAME=fusion92.sharepoint.com   # CRO SharePoint site host.
-SHAREPOINT_SITE_PATH=/sites/CRO  # CRO SharePoint site server-relative path.
-```
-
-### Where they're set
-- **Local dev:** `.env.local` at repo root (gitignored)
-- **Cloudflare Worker:** `npx wrangler secret put SECRET_NAME` for each
-- **Supabase Edge Functions:** set in Supabase dashboard → Edge Functions → Secrets
-
-### .env.example
-Committed to repo with all keys present but empty values.
-
-### ⚠ `/api/health` REPORTS THE WORKER ONLY — it says nothing about edge functions
-
-The `version` field is the **Worker** build SHA. It does **not** reflect Supabase
-Edge Function deploys, so a matching SHA is not evidence that `jira-sync`,
-`jira-webhook` or `drought-evaluator` shipped — those deploy on a separate path
-(`supabase functions deploy`) with no version surface at all. **This has misled twice**
-(recorded 2026-08-15). When a batch changes an edge function, the deploy must be
-verified against the function's own behaviour — a `sync_runs` row, an invocation log —
-never against this endpoint.
-
-### `/api/health` env reads (Batch 011 — all optional, none required)
-The public health probe reads, in priority order, `NEXT_PUBLIC_BUILD_COMMIT`
-(stamped at build by `scripts/gen-build-info.js` — the only one actually set
-in this Workers deploy), then `CF_PAGES_COMMIT_SHA`, then `GIT_COMMIT_SHA` for
-its `version` field, falling back to `"unknown"`. It reads `NODE_ENV` then
-`ENVIRONMENT` for `environment`, also defaulting to `"unknown"`. None are
-required; the endpoint never crashes on a missing var. Note: `CF_PAGES_COMMIT_SHA`
-is a Cloudflare Pages var and is never set here (CQIP runs on Workers, not
-Pages — see §2) — it is kept only as a documented fallback per the Batch 011 spec.
-
----
+**Relocated whole to `docs/env-vars.md`** by the second extraction pass,
+2026-08-23 — §13 **r41 remedy 3** (extract a low-authority-density section),
+used because r42 on §15 alone landed the file within 200 characters of the
+150,000 tool limit and that is not a margin. **The section number is kept so
+`§4` citations elsewhere still resolve.** Live reference, NOT archive —
+r40 does not apply to it.
 
 ## 5. Database Schema
 
@@ -366,45 +315,12 @@ not CQIP-initiated.
 
 ## 7. Jira Custom Field ID Mapping
 
-**Source:** fusion92.atlassian.net
-
-```typescript
-// lib/jira/field-map.ts
-export const JIRA_FIELD_MAP = {
-  who_owns_fix:               'customfield_13120',  // Select List (cascading)
-  detected_by:                'customfield_12910',  // User Picker (single)
-  documentation_updated:      'customfield_12914',  // Checkboxes
-  experiment_paused:          'customfield_12912',  // Checkboxes
-  issue_category:             'customfield_12871',  // Select List (multiple)
-  issue_subtype:              'customfield_12904',  // Select List (multiple)
-  preventable:                'customfield_12911',  // Checkboxes
-  process_improvement_needed: 'customfield_12913',  // Checkboxes
-  reproducibility:            'customfield_12907',  // Select List (single)
-  resolution_type:            'customfield_12908',  // Select List (multiple)
-  root_cause:                 'customfield_12905',  // Select List (multiple)
-  root_cause_description:     'customfield_12909',  // Paragraph (text)
-  severity:                   'customfield_12906',  // Select List (single)
-} as const;
-```
-
-Brand field is per-project (`projects.brand_jira_field_id`); no
-longer in `JIRA_FIELD_MAP`. NBLYCRO uses `customfield_12220`;
-SPLCRO is single-brand and reads no field. See §6 brand resolution
-flow and §13 rule 28.
-
-### Field Type Notes
-- `who_owns_fix` is a **cascading select** — returns parent/child object.
-  Extract: `field?.child?.value ?? field?.value ?? null`
-- `detected_by` is a User Picker — extract: `field?.displayName ?? null`
-- Checkbox fields return an array — check `field?.length > 0` for boolean conversion
-- Multi-select fields return arrays of `{value, id}` objects — map to `value` strings
-- Brand field (per-project, NBLYCRO uses `customfield_12220`) is a
-  single select returning `{ value: "CODE - Display Name", id }` —
-  e.g. `{ value: "MRA - Mr Appliance", id: "13743" }`. NOT cascading.
-  The `quality_logs.client_brand` column stores the resolved brand
-  row's `jira_value` verbatim (Option γ writeback per §13 rule 28).
-
----
+**Relocated whole to `docs/jira-custom-field-ids.md`** by the second extraction pass,
+2026-08-23 — §13 **r41 remedy 3** (extract a low-authority-density section),
+used because r42 on §15 alone landed the file within 200 characters of the
+150,000 tool limit and that is not a margin. **The section number is kept so
+`§7` citations elsewhere still resolve.** Live reference, NOT archive —
+r40 does not apply to it.
 
 ## 8. Jira API Integration
 
@@ -499,74 +415,21 @@ do not yet have evaluators wired and remain on the Batch 005 backlog.
 
 ## 11. Historical Data Import
 
-**Source file:** `NBLY_QualityTrackingLog_Error_Log_.csv` (imported)
-**Import rule:** Only import rows where `Type of Issue` is NOT empty.
-Rows with only Date/Client/JiraTicket/Status and no other data are excluded.
-
-### CSV → Schema Field Mapping
-```
-Date              → triggered_at
-Client            → client_brand
-Type of Issue     → issue_category (array wrap single value)
-Issue Details     → root_cause_description
-Origin            → detected_by
-JIRA Ticket       → jira_ticket_id + jira_ticket_url
-Status (csv)      → log_status (map: Resolved→Resolved, In Progress→In Progress,
-                                 Open→Open, Blocked→Blocked)
-Severity          → severity
-Summary           → jira_summary
-Screenshot Links  → screenshot_urls (array wrap if present, skip if 'N/A')
-URL               → affected_url (skip if 'N/A')
-Root Cause-Initial → root_cause_initial (array wrap)
-Root Cause-Final  → root_cause_final (array wrap)
-Resolution        → resolution_notes
-Errored           → trigger_from_status
-Who Owns the Fix  → who_owns_fix
-Test Type         → test_type (default 'A/B' if empty)
-```
-
-For all imported rows: `created_by = 'csv_import'`, `log_number = 1`
-
----
+**Relocated whole to `docs/historical-data-import.md`** by the second extraction pass,
+2026-08-23 — §13 **r41 remedy 3** (extract a low-authority-density section),
+used because r42 on §15 alone landed the file within 200 characters of the
+150,000 tool limit and that is not a margin. **The section number is kept so
+`§11` citations elsewhere still resolve.** Live reference, NOT archive —
+r40 does not apply to it.
 
 ## 12. Design System — Fusion92 Brand
 
-### Colors
-```typescript
-export const F92 = {
-  orange:  '#F47920',   // Primary accent, H1 headings
-  navy:    '#1E2D6B',   // Secondary, H2 headings, table headers
-  dark:    '#1A1A2E',   // Body text
-  gray:    '#6B7280',   // Muted text
-  lgray:   '#9CA3AF',   // Placeholder text
-  warm:    '#FEF6EE',   // Alt table rows, light backgrounds
-  border:  '#E8D5C4',   // Warm borders
-  white:   '#FFFFFF',
-} as const;
-```
-
-F92 atom logo is reproduced as inline SVG in `components/layout/f92-logo.tsx`
-using orange/navy/tan rings plus a blue nucleus ring and white core. Scales
-freely, transparent background.
-
-### Severity Color Coding
-```
-Critical → red-600    (#DC2626)
-High     → orange-500 (#F97316)
-Medium   → yellow-500 (#EAB308)
-Low      → gray-400   (#9CA3AF)
-```
-
-### Log Status Color Coding
-```
-Open                 → blue-500
-In Progress          → indigo-500
-Blocked              → red-500
-Pending Verification → yellow-500
-Resolved             → green-500
-```
-
----
+**Relocated whole to `docs/design-system-f92.md`** by the second extraction pass,
+2026-08-23 — §13 **r41 remedy 3** (extract a low-authority-density section),
+used because r42 on §15 alone landed the file within 200 characters of the
+150,000 tool limit and that is not a margin. **The section number is kept so
+`§12` citations elsewhere still resolve.** Live reference, NOT archive —
+r40 does not apply to it.
 
 ## 13. Key Business Rules
 
@@ -1597,89 +1460,25 @@ additions.
 
 
 ### Login-activity read side (count + heatmap) — backlog (recording LIVE 2026-07-06)
-`login_events` recording is **LIVE** — the table + fire-and-forget write
-path shipped as Batch login-events (commit `21df742`; plumbing only, see
-§16), so real history is accruing now. This backlog item is the **read
-side only**: a per-user login count and GitHub-style contribution heatmap
-on the admin users page, reading `login_events` (admin-SELECT RLS already
-in place). Read-only, no schema change. Open decision (deferred to that
-batch, per spec §8): heatmap visibility all-admins vs owner-only. Waits
-until enough real history has accrued to be worth rendering.
+Relocated to `docs/specs/ui-backlog-clusters.md` by the second extraction pass,
+2026-08-23 (§13 r42 — no action was named here, so the substance moved and this
+line names where it went). Live scope authority, not archive.
 
 ### Brand Wellness — v1 SHIPPED 2026-07-07 (see §16); v2 deferred
-**v1 shipped** as the Brand Wellness report (`components/reports/brand-wellness-report.tsx`
-on `/dashboard/reports` + a Reggie-drawer CTA) — a read-only proof of a
-brand's real milestone history. Karen post-flight PASS-WITH-FINDINGS; the
-one MEDIUM was closed by follow-up commits 3 + 4 (≤28d `brand_jira_value`
-fallback scoping so the proof view can't contradict the drought flag in the
-rolling-28d window + an Output-table orphan-milestone footer). **v2 remains
-deferred:**
-- **Rework overlay** — milestones vs sendbacks on one axis.
-- **Export/share — downloadable, styled Brand Wellness report:** brand
-  multi-select (1 / 2 / 5 / all) feeding a single richly-formatted document
-  (likely PDF or branded doc). Builds on existing branded-export infra
-  (`downloadBrandedXlsx` / `branded-csv`). Read-only, likely no Jenny; own
-  batch. Adjacent to — not the same as — the "multi-brand compare" v2 stub
-  (compare = a view; this = a combined export).
-- **Multi-brand compare** — a view (distinct from the combined export above).
-- **Per-dot "unresolved — not counted" timeline badge** (Karen's suggestion).
-
-(v1 TODO comments in the component mark rework overlay + export/share +
-compare.) Note: Batch 005.2
-(Coverage Ledger redesign) will re-home the Brand Wellness drawer CTA when
-the drawer is rebuilt.
-
-
+Relocated to `docs/specs/ui-backlog-clusters.md` by the second extraction pass,
+2026-08-23 (§13 r42 — no action was named here, so the substance moved and this
+line names where it went). Live scope authority, not archive.
 
 ### Admin drawer changes (`brand-admin-drawer.tsx`) (scoped 2026-07-09)
-Two items:
-- **(a) QA-URL-pattern editor removal — HOLD (was GATED; AC answered
-  2026-07-09).** AC confirmed there is **no Forge write path** for the
-  preview/live QA-URL config: the Brands API is DC-owned and AC/Forge is
-  **read-only**, and the would-be writer (Forge Phase 2d) is **unbuilt**.
-  Removing the dashboard editor would therefore **strand the config** (nothing
-  else can set it), so **KEEP the editor + column** — this item is on HOLD, not
-  a near-term build. Revisit only if/when a Forge write path (Phase 2d) exists.
-- **(b) Remove the redundant Filter-by-brand control — SHIPPED with Batch 005.5
-  (2026-07-09, see §16)** as the #4 ride-along (`hideBrandFilter` prop on
-  `ManageMilestonesDialog`).
+Relocated to `docs/specs/ui-backlog-clusters.md` by the second extraction pass,
+2026-08-23 (§13 r42 — no action was named here, so the substance moved and this
+line names where it went). Live scope authority, not archive.
 
 ### ClickUp Client Archive — proposed, discovery-first (scoped 2026-07-09)
-Sequenced **behind 006**, exact slot TBD. One-time importer producing
-**overview-only** records (title / client / brand / date, maybe a url-id) —
-**NO** milestones or quality_logs — in an **isolated** table (no FK; must NOT
-feed live coverage KPIs); admin-editable; a new "Client Archive" page for
-growth / all-time context. **Discovery gate (before any ClickUp fetch):** a
-Jira-first read-only key-coverage scan. **AC answered 2026-07-09 (CROSS §6):
-there is NO structured Jira custom field carrying a ClickUp ID/URL** — the
-ClickUp URL lives in the **Jira issue description**, so the dedup strategy is
-**description-regex + fuzzy match**, not an exact custom-field key. Full brief
-DRAFTED (v1, 2026-07-10): `docs/HANDOFF-clickup-archive-discovery.md` — supersedes
-v0; adds the LOCKED effort/delivery metric model (design/dev/delivered = "ever
-reached" Active Design / Active Dev / DCR; total effort = UNION, counted once) +
-an isolation amendment (archive PAGE may read a live Jira aggregate; coverage KPIs
-never read the archive). **Discovery Step A DONE (2026-07-10):** Jira-first
-key-coverage scan across NBLYCRO + SPLCRO + FPOO — 1,232 ClickUp-referencing
-tickets, **100% parseable ids**, 1,153 unique (exact-dedup allowlist), so the fuzzy
-pile ≈ 0. But Jira only reaches back to 2025-09 (migration window), so it settled
-**dedup, not sizing** — the entire pre-2025 history lives only in ClickUp. Next:
-Step B (ClickUp sample-Space probe + Step B′ status-history retrievability),
-token handled out-of-band, still sequenced behind 006. **FPOO** is a real but
-**ARCHIVED** CRO project (no longer an active client; historical data only) —
-**in scope** for all-time / Client Archive counts, **excluded** from
-active-client and live-coverage views; it carried 268 of the 1,232 Step-A
-tickets. Active CRO projects: NBLYCRO · SPLCRO. All CRO projects incl. archived:
-NBLYCRO · SPLCRO · FPOO.
-**Discovery is COMPLETE; the importer is the open work.** The full discovery
-record — Step A/B/B′, the freezer crawl, the corrected scope rules and the
-locked headline — is in `docs/claude-archive/CLAUDE-16-2026-07.md` (r42), with
-the machine-readable source of truth in `docs/clickup-archive/`.
-- **🔒 LOCKED HEADLINE — 14,785 worked-on / 13,858 delivered** (Lacey-confirmed
-  2026-07-12). **NOT 15,681** (wrong scope) and **NOT 16,761** (transcribed,
-  wrong scope). This is the number that goes to the page.
-- **Authoritative scope rules:** `scope_rules_authoritative` in
-  `docs/clickup-archive/crawl-manifest-corrected-2026-07-12.json`. Any future
-  crawl must reproduce the footprint exactly.
+**Scope and narrative relocated to `docs/specs/clickup-client-archive.md` by the second extraction
+pass, 2026-08-23 (§13 r41 remedy 3 / r42). That file is live scope authority,
+NOT archive — r40 does not apply to it.** The open actions stay here.
+
 - [ ] **Phase 2 ETL** — reads the committed 1,153-id twin allowlist at
       `docs/clickup-archive/jira-twin-allowlist.json` directly; **no re-scan**
       (it is the recovered 2026-07-10 extraction and is NOT re-derivable from
@@ -1697,309 +1496,246 @@ the machine-readable source of truth in `docs/clickup-archive/`.
       this list with a deadline set by someone else.
 - [ ] **Move the gitignored raw crawl** (~464 MB, descriptions + assignee PII)
       to durable storage. It must never be committed.
-Both phases stay sequenced behind Batch 006.
-
 ### Later / deferred — ledger + coverage (from Lacey's 2026-07-09 review)
-- **Resizable ledger columns (#6b)** — a real feature (width state + drag +
-  persistence + survive-sort), not polish. Reassess after 005.4's bar-alignment
-  fix (#6a) — may be moot.
-- **Ledger alert-color palette (#7)** — the segment purples / gray / blue read
-  too close to tell apart; Lacey researching a palette → a `globals.css` token
-  swap when delivered.
-- **Expanded-panel layout (#8/#9)** — Full-detail moved up + equal-height /
-  bottom-aligned expanded panel. With **Claude Design**; folds into a ledger
-  batch on return.
-- **Add-milestone form polish** — with **Claude Design** (admin drawer).
-- **Coverage "true all-time incl. pre-Jira" decision** — whether the ClickUp
-  archive count bridges onto the coverage page or stays archive-only. Tied to
-  ClickUp; parked.
+Relocated to `docs/specs/ui-backlog-clusters.md` by the second extraction pass,
+2026-08-23 (§13 r42 — no action was named here, so the substance moved and this
+line names where it went). Live scope authority, not archive.
 
 ### Dashboard polish cluster + Pipeline sortable columns + rework indicator (scoped 2026-07-03)
-Standalone entry — NOT part of Batch 005.2 (different page). Three grouped
-items: (1) dashboard polish — KPI hover popovers, stacked issue-category
-chart, Recent Activity panel; (2) sortable Pipeline table columns on
-`/dashboard/coverage`; (3) a rework indicator that distinguishes
-zero-delivery weeks from genuinely quiet weeks.
+Relocated to `docs/specs/ui-backlog-clusters.md` by the second extraction pass,
+2026-08-23 (§13 r42 — no action was named here, so the substance moved and this
+line names where it went). Live scope authority, not archive.
 
 ### Batch 012 — Client Library (scoped 2026-07-15)
-New cross-brand experimentation surface. Provisional-confirmed batch number
-012 (Lacey 2026-07-15). Leads the open sequence (see priority order). Four
-phases A–D; **Phase A is a shippable MVP.**
+New cross-brand experimentation surface. Four phases A–D; **Phase A was the
+shippable MVP.** A, B, E1, cross-project client nav, inline editing, matrix
+controls, brand-page parity, restyle 2 and 3, and directive CRUD have all
+SHIPPED — see §16. Board rev 8.1 places what remains at **Phase C = #11**
+(gated on the Jira-permission verify) and **Phase D = #12** (Jenny, public
+surface).
 
-Scope:
-- **Directive × brand status matrix** — the core view: experimentation
-  directives crossed against per-brand status.
-- **Monitoring ingest** (Phase B) — the ingest surface that **Batch 008
-  (Convert.com) consumes** rather than rebuilding. This is the coupling that
-  lets 008 follow 012 instead of standing up its own targeting/monitoring
-  layer.
-- **Jira ticketing** — create/track tickets from the library.
-- **Public bug form** (Phase D) — a new public-facing submission surface.
+Scope: directive × brand status matrix · monitoring ingest (Phase B — the
+surface **Batch 008 consumes** rather than rebuilding) · Jira ticketing
+(Phase C) · public bug form (Phase D). **Absorbs the former "Per-brand config
+pages" batch** as the per-brand config layer — per-brand URL inventory, site
+areas, staging/prod URLs, per-site-area targeting definitions (regex patterns,
+exclusion lists, element checks, audience conditions), a resolution-mode field,
+the derived-examples layer, plus the data-model lock and migration path for
+existing brand URL data. It is no longer a standalone prereq for Batch 008.
+*(If the 012/008 overlap resolution changes, only this absorption note and the
+008 prereq framing move.)*
 
-**Absorbs the former "Per-brand config pages" batch.** That batch's scope
-(per-brand URL inventory, site areas, staging/prod URLs, targeting
-definitions per site area — regex patterns, exclusion lists, element checks,
-audience conditions — a resolution-mode field, and the derived-examples
-layer; data-model lock + migration path for existing brand URL data) folds
-into Batch 012 as the per-brand config layer. It is no longer a standalone
-prereq for Batch 008. *(If the 012/008 overlap resolution changes, only this
-absorption note + the 008 prereq framing move.)*
-
-**Gates:** Jenny pre-flight (migration + mutation + new route) and again for
-the new public surface at Phase D; Karen post-flight. **DO NOT PUSH** — Lacey
+**Gates:** Jenny pre-flight (migration + mutation + new route) and again for the
+new public surface at Phase D; Karen post-flight. **DO NOT PUSH** — Lacey
 reviews. Effort: LG (multi-phase).
 
 **Phase status:**
 - **Phase E — Pulse shell/UX track** (distinct from the C/D feature track):
-  - **V2.1 trigger backport — LOADER ABANDONED 2026-07-30; 8 items move to UI
-    hand-entry.** Not an E-phase and no longer a scripted load at all — see the
-    §15 backlog entry for why (superseded brief, inverted polarity) and for the
-    encoding-fidelity-vs-mapping-correctness lesson. The 8 titles are NOT in the
-    repo yet.
-  - **Convert reconciliation backfill — BUILT 2026-07-25, NOT YET RUN** (see §16).
-    One-off data pass flipping existing matrix cells to match real Convert config
-    for the 13 active NBLY brands. **212 CSV rows = 205 todo→done + 7 done→todo**
-    (Lacey-confirmed 2026-08-22 as what executes; re-derived from
-    `scripts/data/convert-reconciliation-backfill.csv` at write time per r43, and
-    matching the script's `EXPECTED_TOTAL/UPGRADES/DOWNGRADES` guards exactly).
-    **This line read `215 / 207 / 8` until 2026-08-22** — the original CSV shape,
-    left stale when spec addenda 6 and 7 corrected it on 2026-07-25 (two MLY rows
-    removed; one MDG row removed as a resolver bug). Data-only; no
-    migration/route/app-code. **Run procedure —
-    `docs/batch-012-convert-reconciliation-spec.md`, section
-    `## 7. Run procedure (operator checklist)`.** That section was **lifted into
-    the spec on 2026-08-22** (Karen delta review HIGH-1) precisely so this write
-    has a citable procedure: it had existed only in
-    `docs/claude-archive/CLAUDE-16-2026-07.md`, which §13 r40 makes history and
-    never authority. **TWO repoints failed before this one, and the archive was
-    not one of them** — it is where the procedure lived before any pointer
-    existed. Re-derived from git 2026-08-22:
-    **(1)** `36b7573` cited a **`§Pre-run`** section that has never existed in
-    the spec — caught by Karen re-review HIGH-1;
-    **(2)** `7b8fc21` cited `## 5. Verification` + `## 6. Gate`, which do exist
-    but are post-run assertions and approval policy with **no runnable command**
-    anywhere in the document — caught by Karen delta review HIGH-1;
-    **(3)** `43ad41f` lifted the procedure into `## 7` and cites that.
-    *(An earlier version of this paragraph also said "two", but named the archive
-    and `§5`+`§6` as the pair and dropped `§Pre-run` — while the spec's own §7
-    named the archive and `§Pre-run` and dropped `§5`+`§6`. Two documents, two
-    different wrong pairs, and the accurate record had existed in this file at
-    `7b8fc21` before that edit removed it. Karen delta review MEDIUM-1.)*
-    The archived copy remains as history and **must not be cited**: it carries
-    **seven stale tokens across four numbers** — `215`×2, `209`, `207`, and
-    `8 downgrades`×2 (counted at write time; an earlier note said "four stale
-    values" and omitted `207` entirely) — plus a step 6 that addendum 6 had
-    already resolved. Lacey approves + runs. Not an
-    E-phase — a data correction riding alongside the E track.
-  - **Restyle batch 4 — NOT STARTED. Gate 0 (MEDIUM-6 audit-coverage count) DONE
-    2026-08-03**; the probe figures are in
-    `docs/claude-archive/CLAUDE-16-2026-08.md` (r42). Three actions come out of it:
-    the Change Log widget needs a NEW `audit_log` read and **`audit_log` is already
-    over the PostgREST 1,000-row cap**, so it must use `fetchAllPaged()` **from the
-    outset**; only **52.7%** of done cells hold a per-cell audit row, so the
-    honest-degradation path is the load-bearing half of the widget, not an edge
-    case; and **attribution can distinguish script vs human, NOT which human pass**
-    — do not write copy claiming finer provenance.
-
-    **VINTAGE — the counts have moved on EVERY re-probe (three times running), so
-    RE-PROBE, never scale an old ratio.** Figures as of 2026-08-14 and the
-    "87 is ambiguous" trap are in `docs/claude-archive/CLAUDE-16-2026-08.md` (r42).
-    **The actions they imply:** use the **per-project active** figure and group by
-    `project_key` *and* filter on `status` before computing anything — a
-    cross-project product is meaningless and one pass of it reported "98 missing
-    cells" against two complete grids. Judge the memoized-row follow-on against a
-    freshly probed `active directives × visible brands`, not a written-down number.
-    Two obligations still ride here: a **skip-the-matrix link** as the cheap interim
-    for the ~1,300 read-only tab stops (the `role="grid"` roving-tabindex decision
-    stays with batch 4), and the **memoized-row follow-on** from batch 3 MEDIUM-4.
-  - **E2 (Convert config sync)** — fills the brand-page "Convert configuration"
-    placeholder with synced Convert data. Couples to Batch 008.
+  - **V2.1 trigger backport — loader ABANDONED 2026-07-30; 8 items move to UI
+    hand-entry.** Not an E-phase and not a scripted load. See the dedicated
+    entry below in this section.
+  - [ ] **Convert reconciliation backfill — BUILT 2026-07-25, NOT YET RUN.
+        Lacey approves + runs.** **212 CSV rows = 205 todo→done + 7 done→todo**
+        (Lacey-confirmed 2026-08-22 as what executes) — **re-derive from
+        `scripts/data/convert-reconciliation-backfill.csv` at write time per
+        r43**; it must match the script's `EXPECTED_TOTAL` / `UPGRADES` /
+        `DOWNGRADES` guards exactly. Data-only: no migration, no route, no app
+        code. **Run procedure —
+        `docs/batch-012-convert-reconciliation-spec.md`, section
+        `## 7. Run procedure (operator checklist)`**, lifted into the spec
+        2026-08-22 (Karen delta review HIGH-1) precisely so this write has a
+        citable procedure. **Do NOT cite the archived copy in
+        `docs/claude-archive/CLAUDE-16-2026-07.md`** — r40 makes it history, and
+        it carries seven stale tokens across four numbers plus a step 6 that
+        addendum 6 had already resolved. The three-repoint history is in
+        `docs/claude-archive/CLAUDE-16-2026-08.md` (r42).
+  - **Change Log widget — board sequence #3, UNBLOCKED 2026-08-22.** Was
+    "restyle batch 4", which board rev 8 DISSOLVED into this and G7 tab-stops.
+    Gate 0 (MEDIUM-6 audit-coverage count) DONE 2026-08-03; the probe figures
+    are in `docs/claude-archive/CLAUDE-16-2026-08.md` (r42). Three constraints
+    bind:
+    - [ ] **Use `fetchAllPaged()` from the outset.** The widget is a NEW
+          `audit_log` read and `audit_log` is already over the PostgREST
+          1,000-row cap.
+    - [ ] **Render the degraded path as the load-bearing half, not an edge
+          case** — only **52.7%** of done cells hold a per-cell audit row. The
+          **255 of 539** without one render as **"Resolved — date unknown"**,
+          showing the directive-level date **marked approximate** (Lacey,
+          2026-08-22). **Never substitute that date without the marker** — that
+          would make 47% of the widget quietly wrong in one direction.
+    - [ ] **Keep attribution to script vs human only — NOT which human pass.**
+          Every UI edit writes `changed_by = l.hay@fusion92.com`; copy claiming
+          finer provenance is unsupported by the data.
+    **RE-PROBE, never scale an old ratio** — these counts have moved on every
+    re-probe, three times running. Group by `project_key` **and** filter on
+    `status` before computing anything: a cross-project product is meaningless,
+    and one pass of it reported "98 missing cells" against two complete grids.
+  - [ ] **G7 tab-stops — board sequence #2.** A skip-the-matrix link as the
+        cheap interim for the ~1,300 read-only tab stops. The `role="grid"`
+        roving-tabindex decision does NOT fold in earlier.
+  - [ ] **Memoized-row follow-on** (restyle batch 3, MEDIUM-4). Judge it
+        against a freshly probed `active directives × visible brands`, never a
+        number written into a doc.
+  - **E2 (Convert config sync) — SUPERSEDED, not blocked.** Board rev 8:
+    **Convert direct read (sequence #8)** replaces it, routes around the Xandor
+    dependency entirely, and makes the `issue_type` / severity enum decision
+    unilaterally CQIP's rather than a negotiation.
   - **E3 (rich directive rows)** — swaps the read-only brand-page directive rows
     for expandable rows with comments + lifecycle dates. **Seam is live:** the
     `CellEditStrip` container on both the matrix and the brand page is what E3
     enriches — extend it, don't rebuild.
-- **Phase C (Jira ticketing) — after E1.** Create/track Jira tickets from a finding
-  / a directive cell. **Gated on §1 Jira-create-permission verify** (confirm the
-  CQIP Jira credential can POST issues; §13 r5 is read-only today, so a Jira
-  WRITE path is a deliberate scope expansion needing its own decision). Jenny
-  pre-flight required (new write surface). Per-finding + per-cell ticket links
-  land here (the Phase B TODOs).
-- **Phase D (Public bug form) — after C.** New public-facing submission surface;
-  needs Turnstile (unlike the token-gated Phase B feed). Jenny pre-flight again.
+- **Phase C (Jira ticketing) — board #11.** Create/track Jira tickets from a
+  finding or a directive cell. **Gated on the §1 Jira-create-permission
+  verify** (confirm the CQIP Jira credential can POST issues; §13 r5 is
+  read-only today, so a Jira WRITE path is a deliberate scope expansion needing
+  its own decision). Jenny pre-flight required (new write surface). Per-finding
+  and per-cell ticket links land here (the Phase B TODOs).
+- **Phase D (Public bug form) — board #12, after C.** New public-facing
+  submission surface; needs Turnstile, unlike the token-gated Phase B feed.
+  Jenny pre-flight again.
 
 **Convert-reconciliation deferred follow-ons (backlog, from the 2026-07-25 pass):**
-- [ ] **⚠ Convert reconciliation RESOLVER BUG (spec addendum 7) — STATUS AT
-      SOURCE IS UNKNOWN. Do not regenerate that CSV until it is established.**
-      Captured 2026-08-22 on Lacey's instruction; it had no §15 entry before.
-      **The bug:** MDG's Convert export holds **two goals with byte-identical
-      names** — `Step 1 | Contact Info | Validation Error Exposure`, one ACTIVE
-      (`1004115396`) and one ARCHIVED (`1004117395`). The reconciliation tool's
-      exact-match resolver keyed a plain dict by goal **name**, so on a collision
-      the later array entry silently overwrote the earlier. The archived twin
-      won and the pass concluded *"archived → flip to To do"* — while MDG's
-      directive is genuinely Done via the real active goal. It produced a
-      **false downgrade**: a wrong production write, caught only by review.
-      **ESTABLISHED by inspection of this repo, 2026-08-22:**
-      - **The bug is NOT in any code in this repository.**
-        `scripts/backfill-convert-reconciliation.ts` never resolves goals by
-        name — it reads `convert_id` straight from the CSV — and no other file
-        under `scripts/`, `lib/` or `app/` resolves a Convert goal by name.
-      - **The one known output is corrected.** The row was removed, the CSV
-        regenerated to 212/205/7, and its `DOWNGRADE_REASONS` key deleted in the
-        same change so it could not drift. `DOWNGRADE_REASONS` holds 7 keys,
-        matching the CSV (re-counted at write time).
-      - **One other name collision exists** — MOJ `Submits SF Lead - Footer
-        [Contact API]` ×2 — and **both copies are active**, so either resolution
-        yields the same answer. No data impact.
-      **UNKNOWN — stated as unknown, NOT inferred:** whether the resolver itself
-      was ever fixed. **The tool that produced this CSV is not in this
-      repository.** The 2026-07-25 change corrected the *output*; nothing found
-      so far speaks to the *generator*.
-      **Where to look first, and what has already been checked** (an earlier
-      draft said "nothing here can answer it", which told a future session not to
-      look — Karen delta review MEDIUM-1):
-      - **`docs/convert-reconciliation-2026-08-07/` — READ THIS FIRST.** It is a
-        later output of the same reconciliation workflow, 13 days on, carrying a
-        full-account 1,007-goal crawl, the live Convert API endpoints, and a
-        *"Handoffs / feature asks (Claudette, sent 2026-08-07)"* section — the
-        strongest in-repo lead on **who owns the tool**, which is exactly what
-        the action below needs. **Checked 2026-08-22 and INCONCLUSIVE, not
-        empty:** its backfill CSV is 4 rows with all-distinct names, so there is
-        no collision to observe either way.
-      - Already ruled out: no name-keyed resolution under `scripts/`, `lib/` or
-        `app/`; no generator, notebook or vendored export; no deleted tool in
-        history (`--diff-filter=D` over `*convert*` returns nothing).
-      **Why this matters even though the CSV is now correct:** the spec instructs
-      that a regenerated CSV be re-verified, and the script hard-fails on a shape
-      change. If the resolver is still name-keyed, the next regeneration
-      reintroduces the same class of false downgrade **silently** — a name
-      collision produces a plausible row, not an error.
-      - [ ] Ask whoever owns the reconciliation tool whether the resolver keys on
-            `convert_id` (or `(name, status)`) rather than name alone, and record
-            the answer here.
-- **Unmapped active Convert goals → new directives** — `docs/convert-reconciliation-2026-07-25/unmapped-active.csv`
-  lists real, live Convert goals that have NO directive yet (so the backfill
-  couldn't touch them). Creating them is a CREATE pass, not a backfill: needs
-  title/type decisions per goal and a fan-out. Own batch.
-- **Paused-brand reconciliation** — `paused-brands-readiness.csv` (MRR-CA 17 /
-  SHG 16 / WDG 16 pre-resolved) is informational only while those brands are
-  paused (the pause rule forces `n_a`). Re-run the same reconciliation logic
-  if/when they reactivate.
-- **Stale §15.5 zero-cell note** — the brand-page inline-edit entry claims
-  `Chat Appointment Made` / `Chat Started` / `Chat Lead Submitted` have zero
-  `directive_brand_status` cells. The 2026-07-22 goal load populated them; prod
-  is now 69 directives × 16 brands = 1,104 cells with zero gaps (verified
-  2026-07-25). Trim that note when that entry is next touched.
+- [ ] **⚠ Convert reconciliation RESOLVER BUG (spec addendum 7) — STATUS AT SOURCE IS UNKNOWN. Do not regenerate that CSV until it is established.**
+      A name-keyed exact-match resolver let an ARCHIVED goal twin silently
+      overwrite its ACTIVE twin, producing a **false downgrade** — a wrong
+      production write, caught only by review. **ESTABLISHED 2026-08-22:** the
+      bug is **NOT in any code in this repository**, and **the one known output
+      is corrected** (row removed, CSV regenerated to 212/205/7, its
+      `DOWNGRADE_REASONS` key deleted in the same change so it could not
+      drift). **UNKNOWN, and stated as unknown rather than inferred:** whether
+      the resolver itself was ever fixed — **the tool that produced the CSV is
+      not in this repo.** Full case detail (the MDG and MOJ collisions, the
+      corrected-output accounting) is in
+      `docs/claude-archive/CLAUDE-16-2026-08.md` (r42).
+      **Why it still matters even though the CSV is correct:** the spec
+      instructs that a regenerated CSV be re-verified and the script hard-fails
+      on a shape change — but if the resolver is still name-keyed, the next
+      regeneration reintroduces the same class of false downgrade **silently**.
+      A name collision produces a plausible row, not an error.
+      - [ ] Ask whoever owns the reconciliation tool whether the resolver keys
+            on `convert_id` (or `(name, status)`) rather than name alone, and
+            record the answer here.
+      - [ ] **Read `docs/convert-reconciliation-2026-08-07/` FIRST** — a later
+            output of the same workflow, 13 days on, carrying a full-account
+            1,007-goal crawl, the live Convert API endpoints, and a *"Handoffs /
+            feature asks (Claudette, sent 2026-08-07)"* section: the strongest
+            in-repo lead on **who owns the tool**, which is what the action
+            above needs. **Checked 2026-08-22 and INCONCLUSIVE, not empty** —
+            its backfill CSV is 4 rows with all-distinct names, so there is no
+            collision to observe either way. Already ruled out: no name-keyed
+            resolution under `scripts/`, `lib/` or `app/`; no generator,
+            notebook or vendored export; no deleted tool in history
+            (`--diff-filter=D` over `*convert*` returns nothing).
+- [ ] **Unmapped active Convert goals → new directives.**
+      `docs/convert-reconciliation-2026-07-25/unmapped-active.csv` lists real,
+      live Convert goals with NO directive yet, so the backfill could not touch
+      them. Creating them is a CREATE pass, not a backfill: it needs title and
+      type decisions per goal plus a fan-out. **Own batch.**
+- [ ] **Paused-brand reconciliation** — `paused-brands-readiness.csv` (MRR-CA
+      17 / SHG 16 / WDG 16 pre-resolved) is informational only while those
+      brands are paused, because the pause rule forces `n_a`. Re-run the same
+      reconciliation logic if and when they reactivate.
+- **Stale §15.5 zero-cell note — CLOSED BY RELOCATION, not by a fix.** The
+  brand-page inline-edit entry that carried the claim left §15.5 for §16 on
+  ship (r34), so there is no longer a note to trim. Prod was 69 directives × 16
+  brands = 1,104 cells with zero gaps when verified 2026-07-25 — re-probe
+  rather than trusting that figure. Original text in
+  `docs/claude-archive/CLAUDE-16-2026-08.md` (r42).
 
 **Phase B deferred follow-ons (backlog):**
-- **Unresolved-finding self-heal** — a finding first ingested with
-  `brand_id=null` stays under "Unassigned" permanently (Phase B re-post freezes
-  identity fields — Karen LOW-2). Add a null→resolve path: re-resolve on
-  re-ingest once the brand/alias exists, and/or a periodic sweep. Pairs with →
-- **Manual finding-reassign affordance** — admin control to set a finding's
-  `brand_id` (today the admin status route only edits status/note). Closes the
-  "stuck in Unassigned" gap operationally even without the self-heal sweep.
-- **Toast cleanup** — the Client Library panel/dialog toasts accreted across
-  Phase A + B; a small pass to unify wording/severity.
-- (Phase A LOW-1, still open) **cell-backfill / brand-target picker** — a brand
-  added AFTER a directive was created has no `directive_brand_status` cell
-  (renders hollow n_a, non-interactive). Backfill on brand-add or a target
-  picker at directive-create.
+- [ ] **Unresolved-finding self-heal** — a finding first ingested with
+      `brand_id=null` stays under "Unassigned" permanently, because Phase B
+      re-post freezes identity fields (Karen LOW-2). Add a null→resolve path:
+      re-resolve on re-ingest once the brand or alias exists, and/or a periodic
+      sweep. Pairs with →
+- [ ] **Manual finding-reassign affordance** — an admin control to set a
+      finding's `brand_id`; today the admin status route only edits status and
+      note. Closes the "stuck in Unassigned" gap operationally even without the
+      self-heal sweep.
+- [ ] **Toast cleanup** — the Client Library panel and dialog toasts accreted
+      across Phase A + B; a small pass to unify wording and severity.
+- [ ] **Cell-backfill / brand-target picker** (Phase A LOW-1, still open) — a
+      brand added AFTER a directive was created has no `directive_brand_status`
+      cell and renders a hollow, non-interactive `n_a`. Backfill on brand-add,
+      or a target picker at directive-create.
 
 **PROCESS — the spec is commit 1, and commit 1 lands before the build starts.**
-Twice a Pulse batch opened against an authority that existed only outside the repo.
-Both narratives are in `docs/claude-archive/CLAUDE-16-2026-08.md` (r42); the
-transferable half is: **a spec cited by section number is falsifiable, a spec
-paraphrased into bullets is not.** Cite specs by section so absence is detectable.
+Twice a Pulse batch opened against an authority that existed only outside the
+repo; both narratives are in `docs/claude-archive/CLAUDE-16-2026-08.md` (r42).
+The transferable half: **a spec cited by section number is falsifiable, a spec
+paraphrased into bullets is not.** Cite specs by section so absence is
+detectable.
 
 **Restyle-core follow-ons (backlog, from the 2026-08-02 ship):**
-- **Sweep the remaining 32 `ring-[color:var(--f92-orange)]` call sites onto
-  `--f92-focus-ring`.** The token fix is already app-wide for KEYBOARD focus — the
-  unlayered `:focus-visible` outline was repointed, and it beats the layered Tailwind
-  ring utilities — but those 32 utilities (across 24 files: coverage, logs, dashboard,
-  settings, ui primitives) still paint a SECOND ring at 2.76:1 on top of the compliant
-  outline. 13 in-scope Pulse sites were done. Purely mechanical; kept out of the restyle
-  so a token commit wouldn't carry two dozen unrelated files.
-- **`components/ui/badge.tsx` fails WCAG AA for white text in BOTH themes** on three of
-  four severity variants — `high` 2.80:1, `medium` 1.92:1, `low` 2.54:1 (`critical`
-  passes at 4.83:1). Pre-existing and app-wide, surfaced while reverting this batch's
-  `--severity-*` dark overrides (Karen HIGH-2). Needs its own decision: darken the
-  variant backgrounds, or switch those variants off `text-white`. Not a Pulse problem.
-- **The Phase A token / Tailwind-v4 collision (194 utility call sites).** `--radius-*`,
-  `--shadow-sm` and `--tracking-wide` shadow Tailwind's own theme tokens, and the app
-  depends on `globals.css` being UNLAYERED to win. Works, shipped since 2026-07-17, but
-  moving that file into a layer would silently flip `rounded-sm` (5), `rounded-md` (27),
-  `rounded-lg` (10), `rounded-xl` (25), `rounded-2xl` (24), `rounded-3xl` (27),
-  `shadow-sm` (75) and one `tracking-wide` at once. Karen ruled leaving it alone correct;
-  recorded so nobody "tidies" globals.css into a layer without knowing the blast radius.
-- **The matrix renders `<button disabled>` to non-admins**, so the "never a disabled
-  control" contract holds on the brand page but has never held on the matrix
-  (`disabled={!clickable}`, byte-identical pre-batch). Worth aligning; not a regression.
-- **"Largest gap" KPI card** — omitted from the strip rather than rendered inert,
-  because it is a per-FAMILY number and family grouping does not exist. Revisit if/when
-  a real family column lands (the mockup's nine families are invented client-side).
+- [ ] **Sweep the remaining 32 `ring-[color:var(--f92-orange)]` call sites onto
+      `--f92-focus-ring`** — 24 files across coverage, logs, dashboard,
+      settings and the ui primitives. The token fix is already app-wide for
+      KEYBOARD focus (the unlayered `:focus-visible` outline was repointed and
+      beats the layered Tailwind ring utilities), but those 32 still paint a
+      SECOND ring at 2.76:1 on top of the compliant outline. The 13 in-scope
+      Pulse sites were done. Purely mechanical; kept out of the restyle so a
+      token commit would not carry two dozen unrelated files.
+- [ ] **`components/ui/badge.tsx` fails WCAG AA for white text in BOTH themes**
+      on three of four severity variants — `high` 2.80:1, `medium` 1.92:1,
+      `low` 2.54:1; `critical` passes at 4.83:1. Pre-existing and app-wide,
+      surfaced while reverting this batch's `--severity-*` dark overrides
+      (Karen HIGH-2). Needs its own decision: darken the variant backgrounds,
+      or switch those variants off `text-white`. Not a Pulse problem.
+- [ ] **The matrix renders `<button disabled>` to non-admins**, so the "never a
+      disabled control" contract holds on the brand page but has never held on
+      the matrix (`disabled={!clickable}`, byte-identical pre-batch). Worth
+      aligning; not a regression.
+- **DO NOT "tidy" `globals.css` into a layer.** `--radius-*`, `--shadow-sm` and
+  `--tracking-wide` shadow Tailwind v4's own theme tokens across 194 utility
+  call sites, and the app depends on that file being UNLAYERED to win. It has
+  worked since 2026-07-17 and Karen ruled leaving it alone correct; moving it
+  would silently flip every one of those utilities at once. The per-utility
+  blast-radius counts are in `docs/claude-archive/CLAUDE-16-2026-08.md` (r42).
+- **"Largest gap" KPI card** — omitted from the strip rather than rendered
+  inert, because it is a per-FAMILY number and family grouping does not exist
+  (the mockup's nine families are invented client-side). Revisit if and when a
+  real family column lands.
 
-**Matrix-controls deferred follow-ons (backlog, from the 2026-07-29 ship):**
-- **Archive-UI signal obligation (Karen LOW-8)** — `loadProject` only loads
-  `status='active'` directives, so an ARCHIVED directive is invisible to the
-  matrix search and counts 0 toward `hiddenByStatus`: an exists-but-archived title
-  reads as "found nothing", the same duplicate hazard the above mitigates.
-  Currently **unreachable** — verified 2026-07-29 that no archive writer exists
-  anywhere in `app/api/`, create never sets `status` (relies on 024's
-  `DEFAULT 'active'`), and directive edit/archive UI is still an open TODO. When
-  that UI is built it **owes this surface a signal** (include archived titles in
-  the duplicate-risk count, or land the route check above first).
-  **⚠ THE "unreachable" CLAIM ABOVE IS FALSIFIED — left in place, not deleted,
-  because the way it failed is the lesson.** Prod holds an archived directive
-  (`Submits Form Lead - Combined`), written by **direct SQL** — a surface that
-  audit did not consider, because it examined `app/api/` only. **A "no writer
-  exists" claim must state which surfaces were checked.** See the dedicated §15
-  entry below, and **✅ SHIPPED 2026-08-18 — Batch 012 directive CRUD (see §16)**,
-  which paid the signal obligation in full: archived rows are now **viewable**
-  behind a `Hide archived` toggle rather than merely counted, and the
-  archived-search signal is gated on that toggle so its "…are not shown" wording
-  cannot be false. This item is CLOSED.
+**Matrix-controls follow-ons (2026-07-29 ship) — CLOSED.** The archive-UI
+signal obligation (Karen LOW-8) was **paid in full by 012 directive CRUD,
+SHIPPED 2026-08-18** (see §16): archived rows are now viewable behind a `Hide
+archived` toggle rather than merely counted, and the archived-search signal is
+gated on that toggle so its "…are not shown" wording cannot be false. The
+falsified "unreachable" claim and its standing lesson — **a "no writer exists"
+claim must state WHICH SURFACES were checked** — are in the dedicated §15 entry
+below and in `docs/claude-archive/CLAUDE-16-2026-08.md` (r42).
 
 **V2.1 trigger backport — 8 items, HAND-ENTERED via the UI (loader ABANDONED
 2026-07-30):**
-- **The work:** 8 outstanding items from Lacey's 2026-07-30 list, entered through
-  the Pulse **inline-create strip**. **This is NOT a scripted load, now or later.**
-  No loader exists for it, none is parked on a branch, and no corrected mapping is
-  to be attempted — the decision is that directive entry moves to the UI.
-- **⚠ THE 8 ITEMS ARE NOT IN THIS REPO — this entry is not yet executable.** It
-  records *why* and *how*, but not *what*. The titles live only in Lacey's 7/30
-  list, which was never committed. **A future session cannot do this work from the
-  repo and must get the list from Lacey first.** This is the same
-  out-of-repo-authority gap that killed the loader, so the corrective that follows
-  directly from the lesson below is: **commit the 7/30 list — or at minimum the 8
-  titles and their intended `directive_type` — the next time it is to hand.**
-  Deliberately NOT reconstructed from memory here: inventing eight plausible titles
-  is precisely the failure mode being documented.
-- **Why the loader was abandoned.** A loader was built (spec + script + 20 tests,
-  Karen-reviewed, never run) against an earlier brief that Lacey's 7/30 list
-  **superseded**. Reconciliation against the new list found the mapping was wrong
-  in four independent ways: **3 items had no directive**, **1 directive was an
-  orphan**, **4 were mismapped**, and — the killer — **the polarity was INVERTED**:
-  the loader's `DONE_DIRECTIVES` encoded *completed* work while the 7/30 list is
-  *outstanding* work. Its `EXPECTED` totals (112 / 18·61·33) are **void**. Prod was
-  never touched: it holds no `[Trigger]` directives and 0 rows under
+- [ ] **⚠ GET THE 8 TITLES FROM LACEY FIRST — they are NOT in this repo.** They
+      live only in her 2026-07-30 list, which was never committed, so a future
+      session cannot do this work from the repo. Deliberately NOT reconstructed
+      here: inventing eight plausible titles is precisely the failure mode being
+      documented.
+- [ ] **Commit the 7/30 list** — or at minimum the 8 titles and their intended
+      `directive_type` — the next time it is to hand. This is the same
+      out-of-repo-authority gap that killed the loader.
+- [ ] **Enter all 8 through the Pulse inline-create strip.** **This is NOT a
+      scripted load, now or later** — no loader exists, none is parked on a
+      branch, and no corrected mapping is to be attempted. Directive entry moves
+      to the UI.
+- [ ] **Entry gotcha, do NOT skip:** the create form defaults to
+      `directive_type: 'goal'` (`app/dashboard/pulse/page.tsx:977`,
+      `useState<DirectiveType>('goal')`). **All eight are `[Trigger]`
+      directives**, so every hand-entry must change the type picker or it ships
+      a **"Goal"** badge against a `[Trigger] …` title.
+- [ ] **Decide whether that default should be unset/required rather than
+      `'goal'`.** Deliberately NOT changed as part of the abandonment.
+- **Why the loader was abandoned, and the durable lesson:** `EXPECTED`-totals
+  assertions verify ENCODING FIDELITY, not mapping CORRECTNESS — every wrong
+  mapping still summed to the same totals, so no in-script guard could have
+  caught it, and **when the authority for a mapping lives outside the repo no
+  in-repo verification reaches it.** Generalised to **§13 r38** (shared oracle);
+  the four-ways-wrong reconciliation detail and the worked instances are in
+  `docs/claude-archive/CLAUDE-16-2026-08.md` and
+  `docs/claude-archive/CLAUDE-16-2026-07.md` (r42). Prod was never touched: it
+  holds no `[Trigger]` directives and 0 rows under
   `system:v21-trigger-backport`.
-- **⚠ THE DURABLE LESSON.** `EXPECTED`-totals assertions verify ENCODING
-  FIDELITY, not mapping CORRECTNESS — every wrong mapping still summed to
-  112 / 18·61·33, so no in-script guard could have caught it. **When the
-  authority for a mapping lives outside the repo, no in-repo verification
-  reaches it.** The generalised rule is now **§13 r38** (shared oracle); the four
-  worked instances behind it — including the Pulse cell truncation, where a
-  DB-level check overturned a correct render-layer bug report for nine days —
-  are in `docs/claude-archive/CLAUDE-16-2026-07.md` (r42).
-- **Entry gotcha for the hand-entry (do NOT skip):** the create form defaults to
-  `directive_type: 'goal'` (`app/dashboard/pulse/page.tsx:977`,
-  `useState<DirectiveType>('goal')`). **All eight of these are `[Trigger]`
-  directives**, so every single hand-entry must change the type picker or it ships
-  a **"Goal"** badge against a `[Trigger] …` title — precisely the user-visible
-  mismatch the abandoned batch's MEDIUM-4 was about. **Worth considering whether
-  that default should be unset/required rather than `'goal'`** — deliberately NOT
-  changed as part of the abandonment; it needs its own decision.
 
 **Unranged-select audit — the ACTION; measurements relocated.** PostgREST caps an
 unranged select at 1,000 and returns the short result with **no error**. Full
@@ -2023,24 +1759,23 @@ them**; every figure in this file has moved on re-probe.
       — coverage page, brand-wellness report, dashboard KPI, manage-milestones dialog.
       An earlier draft named only two, which is how half a fix ships.
 
-**Convert historical-data remediation — 5 misnamed goals (from the 7/30 list,
-item 2):** historical data on these five Convert goals is **misnamed**:
-`ASV 100496074` · `RBW 1004117356` · `MDG 1004101060` · `FSP 100425378` ·
-`PDS 1004118956`. This is a **Convert-side data problem, NOT a matrix cell** —
-recorded as its own backlog item precisely so it does not vanish along with the
-abandoned loader it arrived beside. Needs a decision on whether the rename happens
-in Convert (like the Batch 012 `rename-cleanup.csv` pass, executed in Convert
-itself) and whether anything in CQIP references the old names.
+**Convert-side data items (not matrix cells):**
+- [ ] **5 misnamed goals** (from the 7/30 list, item 2): `ASV 100496074` ·
+      `RBW 1004117356` · `MDG 1004101060` · `FSP 100425378` ·
+      `PDS 1004118956`. Historical data on these five Convert goals is
+      misnamed. Recorded as its own item precisely so it does not vanish along
+      with the abandoned loader it arrived beside. Needs a decision on whether
+      the rename happens in Convert itself (like the 012 `rename-cleanup.csv`
+      pass) and whether anything in CQIP references the old names.
+- [ ] **`Srolled 100% - Sitewide` is a typo in a LIVE directive title** — its
+      three siblings read `Scrolled 25/50/75% - Sitewide`. Lacey's data,
+      Lacey's call.
 
-**Prod directive-count drift (recorded 2026-07-29, independent of the above):**
-NBLYCRO went **69 → 75** directives when Lacey created six goals through the matrix
-UI on 2026-07-29 (4 scroll-depth + 2 MRE upsell). Unrelated to any batch; noted
-because the count is a **moving target**, not a constant to re-baseline — anything
-reading it should re-probe rather than trust a figure written into a doc. Side
-observation from that pass: one of those titles is **`Srolled 100% - Sitewide`**,
-missing the `c` its three siblings (`Scrolled 25/50/75% - Sitewide`) have — a typo
-in a live title, same class as the handoff §3 typo resolutions. Not corrected here;
-Lacey's data, Lacey's call.
+**Directive counts are a MOVING TARGET — re-probe, never re-baseline.** NBLYCRO
+went 69 → 75 directives when six goals were created through the matrix UI on
+2026-07-29, unrelated to any batch. The per-project active figure now renders in
+the matrix result count, so read it there. The drift narrative is in
+`docs/claude-archive/CLAUDE-16-2026-08.md` (r42).
 
 ### Batch 006 (post-demo) — Teams dispatch (EXPANDED)
 Wires `alert_events` rows to actually fire Teams notifications.
@@ -2077,154 +1812,66 @@ Expanded scope (locked 2026-07-03):
       (open droughts, active alerts; pipeline health once Batch 010.1
       lands).
 
-### Batch 007 (post-006, hard prereq: 004.99 + SPL onboarding) — Custom Jira Boards
-Internal Kanban-style board view inside CQIP mirroring active tickets
-across all onboarded CRO Jira projects. Functions as a CRO-native
-replacement for the standard Jira board, with quality_logs context
-integrated next to each ticket. Direct team request; high priority
-once multi-client foundation is in place.
+### Batch 007 — Custom Jira Boards (board sequence #13, mode `auto`)
+Internal Kanban-style board view inside CQIP mirroring active tickets across all
+onboarded CRO Jira projects, with `quality_logs` context beside each ticket — a
+CRO-native replacement for the standard Jira board. Direct team request.
+**Initial scope: read-only** — §13 r5 (CQIP read-only against Jira) stays intact
+for v1; drag-drop and write-back are a follow-on batch once the read-only board
+has lived in production a few weeks.
 
-**Initial scope: read-only.** §13 rule 5 (CQIP read-only against Jira)
-remains intact for v1. Drag-drop / write-back is a follow-on batch
-once the read-only board has lived in production for a few weeks
-and team feedback informs the write model.
+**Full scope, the locked decisions (2026-05-06) and the banked decisions
+(2026-07-03) are in `docs/specs/batch-007-jira-boards.md`** — relocated there by
+the second extraction pass, 2026-08-23 (§13 r41 remedy 3 / r42). The
+implementation sketch is in `docs/claude-archive/CLAUDE-16-2026-07.md`: an
+unbuilt 2026-05-06 design sketch, not an obligation, and **re-derive it against
+the codebase as it stands when 007 actually starts.** What binds is the spec's
+locked decisions, not the sketch.
 
-**Decisions locked at scope time (2026-05-06):**
-- Read-only first; read-write as natural follow-on batch
-- Real-time sync via webhook (extend jira-webhook to cache all
-  ticket state, not just rework events)
-- Multi-board UX: per-client board (NBLY, SPL, future) plus a
-  "View All" combined view; same status columns + structure
-  across all
-- Brand-level filtering on per-client boards; global filter
-  system (built-in + user-custom) on all views
-- v1 columns only (status); swimlanes deferred to v2 unless
-  team friction surfaces during use
-- Card content: ticket ID, title, status, severity, brand,
-  assignee, sendback count, age, plus any custom-field tags;
-  expandable as needs emerge
-- Performance: server-side filtering + per-column pagination
-  (~50 tickets per column initial load, infinite scroll for
-  more) + client-side virtual scrolling per @tanstack/react-virtual
-- Cache layer: new `jira_tickets` table populated by webhook,
-  read-side served from cache (Jira API never hit at render time)
-- Permissions: same view for admins + read-only users (no
-  per-action gating in v1)
-- Ticket detail: click card opens unified drawer (ticket header
-  + status + assignee + brand + custom tags on top, associated
-  quality_logs underneath via existing LogDetailDrawer pattern;
-  per §13 rule 26 drawer-on-drawer is supported)
-- New page: `/dashboard/board` (or `/dashboard/boards` —
-  decide at implementation), linked in main nav alongside
-  Dashboard, Coverage, etc.
+- [ ] **Settle the prereq disagreement before scoping.** This entry read
+      *"post-006, hard prereq: 004.99 + SPL onboarding"* from 2026-05-06, and
+      §0.1 put 007 behind 010.1 — but board rev 8.1 lists 007 at **#13 with NO
+      dependency**. The board is the newer claim and the prereq is the older
+      one; neither was reconciled when 8.1 reordered the sequence by dependency.
+- [ ] **Decide the route path** — `/dashboard/board` vs `/dashboard/boards` —
+      at implementation.
+- [ ] **Decide whether "View All" collapses to a single combined column set or
+      shows per-client column groups.**
 
-**Decisions banked 2026-07-03 (`docs/batch-outline-2026-07-03.md`) —
-promoted from the discovery list below:**
-- **Saved views: URL params + per-user saved views + default-view-on-login**
-  (uses the `board_views` table already in the sketch). Flow: Jira-like
-  default layout → user customizes → saves to profile → their default
-  loads on board entry.
-- **Filter bar: Jira-parity** (per Lacey's screenshot) — quick filters
-  (Exclude Paused Brands / Roadmap / In Progress / QA / With Client /
-  Needs Attention / No holds / Assigned to me / Unassigned / Recently
-  Updated), brand pills (ASV…WDG), a grouping control.
-- **Card density: compact default, comfortable as a user toggle.**
-- **Cache freshness: "last synced" indicator + manual "sync now" CTA**
-  showing success/failure (sync_runs pattern precedent from Batch 005.10).
+### Batch 008 — Convert.com test deployment automation (board sequence #9)
+Lets the team pull active A/B tests for a given brand and turn a winning
+variation into a deployment in one click — pause test, create deployment from
+variation, rename per a formula, activate. Director of CRO request. NBLY-only
+initially, but the spec assumes the brand model is CRUD-ready so new clients
+onboard without code changes (overlaps Batch 004.99 multi-client readiness).
+**008 consumes Batch 012's Phase B monitoring-ingest surface** instead of
+rebuilding a targeting/monitoring layer, and the former "Per-brand config pages"
+prereq is absorbed into 012. *(If the 012/008 overlap resolution changes, only
+this note moves.)*
 
-DISCOVERY DECISIONS STILL OPEN AT IMPLEMENTATION:
-- Exact route path (`/board` vs `/boards`)
-- Whether "View All" collapses to a single combined column
-  set or shows per-client column groups
+**The discovery checklist, the implementation sketch and the scope estimate are
+in `docs/specs/batch-008-convert-automation.md`** — relocated there by the
+second extraction pass, 2026-08-23 (§13 r41 remedy 3 / r42). Recorded there: a
+realistic 2-4 week build, because the "single push" hides a multi-step
+orchestrator with error handling, idempotency and rollback semantics.
 
-IMPLEMENTATION SKETCH — relocated to `docs/claude-archive/CLAUDE-16-2026-07.md`
-(r42). It is an unbuilt design sketch, not an obligation; **re-derive it against
-the codebase as it stands when 007 actually starts** rather than treating a
-2026-05-06 sketch as a plan. The parts that bind are the locked decisions above,
-not the sketch. Effort was estimated at 3-5 weeks for read-only v1, +2-4 for the
-read-write follow-on — an estimate, never validated.
-
-**Why high priority:** team request, replaces a daily-use external
-tool with a CRO-context-aware view, reuses CQIP's existing data
-model (quality_logs, brands, milestones) rather than duplicating it.
-
-### Batch 008 — Convert.com test deployment automation
-**Sequenced after Batch 012 (resequence 2026-07-15).** 008 **consumes Batch
-012's Phase B monitoring-ingest surface** instead of rebuilding a
-targeting/monitoring layer; the former "Per-brand config pages" prereq is
-absorbed into Batch 012, so 008 no longer carries a standalone prereq batch.
-*(If the 012/008 overlap resolution changes, only this note moves.)*
-
-Big-boy integration. Director of CRO requested a tool that lets the
-team pull active A/B tests for a given brand, then convert a winning
-variation into a deployment with a single click — pause test,
-create deployment from variation, rename per a formula, activate.
-NBLY-only initially, but spec assumes brand model is CRUD-ready so
-new clients can be onboarded without code changes (overlaps with
-Batch 004.99 multi-client readiness work).
-
-Discovery work the batch needs to start with:
-- Convert.com API auth model — service accounts? per-user OAuth?
-  API keys per project? Document the actual mechanism.
-- Rate limits and the pause/deploy state machine — what's atomic?
-  Can the four-step sequence happen in one API session, or is
-  there polling between steps? What's the failure mode if step 3
-  of 4 fails (half-deployed states are dangerous)?
-- Brand → Convert project mapping — CQIP knows brands, Convert
-  knows projects/accounts. Need a translation table; probably a
-  new column on `brands` (e.g. `convert_project_id`).
-- The naming formula (Lacey to provide) — derivable from Jira
-  ticket data? from CQIP-known fields? from a manual input at
-  click time?
-- UI placement — extend `/dashboard/coverage`, or new
-  `/dashboard/deployments` page?
-- Failure / rollback semantics — destructive 4-step action needs
-  confirmation dialog, audit trail (who clicked, what got renamed
-  to what, did all 4 steps succeed), and idempotency.
-
-Implementation sketch (post-discovery):
-- `lib/convert/client.ts` — Convert API client
-- New page or page extension for listing active tests by brand
-- Single-click deploy button with confirmation dialog
-- `convert_deployments` audit table (or extend existing `audit_log`
-  with `target_type='convert_deployment'`) recording every
-  deploy attempt + per-step success/failure
-- New env var(s) for Convert API credentials + per-brand mapping
-
-Realistic scope: 2-4 week build, not a weekend project. The
-"single push" hides a multi-step orchestrator with error handling,
-idempotency, and rollback semantics.
+- [ ] **Check the collision with Convert direct read (board #8) BEFORE scoping
+      either.** Board rev 8: #8 builds the reader and 008 automates against
+      Convert, and **whether 008 folds into #8 or becomes its phase 2 is
+      unresolved.** This entry's own sequencing line said "after Batch 012"
+      until rev 8.1 superseded it.
+- [ ] **Lacey to provide the naming formula** — and decide whether it derives
+      from Jira ticket data, from CQIP-known fields, or from a manual input at
+      click time.
 
 
 
 
 ### Batch 010.1 — Pipeline alerts (MERGED: 010.1 + 010.2 + Path 2)
-Sequenced after Batch 006. Collapses the three formerly-separate items
-(pipeline drought alerting, brand contract management, and the Path 2
-off-by-one) into one coherent build.
+**Scope and narrative relocated to `docs/specs/batch-010.1-pipeline-alerts.md` by the second extraction
+pass, 2026-08-23 (§13 r41 remedy 3 / r42). That file is live scope authority,
+NOT archive — r40 does not apply to it.** The open actions stay here.
 
-- **Per-brand targets on the brand record** — milestone targets AND
-  pipeline-stage thresholds, replacing the flat **4/28d** constant
-  (`COVERAGE_TARGET`; it was 2/28d until the 2026-08-03 coverage-honesty
-  batch — do NOT go looking for a `2`). Driven by the fact that contracts
-  already vary per brand (the old "gated on a real contract" trigger for
-  010.2 is moot).
-- **UI home: BrandAdminDrawer tab** — resolves the deleted-settings-page
-  re-home question (the old 010.2 sketch said `/settings/coverage`, deleted
-  in Batch 005.1 Phase 5). This is what the drawer was built for.
-- **NEW — scheduled orphan-milestone alert (from Brand Wellness follow-up,
-  2026-07-07):** add a null-`brand_id` `test_milestones` check to the 5am
-  cron so orphaned milestones (unresolved brand at ingest, §13 r18) are
-  actively surfaced, not just visible on the Coverage Output footer (Batch
-  Brand Wellness commit 4) and the pipeline `unresolved_count`. Pairs with
-  the OPS backfill-cadence check (Ops/deferred) — an alert makes a lagging
-  backfill loud instead of silent.
-- **Both evaluators (milestone-drought + pipeline-drought) read per-brand
-  config.** Batch 005.1's aggregators were deliberately written so the
-  flat→per-brand swap is a one-line change inside the per-brand loop.
-- **Path 2 off-by-one — SETTLED 2026-08-03 on both sides; the parity narrative is
-  relocated** to `docs/claude-archive/CLAUDE-16-2026-08.md` (r42). **No parity work
-  is owed.** What 010.1 still owns is STRUCTURAL, and it is an action:
   - [ ] **Collapse the drought threshold to ONE per-brand target compared with
         strict-less-than, in one place.** It is currently two spellings that happen
         to coincide — `COVERAGE_TARGET = 4` with `count < target` in
@@ -2235,21 +1882,6 @@ off-by-one) into one coherent build.
         its `threshold` key. Removing that fallback is the load-bearing half.
         **Do not reintroduce a threshold-and-`<=` shape** in `queries.ts`: writing 4
         into the old spelling makes 4 read as DROUGHT.
-- **`contract_status` ≠ `is_paused` (locked):** separate fields.
-  `is_paused` = operational state (mid-contract hold) → drives
-  alert-skipping (r20 precedent). `contract_status` = commercial state →
-  informational + future billing hooks. A brand can be contracted-but-
-  paused; collapsing the two loses that.
-- **Default thresholds:** placeholder until PM consult on per-contract
-  numbers (Lacey action); configurable per brand from day one.
-- **Storage decision (open):** new table vs `alert_rules.config` reuse —
-  consult the Batch 005.2 redesign outcome before deciding.
-- Daily 5am Central cron → `alert_events`, audit per §13 r20
-  (`changed_by = 'system:pipeline-drought-evaluator'`).
-- Ships with Teams pings live (Batch 006 lands first in sequence).
-- Effort: MED. PM consult on contract verbiage / monthly-vs-28d window
-  semantics still owed (Lacey).
-
 ### Sync-guard deferred follow-ons (from the 2026-08-08 batch — see §16)
 
 Eight items the skip-if-empty batch deliberately did NOT do. Each is recorded with
@@ -2457,18 +2089,56 @@ ground truth. **It did not achieve that on the first pass.**
   actions* — r42 restructuring narrative into actions, which is the rule working,
   not failing. **r42 remains available as r41 remedy #2.** (Karen re-review
   HIGH-4, 2026-08-22.)
-- [ ] **Decide the second pass.** **Scope it off the live `[claude-md]` prebuild
-      breakdown, not off any figure written here** — every number in this
-      subsection is part of what it measures (r43). At `f374676` the loads were
-      §15, then §13 (which r41 explicitly rules out), then the §16 archive index.
-      The index is the only untouched candidate; trimming it trades "find a batch
-      by name without grepping six files" for roughly its own size. **That is a
-      real trade and it is Lacey's call, not a cleanup.**
+- **✅ SECOND PASS DECIDED AND EXECUTED 2026-08-23 (Lacey): target 150,000, the
+  tool limit — cleared with margin, and the exact figure is deliberately NOT
+  written here** because this paragraph is part of what it measures (r43). **Read
+  the `[claude-md]` prebuild line.** The starting loads, measured at `ab70878`
+  and stable as a dated record: §15 **69,331**, §13 **50,212** (r41 rules it
+  out), §16 **12,812**, everything else **29,798**.
+- **What the pass used, in r41's remedy order.** Remedy #1 was already spent.
+  **Remedy #2 (r42 clause 3 on §15)** took the Batch 012 block and relocated the
+  Batch 007, Batch 008, ClickUp and 010.1 scope plus five zero-action UI clusters
+  to `docs/specs/`. **Remedy #3 (extract a whole low-authority-density section)**
+  relocated **§4, §7, §11 and §12** to `docs/`, keeping their section headings
+  and pointers so existing `§n` citations still resolve. Everything in
+  `docs/specs/` and `docs/` is **live authority, NOT archive — r40 does not
+  apply to it.** Only post-mortem narrative went to `docs/claude-archive/`.
+- **⚠ REMEDY #2 ALONE WAS NOT ENOUGH, and that is the finding worth keeping.**
+  r42 clause 3 applied across the whole of §15 landed the file **within 200
+  characters** of the 150,000 limit — inside the noise of a single edit, which is
+  not a margin. Remedy #3 is what bought the headroom. **Do not scope a future
+  pass on r42 alone.**
+- **The 34,000 §15 budget has now been missed THREE times: 74,120 → 63,551 →
+  this pass.** Each pass cut real weight and none came close. Three misses is
+  evidence about the budget, not about the cutters: **either the budget is wrong
+  or §15 needs a different mechanism than cutting.** Do not re-attempt it
+  unamended a fourth time.
+- **The §16 archive-index trade was NOT taken** (Lacey, 2026-08-23). Trimming it
+  costs "find a batch by name without grepping six files" for roughly its own
+  size. Still available, still her call, still not a cleanup.
+- [ ] **r41's 120,000 ceiling is STILL TRIPPED and still owed.** It is not
+      reachable without either the §16 archive-index trade or an r41 amendment
+      putting §13 in play — everything outside §13/§15/§16 was **29,798** at
+      `ab70878`, so extracting every remaining section whole still leaves the
+      file over 120,000. **Decide which, or amend r41 to record 150,000 as the
+      working ceiling** — an unreachable hard rule reads as actionable and is
+      not, which is exactly how r41's own remedy #1 failed.
+- **§15 REGREW inside the split chain, and expect this pass to do the same.**
+  The first clause-3 pass measured §15 at **63,551 at `f374676`**; it was
+  **69,331** at `ab70878` — **+5,781**, so over half that pass's gain (−10,569)
+  was eaten by later commits in the same batch. **The ceiling check is per-push,
+  not per-batch.**
 
 **Do not let this entry be deleted when the file next comes under the limit.**
 It is the record that the ceiling in r41 was set by a batch that did not meet it.
 
 ### Ops / deferred
+- [ ] **Split `docs/claude-archive/CLAUDE-16-2026-08.md` by SIZE.** The second
+      extraction pass appended to it, putting it past r41's **150,000-character
+      advisory ceiling** for archive files. Advisory, not hard — under r40 nobody
+      reads an archive whole — but it is the same trajectory §16 was on, and r41
+      says rollover triggers on size and never the calendar, so "August" is not
+      the unit. Split it the next time anything touches it.
 
 - [ ] **Finish paying off `docs/repo-structure.md`'s r23 obligation.**
       §13 r23 was amended 2026-08-22 to name that file as a per-ship destination
