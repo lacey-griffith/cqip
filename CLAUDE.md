@@ -1771,12 +1771,25 @@ reviews. Effort: LG (multi-phase).
     the spec on 2026-08-22** (Karen delta review HIGH-1) precisely so this write
     has a citable procedure: it had existed only in
     `docs/claude-archive/CLAUDE-16-2026-07.md`, which §13 r40 makes history and
-    never authority. **Two earlier repoints failed** — first at the archive
-    itself, then at `## 5. Verification` + `## 6. Gate`, which exist but are
-    post-run assertions and approval policy, containing no runnable command.
+    never authority. **TWO repoints failed before this one, and the archive was
+    not one of them** — it is where the procedure lived before any pointer
+    existed. Re-derived from git 2026-08-22:
+    **(1)** `36b7573` cited a **`§Pre-run`** section that has never existed in
+    the spec — caught by Karen re-review HIGH-1;
+    **(2)** `7b8fc21` cited `## 5. Verification` + `## 6. Gate`, which do exist
+    but are post-run assertions and approval policy with **no runnable command**
+    anywhere in the document — caught by Karen delta review HIGH-1;
+    **(3)** `43ad41f` lifted the procedure into `## 7` and cites that.
+    *(An earlier version of this paragraph also said "two", but named the archive
+    and `§5`+`§6` as the pair and dropped `§Pre-run` — while the spec's own §7
+    named the archive and `§Pre-run` and dropped `§5`+`§6`. Two documents, two
+    different wrong pairs, and the accurate record had existed in this file at
+    `7b8fc21` before that edit removed it. Karen delta review MEDIUM-1.)*
     The archived copy remains as history and **must not be cited**: it carries
-    four stale values (215, 209, "8 downgrades" twice) and a step 6 that
-    addendum 6 had already resolved. Lacey approves + runs. Not an
+    **seven stale tokens across four numbers** — `215`×2, `209`, `207`, and
+    `8 downgrades`×2 (counted at write time; an earlier note said "four stale
+    values" and omitted `207` entirely) — plus a step 6 that addendum 6 had
+    already resolved. Lacey approves + runs. Not an
     E-phase — a data correction riding alongside the E track.
   - **Restyle batch 4 — NOT STARTED. Gate 0 (MEDIUM-6 audit-coverage count) DONE
     2026-08-03**; the probe figures are in

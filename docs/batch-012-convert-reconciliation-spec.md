@@ -239,11 +239,25 @@ cite THIS section, not the archive.**
 Lifted into the spec 2026-08-22 (Karen delta review HIGH-1). It previously
 existed only inside a `docs/claude-archive/` file, which §13 **r40** makes
 history and never authority — so a production write had no citable procedure at
-all, and two earlier attempts to point at one failed (the archive itself, then
-an invented `§Pre-run` section). **Every figure below was re-derived from
+all.
+
+**TWO repoints failed before this one, and the archive was not one of them** —
+it is where the procedure lived before any pointer existed. Re-derived from git
+2026-08-22: **(1)** commit `36b7573` cited a **`§Pre-run`** section that has
+never existed in this spec; **(2)** commit `7b8fc21` cited `## 5. Verification`
++ `## 6. Gate`, which do exist but are post-run assertions and approval policy,
+with **no runnable command anywhere in this document** before §7; **(3)** commit
+`43ad41f` lifted the procedure here. *(An earlier version of this paragraph also
+said "two" but named the archive and `§Pre-run`, dropping `§5`+`§6` — while
+CLAUDE.md named the archive and `§5`+`§6`, dropping `§Pre-run`. Two documents,
+two different wrong pairs. Karen delta review MEDIUM-1; this wording is now
+identical in both so they cannot diverge again.)*
+
+**Every figure below was re-derived from
 `scripts/data/convert-reconciliation-backfill.csv` at the moment of writing, per
-§13 r43 — nothing was transcribed from the archived copy, which carried four
-stale values.**
+CLAUDE.md §13 r43 — nothing was transcribed from the archived copy, which
+carries seven stale tokens across four numbers (`215`×2, `209`, `207`,
+`8 downgrades`×2).**
 
 **Figures, and where each comes from — the two kinds are not interchangeable:**
 
