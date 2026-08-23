@@ -12,7 +12,7 @@ a decision, check this file before asking the user. All major decisions are reco
 here so they don't need to be re-explained.
 
 **Prod right now:** Worker **`ab70878`**, declared **v3.0** — verified via
-`/api/health` 2026-08-22 against the pushed tip (board rev 8.1), re-confirmed by
+`/api/health` 2026-08-22 against the pushed tip (board rev 8.2), re-confirmed by
 Lacey 2026-08-23. Migrations 001–029 all applied. **`/api/health` reports the
 WORKER ONLY** — it says nothing about the Supabase edge function `jira-sync`,
 and that scope confusion has misled twice. The SHA also advances on **docs +
@@ -55,13 +55,15 @@ history, not sequencing, and is now in
 It made the block ~40% history; keeping it here would have shipped a new
 authority section already four-tenths stale.
 
-**Priority order — DEPENDENCY-ORDERED, board rev 8.1 (2026-08-22).**
+**Priority order — DEPENDENCY-ORDERED, board rev 8.2 (2026-08-23).**
 Supersedes the 2026-07-15 need-ordered list; that list and its rationale are in
 `docs/claude-archive/CLAUDE-16-2026-08.md` (r42). Canonical — the `CQIP Batch
 Outline` project file mirrors this. **⚠ `CROSS_CLAUDE.md` §5 is STALE against
 this** (last locked 2026-07-15; its footer reads 2026-07-17 while its own §6
 carries 2026-08-08 entries), and an AC-facing mirror update is owed and
-coordinated, not unilateral.
+coordinated, not unilateral. **Its §5 board contains no G7 at all**, so a session
+told by R17 to read it at start sees a board this item does not exist on. It has
+now missed THREE consecutive batches.
 
 The MODE column is the agent-autonomy setting, not a difficulty rating:
 **`auto` where failure is LOUD, `manual` where failure is SILENT or the batch
@@ -70,8 +72,8 @@ the bounded middle.
 
 ```
      BATCH                     MODE     DEPENDS ON
- 1   SECOND EXTRACTION PASS    manual   —          ← this pass; see §15
- 2   G7 TAB-STOPS              auto     —
+ ✅  SECOND EXTRACTION PASS    manual   —          SHIPPED 2026-08-23
+ 2   G7 TAB-STOPS              auto     —          ← this pass; see §15
  3   CHANGE LOG WIDGET         auto     —          47% render DECIDED
  4   DATA INSIGHTS             accept   —
  5   006 TEAMS DISPATCH        accept   —          no longer blocked
@@ -1570,12 +1572,65 @@ reviews. Effort: LG (multi-phase).
     re-probe, three times running. Group by `project_key` **and** filter on
     `status` before computing anything: a cross-project product is meaningless,
     and one pass of it reported "98 missing cells" against two complete grids.
-  - [ ] **G7 tab-stops — board sequence #2.** A skip-the-matrix link as the
-        cheap interim for the ~1,300 read-only tab stops. The `role="grid"`
-        roving-tabindex decision does NOT fold in earlier.
+  - [ ] **G7 tab-stops — board sequence #2. SPEC LANDED:
+        `docs/specs/batch-g7-tab-stops.md`** — cite it by section number; the
+        three lines here are a pointer, not the authority.
+        - A **skip-the-matrix link** is the whole of this batch. The
+          `role="grid"` roving-tabindex decision does NOT fold in — spec §6, and
+          its standing gate is *decide it before adding another focusable
+          surface to this page.*
+        - **`~1,300` IS RETIRED. Re-derived 2026-08-23: 1,092 cell stops + 13
+          brand-header stops = 1,105** in the read-only default view
+          (84 active directives × 13 visible brands); 1,344 + 16 = 1,360 with
+          paused shown. The old figure was written against the 07-31 grid.
+        - ⚠ **The grid SHRANK.** Active directives went **87 → 84** and archived
+          **1 → 4** since 08-18, so **64 cells** are now held by archived
+          directives — invisible to matrix search, counting 0 toward
+          `hiddenByStatus`. That is the LOW-8 consequence, quadrupled, and
+          nothing recorded it. **Not G7's job**; filed here so it is not lost.
+        - **PROMOTED OUT OF THE ARCHIVE (r40 — it was authority-shaped in a
+          history file):** this is a **sighted-keyboard** problem, NOT an AT one
+          — the note lives in the accessible name and browse mode does not use
+          Tab. **Each admin stop does something**; the problem is volume. The
+          regression is **relative**: a read-only keyboard user could previously
+          Tab past the whole table in one press, because nothing in it was
+          focusable.
+        - The **13 brand-header buttons are real buttons and do cost 13 stops** —
+          the 08-03 handoff asked for confirmation that they add none, and the
+          honest answer was that they add 13. They open the grid, so the link
+          clears them in the same press.
+        - ⚠ **CI HALF NOT LANDED.** `package.json` has a `test` script;
+          `.github/workflows/deploy.yml` does NOT have the job that calls it,
+          because the remote tooling refuses to write protected workflow files.
+          **`npm test` passes and CI never runs it** — all 23 test files still run
+          only when someone remembers, which is the gap the job was for. Lacey
+          applies it by hand. Spec §5.
+        - ✅ **ALL SIX ACCEPTANCE ITEMS PASSED 2026-08-23.** The three manual ones
+          (spec §4.1-4.3 — link un-hides on focus, focus moves to the anchor, next
+          Tab leaves the grid) were run **by Lacey, by hand, in BOTH THEMES**
+          against the dev server; the dark pass is the one that matters, because
+          Karen's contrast defect was invisible in light. `npm test` **399/399**.
+          ⚠ **THE THREE ARE A HAND-RUN OBSERVATION, NOT COVERAGE** — the §15
+          distinction already drawn for the 409 runbook's Scenario A. **No gate in
+          this repo re-checks them and none can:** the harness models focus ORDER,
+          so a link that never appears passes all 23 tests. Touch the
+          `sr-only focus:not-sr-only` classes, the `--f92-surface` /
+          `--f92-focus-ring` tokens, or the anchor's position and **nothing will
+          tell you it broke.** Re-run by hand.
+        - **Karen post-flight found 2 HIGH claim defects IN THIS BATCH'S OWN
+          FIGURES**, both fixed before push: a `1,377` spliced into a default-view
+          series it did not belong to (it is the 08-14 rendered-CELL count,
+          86 × 16 + 1), and a 3-archived-directive cause read off what is really a
+          2-row delta. **Like for like, default view: 1,118 (08-14, 86 rows) →
+          1,092 (08-23, 84 rows), non-monotonic** — 87 on 08-18. Recorded, not
+          quietly corrected: it is the r43 failure inside the batch that cites r43,
+          and r43 exists because this keeps happening.
   - [ ] **Memoized-row follow-on** (restyle batch 3, MEDIUM-4). Judge it
         against a freshly probed `active directives × visible brands`, never a
-        number written into a doc.
+        number written into a doc. ⚠ **Its in-source comment in `page.tsx` still
+        cites ~1,118 from an 08-14 probe of 86 directives** — honestly dated, so
+        not an r43 breach, but superseded by the G7 item's 08-23 figures above.
+        Re-probe when this is picked up; do not read that comment as current.
   - **E2 (Convert config sync) — SUPERSEDED, not blocked.** Board rev 8:
     **Convert direct read (sequence #8)** replaces it, routes around the Xandor
     dependency entirely, and makes the `issue_type` / severity enum decision
@@ -1681,10 +1736,18 @@ detectable.
       surfaced while reverting this batch's `--severity-*` dark overrides
       (Karen HIGH-2). Needs its own decision: darken the variant backgrounds,
       or switch those variants off `text-white`. Not a Pulse problem.
-- [ ] **The matrix renders `<button disabled>` to non-admins**, so the "never a
+- ~~**The matrix renders `<button disabled>` to non-admins**, so the "never a
       disabled control" contract holds on the brand page but has never held on
       the matrix (`disabled={!clickable}`, byte-identical pre-batch). Worth
-      aligning; not a regression.
+      aligning; not a regression.~~
+      **⚠ STRUCK 2026-08-23 — THIS WAS FALSE, AND IT ASSERTED THE INVERSE OF
+      SHIPPED SOURCE.** Restyle batch 3 removed `disabled` from the cell button;
+      `disabled={!clickable}` is not in `page.tsx` and has not been since
+      2026-08-03. **Removing it is what CREATED G7.** Struck rather than deleted:
+      an unchecked box reads as outstanding work, and this one would have sent a
+      reader to re-fix a thing already done — in the direction that undoes G7's
+      own cause. A duplicate of this claim survives in
+      `docs/claude-archive/CLAUDE-16-2026-08.md`, where r40 makes it history.
 - **DO NOT "tidy" `globals.css` into a layer.** `--radius-*`, `--shadow-sm` and
   `--tracking-wide` shadow Tailwind v4's own theme tokens across 194 utility
   call sites, and the app depends on that file being UNLAYERED to win. It has
@@ -2338,4 +2401,4 @@ not of shipped batches.
 - Batch 012 — Pulse: restyle core (batch 2 of 4) — 2026-08-02
 ---
 
-*Last updated: 2026-08-22 | CQIP v3.0 — **BATCH 012 PULSE DIRECTIVE CRUD (edit · soft-delete · archive) — SHIPPED + PUSHED + DEPLOYED 2026-08-18; prod `/api/health` now reports `version: d5e5703`** — the docs-only rev-7 outline commit. **No application code changed** (no `.ts`/`.tsx` moved from `e518624`), but the bundle is NOT identical: `package.json` is a build input as well as a deploy trigger, so `gen-build-info.js` stamped the bump into `NEXT_PUBLIC_APP_VERSION` and **v3.0 IS live — Settings → System Info renders `3.0.0`**, which retires the entry's own "declared ≠ deployed" framing rather than patching it. **The §16 entry's ⚠ 0 predicted the SHA would hold at `e518624` and that was WRONG**: `deploy.yml`'s `paths-ignore` is `**.md` / `docs/**` / `.github/**` and does NOT cover `package.json`, so the version bump itself triggered CI, which stamped the pushed tip — struck in place there, not deleted. Migration 029 (`idx_directives_project_title`, UNIQUE `(project_key, title)`, spanning archived rows) is **APPLIED TO PRODUCTION**, verified by direct query in the prod Supabase SQL editor 2026-08-18 — stated with its environment and method because *deployed* and *migrated* are independent facts and `/api/health` reports the **Worker only**. **Jenny pre-flight ×2** (rev 1 DO-NOT-BUILD-YET: 1 CRITICAL · 3 HIGH · 6 MEDIUM · 10 LOW → rev 2 APPROVE-WITH-FINDINGS: 1 HIGH · 10 MEDIUM · 4 LOW), **FIVE Karen rounds** (2H/7M/5L → 2H/1M/4L → 0/2M/2L → 0/1M/2L → 0/0/3L). **Read that progression, not the total:** the original build's HIGHs were found in round one and never recurred, **every HIGH in round two was in a FIX**, and rounds three-to-five found nothing above MEDIUM — the core machinery was re-confirmed three times against three different trees, while what kept failing was the *claims*. Jenny's CRITICAL changed the design: the `project_key` block was specified only as a render-layer lock, so ordinary two-admin concurrency would have destroyed 16 cells including notes **with no `old_value` anywhere in the trail** (§13 r37's shape); the route now re-runs the **same shared predicate** against freshly-read cells. The predicate is a **three-clause conjunction** — the two-clause version would have wrongly allowed moving **5 of its 6 "movable"** directives, because `n_a` is not machine-only and **620 prod cells** that looked like fan-out output had in fact been written. It is kept fail-safe **by construction**: every clause can only SHRINK the movable set, so `project_key` being editable on **1 of 89** directives is the predicate working, not failing — and every directive created from now on is movable until someone works it. **⚠ My own audit caused a HIGH:** COMMIT 7 claimed "exactly ONE `setEditingDirectiveId(null)` remains" on a grep for that **literal string**, which cannot match the **ternary** form the row's Edit/Close toggle uses — §13 r38 mechanism (a), a count stated on an instrument that could not see the case. Karen later re-derived it by **AST**. Three defects in this chain were created **by** the fix before them, and each was closed with a **mechanism rather than a longer list**: clear-on-unmount over a ninth enumeration entry, then its prop-identity dependency **removed** rather than documented, and a prompt that fires only when the click would actually drop the edited row — because a dialog that is usually wrong trains the user to click through, which is how a guard stops working without breaking. **Same-shape duplication removed THREE times in one batch** (`CELL_STATUS_LABEL`, the duplicate-title message whose drift mutation *survived*, `visibleForLifecycle`) — recorded as a rule CANDIDATE, **not promoted**: *the comment is the tell*, since all three carried a comment asserting parity and one was demonstrably false with every gate green. **Directive count re-derived 2026-08-18 grouped by `project_key` AND `status`:** NBLYCRO active **87** · archived **1** · SPLCRO active **1** · global active **88** · all rows **89**. The apparent three-way conflict was **one stale figure plus one MISLABELLED comparison** — "NBLYCRO active" = 87 (matrix header, correct) versus "directives holding cell work" = 88 of 89 (the runbook's, a *different quantity*); rev 6's 86/87 was stale 08-14 data. **The label is the fix.** Gates at five trees: tsc 0 · ESLint 0 · **376/376** (from 333) · build 0 · **44 mutations run, 42 caught**, both survivors verified equivalent mutants. **⚠ NOT VERIFIED, carried forward: there is NO route-level test harness** — Lacey's Scenario A result (`a059d078`, 409 with `blocking_cells: 16`, hash `a2808d54…`, SPLCRO 0, still `NBLYCRO`, zero audit rows) is a **HAND-RUN OBSERVATION, NOT COVERAGE**; **the guard has been observed REFUSING but never PERMITTING**, since the positive case was deliberately skipped (it writes a permanent prod directive and archiving does not free the title) — **the batch's oldest open item**; the `splitShownByLifecycle` **caller remains UNCOVERED** (one call expression, one surviving mutation, all gates green — the extraction narrowed the surface, it did not close the caller); and **`clearAllFilters` is correct BY ACCIDENT**, resetting `statusFilter` to `'all'` which strictly widens — nothing pins that, and a "restore defaults" edit to `'open'` reinstates the silent-loss path in one line.*
+*Last updated: 2026-08-23 | CQIP v3.0 — **BATCH 012 PULSE DIRECTIVE CRUD (edit · soft-delete · archive) — SHIPPED + PUSHED + DEPLOYED 2026-08-18; prod `/api/health` now reports `version: d5e5703`** — the docs-only rev-7 outline commit. **No application code changed** (no `.ts`/`.tsx` moved from `e518624`), but the bundle is NOT identical: `package.json` is a build input as well as a deploy trigger, so `gen-build-info.js` stamped the bump into `NEXT_PUBLIC_APP_VERSION` and **v3.0 IS live — Settings → System Info renders `3.0.0`**, which retires the entry's own "declared ≠ deployed" framing rather than patching it. **The §16 entry's ⚠ 0 predicted the SHA would hold at `e518624` and that was WRONG**: `deploy.yml`'s `paths-ignore` is `**.md` / `docs/**` / `.github/**` and does NOT cover `package.json`, so the version bump itself triggered CI, which stamped the pushed tip — struck in place there, not deleted. Migration 029 (`idx_directives_project_title`, UNIQUE `(project_key, title)`, spanning archived rows) is **APPLIED TO PRODUCTION**, verified by direct query in the prod Supabase SQL editor 2026-08-18 — stated with its environment and method because *deployed* and *migrated* are independent facts and `/api/health` reports the **Worker only**. **Jenny pre-flight ×2** (rev 1 DO-NOT-BUILD-YET: 1 CRITICAL · 3 HIGH · 6 MEDIUM · 10 LOW → rev 2 APPROVE-WITH-FINDINGS: 1 HIGH · 10 MEDIUM · 4 LOW), **FIVE Karen rounds** (2H/7M/5L → 2H/1M/4L → 0/2M/2L → 0/1M/2L → 0/0/3L). **Read that progression, not the total:** the original build's HIGHs were found in round one and never recurred, **every HIGH in round two was in a FIX**, and rounds three-to-five found nothing above MEDIUM — the core machinery was re-confirmed three times against three different trees, while what kept failing was the *claims*. Jenny's CRITICAL changed the design: the `project_key` block was specified only as a render-layer lock, so ordinary two-admin concurrency would have destroyed 16 cells including notes **with no `old_value` anywhere in the trail** (§13 r37's shape); the route now re-runs the **same shared predicate** against freshly-read cells. The predicate is a **three-clause conjunction** — the two-clause version would have wrongly allowed moving **5 of its 6 "movable"** directives, because `n_a` is not machine-only and **620 prod cells** that looked like fan-out output had in fact been written. It is kept fail-safe **by construction**: every clause can only SHRINK the movable set, so `project_key` being editable on **1 of 89** directives is the predicate working, not failing — and every directive created from now on is movable until someone works it. **⚠ My own audit caused a HIGH:** COMMIT 7 claimed "exactly ONE `setEditingDirectiveId(null)` remains" on a grep for that **literal string**, which cannot match the **ternary** form the row's Edit/Close toggle uses — §13 r38 mechanism (a), a count stated on an instrument that could not see the case. Karen later re-derived it by **AST**. Three defects in this chain were created **by** the fix before them, and each was closed with a **mechanism rather than a longer list**: clear-on-unmount over a ninth enumeration entry, then its prop-identity dependency **removed** rather than documented, and a prompt that fires only when the click would actually drop the edited row — because a dialog that is usually wrong trains the user to click through, which is how a guard stops working without breaking. **Same-shape duplication removed THREE times in one batch** (`CELL_STATUS_LABEL`, the duplicate-title message whose drift mutation *survived*, `visibleForLifecycle`) — recorded as a rule CANDIDATE, **not promoted**: *the comment is the tell*, since all three carried a comment asserting parity and one was demonstrably false with every gate green. **Directive count re-derived 2026-08-18 grouped by `project_key` AND `status`:** NBLYCRO active **87** · archived **1** · SPLCRO active **1** · global active **88** · all rows **89**. The apparent three-way conflict was **one stale figure plus one MISLABELLED comparison** — "NBLYCRO active" = 87 (matrix header, correct) versus "directives holding cell work" = 88 of 89 (the runbook's, a *different quantity*); rev 6's 86/87 was stale 08-14 data. **The label is the fix.** Gates at five trees: tsc 0 · ESLint 0 · **376/376** (from 333) · build 0 · **44 mutations run, 42 caught**, both survivors verified equivalent mutants. **⚠ NOT VERIFIED, carried forward: there is NO route-level test harness** — Lacey's Scenario A result (`a059d078`, 409 with `blocking_cells: 16`, hash `a2808d54…`, SPLCRO 0, still `NBLYCRO`, zero audit rows) is a **HAND-RUN OBSERVATION, NOT COVERAGE**; **the guard has been observed REFUSING but never PERMITTING**, since the positive case was deliberately skipped (it writes a permanent prod directive and archiving does not free the title) — **the batch's oldest open item**; the `splitShownByLifecycle` **caller remains UNCOVERED** (one call expression, one surviving mutation, all gates green — the extraction narrowed the surface, it did not close the caller); and **`clearAllFilters` is correct BY ACCIDENT**, resetting `statusFilter` to `'all'` which strictly widens — nothing pins that, and a "restore defaults" edit to `'open'` reinstates the silent-loss path in one line.*

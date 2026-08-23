@@ -45,6 +45,16 @@ so you cannot tell which of ~1,312 cells carry a note without hovering each one.
 And `clickable = isAdmin && !!cell`, so non-admins get `<button disabled>` — out of the
 tab order, no mouse events in most browsers, which also suppresses its own `title`.
 
+> **⚠ STRUCK 2026-08-23 — §1 IS NO LONGER "WHAT IS TRUE TODAY".** This section was
+> accurate when written on 2026-08-02 and describes the PRE-batch tree. `disabled` and
+> `disabled={!clickable}` were both removed from the cell button by §2.6 of this very
+> spec; the `:1066` / `:1077` / `:1101` line numbers no longer resolve either.
+> **Removing that `disabled` is what created QMS finding G7** (`docs/specs/batch-g7-tab-stops.md`).
+> Struck in place, not deleted — a heading that says "verified against source" over
+> present-tense claims about a tree that no longer exists is how a later batch
+> reinstates a fixed defect with every gate green. The identical claim was struck from
+> `CLAUDE.md` §15 on the same date; this was the second copy.
+
 **The brand page.** Already renders the note as **persistent text** under the title
 (`:733-738`, a `<p className="mt-1 text-xs">` with a `Note:` prefix, no hover, visible to
 everyone). This was shipped, and rev 1 of this spec described it as unbuilt. It is not.
@@ -97,10 +107,21 @@ disabled control" rule, which the brand page honors and the matrix never has.
 
 **Locked shape:** the cell stays a real `<button>` for everyone.
 - **Admins** — click opens the editor, unchanged (5870dae). Dot remains the edit target.
-- **Non-admins** — `aria-disabled="true"`, never `disabled`; no mutation handler; **click
-  pins/unpins the readout.** That gives the control an honest job instead of being a
-  button that does nothing, and it is the only note path that works on touch, where
-  there is no hover at all.
+- **Non-admins** — ~~`aria-disabled="true"`, never `disabled`~~; no mutation handler;
+  **click pins/unpins the readout.** That gives the control an honest job instead of
+  being a button that does nothing, and it is the only note path that works on touch,
+  where there is no hover at all.
+  > **⚠ AMENDED 2026-08-23 — THIS CLAUSE IS WRONG AND SHIPPED CODE DOES NOT FOLLOW IT.**
+  > **Decision: DC, 2026-08-03, on Karen MEDIUM-2 — the cell carries NEITHER `disabled`
+  > NOR `aria-disabled`.** `aria-disabled` on a control that is genuinely operable (it
+  > pins the readout, per the bullet above) is a false claim about the control, and
+  > NVDA/JAWS can be configured to skip controls marked unavailable — which would hide
+  > the readout from the very user it exists for. The rationale is in `page.tsx` at the
+  > cell button.
+  > **Amended in place because the spec was never corrected, and PROCESS tells readers
+  > to cite specs BY SECTION NUMBER** — so `§2.6` was handing out an instruction the
+  > codebase had already rejected, with a comment in the source calling this section
+  > wrong and no trace of that on this side. See `docs/specs/batch-g7-tab-stops.md` §7.2.
 - Accessible names differ between the two cases. Exactly one tab stop per cell either way.
 
 ### §2.7 Brand page — refactor onto the shared module, do NOT redesign

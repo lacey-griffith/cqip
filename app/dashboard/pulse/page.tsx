@@ -93,6 +93,11 @@ import {
   type MatrixStatusFilter,
   type MatrixTypeFilter,
 } from '@/lib/client-library/matrix-controls';
+import {
+  MATRIX_SKIP_LINK_LABEL,
+  MATRIX_SKIP_TARGET_ID,
+  shouldRenderSkipLink,
+} from '@/lib/client-library/focus-order';
 import { cellBandClass, headerBandClass } from '@/lib/client-library/matrix-band';
 import { NoteIndicator, StatusCellBox, StatusLegend } from '@/components/client-library/status-cell';
 import { MultiTabGroup, TabGroup } from '@/components/client-library/tab-group';
@@ -1021,6 +1026,25 @@ export default function ClientLibraryPage() {
   );
 
 
+  // Batch G7 — one predicate for BOTH the skip link and its target, because
+  // rendering one without the other is a silent failure: focus does not move and
+  // nothing throws. Derived through lib/client-library/focus-order.ts so
+  // tests/focus-order.test.ts pins the rule; see docs/specs/batch-g7-tab-stops.md
+  // §3.2 and §3.3.
+  //
+  // `gridRendered` mirrors PART B's own condition exactly. If the ternary below
+  // ever gains a branch, this has to move with it — that coupling is the reason
+  // the predicate is named here rather than inlined twice.
+  const showMatrixSkipLink = shouldRenderSkipLink({
+    loading,
+    projectKey,
+    gridRendered: visibleDirectives.length > 0 && matrixRows.length > 0,
+    hasFindings,
+    isAdmin,
+    visibleBrandCount: visibleBrands.length,
+    renderedDirectiveCount: matrixRows.length,
+  });
+
   const projectLabel = projects.find((p) => p.jira_project_key === projectKey)?.display_name ?? projectKey;
   // Move targets. `projects` already holds ACTIVE projects only (initialLoad
   // filters is_active), which matters: the route rejects a move to an inactive
@@ -1849,6 +1873,66 @@ export default function ClientLibraryPage() {
                with its own keyboard path, and this handler only ever REMOVES a
                purely decorative state. There is nothing here for a keyboard user
                to reach that they cannot reach by activating a header again. */
+            <>
+            {/* Batch G7 — THE SKIP LINK. Sits immediately before the scroll
+                region, so one press clears every stop inside it: the 13 brand
+                headers first (they are real buttons and they do cost 13 stops)
+                and then a cell per rendered cell — 1,092 under defaults on
+                2026-08-23, 84 directives x 13 visible brands.
+
+                ⚠ THAT FIGURE IS NOT A CONSTANT AND MUST NOT BECOME ONE. Like
+                for like (default view, x 13 visible brands): 1,118 on 08-14 with
+                86 rows, 1,092 on 08-23 with 84. A net 2-row drop, and NOT
+                monotonic — 86 (08-14), 87 (08-18, one created), 84 (08-23, three
+                archived). The `x 16` paused-shown numbers (1,312 / 1,376) and the
+                rendered-CELL count (1,377) are DIFFERENT QUANTITIES; splicing
+                them into one series is how this comment's first draft read a
+                3-directive cause off a 2-row delta. §13 r43: re-derive at write
+                time, and state which quantity.
+
+                WHY THIS EXISTS: restyle batch 3 removed `<button disabled>` from
+                the cells, correctly — a disabled control kills hover, focus and
+                tooltip for exactly the read-only viewer the readout exists for.
+                Its consequence is that a read-only keyboard user, who could
+                previously Tab past the whole table in one press because nothing
+                in it was focusable, now cannot. This restores that.
+
+                IT IS A SIGHTED-KEYBOARD FIX, NOT AN AT ONE. The cell note lives
+                in the accessible name and browse mode does not use Tab. Do not
+                write copy claiming a screen-reader benefit.
+
+                `sr-only focus:not-sr-only` — invisible until focused, then a real
+                visible control. Never permanently visible: this is not new page
+                furniture.
+
+                preventDefault + focus() rather than the bare fragment: in several
+                browsers an href jump scrolls WITHOUT moving focus, which would
+                leave the user's Tab position still inside the grid while the page
+                appeared to move. The href is kept so the control is a real link
+                with a real target for anything that ignores the handler. */}
+            {showMatrixSkipLink ? (
+              <a
+                href={`#${MATRIX_SKIP_TARGET_ID}`}
+                onClick={(e) => {
+                  e.preventDefault();
+                  document.getElementById(MATRIX_SKIP_TARGET_ID)?.focus();
+                }}
+                /* COLOURS ARE TOKENS, NOT `bg-white` / `--f92-orange` (Karen
+                   HIGH, 2026-08-23). Two separate defects in the first draft:
+                   globals.css's dark override is `:root[data-theme="dark"]
+                   .bg-white`, which matches the literal class and NOT the
+                   generated `.focus\:bg-white:focus`, so the focused link stayed
+                   a pure-white box on a #1E2235 card in dark mode; and
+                   --f92-orange on white is 2.76:1, the exact ratio globals.css
+                   cites as the REASON --f92-focus-ring exists. Shipping an
+                   AA-failing control inside an accessibility batch is the
+                   self-defeating kind of defect. --f92-focus-ring on
+                   --f92-surface is 5.18:1 light / 5.80:1 dark. */
+                className="sr-only focus:not-sr-only focus:absolute focus:z-40 focus:m-2 focus:rounded focus:border focus:border-[color:var(--f92-border)] focus:bg-[color:var(--f92-surface)] focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-[color:var(--f92-focus-ring)] focus-visible:ring-2 focus-visible:ring-[color:var(--f92-focus-ring)]"
+              >
+                {MATRIX_SKIP_LINK_LABEL}
+              </a>
+            ) : null}
             <div className="max-h-[65vh] overflow-auto" onClick={() => setHighlightBrandId(null)}>
               <table className="w-full border-collapse text-sm">
                 {/* The header's bottom rule is an inset BOX-SHADOW, not a
@@ -1939,10 +2023,21 @@ export default function ClientLibraryPage() {
                             control needs a tab stop, and the alternatives are a
                             mouse-only feature or a control Tab cannot reach. The
                             only way to have both is a roving tabindex over
-                            role="grid", which is out of scope (G7, recorded
-                            against restyle batch 4) — and these 13 sit at the
-                            very top of the grid, where the already-recorded
-                            skip-the-matrix link would clear them in one press.
+                            role="grid", which is STILL out of scope — G7, board
+                            sequence #2, docs/specs/batch-g7-tab-stops.md §6.
+                            ("recorded against restyle batch 4" was correct until
+                            rev 8 dissolved that batch into two unrelated items.)
+                            These 13 sit at the very top of the grid, so the skip
+                            link ABOVE THE SCROLL REGION clears them in one press.
+                            (Built in that batch. Its three MANUAL acceptance
+                            items — link un-hides on focus, focus actually moves,
+                            next Tab leaves the grid — are the only proof the
+                            feature works, and no test in this repo can stand in
+                            for them; see the spec §5. ✅ ALL THREE RUN BY HAND,
+                            BOTH THEMES, 2026-08-23. That is an OBSERVATION, not
+                            coverage: change the sr-only/focus classes, the
+                            --f92-surface / --f92-focus-ring tokens, or the
+                            anchor's position and no gate here will catch it.)
 
                             stopPropagation is what makes the container's
                             clear-on-click a toggle rather than an
@@ -2523,8 +2618,41 @@ export default function ClientLibraryPage() {
                 </tbody>
               </table>
             </div>
+            </>
           )}
         </Card>
+
+        {/* Batch G7 — THE SKIP TARGET. `tabIndex={-1}` so it is programmatically
+            focusable but adds no tab stop of its own.
+
+            OUTSIDE the Card, and deliberately NOT gated on `hasFindings`. The
+            "Needs action" section renders only when there are open findings,
+            which is the MINORITY path; an anchor that tracked it would send focus
+            nowhere exactly when the page is calmest. It is the target; the
+            findings panel is merely what usually follows it.
+
+            Gated on the SAME predicate as the link — one const, both sites. That
+            structural single-source is the real guarantee they cannot disagree;
+            no unit test can reach it (see lib/client-library/focus-order.ts).
+
+            IT SAYS SOMETHING WHEN FOCUSED (Karen MEDIUM, 2026-08-23). The first
+            draft was an empty self-closing div carrying
+            `focus-visible:outline-none`, which was wrong twice: the batch is a
+            SIGHTED-keyboard fix, so landing focus on a zero-height invisible box
+            gives its whole audience no feedback that the press worked — and the
+            suppression was inert anyway, because globals.css's :focus-visible
+            rule is UNLAYERED and beats Tailwind's utility, so it would have
+            painted a stray orange rule under the Card. Now it mirrors the link:
+            hidden until focused, real text when it is. */}
+        {showMatrixSkipLink ? (
+          <div
+            id={MATRIX_SKIP_TARGET_ID}
+            tabIndex={-1}
+            className="sr-only focus:not-sr-only focus:my-2 focus:text-sm focus:font-medium focus:text-[color:var(--f92-gray)]"
+          >
+            End of the directive matrix
+          </div>
+        ) : null}
         </>
       )}
 
