@@ -8,8 +8,11 @@
 // 2026-07-25 cross-reference of all 65 loaded goal directives against real
 // Convert config exports for the 13 ACTIVE NBLY brands (paused MRR-CA / SHG /
 // WDG deliberately excluded — see the spec's out-of-scope section).
-//   215 cells: 207 upgrades (To do → Done, confirmed live in Convert)
-//            +   8 downgrades (Done → To do, false positives — see below).
+//   212 cells: 205 upgrades (To do → Done, confirmed live in Convert)
+//            +   7 downgrades (Done → To do, false positives — see below).
+//   (Was 215/207/8 before spec addenda 6 + 7 on 2026-07-25; these three comment
+//    sites still said 8 until 2026-08-22. The EXPECTED_* constants and the CSV
+//    were correct throughout — only the prose drifted.)
 //
 // THIS IS AN UPDATE PASS, NOT A CREATE PASS. Every (directive, brand) pair in
 // the CSV already has a cell from the original bulk load. This script:
@@ -291,10 +294,14 @@ function label(status: string): string {
  *
  * Keyed on whether the row carries real Convert coordinates, NOT on the
  * direction of the flip — a deliberate refinement of the spec's "downgrades get
- * the placeholder note" phrasing. Two of the 8 downgrades reference a REAL
+ * the placeholder note" phrasing. ONE of the 7 downgrades references a REAL
  * Convert goal that is archived (MRA "Submits Form Lead - Combined" id
- * 1004101324, MDG "Step 1 | Contact Info | Validation Error Exposure" id
- * 1004117395); writing "no real Convert goal" over those would discard the
+ * 1004101324 — verified against the CSV 2026-08-22: it is the only downgrade
+ * carrying a non-empty convert_id). This said "Two of the 8" and cited MDG
+ * "Step 1 | Contact Info | Validation Error Exposure" id 1004117395 as the
+ * second — but that row was REMOVED by addendum 7 as the resolver-bug false
+ * positive, so the comment was citing the deleted row as a live example.
+ * Writing "no real Convert goal" over the MRA row would discard the
  * archived goal's id from the only forensic trail we keep.
  *
  * Exported for tests: a wrong note here is silent and permanent.
@@ -717,7 +724,7 @@ async function main() {
       );
   }
 
-  // The 8 downgrades, always by name with their reason — a "downgrade" in the
+  // The 7 downgrades, always by name with their reason — a "downgrade" in the
   // diff is an intentional correction here, NOT a bug. Printed even in a
   // no-op re-run so whoever runs this never has to go dig for the reasons.
   // Every CSV row is in `resolved` by this point (unresolved rows hard-fail

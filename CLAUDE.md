@@ -1758,13 +1758,21 @@ reviews. Effort: LG (multi-phase).
     repo yet.
   - **Convert reconciliation backfill — BUILT 2026-07-25, NOT YET RUN** (see §16).
     One-off data pass flipping existing matrix cells to match real Convert config
-    for the 13 active NBLY brands (207 todo→done, 8 done→todo). Data-only; no
-    migration/route/app-code. **Run procedure: the 6-step pre-run checklist is at
-    `docs/batch-012-convert-reconciliation-spec.md` §Pre-run (the batch spec, live
-    authority). A verbatim copy of the original checklist also sits in
-    `docs/claude-archive/CLAUDE-16-2026-07.md`, but that is an r40 history file and
-    **must not be the cited procedure for a production UPDATE** — repointed
-    2026-08-22, Karen H3.** Lacey approves + runs. Not an
+    for the 13 active NBLY brands. **212 CSV rows = 205 todo→done + 7 done→todo**
+    (Lacey-confirmed 2026-08-22 as what executes; re-derived from
+    `scripts/data/convert-reconciliation-backfill.csv` at write time per r43, and
+    matching the script's `EXPECTED_TOTAL/UPGRADES/DOWNGRADES` guards exactly).
+    **This line read `215 / 207 / 8` until 2026-08-22** — the original CSV shape,
+    left stale when spec addenda 6 and 7 corrected it on 2026-07-25 (two MLY rows
+    removed; one MDG row removed as a resolver bug). Data-only; no
+    migration/route/app-code. **Run procedure — the batch spec
+    `docs/batch-012-convert-reconciliation-spec.md`, sections `## 5. Verification`
+    and `## 6. Gate`** (cited by their real names; an earlier repoint invented a
+    `§Pre-run` section that does not exist — Karen re-review HIGH-1). The
+    6-step operator checklist also survives verbatim in
+    `docs/claude-archive/CLAUDE-16-2026-07.md`, but that is an r40 history file
+    and **must not be the cited procedure for a production UPDATE**; it also
+    carries the superseded 215/209/8 counts. Lacey approves + runs. Not an
     E-phase — a data correction riding alongside the E track.
   - **Restyle batch 4 — NOT STARTED. Gate 0 (MEDIUM-6 audit-coverage count) DONE
     2026-08-03**; the probe figures are in
@@ -1803,6 +1811,42 @@ reviews. Effort: LG (multi-phase).
   needs Turnstile (unlike the token-gated Phase B feed). Jenny pre-flight again.
 
 **Convert-reconciliation deferred follow-ons (backlog, from the 2026-07-25 pass):**
+- [ ] **⚠ Convert reconciliation RESOLVER BUG (spec addendum 7) — STATUS AT
+      SOURCE IS UNKNOWN. Do not regenerate that CSV until it is established.**
+      Captured 2026-08-22 on Lacey's instruction; it had no §15 entry before.
+      **The bug:** MDG's Convert export holds **two goals with byte-identical
+      names** — `Step 1 | Contact Info | Validation Error Exposure`, one ACTIVE
+      (`1004115396`) and one ARCHIVED (`1004117395`). The reconciliation tool's
+      exact-match resolver keyed a plain dict by goal **name**, so on a collision
+      the later array entry silently overwrote the earlier. The archived twin
+      won and the pass concluded *"archived → flip to To do"* — while MDG's
+      directive is genuinely Done via the real active goal. It produced a
+      **false downgrade**: a wrong production write, caught only by review.
+      **ESTABLISHED by inspection of this repo, 2026-08-22:**
+      - **The bug is NOT in any code in this repository.**
+        `scripts/backfill-convert-reconciliation.ts` never resolves goals by
+        name — it reads `convert_id` straight from the CSV — and no other file
+        under `scripts/`, `lib/` or `app/` resolves a Convert goal by name.
+      - **The one known output is corrected.** The row was removed, the CSV
+        regenerated to 212/205/7, and its `DOWNGRADE_REASONS` key deleted in the
+        same change so it could not drift. `DOWNGRADE_REASONS` holds 7 keys,
+        matching the CSV (re-counted at write time).
+      - **One other name collision exists** — MOJ `Submits SF Lead - Footer
+        [Contact API]` ×2 — and **both copies are active**, so either resolution
+        yields the same answer. No data impact.
+      **UNKNOWN — stated as unknown, NOT inferred:** whether the resolver itself
+      was ever fixed. **The tool that produced this CSV is not in this
+      repository**, so nothing here can answer it. The 2026-07-25 change
+      corrected the *output*; this repo holds no evidence either way about the
+      *generator*.
+      **Why this matters even though the CSV is now correct:** the spec instructs
+      that a regenerated CSV be re-verified, and the script hard-fails on a shape
+      change. If the resolver is still name-keyed, the next regeneration
+      reintroduces the same class of false downgrade **silently** — a name
+      collision produces a plausible row, not an error.
+      - [ ] Ask whoever owns the reconciliation tool whether the resolver keys on
+            `convert_id` (or `(name, status)`) rather than name alone, and record
+            the answer here.
 - **Unmapped active Convert goals → new directives** — `docs/convert-reconciliation-2026-07-25/unmapped-active.csv`
   lists real, live Convert goals that have NO directive yet (so the backfill
   couldn't touch them). Creating them is a CREATE pass, not a backfill: needs
