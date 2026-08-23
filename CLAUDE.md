@@ -2308,12 +2308,15 @@ batch existed to make this file readable whole by the tool that treats it as
 ground truth. **It did not achieve that on the first pass.**
 
 - **Before:** 631,268 characters. **After the split + the Karen fold + the
-  clause-3 (r42) pass: 152,830.** A **76% reduction**, every invariant intact —
-  and still **2,830 over the 150,000-character tool limit**, and **32,830 over
-  the 120,000 ceiling this batch set for itself in r41.** (This paragraph is
-  part of the number it reports: recording the miss cost ~1,700 characters, and
-  quoting a figure taken before the paragraph existed would have been exactly
-  the stale-count error §16 records twice.)
+  clause-3 (r42) pass: ~153,000.** A **~76% reduction**, every invariant intact —
+  and still **over the 150,000-character tool limit**, and well over the 120,000
+  ceiling this batch set for itself in r41.
+  **The exact figure is deliberately NOT written here.** This paragraph is part
+  of what it would measure, so every correction moved the number it quoted — a
+  fixed point, and chasing it is how a stale count gets written down. **The live
+  number is the `[claude-md]` line from `npm run build` (prebuild, r41), which
+  measures at run time and also names the section that grew.** Read that, not a
+  figure in prose.
 - **Jenny's round-2 projection was ~106,490.** It assumed §15 would reach a
   34,000-character budget. §15 finished the first pass at 74,120 and the
   clause-3 pass at **59,172**. The budget was never reached and, on the evidence,
