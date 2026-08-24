@@ -334,4 +334,118 @@ every other route does.** Say so rather than implying coverage.
 
 ## 8. Post-mortem
 
-*(Written at ship. Stays HERE, per route (b) — CLAUDE.md §15 gets a pointer.)*
+**SHIPPED + PUSHED + DEPLOYED 2026-08-24. Prod `e58cf7b`, run #49.** Two commits
+(`9c69454` spec, `e58cf7b` build). No migration, no Jenny, no version bump.
+`/api/health` verified against the pushed tip; because `deploy` now carries
+`needs: test`, a deployed SHA is itself proof the suite passed.
+
+Stays HERE, per route (b) — CLAUDE.md §15 gets a pointer only. **This section is
+why route (b) exists: it would have cost CLAUDE.md ~6k of its remaining 2k.**
+
+### 8.1 What shipped
+
+`lib/client-library/change-log.ts` (pure logic, 31 tests),
+`components/reports/change-log-report.tsx` (the panel), a 10-line mount in
+`app/dashboard/reports/page.tsx`, and a **`typecheck` script** in `package.json`.
+**430 tests** repo-wide. Read-only; zero tab stops added to the Pulse matrix.
+
+### 8.2 ⚠ THE HEADLINE: KAREN'S TWO CRITICALS WERE BOTH VERIFICATION CLAIMING MORE THAN IT HAD
+
+Neither was a coding mistake. **Both were the batch asserting it had checked
+something it had not** — G5a, and the second consecutive batch to produce
+instances of it at post-flight.
+
+**C1 — a fabricated 0% presented as verified fact.** `audit_log`'s only SELECT
+policy is `is_admin()`; there are three active read-only users. RLS filters the
+`count:'exact'` query and the paged read **identically to zero, with no error**, so
+the completeness check *passed* and the panel rendered *"0 of 639 finished cells
+(0.0%) have an exact resolve date"* with 639 rows reading "no audit trail" — every
+one of which has one.
+
+Three things had to line up, and all three were things this batch was proud of:
+
+1. §6 asserted the panel *"shows nothing a Pulse viewer cannot already see."*
+   **False** — `audit_log` is the one table on it they cannot see.
+2. §4 asked for the degraded state to **look deliberate rather than like a
+   failure**, which is exactly what made the failure invisible.
+3. A test — *"zero rows verified against zero is a valid complete read"* —
+   **encoded the bug as intended behaviour.** It was the most consequential line
+   in the file.
+
+> **LESSON, GENERAL:** *"read-only" is not "readable by everyone."* **A permission
+> question about a panel must be asked per TABLE, not per route.** And a
+> completeness check comparing two numbers from the same filtered source cannot
+> detect that the filter is the problem.
+
+**C2 — `npm test` is not the gate.** Five strict-null errors in the new test file.
+`tests/` **is** typechecked by `next build` (tsconfig includes `**/*.ts`, no
+`ignoreBuildErrors`), but `npm test` runs under `tsx`, **which strips types**. CI
+would have gone **green on the test job and red on deploy.** Zero such errors in
+the 22 pre-existing test files — a fresh regression.
+
+> **LESSON:** the test gate added in the G7 batch does **not** cover the gate that
+> blocks a push. `typecheck` script added; **wiring it into CI is still owed** (one
+> line in `deploy.yml`). Deliberately NOT folded into `npm test`, because a
+> full-repo `tsc` could not be run from the authoring environment and a red
+> `npm test` behind `needs: test` blocks **every** deploy — introducing that blind
+> is the same class of mistake as the one being fixed.
+
+### 8.3 The four HIGHs
+
+- **H1 — a guard on presentation is not a guard on classification.** The build
+  took the latest per-cell row regardless of `field_name`, so a later **note**
+  edit became the exact resolve date. Real row `ea9cd7c5`: resolved
+  **2026-07-25 by a script**, rendered **"Jul 29, 2026", exact, no qualifier, By:
+  "Manual"**. Wrong date, wrong actor, no marker — the §4 violation the module's
+  own header called structurally unreachable. It entered through classification;
+  by the time `resolveDisplay()` saw it, the moment was already labelled exact.
+  **This is the most transferable finding in the batch.**
+- **H2 — a false cause stated as fact in the UI.** "Cells resolved before per-cell
+  history existed" — per-cell history began 07-17 and was writing on 07-22, and
+  all 252 degraded cells sit in a **0.4-second** window on 07-22. A bulk load that
+  did not write audit rows. There is **no trigger** on
+  `directive_brand_status`; audit rows come from application code.
+- **H4 — the G7 HIGH, repeated in form, ten lines after §1.3 warned against it.**
+  §1.2 said *"27 in the last 3 days."* **`2026-08-21` alone is 27.** Understated
+  the rate ~3×. The warning being present and specific did not prevent it.
+- **H5** — **252** used for two unrelated quantities in adjacent sections, one
+  unlabelled.
+
+### 8.4 Silent-failure fixes worth keeping
+
+- An **over-read** killed the whole panel — one ordinary save between count and
+  read — with a message explaining a *short* read. Only `received < expected`
+  fails now; an over-read cannot hide rows.
+- `count` is **`NaN`, not `null`**, when the content-range header is absent
+  (supabase-js does `parseInt`). The `expected === null` branch was **dead against
+  the real client**, and users saw *"the exact count is NaN"*.
+- A `head:true` error carries an **empty `message`** — the banner rendered
+  "count failed — " with nothing after it. `status`/`statusText` now used.
+- The 60vh scroll region had **zero focusables and no tab stop**: hundreds of rows
+  unreachable by keyboard. The matrix page's documented escape hatch does not
+  apply where there are no controls at all.
+- Sticky `<th>` had no header rule — the exact `border-collapse` + `position:
+  sticky` defect the matrix page documents and fixed with an inset box-shadow.
+
+### 8.5 What is NOT covered, stated rather than implied
+
+- **`readAllVerified` is untested and cannot be unit-tested** — it needs a live
+  PostgREST, and the repo has no integration harness. **C1, the `NaN` bug and the
+  over-read bug all lived in that one function**, while `actorLabel()` — dead in
+  production — sat in `lib/` with tests around it. **The extraction was applied
+  backwards:** §7's rule caught the trivial half.
+- Acceptance §7.2 as first written was **unsatisfiable**, and signing it off
+  anyway would have been the G5a mechanism. Replaced.
+- **`--f92-navy` on a card fails AA in dark mode (2.59:1)** — pre-existing, three
+  prior instances on the same page. Filed, not fixed; the remedy is an app-wide
+  token change.
+- **§16 shipped entries are owed for BOTH this batch and G7.** §16's index is
+  script-generated (`npm run archive:index`, with `archive:index:check` failing on
+  staleness), so hand-editing it risks the check. Not attempted here.
+
+### 8.6 Route (b) validated
+
+The spec absorbed ~6.4k chars of post-flight detail. **CLAUDE.md went DOWN 337
+chars** when §15's block became a pointer and its stale figures left with it —
+against G7, which put 4,744 chars in and consumed 70% of the extraction pass's
+margin. **Do this for #4.**
