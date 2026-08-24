@@ -79,8 +79,8 @@ the bounded middle.
  ✅  SECOND EXTRACTION PASS    manual   —          SHIPPED 2026-08-23
  2   G7 TAB-STOPS              auto     —          ← this pass; see §15
  ✅  CHANGE LOG WIDGET         auto     —          SHIPPED 08-24 (e58cf7b)
- 4   DATA INSIGHTS             accept   —
- 5   006 TEAMS DISPATCH        accept   —          no longer blocked
+ ⏸  DATA INSIGHTS             accept   —          DEFERRED 08-24 (premise fails)
+ 5   006 TEAMS DISPATCH        accept   —          ← next up
  6   010.1 REMAINDER           accept   #5
  7   CLICKUP PHASE 2/3         manual   #5 · Jenny
  8   CONVERT DIRECT READ       accept   —          supersedes 012 E2

@@ -1,6 +1,7 @@
 # CQIP Batch Priority Outline
 
-**Updated:** 2026-08-24 (rev 8.5 — **BATCH #3 CHANGE LOG WIDGET SHIPPED + DEPLOYED**, prod `e58cf7b`, run #49; sequence head is now **#4 Data insights**; ⚠ **Karen's two CRITICALs were both VERIFICATION claiming more than it had** — two new standing lessons)
+**Updated:** 2026-08-24 (rev 8.6 — **#4 DATA INSIGHTS DEFERRED, its premise does not hold on current data**; sequence head is now **#5 006 Teams dispatch**)
+**Previous:** rev 8.5 (2026-08-24 — batch #3 change log widget shipped + deployed, prod `e58cf7b`, run #49; Karen's two CRITICALs were both verification claiming more than it had)
 **Previous:** rev 8.4 (2026-08-24 — r41's ceiling amended to 150,000, §16-index trade rejected; the amendment bought no room)
 **Previous:** rev 8.3 (2026-08-23 — **BATCH #2 G7 TAB-STOPS SHIPPED + DEPLOYED**; CI now runs the tests and gates the deploy; the directive count moved again and DOWN)
 **Supersedes:** rev 8.3, 8.2, 8.1 (2026-08-22) and rev 7 (2026-08-19). **Delete rev 7, 8.1, 8.2 and the rev-8 DRAFT from project knowledge — this file replaces all of them.**
@@ -348,8 +349,8 @@ The **MODE** column is the agent-autonomy setting, not a difficulty rating.
  ✅  SECOND EXTRACTION PASS    manual   —          SHIPPED 2026-08-23
  ✅  G7 TAB-STOPS              auto     —          SHIPPED + DEPLOYED 2026-08-23 (2ad78bb)
  ✅  CHANGE LOG WIDGET         auto     —          SHIPPED + DEPLOYED 2026-08-24 (e58cf7b)
- 4   DATA INSIGHTS             accept   —          ← HEAD OF THE OPEN SEQUENCE
- 5   006 TEAMS DISPATCH        accept   —          NO LONGER BLOCKED
+ ⏸  DATA INSIGHTS             accept   —          DEFERRED 08-24 — premise fails on data
+ 5   006 TEAMS DISPATCH        accept   —          ← HEAD OF THE OPEN SEQUENCE
  6   010.1 REMAINDER           accept   #5
  7   CLICKUP PHASE 2/3         manual   #5 · Jenny
  8   CONVERT DIRECT READ       accept   —
@@ -568,7 +569,84 @@ not a foundation to build on — this is ground-up.
   **Check for collision before scoping either.**
 - Scope after the split's second pass lands.
 
-### NEW — Data insights (sequence #4)
+### ⏸ DEFERRED 2026-08-24 — Data insights. THE PREMISE DOES NOT HOLD ON CURRENT DATA.
+
+**Decision: Lacey, 2026-08-24. Not dropped, not blocked — DEFERRED, and it gets
+cheaper and better by waiting.** Probed before any spec was written; nothing was
+built.
+
+**The batch's whole premise is period-over-period distribution shifts. There are
+not two comparable periods.** 100 live logs (131 total, 31 deleted), of which
+**68** carry `issue_category`:
+
+```
+month     logs   classified          quarter    logs   classified
+2025-11      5      5                2025-Q4      31      28
+2025-12     26     23                2026-Q1       6       6
+2026-01      6      6                2026-Q2      37      18
+2026-02      —      —   no logs      2026-Q3      26       4   ←
+2026-03      —      —   no logs
+2026-04      5      4
+2026-05     12      9
+2026-06     20      5
+2026-07     15      1   ←
+2026-08     11      3   ←
+```
+
+**⚠ QUARTERLY AGGREGATION DOES NOT RESCUE IT — CHECKED, NOT ASSUMED.** The most
+recent quarter is **n=4** against ten categories. The spec's own small-n
+suppression rule would suppress every recent period, so the widget would render
+counts and no percentages for exactly the months anyone wants to compare. **The
+best month in the entire series is 2025-12 at 23**, and nothing else exceeds 9.
+
+**⚠ AND THE VALUES ARE THIN EVEN IN AGGREGATE.** Ten `issue_category` values
+across 68 classified logs: `CRO Implementation` 20 · `Process/ Communication` 10 ·
+`Experiment Configuration` 8 · `Client Website Code` 8 · `Experiment Concept` 7 ·
+`Client Request` 7 · `Client Data/Feed` 2 · `External Factor` 2 ·
+`Third Party Tool` 1 · `Missing Information / Access` 1. Split by period, most
+cells are 0–2.
+
+### ⚠ THE CAUSE IS A QUEUE, NOT A DATA PROBLEM — AND THAT IS THE USEFUL FINDING
+
+Classification coverage tracks `log_status` almost exactly:
+
+| `log_status` | Logs | Classified | |
+|---|---|---|---|
+| Resolved | 63 | **54** | 86% |
+| Pending Verification | 33 | **2** | 6% |
+| Open | 3 | 0 | — |
+| Blocked | 1 | 0 | — |
+
+**Classification happens at RESOLUTION, and 37 of 100 live logs are unresolved —
+every one of them since 2026-06-03.** So the recent months are not showing a
+distribution shift; they are showing work that has not been classified yet.
+**Any insight built today would read a queue as a trend**, which is precisely the
+failure the batch's own "every insight names its denominator" rule exists to
+prevent.
+
+**UNPARKS ON A REACHABLE TRIGGER — deliberately not a volume threshold.** *The
+Pending Verification backlog falls below 10.* That yields ~30 newly classified
+logs and makes 2026-06/07/08 comparable for the first time. **A
+"≥25 classified per month" style trigger was considered and REJECTED as
+unreachable** — recent volume is 11–20 logs/month total, so it would need volume
+to roughly double, and an unreachable trigger reads as actionable and is not,
+which is exactly how r41's 120,000 ceiling failed.
+
+**COUPLING — this is the AI classifier's case, restated in data.** The classifier
+section already records that its real value is forward-looking and that the **free
+Rovo-by-hand path has never been tried**. Hand-classifying ~35 logs would clear
+the backlog AND supply #4's missing denominator in one pass. Same upstream cause
+as the filed-not-fixed item that `root_cause_initial` is empty on 74/83
+webhook-created logs because the Jira QA tab is cleared at sendback.
+
+**THE BUILDABLE-TODAY ALTERNATIVE, offered and not taken:** an **all-time
+distribution with no period comparison**, honest about n. Genuinely small and
+real, but it is not what this batch was scoped for, and shipping it would consume
+the name.
+
+---
+
+### NEW — Data insights (ORIGINAL SCOPE, retained — see the deferral above)
 
 For **Lacey and the CRO team internally** — not leadership decks, not
 client-facing. **That scoping is what keeps it small.**
@@ -920,6 +998,7 @@ than unilateral. Flagged here so it is owed on the record rather than remembered
 
 ## CHANGE LOG
 
+- **2026-08-24 (rev 8.6)** — **#4 DATA INSIGHTS DEFERRED (Lacey). Its premise does not hold on current data, and this was found by probing BEFORE a spec was written — nothing was built.** The batch is period-over-period distribution shifts, and **there are not two comparable periods.** Of 100 live logs, 68 carry `issue_category`, but the recent months run **20→5, 15→1, 11→3**, and **quarterly aggregation does NOT rescue it — checked, not assumed: 2026-Q3 is n=4** against ten categories. The best month in the whole series is 2025-12 at 23 and nothing else exceeds 9; ten category values across 68 logs leave most per-period cells at 0–2. So the spec's own small-n suppression rule would suppress every period anyone wants to compare. **⚠ THE CAUSE IS A QUEUE, NOT A DATA PROBLEM, AND THAT IS THE USEFUL FINDING:** coverage tracks `log_status` almost exactly — **Resolved 54/63 classified (86%) vs Pending Verification 2/33 (6%)** — so classification happens at resolution, and **37 of 100 live logs are unresolved, every one since 2026-06-03.** The recent months are not a distribution shift; they are unclassified work. **An insight built today would read a QUEUE as a TREND** — exactly the failure the batch's own "every insight names its denominator and its date" rule exists to prevent. **UNPARKS ON A REACHABLE TRIGGER: the Pending Verification backlog falls below 10** (~30 newly classified logs, making 06/07/08 comparable). **A "≥25 classified per month" trigger was CONSIDERED AND REJECTED as unreachable** — recent volume is 11–20 logs/month total, so it needs volume to double, and an unreachable trigger reads as actionable and is not, which is how r41's 120,000 ceiling failed. **COUPLING: this is the AI classifier's case restated in data** — the free Rovo-by-hand path has never been tried, and hand-classifying ~35 logs would clear the backlog and supply #4's denominator in one pass; same upstream cause as `root_cause_initial` being empty on 74/83 webhook-created logs. **The buildable-today alternative — an all-time distribution with no period comparison — was offered and NOT taken**, because it is not what the batch was scoped for and shipping it would consume the name. **Sequence head moves to #5, 006 Teams dispatch** (accept-with-edits, no dependencies).
 - **2026-08-24 (rev 8.5)** — **BATCH #3, THE CHANGE LOG WIDGET, SHIPPED + PUSHED + DEPLOYED. Prod `e58cf7b`, run #49.** A read-only panel on `/dashboard/reports` — **not** the matrix page, because G7's standing gate forbids adding a focusable surface there until `role="grid"` is decided, and `CellEditStrip` is E3's seam. Two commits, no migration, no Jenny, no version bump, **430 tests**, and a **`typecheck` script** added. **⚠ KAREN POST-FLIGHT: 2 CRITICAL + 4 HIGH + 11 MEDIUM, ALL FIXED PRE-PUSH — AND BOTH CRITICALs WERE VERIFICATION CLAIMING MORE THAN IT HAD, NOT CODING MISTAKES.** That is the second consecutive batch to produce G5a instances at post-flight, and the QMS review was amended for it. **C1: a FABRICATED 0% PRESENTED AS VERIFIED FACT.** `audit_log`'s only SELECT policy is `is_admin()` and there are three active read-only users; RLS filtered the `count:'exact'` query and the paged read **identically to zero with no error**, so the completeness check PASSED and the panel rendered *"0 of 639 finished cells (0.0%) have an exact resolve date"* with 639 rows reading "no audit trail" — every one of which has one. **Three things the batch was proud of had to line up:** the spec's §6 asserting the panel "shows nothing a Pulse viewer cannot already see" (false — `audit_log` is the one table they cannot see); §4's instruction to make the degraded state *look deliberate rather than like a failure*, which is what hid it; and **a test — "zero rows verified against zero is a valid complete read" — that encoded the bug as intended behaviour.** **NEW STANDING LESSON: "read-only" is NOT "readable by everyone" — ask the permission question per TABLE, not per route**, and a completeness check comparing two numbers from the same filtered source cannot detect that the filter is the problem. **C2: `npm test` IS NOT THE GATE.** Five strict-null errors in the new test file; `tests/` IS typechecked by `next build`, but `npm test` runs under `tsx` **which strips types**, so CI would have gone **green on the test job and red on deploy** — the gate added in the G7 batch does not cover the gate that blocks a push. `typecheck` script added; **CI wiring still OWED** (one line, `.github/**` is in `paths-ignore` so it does not deploy). Deliberately NOT folded into `npm test`: a full-repo `tsc` could not be verified from the authoring environment, and a red `npm test` behind `needs: test` blocks every deploy. **H1 — NEW STANDING LESSON, the most transferable finding: A GUARD ON PRESENTATION IS NOT A GUARD ON CLASSIFICATION.** §4's structural guard made an approximate date unrenderable as exact, and a later **note** edit still became the exact resolve date because it was mislabelled upstream of the guard — real row `ea9cd7c5`, resolved **2026-07-25 by a script**, rendered **"Jul 29, 2026", exact, no qualifier, By: "Manual"**. Wrong date, wrong actor, no marker, inside the module whose own header called that unreachable. **H2** — the UI stated a false cause as fact ("cells resolved before per-cell history existed"); per-cell history began 07-17 and all 252 degraded cells sit in a **0.4-second window on 07-22** — a bulk load that wrote no audit rows, and there is **no trigger** on `directive_brand_status`. **H4 — THE G7 HIGH, REPEATED IN FORM, TEN LINES AFTER THE SPEC WARNED AGAINST IT:** §1.2 said "27 in the last 3 days" when **08-21 alone is 27**, understating the rate ~3×. **A specific, present warning did not prevent it.** **H5** — 252 used for two unrelated quantities in adjacent sections. **SILENT-FAILURE FIXES WORTH KEEPING:** an over-read killed the whole panel on one ordinary mid-load save, with a message describing a *short* read; `count` is **NaN, not null**, when the content-range header is absent, so the fail-closed branch was **dead against the real client** and users saw "the exact count is NaN"; a `head:true` error carries an **empty message**, rendering "count failed — "; the 60vh scroll region had **zero focusables and no tab stop**, leaving hundreds of rows keyboard-unreachable; and the sticky `<th>` lacked the inset-box-shadow header rule the matrix page documents. **NOT COVERED, STATED RATHER THAN IMPLIED:** `readAllVerified` is untested and cannot be unit-tested without a live PostgREST — **C1, the NaN bug and the over-read bug all lived in that one function**, while `actorLabel()`, dead in production, sat in `lib/` with tests around it. **The extraction rule was applied backwards; it caught the trivial half.** Also filed not fixed: `--f92-navy` on a card fails AA in dark at **2.59:1** (pre-existing, three prior instances on the page). **RIDE-ALONG: §0's `Prod right now` stanza was TWO BATCHES STALE at `ab70878`** while G7 and this batch had both shipped — the same stanza, the same defect the 08-23 pass caught. It is the file's self-declared only current-state claim. **FIGURES RE-DERIVED TWICE IN ONE DAY** and both re-derivations are recorded rather than overwritten, because the rate of staleness is itself the finding: `audit_log` 1,690 → **1,743**, done cells 620 → **639**, per-cell coverage → **387 (60.6%)**, degraded path **252 (39.4%)**, and the **`directive`-target count (278) was missing from the first draft entirely** despite being the whole basis of the degraded path.
 - **2026-08-24 (rev 8.4)** — **r41's CEILING DECIDED (Lacey): amend to 150,000 as the WORKING ceiling; the §16 archive-index trade was considered and REJECTED.** 120,000 is **retired as unreachable, not softened** — everything outside §13/§15/§16 totalled **29,798** at `ab70878`, so extracting every remaining section whole still left the file over it, and two passes ran against that figure with both recorded as misses. **A ceiling no permitted remedy can reach is a standing failure report rather than a bound**, and its practical effect was to generate extraction passes instead of limiting growth. 150,000 is the **tool read limit**, so breaching it makes §0's own "read this file completely" inexecutable — the failure the rule actually exists to prevent. **⚠ AND THE AMENDMENT BOUGHT NO ROOM, WHICH CORRECTS WHAT WAS IMPLIED WHEN THE OPTION WAS OFFERED:** 147,921 → **148,205**, so headroom is **~1,795** against G7's **4,744** of doc obligations. **The first draft of the amendment came within 271 chars of tripping the ceiling it was setting** — recorded because it is the cleanest available measurement of the refill problem, and because the fix was to relocate its own rationale here, which is r42 applied to the amendment itself. **THE SPACE PROBLEM IS THEREFORE STILL OPEN AND IS NOW #3's FIRST QUESTION,** with three routes: a third extraction pass before #3 starts; **#3's spec and post-mortem living entirely in `docs/specs/` with §15 carrying pointers only** (r42 applied pre-emptively rather than as cleanup — cheapest, and what G7 should have done, since most of G7's 4,744 was narrative a later pass would relocate anyway); or revisiting the §16 trade. **Refill rate, as a number because it keeps being guessed: the 08-23 pass bought 6,823 chars and the next batch spent 4,744 — a pass buys about one and a half batches.** Also recorded: the rev-8 DRAFT should be **deleted from project knowledge** — four revisions stale and internally wrong (it places the Change Log widget at #7 where every current doc says #3).
 - **2026-08-23 (rev 8.3)** — **BATCH #2, G7 TAB-STOPS, SHIPPED + PUSHED + DEPLOYED. Prod `2ad78bb`, run #48.** Two commits (`f8d5f28` spec, `2ad78bb` code); no migration, no Jenny, no version bump. A **skip-the-matrix link** plus an **end-of-matrix anchor**, gated on **one shared const**; focus-order logic extracted to `lib/client-library/focus-order.ts` with 23 `node:test` cases. **`role="grid"` + roving tabindex was explicitly NOT decided** and its gate stands: *decide it before adding another focusable surface to that page.* **THE SECOND DELIVERABLE IS ARGUABLY THE LARGER ONE — CI NOW RUNS THE TESTS.** Before run #48, 22 test files ran only when someone remembered; `deploy` now carries `needs: test`, so a deployed SHA is itself proof the suite passed. **399/399.** **FIGURES RE-DERIVED, AND THE GRID SHRANK:** active directives **87 → 84**, archived **1 → 4**, giving **1,092 cell stops + 13 brand-header stops = 1,105** in the default view (1,360 paused-shown). **G7's own `~1,300` is RETIRED** — it was a `× 16` product from 07-31 and never comparable to a default-view figure. **NAME THE QUANTITY OR THIS BREAKS AGAIN:** default-view stops (`× 13`), paused-shown stops (`× 16`) and rendered *cells* (`× 16 + 1`) are three different numbers; like for like the series is **1,118 (08-14) → 1,092 (08-23)**, a 2-row delta, **non-monotonic** (87 on 08-18). **⚠ NEW AND PREVIOUSLY UNRECORDED: 64 cells are held by archived directives, up from 16** — invisible to matrix search, counting 0 toward `hiddenByStatus`. Karen's LOW-8 consequence quadrupled, and **it grew with no code change at all**; nothing on this board noticed. Filed, not fixed. **KAREN POST-FLIGHT: 4 HIGH + 6 MEDIUM, ALL FIXED PRE-PUSH — AND TWO OF THE HIGHs WERE THE BATCH'S OWN CLAIMS, NOT ITS CODE.** (1) A **fabricated series**: `1,377`, the 08-14 rendered-*cell* count, spliced into a default-view series, with a 3-directive cause read off a 2-row delta — **inside the batch whose own comments cite r43 four times.** (2) **The new control failed WCAG AA**: `focus:bg-white` never receives globals.css's dark override (that rule matches the literal class; the generated selector is `.focus\:bg-white:focus`), so the focused link was a white box on a `#1E2235` card, and `--f92-orange` on white is **2.76:1** — the exact ratio globals.css names as the reason `--f92-focus-ring` exists. **An AA-failing control inside an accessibility batch.** Both are G5a instances 4 and 5; see the QMS review, amended the same day. The remaining two HIGHs: the CI half was unwritten while the spec read as delivered, and a **test that could not fail** — a `shouldRenderSkipTarget()` helper plus a 32-state exhaustive assertion that it matched `shouldRenderSkipLink()`, both the same expression, presenting as proof of the batch's headline invariant. **Deleted rather than kept as ceremony**, and the spec now states that the real guarantee is structural (one const, two JSX sites) and unreachable from a unit test. **THE PUSH WAS MIS-READ ONCE, AND THAT IS THE PROCESS ENTRY WORTH KEEPING:** the first push looked successful — clean `git push`, green Actions page — while the code commit had **silently never been made**, so 47 runs and a green page meant "docs-only skip", not "shipped". **The reflog caught it; the SHA could not.** As of run #48 `/api/health` can no longer distinguish *tests red* from *nothing fired* from *still building* — **the Actions log is not optional any more.** **RIDE-ALONGS:** CLAUDE.md §15's unchecked *"the matrix renders `<button disabled>` to non-admins"* **STRUCK — it was FALSE and asserted the INVERSE of shipped source**, and removing that `disabled` is what created G7; `batch-012-pulse-restyle-3-spec.md` §2.6 **amended** with DC's 2026-08-03 "neither `disabled` nor `aria-disabled`" decision, because PROCESS tells readers to cite specs by section number and §2.6 was issuing an instruction the codebase had rejected; **that spec's §1 struck too**, a second copy of the same falsified claim sitting under *"What is true today — verified against source"*; and the `"recorded against restyle batch 4"` pointer in `page.tsx` corrected to the board sequence number. **⚠ THE VERIFICATION RESIDUE, STATED BECAUSE NOTHING RE-CHECKS IT:** acceptance items 1–3 passed **by hand, both themes, by Lacey** — a **HAND-RUN OBSERVATION, NOT COVERAGE**, the same distinction §15 draws for the 409 runbook's Scenario A. The harness models focus **order**; a link that never appears passes all 23 tests. **⚠ `CLAUDE.md` IS AT 147,921 — 2,079 UNDER THE TOOL LIMIT.** The second pass left 6,823 of headroom this morning and **G7 spent 4,744 of it**, which is the honest measure of that pass's durability: one ordinary batch consumed 70% of the margin. **r41's ceiling decision is now the nearest thing on this board to a hard blocker.** **`CROSS_CLAUDE.md` STILL OWED and now THREE batches behind** — footer 2026-07-17, §6 entries through 08-08, §5 last locked 07-15, and **its §5 board contains no G7 at all**, so a session told by R17 to read it at start sees a board this item never existed on. Per CC7, coordinated and not unilateral.
