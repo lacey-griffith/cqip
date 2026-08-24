@@ -16,6 +16,7 @@ import { ScorecardReport } from '@/components/reports/scorecard-report';
 import { RootCauseReport } from '@/components/reports/root-cause-report';
 import { ClientReport } from '@/components/reports/client-report';
 import { BrandWellnessReport } from '@/components/reports/brand-wellness-report';
+import { ChangeLogReport } from '@/components/reports/change-log-report';
 import { SyncJiraButton } from '@/components/dashboard/sync-jira-button';
 import { BrandSelector, BRAND_SELECTOR_ALL } from '@/components/filters/brand-selector';
 import type { DateRange } from '@/components/reports/common';
@@ -453,6 +454,15 @@ export default function ReportsPage() {
       {/* Brand Wellness — self-contained (own brand picker + range toggle, NOT
           the ReportKind union / reportCards). Batch 005.2 re-homes this. */}
       <BrandWellnessReport />
+
+      {/* Change log (batch #3) — self-contained in the same sense: own project
+          picker, own verified fetch, NOT the ReportKind union.
+
+          HERE AND NOT ON THE MATRIX PAGE, deliberately: G7's standing gate says
+          decide the role="grid" roving-tabindex question before adding another
+          focusable surface to a page already carrying 1,105 tab stops, and
+          `CellEditStrip` is 012 Phase E3's designated seam. Spec §6. */}
+      <ChangeLogReport />
 
       <div className="cqip-skip-in-print rounded-3xl border border-[color:var(--f92-border)] bg-white p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-[color:var(--f92-navy)]">Custom filter &amp; export</h2>

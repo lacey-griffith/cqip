@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test tests/*.test.ts",
     "import:csv": "tsx scripts/import-csv.ts",
     "fix:dates": "tsx scripts/fix-dates.ts",
