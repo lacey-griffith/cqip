@@ -1559,27 +1559,23 @@ reviews. Effort: LG (multi-phase).
         it carries seven stale tokens across four numbers plus a step 6 that
         addendum 6 had already resolved. The three-repoint history is in
         `docs/claude-archive/CLAUDE-16-2026-08.md` (r42).
-  - **Change Log widget — board sequence #3, UNBLOCKED 2026-08-22.** Was
-    "restyle batch 4", which board rev 8 DISSOLVED into this and G7 tab-stops.
-    Gate 0 (MEDIUM-6 audit-coverage count) DONE 2026-08-03; the probe figures
-    are in `docs/claude-archive/CLAUDE-16-2026-08.md` (r42). Three constraints
-    bind:
-    - [ ] **Use `fetchAllPaged()` from the outset.** The widget is a NEW
-          `audit_log` read and `audit_log` is already over the PostgREST
-          1,000-row cap.
-    - [ ] **Render the degraded path as the load-bearing half, not an edge
-          case** — only **52.7%** of done cells hold a per-cell audit row. The
-          **255 of 539** without one render as **"Resolved — date unknown"**,
-          showing the directive-level date **marked approximate** (Lacey,
-          2026-08-22). **Never substitute that date without the marker** — that
-          would make 47% of the widget quietly wrong in one direction.
-    - [ ] **Keep attribution to script vs human only — NOT which human pass.**
-          Every UI edit writes `changed_by = l.hay@fusion92.com`; copy claiming
-          finer provenance is unsupported by the data.
-    **RE-PROBE, never scale an old ratio** — these counts have moved on every
-    re-probe, three times running. Group by `project_key` **and** filter on
-    `status` before computing anything: a cross-project product is meaningless,
-    and one pass of it reported "98 missing cells" against two complete grids.
+  - [ ] **Change Log widget — board sequence #3. SPEC LANDED:
+        `docs/specs/batch-change-log-widget.md`** — cite it by section number.
+        **These three lines are a POINTER, not the authority** (route (b),
+        2026-08-24: this batch's detail and post-mortem live in the spec, so §15
+        does not carry them).
+        - **Gate 0 RE-DERIVED 2026-08-24 and THREE BOARD FIGURES WERE WRONG.**
+          Done cells **539 → 620**, per-cell coverage **52.7% → 59.4%**, degraded
+          path **255 → 252**. Spec §1.
+        - ⚠ **THE DEGRADED PATH IS SHRINKING AND ITS ABSOLUTE SIZE IS FROZEN** —
+          +81 done cells, −3 uncovered, so nearly every NEW done cell gets a
+          per-cell row. It is a fixed historical backlog, **never reaches zero**,
+          and is therefore **permanent UI, not a transitional state.** Spec §1.1.
+        - ⚠ **PLACEMENT IS THE OPEN DECISION** — recommended
+          `/dashboard/reports`, NOT the matrix page, because **G7's standing gate
+          forbids adding another focusable surface there** until `role="grid"` is
+          decided, and `CellEditStrip` is E3's seam. Spec §6.
+
   - [ ] **G7 tab-stops — board sequence #2. SPEC LANDED:
         `docs/specs/batch-g7-tab-stops.md`** — cite it by section number; the
         three lines here are a pointer, not the authority.
