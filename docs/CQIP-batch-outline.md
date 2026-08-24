@@ -1,9 +1,45 @@
 # CQIP Batch Priority Outline
 
-**Updated:** 2026-08-23 (rev 8.2 — **BATCH #1 SECOND EXTRACTION PASS SHIPPED**; sequence head is now **#2 G7 tab-stops**; rev 8.1's prose-vs-table numbering contradiction FIXED in four places; four new open items recorded)
-**Supersedes:** rev 8.1 (2026-08-22), which superseded rev 7 (2026-08-19). **Delete rev 7 and rev 8.1 from project knowledge — this file replaces both.**
+**Updated:** 2026-08-24 (rev 8.4 — **r41's CEILING DECIDED: amended to 150,000, §16-index trade NOT taken.** ⚠ **AND THE AMENDMENT BOUGHT NO ROOM** — the file is still ~1,795 from the limit, so #3 is not unblocked by it)
+**Previous:** rev 8.3 (2026-08-23 — **BATCH #2 G7 TAB-STOPS SHIPPED + DEPLOYED**; CI now runs the tests and gates the deploy; the directive count moved again and DOWN)
+**Supersedes:** rev 8.3, 8.2, 8.1 (2026-08-22) and rev 7 (2026-08-19). **Delete rev 7, 8.1, 8.2 and the rev-8 DRAFT from project knowledge — this file replaces all of them.**
 **Canonical source:** CLAUDE.md §15/§16 wins; CROSS_CLAUDE.md §5 mirrors it; this file mirrors both.
-**Current deployed state:** Worker **`ab70878`** — verified via `/api/health` 2026-08-22, matching the pushed tip. **The 2026-08-23 second-extraction-pass push did NOT deploy — VERIFIED in the Actions log, not assumed:** the newest run is **#47 (`ab70878`, 2026-08-22 22:59 CDT)** and nothing fired for HEAD **`00084ef`**, so `paths-ignore` held on an all-`.md` push. **Recorded because the two docs-titled commits before it BOTH DID deploy** — #46 (`d5e5703`, 08-19) and #47 (`ab70878`, 08-22), each carrying a non-`.md` file along. That is the mechanism, and it is why the check is not optional: the commit MESSAGE saying "docs" predicts nothing; the FILE LIST does · **v3.0** · edge function `jira-sync` deployed 2026-08-09 23:22 UTC · **migrations 001–029, ALL APPLIED** (029 verified by direct query in the prod Supabase SQL editor 2026-08-18).
+**Current deployed state:** Worker **`2ad78bb`** — verified via `/api/health` 2026-08-23 23:51 UTC, matching the pushed tip. Run **#48** is the G7 batch and it is **the first run in this repo's history to execute a test job**: `deploy` now carries `needs: test`, so a deployed SHA is itself proof the suite passed. **The G7 spec's own commit (`f8d5f28`) did NOT deploy, correctly** — one `.md` under `docs/`, so `paths-ignore` held; #48 fired on the second commit, which carried `package.json`. **⚠ THE PUSH WAS MIS-READ ONCE AND THAT IS WHY THIS LINE IS LONG:** the first push looked successful — clean `git push`, green Actions page — while the code commit had **silently never been made**. 47 runs plus a green page meant *docs-only skip*, not *shipped*. **The reflog caught it; the SHA could not.** As of #48, prod standing still has THREE possible causes — tests red, nothing fired, still building — and **`/api/health` cannot distinguish them.** The Actions log is no longer optional. · **v3.0** · edge function `jira-sync` deployed 2026-08-09 23:22 UTC · **migrations 001–029, ALL APPLIED** (029 verified by direct query in the prod Supabase SQL editor 2026-08-18); **G7 added no migration.**
+
+**⚠ `CLAUDE.md` IS AT 148,205 CHARS — 1,795 UNDER THE CEILING. THIS IS THE BOARD'S TIGHTEST CONSTRAINT AND THE r41 AMENDMENT DID NOT LOOSEN IT.**
+
+**DECIDED 2026-08-24 (Lacey): amend r41, do not take the §16 trade.** r41 now
+records **150,000 as the WORKING ceiling** and retires 120,000 as unreachable —
+everything outside §13/§15/§16 was **29,798** at `ab70878`, so extracting every
+remaining section whole still left the file over it. Two passes ran against that
+figure and both were recorded as misses. **A ceiling no permitted remedy can reach
+is a standing failure report, not a bound**, and it was generating extraction
+passes rather than limiting growth. 150,000 is the **tool read limit**, so
+breaching it makes §0's "read this file completely" inexecutable — the actual
+failure the rule exists to prevent. The §16 archive-index trade was **considered
+and rejected**: it costs *find a batch by name without grepping six files* for
+roughly its own size back.
+
+> **⚠ READ THIS BEFORE SCOPING #3. THE AMENDMENT MADE THE RULE HONEST. IT DID NOT
+> CREATE ROOM.** The file was 147,921 before the amendment and **148,205 after** —
+> the edit that set the ceiling cost 284 chars net, and **its first draft came
+> within 271 chars of tripping the ceiling it was setting.** That is not a joke at
+> the rule's expense; it is the measurement. **Headroom is ~1,795 and G7's doc
+> obligations were 4,744.** The Change Log widget is a LARGER batch than G7 — new
+> `audit_log` read, `fetchAllPaged()` from the outset, a degraded path covering 47%
+> of the data. **On current rates #3 trips the ceiling mid-batch.**
+>
+> **So the space problem is still open and is now the FIRST thing #3 has to
+> answer**, with three honest routes: (a) a third extraction pass before #3
+> starts; (b) #3's spec and post-mortem live entirely in `docs/specs/` with §15
+> carrying only pointers — r42's discipline applied *pre*-emptively rather than as
+> cleanup; (c) revisit the §16 trade after all. **(b) is the cheapest and is what
+> G7 should have done** — G7 put 4,744 chars into CLAUDE.md when most of it was
+> narrative that r42 would have relocated at the next pass anyway.
+
+**Refill rate, stated as a number because it keeps being guessed:** the 08-23 pass
+bought **6,823** chars; the next batch spent **4,744**. **A pass buys about one and
+a half batches.**
 **⚠ Rev 7's "DECLARED v3.0 ≠ DEPLOYED" headline is RETIRED.** Both halves were false and the whole framing is stale: **v3.0 is live and Settings → System Info renders `3.0.0`.** What survives is the mechanism, and it is worth keeping because it fired again on this very push: **`package.json` is NOT in `paths-ignore`** (`**.md` · `docs/**` · `.github/**`), so it is a deploy **TRIGGER**, and `gen-build-info.js` reads it, so it is also a build **INPUT**. A version bump is never inert on either axis. The 17-commit split chain moved `package.json` plus three files under `scripts/`, so CI fired as expected and the SHA advanced to `ab70878`.
 **⚠ `/api/health` reports the WORKER ONLY** — it does not reflect Supabase edge-function deploys, so a matching SHA says nothing about `jira-sync`. This SHA has misled twice; see settled discrepancy 6.
 **This revision (8.1):** the OPEN SEQUENCE is reordered **by DEPENDENCY rather than need** and gains an **agent-mode column** (auto / accept-with-edits / manual) governed by one rule — *auto where failure is LOUD, manual where it is SILENT or writes to prod, Jenny-gated manual regardless*; **006's alerts channel is NO LONGER an external block** (Lacey has a channel cleared for testing), which unblocks 010.1 and ClickUp 2/3; and the **Change Log widget's 47% question is DECIDED** — the 255 uncovered cells render as *"Resolved — date unknown"* with the directive-level date marked approximate. **Two of the seven open decisions are now closed.**
@@ -92,6 +128,16 @@ recorded here rather than deleted, so the next reader can see what was checked.
 ## DONE (recent, for context)
 
 ```
+✅ G7 tab-stops  skip-the-matrix link + focus harness  SHIPPED + PUSHED + DEPLOYED 2026-08-23
+                                                      2 commits f8d5f28 → 2ad78bb · run #48
+                                                      NO version bump (render/interaction only,
+                                                      no new structural surface) · NO migration
+                                                      NO Jenny · Karen post-flight
+                                                      Karen: 4 HIGH + 6 MEDIUM, ALL FIXED PRE-PUSH.
+                                                      TWO OF THE HIGHs WERE THE BATCH'S OWN CLAIMS,
+                                                      not its code — G5a instances 4 and 5.
+                                                      FIRST CI RUN EVER TO EXECUTE TESTS: 399/399,
+                                                      and `deploy` now `needs: test`.
 ✅ 012 directive CRUD (edit·soft-delete·archive)      SHIPPED + PUSHED + DEPLOYED 2026-08-18
                                                       15 commits 887f55e → e518624 (prod stamp as of 2026-08-18) · v2.9 → v3.0
                                                       migration 029 APPLIED TO PRODUCTION
@@ -290,8 +336,8 @@ The **MODE** column is the agent-autonomy setting, not a difficulty rating.
 ```
      BATCH                     MODE     DEPENDS ON
  ✅  SECOND EXTRACTION PASS    manual   —          SHIPPED 2026-08-23
- 2   G7 TAB-STOPS              auto     —          ← HEAD OF THE OPEN SEQUENCE
- 3   CHANGE LOG WIDGET         auto     —          47% DECIDED (see below)
+ ✅  G7 TAB-STOPS              auto     —          SHIPPED + DEPLOYED 2026-08-23 (2ad78bb)
+ 3   CHANGE LOG WIDGET         auto     —          ← HEAD OF THE OPEN SEQUENCE · 47% DECIDED
  4   DATA INSIGHTS             accept   —
  5   006 TEAMS DISPATCH        accept   —          NO LONGER BLOCKED
  6   010.1 REMAINDER           accept   #5
@@ -361,6 +407,113 @@ rule working.
 
 ---
 
+## BATCH #2 — G7 TAB-STOPS · OUTCOME
+
+**2 commits, `f8d5f28` → `2ad78bb`. Run #48. No Jenny, Karen post-flight, no
+migration, no version bump.** Spec: `docs/specs/batch-g7-tab-stops.md` — cite it
+by section number.
+
+### What shipped
+
+A **skip-the-matrix link** above the grid's scroll region and an
+**end-of-matrix anchor** below the Card, both gated on **one shared const** in
+`app/dashboard/pulse/page.tsx`. Focus-order logic extracted to
+`lib/client-library/focus-order.ts` with **23 `node:test` cases**.
+`role="grid"` + roving `tabindex` was **explicitly NOT decided** and stays open;
+its gate holds: *decide it before adding another focusable surface to that page.*
+
+**The CI test gate is the batch's second deliverable and arguably the larger
+one.** Before run #48, 22 test files ran only when someone remembered — CI was
+install → build → deploy → smoke with no test step at all. Now `npm test` exists
+and `deploy` carries `needs: test`.
+
+### Figures re-derived 2026-08-23 — and the grid SHRANK
+
+| Quantity | Figure |
+|---|---|
+| NBLYCRO active directives | **84** (was 87 on 08-18) |
+| NBLYCRO archived | **4** (was 1) |
+| Visible brands, default | **13** of 16 active, 3 paused |
+| **Cell tab stops, default view** | **1,092** |
+| Brand-header tab stops | **13** |
+| **Total matrix tab stops, default** | **1,105** |
+| Paused shown | 1,344 + 16 = **1,360** |
+| **Cells held by archived directives** | **64** (was 16) |
+
+**G7's own `~1,300` is RETIRED** — a `× 16` paused-shown product from 07-31, never
+comparable to a default-view figure.
+
+**⚠ NAME THE QUANTITY OR THIS BREAKS AGAIN.** Three numbers get quoted as "the
+number": default-view stops (`× 13`), paused-shown stops (`× 16`), and rendered
+*cells* (`× 16 + 1`). Like for like, default view: **1,118 (08-14, 86 rows) →
+1,092 (08-23, 84 rows)** — a 26-stop drop worth 2 rendered rows, and **not
+monotonic**: 86 on 08-14, **87** on 08-18, 84 on 08-23.
+
+### ⚠ NEW, UNRECORDED ANYWHERE BEFORE THIS: 64 archived-invisible cells
+
+Archived directives went **1 → 4** between 08-18 and 08-23, taking the cells they
+hold from **16 to 64**. `loadProject` loads `status='active'` only, so all 64 are
+**invisible to matrix search and count 0 toward `hiddenByStatus`** — an
+exists-but-archived title reads as "found nothing", which is precisely the
+duplicate-creation hazard `countHiddenByStatus` was built to mitigate.
+
+**Karen's LOW-8 consequence, quadrupled — and it grew with NO CODE CHANGE.**
+Someone archived three directives; that was the whole cause. Nothing on this board
+noticed. Out of scope for G7, filed rather than fixed.
+
+### Karen post-flight: 4 HIGH + 6 MEDIUM, all fixed pre-push
+
+**Two of the four HIGHs were defects in the batch's own claims, not its code** —
+G5a instances 4 and 5, recorded in the QMS review the same day:
+
+1. **A fabricated series.** `1,377` — the 08-14 rendered-*cell* count — spliced
+   into a default-view series it did not belong to, with a "three directives
+   archived" cause read off what is really a 2-row delta. **Inside the batch whose
+   own comments cite r43 four times.**
+2. **The new control failed WCAG AA.** `focus:bg-white` never receives
+   globals.css's dark override — that rule matches the literal class, while the
+   generated selector is `.focus\:bg-white:focus` — so the focused link was a
+   white box on a `#1E2235` card in dark mode; and `--f92-orange` on white is
+   **2.76:1**, the exact ratio globals.css names as the reason
+   `--f92-focus-ring` exists. **An AA-failing control inside an accessibility
+   batch.** Now tokens: 5.18:1 light / 5.80:1 dark.
+
+The other two HIGHs: the CI half was unwritten while the spec read as delivered,
+and **a test that could not fail** — a `shouldRenderSkipTarget()` helper plus a
+32-state exhaustive assertion that it agreed with `shouldRenderSkipLink()`, both
+reducing to the same expression while presenting as proof of the batch's headline
+invariant. **Export and test deleted rather than kept as ceremony**, and the spec
+now states plainly that the real guarantee is structural — one const, two JSX
+sites — and unreachable from a unit test.
+
+### The verification residue, stated because nothing re-checks it
+
+**Acceptance items 1–3 passed by hand, both themes, 2026-08-23 (Lacey).** That is
+a **HAND-RUN OBSERVATION, NOT COVERAGE** — the same distinction §15 draws for the
+409 runbook's Scenario A. The harness models focus **order**; a link that never
+appears passes all 23 tests. **Change the `sr-only` / `focus:` classes, the
+`--f92-surface` / `--f92-focus-ring` tokens, or the anchor's position and no gate
+in this repo will tell you it broke.** Re-run by hand.
+
+### Ride-alongs landed
+
+- **CLAUDE.md §15's unchecked *"the matrix renders `<button disabled>` to
+  non-admins"* — STRUCK. It was FALSE and asserted the INVERSE of shipped
+  source**; removing that `disabled` is what created G7. An unchecked box reads as
+  outstanding work, and this one would have sent a reader to undo G7's own cause.
+- **`docs/batch-012-pulse-restyle-3-spec.md` §2.6 AMENDED** with DC's 2026-08-03
+  "neither `disabled` nor `aria-disabled`" decision. PROCESS tells readers to cite
+  specs by section number, and §2.6 was issuing an instruction the codebase had
+  already rejected — with a comment in the source calling that section wrong and
+  no trace of it on the spec side.
+- **That spec's §1 STRUCK too** — a second copy of the same falsified claim,
+  sitting under a heading reading *"What is true today — verified against
+  source."*
+- The `"recorded against restyle batch 4"` pointer in `page.tsx` corrected to the
+  board sequence number. The archive copy left alone; r40 makes it history.
+
+---
+
 ## STRUCTURAL CHANGES TO THE BOARD (rev 8)
 
 ### DISSOLVED — "Pulse restyle batch 4 of 4"
@@ -368,7 +521,7 @@ rule working.
 Not restyle work, and not one batch. **Two unrelated items sharing a name**,
 split because they share no dependency:
 
-- **G7 tab-stops** → sequence **#2**
+- **G7 tab-stops** → sequence **#2** — ✅ **SHIPPED + DEPLOYED 2026-08-23 (`2ad78bb`)**
 - **Change Log widget** → sequence **#3**
 
 **Change Log widget facts, for whoever scopes it:**
@@ -638,7 +791,37 @@ here on. Scope it that way or it won't justify itself.
                               since early June. Closes G4a.
 - Second extraction pass      ✅ DONE 2026-08-23. 163,228 → 143,177. See the
                               BATCH #1 section for the outcome and its oracles.
-- r41's 120,000 ceiling       STILL TRIPPED, and it is a DECISION not a task.
+- 64 ARCHIVED-INVISIBLE CELLS NEW, and it GREW WITHOUT A CODE CHANGE. Archived
+                              directives went 1 -> 4 between 08-18 and 08-23,
+                              taking the cells they hold from 16 to 64. All
+                              invisible to matrix search, all counting 0 toward
+                              hiddenByStatus, so an exists-but-archived title
+                              reads as "found nothing" — the duplicate-creation
+                              hazard countHiddenByStatus was built to mitigate.
+                              Karen's LOW-8 consequence, QUADRUPLED, and nothing
+                              on this board noticed it happen. Cheapest honest
+                              fix is surfacing the count the way
+                              countHiddenByStatus already does for filters.
+- CI TEST GATE, FIRST RED RUN `deploy` now `needs: test` (run #48 onward). A red
+                              suite blocks every deploy, which is the point — but
+                              prod staying put now has THREE causes (tests red /
+                              nothing fired / still building) and /api/health
+                              cannot tell them apart. The Actions log is no longer
+                              optional. This ambiguity is PERMANENT.
+- NO GATE COVERS THE SKIP LINK Acceptance 1-3 are manual and nothing re-runs them.
+                              Touch the sr-only/focus classes, the --f92-surface /
+                              --f92-focus-ring tokens, or the anchor position and
+                              it breaks SILENTLY. A DOM or e2e harness is the only
+                              real fix; both were declined as wrong-sized for this
+                              batch, correctly.
+- r41's ceiling               ✅ DECIDED 2026-08-24: amended to 150,000 working,
+                              120,000 retired as unreachable, §16 trade rejected.
+                              ⚠ BUT THE SPACE PROBLEM IS NOT SOLVED. 148,205 now,
+                              ~1,795 of headroom, and G7's doc obligations were
+                              4,744. #3 is LARGER than G7. Route (b) — spec and
+                              post-mortem in docs/specs/, §15 gets pointers only —
+                              is the cheapest fix and is what G7 should have done.
+                              Decide it as part of scoping #3, not after.
                               Everything outside §13/§15/§16 was 29,798 at
                               ab70878, so extracting every remaining section
                               whole still leaves the file over 120,000. Either
@@ -727,6 +910,8 @@ than unilateral. Flagged here so it is owed on the record rather than remembered
 
 ## CHANGE LOG
 
+- **2026-08-24 (rev 8.4)** — **r41's CEILING DECIDED (Lacey): amend to 150,000 as the WORKING ceiling; the §16 archive-index trade was considered and REJECTED.** 120,000 is **retired as unreachable, not softened** — everything outside §13/§15/§16 totalled **29,798** at `ab70878`, so extracting every remaining section whole still left the file over it, and two passes ran against that figure with both recorded as misses. **A ceiling no permitted remedy can reach is a standing failure report rather than a bound**, and its practical effect was to generate extraction passes instead of limiting growth. 150,000 is the **tool read limit**, so breaching it makes §0's own "read this file completely" inexecutable — the failure the rule actually exists to prevent. **⚠ AND THE AMENDMENT BOUGHT NO ROOM, WHICH CORRECTS WHAT WAS IMPLIED WHEN THE OPTION WAS OFFERED:** 147,921 → **148,205**, so headroom is **~1,795** against G7's **4,744** of doc obligations. **The first draft of the amendment came within 271 chars of tripping the ceiling it was setting** — recorded because it is the cleanest available measurement of the refill problem, and because the fix was to relocate its own rationale here, which is r42 applied to the amendment itself. **THE SPACE PROBLEM IS THEREFORE STILL OPEN AND IS NOW #3's FIRST QUESTION,** with three routes: a third extraction pass before #3 starts; **#3's spec and post-mortem living entirely in `docs/specs/` with §15 carrying pointers only** (r42 applied pre-emptively rather than as cleanup — cheapest, and what G7 should have done, since most of G7's 4,744 was narrative a later pass would relocate anyway); or revisiting the §16 trade. **Refill rate, as a number because it keeps being guessed: the 08-23 pass bought 6,823 chars and the next batch spent 4,744 — a pass buys about one and a half batches.** Also recorded: the rev-8 DRAFT should be **deleted from project knowledge** — four revisions stale and internally wrong (it places the Change Log widget at #7 where every current doc says #3).
+- **2026-08-23 (rev 8.3)** — **BATCH #2, G7 TAB-STOPS, SHIPPED + PUSHED + DEPLOYED. Prod `2ad78bb`, run #48.** Two commits (`f8d5f28` spec, `2ad78bb` code); no migration, no Jenny, no version bump. A **skip-the-matrix link** plus an **end-of-matrix anchor**, gated on **one shared const**; focus-order logic extracted to `lib/client-library/focus-order.ts` with 23 `node:test` cases. **`role="grid"` + roving tabindex was explicitly NOT decided** and its gate stands: *decide it before adding another focusable surface to that page.* **THE SECOND DELIVERABLE IS ARGUABLY THE LARGER ONE — CI NOW RUNS THE TESTS.** Before run #48, 22 test files ran only when someone remembered; `deploy` now carries `needs: test`, so a deployed SHA is itself proof the suite passed. **399/399.** **FIGURES RE-DERIVED, AND THE GRID SHRANK:** active directives **87 → 84**, archived **1 → 4**, giving **1,092 cell stops + 13 brand-header stops = 1,105** in the default view (1,360 paused-shown). **G7's own `~1,300` is RETIRED** — it was a `× 16` product from 07-31 and never comparable to a default-view figure. **NAME THE QUANTITY OR THIS BREAKS AGAIN:** default-view stops (`× 13`), paused-shown stops (`× 16`) and rendered *cells* (`× 16 + 1`) are three different numbers; like for like the series is **1,118 (08-14) → 1,092 (08-23)**, a 2-row delta, **non-monotonic** (87 on 08-18). **⚠ NEW AND PREVIOUSLY UNRECORDED: 64 cells are held by archived directives, up from 16** — invisible to matrix search, counting 0 toward `hiddenByStatus`. Karen's LOW-8 consequence quadrupled, and **it grew with no code change at all**; nothing on this board noticed. Filed, not fixed. **KAREN POST-FLIGHT: 4 HIGH + 6 MEDIUM, ALL FIXED PRE-PUSH — AND TWO OF THE HIGHs WERE THE BATCH'S OWN CLAIMS, NOT ITS CODE.** (1) A **fabricated series**: `1,377`, the 08-14 rendered-*cell* count, spliced into a default-view series, with a 3-directive cause read off a 2-row delta — **inside the batch whose own comments cite r43 four times.** (2) **The new control failed WCAG AA**: `focus:bg-white` never receives globals.css's dark override (that rule matches the literal class; the generated selector is `.focus\:bg-white:focus`), so the focused link was a white box on a `#1E2235` card, and `--f92-orange` on white is **2.76:1** — the exact ratio globals.css names as the reason `--f92-focus-ring` exists. **An AA-failing control inside an accessibility batch.** Both are G5a instances 4 and 5; see the QMS review, amended the same day. The remaining two HIGHs: the CI half was unwritten while the spec read as delivered, and a **test that could not fail** — a `shouldRenderSkipTarget()` helper plus a 32-state exhaustive assertion that it matched `shouldRenderSkipLink()`, both the same expression, presenting as proof of the batch's headline invariant. **Deleted rather than kept as ceremony**, and the spec now states that the real guarantee is structural (one const, two JSX sites) and unreachable from a unit test. **THE PUSH WAS MIS-READ ONCE, AND THAT IS THE PROCESS ENTRY WORTH KEEPING:** the first push looked successful — clean `git push`, green Actions page — while the code commit had **silently never been made**, so 47 runs and a green page meant "docs-only skip", not "shipped". **The reflog caught it; the SHA could not.** As of run #48 `/api/health` can no longer distinguish *tests red* from *nothing fired* from *still building* — **the Actions log is not optional any more.** **RIDE-ALONGS:** CLAUDE.md §15's unchecked *"the matrix renders `<button disabled>` to non-admins"* **STRUCK — it was FALSE and asserted the INVERSE of shipped source**, and removing that `disabled` is what created G7; `batch-012-pulse-restyle-3-spec.md` §2.6 **amended** with DC's 2026-08-03 "neither `disabled` nor `aria-disabled`" decision, because PROCESS tells readers to cite specs by section number and §2.6 was issuing an instruction the codebase had rejected; **that spec's §1 struck too**, a second copy of the same falsified claim sitting under *"What is true today — verified against source"*; and the `"recorded against restyle batch 4"` pointer in `page.tsx` corrected to the board sequence number. **⚠ THE VERIFICATION RESIDUE, STATED BECAUSE NOTHING RE-CHECKS IT:** acceptance items 1–3 passed **by hand, both themes, by Lacey** — a **HAND-RUN OBSERVATION, NOT COVERAGE**, the same distinction §15 draws for the 409 runbook's Scenario A. The harness models focus **order**; a link that never appears passes all 23 tests. **⚠ `CLAUDE.md` IS AT 147,921 — 2,079 UNDER THE TOOL LIMIT.** The second pass left 6,823 of headroom this morning and **G7 spent 4,744 of it**, which is the honest measure of that pass's durability: one ordinary batch consumed 70% of the margin. **r41's ceiling decision is now the nearest thing on this board to a hard blocker.** **`CROSS_CLAUDE.md` STILL OWED and now THREE batches behind** — footer 2026-07-17, §6 entries through 08-08, §5 last locked 07-15, and **its §5 board contains no G7 at all**, so a session told by R17 to read it at start sees a board this item never existed on. Per CC7, coordinated and not unilateral.
 - **2026-08-23 (rev 8.2)** — **BATCH #1, THE SECOND EXTRACTION PASS, SHIPPED. CLAUDE.md 163,228 → 143,177 chars, 6,823 under the 150,000 tool limit;** §15 **69,332 → 57,239**, §13 and §16 untouched. Sizes verified on disk after the drop rather than from the build log alone, and the exact total is deliberately NOT written into CLAUDE.md itself per r43 — that file points at the `[claude-md]` prebuild line instead, because the paragraph would be part of what it measures. **THE FINDING WORTH CARRYING: r42 clause 3 alone was not enough.** Applied across the whole of §15 it landed at **149,929 — 71 characters under the limit**, inside the noise of a single edit; **r41 remedy 3** (§4, §7, §11, §12 relocated whole to `docs/`, headings and pointers retained so `§n` citations still resolve) is what bought the margin. **Do not scope a future pass on r42 alone.** Post-mortem narrative (16,714 chars) went to `docs/claude-archive/` where r40 applies; live scope (31,257 chars) went to `docs/` and `docs/specs/` where it does NOT, and every stub says which — archiving a live obligation is this batch's failure mode and the split's own oracle caught it twice. **Oracles:** ten boundary assertions before any cut, verbatim conservation on every relocated block, 31 obligation tokens re-checked, every untouched line over 60 chars verified present, and **62 of 64 §15 checkbox items surviving byte-identical** (the two exceptions deliberate). Boxes went 65 → 94, which is r42 turning narrative into actions. **RIDE-ALONGS, all three flagged before they shipped:** §0's `Prod right now` stanza still read **`d5e5703`** dated 08-20 — **two days stale, and it is the file's self-declared ONLY current-state claim**, so the one line the file tells every reader to trust was the wrong one; §0.1 still carried the rev-6-era five-item need-ordered list **while calling itself CANONICAL**; and the title line still read **v2.8** against a repo declaring v3.0. **THIS REVISION ALSO FIXES A CONTRADICTION IN REV 8.1 ITSELF:** the OPEN SEQUENCE table said Change Log widget **#3**, Data insights **#4**, Convert direct read **#8**, while four prose passages still said **#7**, **#3** and **#4** from rev 8's need-ordering — the table was renumbered and the prose was not. An internal contradiction in one file is worse than a stale entry because both halves read as authoritative, which this file already says about rev 6. **Four new open items recorded, three of them decisions rather than tasks:** r41's 120,000 ceiling (take the §16 index trade or amend the rule), the 34,000 §15 budget now **missed three times** (74,120 → 63,551 → 57,239 — evidence about the budget, not the cutters), the August archive file past its advisory ceiling, and 007's **three-way** prereq disagreement. **`CROSS_CLAUDE.md` is STILL OWED and is now further behind** — footer 2026-07-17, §6 entries through 08-08, §5 order last locked 07-15, and it has now missed two consecutive batches. Recorded in CLAUDE.md §0.1 as owed; per CC7 an AC-facing mirror update is coordinated, not unilateral. **CI VERIFIED for this push:** the Actions log shows no run for HEAD `00084ef` — the newest is #47 (`ab70878`, 08-22 22:59 CDT) — so prod is unchanged at `ab70878` and the deployed-state line above needed no correction. **The two preceding docs-titled commits both deployed** (#46 `d5e5703` 08-19, #47 `ab70878` 08-22), each carrying a non-`.md` file, which is the empirical version of the rev-7 lesson: the commit message predicts nothing, the file list does.
 - **2026-08-22 (rev 8.1)** — **Amends rev 8 the same day with three additions the rev-8 draft was missing.** **(1) OPEN SEQUENCE reordered by DEPENDENCY, not need**, and given an **agent-mode column**. Need is a judgement that moves every session; a dependency is a fact about what cannot start until something else finishes — and ordering by the fact makes the parallelism visible: **six of thirteen have no dependency at all.** The mode rule is about the FAILURE MODE, not difficulty: **`auto` where failure is LOUD, `manual` where failure is SILENT or the batch writes to production, Jenny-gated `manual` regardless**, with `accept-with-edits` as the bounded middle. That is why `007 Jira Boards` is `auto` despite being the largest item (read-only against a cache; a wrong board is visibly wrong) while the **second extraction pass is `manual` despite being docs-only** — its failure mode is dropping a live obligation into an archive where r40 makes it stop existing, which the split's own oracle caught twice. This file's entire defect record is silent failure, so the rule follows the record. **(2) 006 Teams dispatch is NO LONGER BLOCKED** — the alerts channel had been an external block for months with nobody re-verifying it; **Lacey has a channel cleared for testing**, so 006 moves to **#5 with no dependency and unblocks 010.1 (#6) and ClickUp Phase 2/3 (#7)**. That is §13 r32 / R21 working, and the **second** phantom gate this file has recorded (Batch 009's Azure block ran 23 days). **(3) The Change Log widget's 47% question is DECIDED** — the **255 of 539 done cells** with no per-cell audit row render as **"Resolved — date unknown"**, showing the **directive-level date marked approximate**. It shows the row instead of hiding it and labels the date's provenance instead of passing a summary date off as a per-cell fact; **substituting that date without the marker would make 47% of the widget quietly wrong in one direction**, the G5a failure this file tracks. The widget moves to **#3, unblocked**. **Two of rev 8's seven open decisions are closed by this amendment.** Figures re-derived at write time per r43: CLAUDE.md **163,228**, §15 **69,331**, §13 **50,212**, §16 **12,812** — unchanged from rev 8, which is expected: 8.1 is docs-only and touches no CLAUDE.md section.
 - **2026-08-22 (rev 8)** — **Q1 RE-LOCKED, the CLAUDE.md split shipped but MISSED ITS GOAL, restyle batch 4 dissolved, and Convert direct read supersedes 012 E2.** **Q1 is now operator load reduction · quantitative data for leadership · insight into the CRO department** — ⚠ **wording NOT final** (Lacey was mid-revision), and the **QMS 25/32 score target is VOID with no replacement; a rescore is owed.** Consequences applied anyway: G2 criterion validation → optional, **Recs 1 and 3 demoted to nice-to-have, Rec 2 demoted** — with the **open flag preserved intact**, because Rec 2 closes G1 and G1 is exactly the moving-denominator problem the new leadership-reporting Q1 depends on. **THE SPLIT MISSED ITS PRIMARY GOAL:** 163,228 chars against the **150,000 tool limit (13,228 over)** and the **120,000 r41 ceiling (43,228 over)**, so the file §0 tells every session to read completely still cannot be. **A second extraction pass is owed;** §15 (69,331) and §13 (50,212) are the loads, **§16 is index-only at 12,812 and r41's remedy #1 is therefore spent** — the rule was amended to say so rather than leave an exhausted prescription reading as actionable. Four new standing rules landed: **r40** (archive is history, never authority), **r41** (size ceiling, not calendar), **r42** (a §15 sentence names an action or names where its substance went), **r43** (re-derive every figure at write time, never transcribe). **Restyle batch 4 DISSOLVED** — it was two unrelated items sharing a name: **G7 tab-stops → #2**, **Change Log widget → #7**, which is blocked on Lacey deciding what the **255 of 539 done cells with no per-cell audit row** render as. **Convert direct read (#4) SUPERSEDES 012 E2 — E2 removed from BLOCKED**, and the enum decision becomes unilateral rather than a negotiation. **Data insights (#3)** added, scoped internally to Lacey and the CRO team so it stays small; **bulk cell edit** added to BACKLOG, Jenny-gated, evidenced by ~70 clicks of matrix paperwork for one MRR trigger ship. **Rev 7's "DECLARED v3.0 ≠ DEPLOYED" headline is RETIRED** — both halves were false, v3.0 is live, and the durable mechanism is that **`package.json` is a deploy TRIGGER and a build INPUT**, which is why this 17-commit chain deployed. **Prod is `ab70878`**, verified against the pushed tip. Every figure in this revision was re-derived at write time per r43; **the rev-8 draft's own numbers predated the final fold and were superseded**. KEPT from rev 7: the DONE list, the DEFECT RECORD, and the PARKED classifier section (the draft supplied no replacement, so it was retained rather than deleted).

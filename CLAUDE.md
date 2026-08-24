@@ -1162,7 +1162,15 @@ r40 does not apply to it.
 41. **Rollover triggers on a SIZE CEILING, never on the calendar.**
     (CLAUDE.md split batch, 2026-08-22.)
 
-    - **CLAUDE.md: 120,000 characters.** Hard rule.
+    - **CLAUDE.md: 150,000 characters — the WORKING ceiling.** (Amended
+      2026-08-24, Lacey. Was 120,000 "hard rule", 2026-08-22.) **120,000 was
+      never reachable:** everything outside §13/§15/§16 was 29,798 at `ab70878`,
+      so extracting every remaining section whole still left it over. 150,000 is
+      the **tool read limit** — breach it and §0's "read this file completely"
+      stops being executable, which is the failure this rule exists to prevent.
+      **Watch the MARGIN, not the ceiling:** the 08-23 pass bought 6,823 and the
+      next batch spent 4,744, so a pass buys ~1.5 batches. Rationale and the
+      rejected §16-index trade: batch outline rev 8.4.
     - **The remedy is whichever section actually grew — read the breakdown
       first.** (Amended 2026-08-22, Karen H1.) This bullet used to say only
       *"move §16's oldest month to the archive until it clears"*, and **that
@@ -2179,13 +2187,9 @@ ground truth. **It did not achieve that on the first pass.**
 - **The §16 archive-index trade was NOT taken** (Lacey, 2026-08-23). Trimming it
   costs "find a batch by name without grepping six files" for roughly its own
   size. Still available, still her call, still not a cleanup.
-- [ ] **r41's 120,000 ceiling is STILL TRIPPED and still owed.** It is not
-      reachable without either the §16 archive-index trade or an r41 amendment
-      putting §13 in play — everything outside §13/§15/§16 was **29,798** at
-      `ab70878`, so extracting every remaining section whole still leaves the
-      file over 120,000. **Decide which, or amend r41 to record 150,000 as the
-      working ceiling** — an unreachable hard rule reads as actionable and is
-      not, which is exactly how r41's own remedy #1 failed.
+- [x] **r41's ceiling DECIDED 2026-08-24 (Lacey): amended to 150,000, §16-index
+      trade NOT taken.** Substance now in **r41** itself; see batch outline
+      rev 8.4 for why.
 - **§15 REGREW inside the split chain, and expect this pass to do the same.**
   The first clause-3 pass measured §15 at **63,551 at `f374676`**; it was
   **69,331** at `ab70878` — **+5,781**, so over half that pass's gain (−10,569)
