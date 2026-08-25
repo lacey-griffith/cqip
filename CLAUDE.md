@@ -77,7 +77,7 @@ the bounded middle.
 ```
      BATCH                     MODE     DEPENDS ON
  ✅  SECOND EXTRACTION PASS    manual   —          SHIPPED 2026-08-23
- 2   G7 TAB-STOPS              auto     —          ← this pass; see §15
+ ✅  G7 TAB-STOPS              auto     —          SHIPPED 08-23 (2ad78bb)
  ✅  CHANGE LOG WIDGET         auto     —          SHIPPED 08-24 (e58cf7b)
  ⏸  DATA INSIGHTS             accept   —          DEFERRED 08-24 (premise fails)
  5   006 TEAMS DISPATCH        accept   —          ← next up
