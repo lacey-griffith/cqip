@@ -176,7 +176,7 @@ Plus route-level validation tests for the three §2.1 rules, once §2.1 exists.
 `npm run typecheck` in the same pass — `npm test` runs under tsx and strips
 types, so it cannot see strict-null errors.
 
-### 3.3 Delivered 2026-08-26 — steps 1-2 of 5
+### 3.3 Delivered 2026-08-26 — steps 1-4 of 5
 
 `lib/onboarding/checks.ts` (202 lines, pure) and
 `tests/onboarding-checks.test.ts` (13 tests). **13 pass, 0 fail; `tsc --noEmit`
@@ -209,6 +209,36 @@ everything the validator accepts also satisfies the 019:90-93 CHECK, and the tes
 counts its own accepted cases so it cannot pass by accepting nothing. The reverse
 direction is deliberately false — the constraint accepts defaulted-not-configured,
 which is the defect.
+
+**Steps 3-4** rewrite `app/dashboard/settings/projects/page.tsx` (238 → 855
+lines). Both project writes now go through `/api/admin/projects`; the direct
+browser `supabase.from('projects').insert()` and `.update()` are gone. Added: a
+brand-model Select, a Jira-brand-field input shown only for multi-brand, an
+**Edit config** row expander (the edit path that did not exist), a per-row
+`brandConfigChecks()` badge with the findings listed beneath any non-clean row,
+and a page-level banner counting blocked projects. `tsc --noEmit` and `eslint`
+both clean.
+
+Deviations from §2.2 as sketched, both deliberate:
+
+- **Brand model is a `Select`, not a radio.** This repo has no radio-group component and two options do not justify adding one.
+- **The §2.2.5 second step is an inline panel on this page**, not a reuse of `components/coverage/add-brand-drawer.tsx`. The drawer has no prop for a preset project, and adding one would ripple into the Coverage page that also mounts it. The panel POSTs to `/api/admin/brands` — same route the drawer uses — then PATCHes the project to `single_brand`.
+
+Failure handling in that two-step flow is explicit at both seams: if the brand
+POST fails the project stays multi-brand and the error names it; if the PATCH
+fails the brand exists and the error says to use Edit config. Either way the row
+carries the blocking badge, so **there is no half-state that is invisible** —
+which was the §2.2.5 requirement.
+
+**A consequence worth knowing:** a newly created multi-brand project shows a
+blocking badge until its first brand is added, because with zero brands it *is*
+misconfigured — that is the HDCRO state exactly. This is intended, not a false
+positive, and the finding text says what to do.
+
+One React defect caught during build: the row was a bare `<>` fragment with keys
+on its child `<tr>`s. The list item is the fragment, so those keys are ignored and
+React reconciles rows by index. Changed to `<Fragment key={project.id}>`. `tsc`
+cannot see this class of bug.
 
 ---
 
