@@ -95,19 +95,25 @@ roll-up. `projects.client_name` becomes the seed and then a deprecated mirror.
 
 ### 1.3 ⚠ ONBOARDING IS ALREADY BROKEN FOR ONE CLIENT SHAPE (Jenny C3b)
 
-`019_project_brand_model.sql:92-96` CHECKs that a `single_brand` project has
-`default_brand_id`, which FKs to `brands` — and a brand requires a project
-(`project_key NOT NULL` + FK). **Hard cycle: a Spotloan-shaped client cannot be
-created through the UI at all.** SPLCRO's config was set by hand in SQL.
+**Corrected 2026-08-26.** An earlier revision of this section claimed a hard
+FK/CHECK cycle made a `single_brand` project uncreatable. Verified false:
+`019:36-39` defaults `brand_jira_field_id` to `'customfield_12220'`, so
+`addProject()`'s four-column insert satisfies the CHECK and succeeds. (The
+constraint is at `019:90-93`, not `:92-96`.)
 
-And `addProject()` writes only four columns — `brand_model` falls to its
-`multi_brand` default and `brand_jira_field_id` to `'customfield_12220'`. **No UI
-anywhere sets `brand_model`, `brand_jira_field_id` or `default_brand_id`, and
-there is no edit path after creation.**
+The real defect is worse, because it is silent. `addProject()` writes only four
+columns, and **no UI anywhere sets `brand_model`, `brand_jira_field_id` or
+`default_brand_id`, and there is no edit path after creation.** So a Spotloan-
+shaped client is created *successfully* and *misconfigured as multi-brand*, with
+no error and no signal. SPLCRO is correct only because `019:46-53` set it by hand.
 
-**So §7's acceptance criterion is already false today**, and Heartland
-(`multi_brand`, the default) structurally cannot detect it. **This batch must fix
-the single-brand path**, or "adding a client touches no code" stays a claim.
+Live consequence: `jira-sync/index.ts:630` writes `client_brand` **unguarded**,
+so a misconfigured project nulls the column on every sync. HDCRO is in that state
+now (multi_brand, 0 brands) with 0 logs — one sync away from damage.
+
+**So §7's acceptance criterion is already false today.** Fixed ahead of this
+batch by `docs/specs/batch-single-brand-onboarding.md`, which also delivers
+`lib/onboarding/checks.ts` that this batch consumes.
 
 ---
 
