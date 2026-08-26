@@ -1,6 +1,7 @@
 # CQIP Batch Priority Outline
 
-**Updated:** 2026-08-24 (rev 8.6 — **#4 DATA INSIGHTS DEFERRED, its premise does not hold on current data**; sequence head is now **#5 006 Teams dispatch**)
+**Updated:** 2026-08-25 (rev 8.7 — **#5 006 TEAMS DISPATCH RE-BLOCKED: its dispatch mechanism was RETIRED BY MICROSOFT 2026-05-22.** ⚠ The 08-22 un-blocking was recorded against the WRONG ARTIFACT. #6 and #7 re-block with it. Sequence head is now **#8 Convert direct read**)
+**Previous:** rev 8.6 (2026-08-24 — #4 Data insights deferred, its premise does not hold on current data)
 **Previous:** rev 8.5 (2026-08-24 — batch #3 change log widget shipped + deployed, prod `e58cf7b`, run #49; Karen's two CRITICALs were both verification claiming more than it had)
 **Previous:** rev 8.4 (2026-08-24 — r41's ceiling amended to 150,000, §16-index trade rejected; the amendment bought no room)
 **Previous:** rev 8.3 (2026-08-23 — **BATCH #2 G7 TAB-STOPS SHIPPED + DEPLOYED**; CI now runs the tests and gates the deploy; the directive count moved again and DOWN)
@@ -350,10 +351,10 @@ The **MODE** column is the agent-autonomy setting, not a difficulty rating.
  ✅  G7 TAB-STOPS              auto     —          SHIPPED + DEPLOYED 2026-08-23 (2ad78bb)
  ✅  CHANGE LOG WIDGET         auto     —          SHIPPED + DEPLOYED 2026-08-24 (e58cf7b)
  ⏸  DATA INSIGHTS             accept   —          DEFERRED 08-24 — premise fails on data
- 5   006 TEAMS DISPATCH        accept   —          ← HEAD OF THE OPEN SEQUENCE
- 6   010.1 REMAINDER           accept   #5
- 7   CLICKUP PHASE 2/3         manual   #5 · Jenny
- 8   CONVERT DIRECT READ       accept   —
+ ⛔  006 TEAMS DISPATCH        manual   BLOCKED    dispatch mechanism retired 05-22
+ ⛔  010.1 REMAINDER           accept   #5         re-blocked with #5
+ ⛔  CLICKUP PHASE 2/3         manual   #5 · Jenny re-blocked with #5
+ 8   CONVERT DIRECT READ       accept   —          ← HEAD OF THE OPEN SEQUENCE
  9   008 CONVERT AUTOMATION    accept   #8 — may fold in
 10   KEEP-BOTH-AND-FLAG        manual   Jenny
 11   012 PHASE C               accept   Jira-permission verify
@@ -684,7 +685,90 @@ retained from rev 7. **The draft for rev 8 supplied no replacement for that
 section, so it was kept rather than deleted**; its one rev-8 change is that
 Rec 1, its free unpark path, is now BACKLOG rather than sequence #2.
 
-**✅ NO LONGER BLOCKED — 006 Teams dispatch (DECIDED 2026-08-22).** The alerts
+### ⛔ RE-BLOCKED 2026-08-25 — 006 Teams dispatch. THE DISPATCH MECHANISM NO LONGER EXISTS.
+
+**Decision: Lacey, 2026-08-25. Keep blocked; verify the replacement before moving
+on it.** Nothing was built and no spec was written.
+
+**Microsoft completed the retirement of Office 365 Connectors in Teams on
+2026-05-22** (rollout 05-18 → 05-22; all connector webhooks had to migrate to
+**Workflows** before 05-18). The `*.webhook.office.com` **Incoming Webhook this
+batch is specced against cannot be created any more.** That is three months
+before this entry, and the batch's expanded scope was locked 2026-07-03 —
+**after** the mechanism had already gone.
+
+**⚠ THE 08-22 UN-BLOCKING WAS RECORDED AGAINST THE WRONG ARTIFACT.** It read:
+*"Lacey has a channel cleared for testing, so the block is gone."* **The block was
+never the channel.** A Teams channel with no POST endpoint gives dispatch nothing
+to send to. Confirmed 2026-08-25: the sandbox channel **exists** (`Webhook
+Sandbox | CRO`), and what was supplied was a `teams.microsoft.com/l/channel/…`
+**deep link — a client-open link, not an endpoint.**
+
+> **THIS IS THE THIRD MIS-RECORDED GATE ON THIS BOARD, AND THE FIRST OF ITS
+> KIND.** Batch 009's Azure block ran 23 days as fiction; 006's own alerts-channel
+> block ran months as fiction; and now an **UN-blocking** was recorded as real
+> against an artifact that had already stopped existing. **The standing rule was
+> "re-verify a blocker carried past 7 days." The missing half is: RE-VERIFY AN
+> UN-BLOCKING TOO, AND NAME THE ARTIFACT IT TURNS ON.** "The channel exists" and
+> "we can POST to it" are different claims, and only the second one unblocks
+> anything.
+
+**LACEY'S READ (2026-08-25), recorded as a HYPOTHESIS, not a finding:** Workflows
+is probably a viable path. **Unverified.** The research task below is what turns
+it into a finding.
+
+### ⚠ THREE LOCKED SPEC ITEMS ARE INVALIDATED, NOT MERELY DELAYED
+
+1. **"Adaptive Card / message card formatting per rule type."** Workflows webhooks
+   do not support interactive cards with MessageCard payloads, and an Adaptive
+   Card posted through a Workflow behaves differently from one posted through a
+   connector. **Re-decide, do not port.**
+2. **"Detect 401/403 from Teams webhook (rotation grace handling)."** Wrong
+   failure mode entirely. Workflows fail on **SAS signature expiry, a disabled
+   flow, or Power Automate throttling (429)** — different codes, different
+   remedies, different grace semantics.
+3. **"Global rate cap with self-announcing overflow."** Power Automate imposes
+   **its own throttling upstream**, which CQIP does not control and cannot count.
+   So an alert can be suppressed by a limiter above ours — which is exactly the
+   silent-swallow this item exists to prevent, relocated out of reach.
+
+Smaller, but it changes the copy: Workflows webhooks **cannot customize bot icon
+or name**, so posts appear as the flow owner rather than as "CQIP".
+
+### THE RESEARCH TASK — do this before any 006 scoping
+
+Concrete, in the sandbox channel, and it answers all three invalidations:
+
+- [ ] Create a **Workflows** webhook on `Webhook Sandbox | CRO` ("Post to a
+      channel when a webhook request is received"). Confirm the URL shape
+      (`*.logic.azure.com` / `*.azure.com/workflows/…` with a SAS signature).
+- [ ] `curl` a plain text payload. **Does it post at all?** This is the gate — if
+      no, 006 is externally blocked on a Teams admin, not on design.
+- [ ] `curl` an **Adaptive Card** payload. Does it render, and does it render
+      *interactively*? Answers invalidation 1.
+- [ ] Record the **failure codes**: expired signature, disabled flow, malformed
+      body. Answers invalidation 2.
+- [ ] Find the **Power Automate throttle limits** for the tenant's licence tier.
+      Answers invalidation 3, and it bounds the rate-cap design.
+- [ ] Decide whether posting as the flow owner is acceptable, or whether 006 needs
+      a Graph/bot path instead.
+
+**⚠ WHEN A URL IS OBTAINED IT IS A SECRET.** A Workflows webhook URL carries its
+own SAS signature — anyone holding it can post to the channel. It goes in
+`wrangler secret put` / Supabase env, **never in the repo, never in a doc, never
+in a commit message.** Note that `/api/health` reports the **Worker only**, so it
+will not verify an edge-function dispatch either way.
+
+### ⚠ KNOCK-ON: TWO MORE ITEMS RE-BLOCK
+
+Rev 8.1 recorded that un-blocking 006 also unblocked **010.1 remainder (#6)** and
+**ClickUp Phase 2/3 (#7)**. That un-blocking was wrong, so **both go back to
+blocked.** The board lost three items in one correction, and the honest read is
+that it never had them.
+
+**Historical, kept — the 08-22 entry this supersedes:**
+
+**~~✅ NO LONGER BLOCKED — 006 Teams dispatch (DECIDED 2026-08-22).~~** The alerts
 channel was an external block for months and nobody had re-verified it. **Lacey
 has a channel cleared for testing**, so the block is gone and **006 moves to
 sequence #5 with no dependency.** It **unblocks 010.1 (#6) and ClickUp Phase 2/3
@@ -998,6 +1082,7 @@ than unilateral. Flagged here so it is owed on the record rather than remembered
 
 ## CHANGE LOG
 
+- **2026-08-25 (rev 8.7)** — **#5 006 TEAMS DISPATCH RE-BLOCKED (Lacey): ITS DISPATCH MECHANISM WAS RETIRED BY MICROSOFT ON 2026-05-22.** Office 365 Connectors in Teams completed retirement 05-18 → 05-22, with all connector webhooks required to migrate to **Workflows** before 05-18 — so the `*.webhook.office.com` **Incoming Webhook this batch is specced against cannot be created any more.** That is three months before this entry, and **006's expanded scope was locked 2026-07-03, AFTER the mechanism had already gone.** **⚠ THE 08-22 UN-BLOCKING WAS RECORDED AGAINST THE WRONG ARTIFACT:** it read *"Lacey has a channel cleared for testing, so the block is gone"*, but **the block was never the channel.** Confirmed 08-25 — the sandbox channel exists (`Webhook Sandbox | CRO`) and what was supplied was a `teams.microsoft.com/l/channel/…` **deep link, a client-open link and not an endpoint.** **THIS IS THE THIRD MIS-RECORDED GATE AND THE FIRST OF ITS KIND:** Batch 009's Azure block ran 23 days as fiction, 006's own alerts-channel block ran months as fiction, and now an **UN-blocking** was recorded as real against an artifact that had already stopped existing. **NEW STANDING LESSON — the existing rule was "re-verify a blocker carried past 7 days"; the missing half is RE-VERIFY AN UN-BLOCKING TOO, AND NAME THE ARTIFACT IT TURNS ON.** *"The channel exists"* and *"we can POST to it"* are different claims and only the second unblocks anything. **THREE LOCKED SPEC ITEMS ARE INVALIDATED, NOT DELAYED:** (1) *Adaptive Card / message card formatting per rule type* — Workflows do not support interactive cards with MessageCard payloads and an Adaptive Card through a Workflow behaves differently; **re-decide, do not port**; (2) *Detect 401/403 with rotation grace* — **wrong failure mode**, Workflows fail on SAS signature expiry, a disabled flow, or Power Automate throttling (429); (3) *Global rate cap with self-announcing overflow* — **Power Automate throttles upstream**, outside CQIP's control and uncountable, so an alert can be suppressed by a limiter above ours, which is the silent-swallow this item exists to prevent, relocated out of reach. Also: Workflows **cannot customize bot icon or name**, so posts appear as the flow owner, not as "CQIP". **LACEY'S READ, RECORDED AS A HYPOTHESIS AND NOT A FINDING:** Workflows is probably viable. **A named research task now gates 006** — create a Workflows webhook in the sandbox, POST plain text (the real gate), POST an Adaptive Card, record the failure codes, find the tenant's throttle limits, and decide whether posting as the flow owner is acceptable. **⚠ A Workflows URL IS A SECRET** — it carries its own SAS signature, so it goes in `wrangler secret put` / Supabase env and **never** into the repo, a doc, or a commit message; and `/api/health` reports the **Worker only**, so it will not verify an edge-function dispatch either way. **⚠ KNOCK-ON — TWO MORE ITEMS RE-BLOCK:** rev 8.1 recorded that un-blocking 006 also unblocked **010.1 remainder (#6)** and **ClickUp Phase 2/3 (#7)**; that un-blocking was wrong, so **both return to blocked.** The board lost three items in one correction, and the honest read is that it never had them. **Sequence head moves to #8 Convert direct read** (accept-with-edits, no dependencies) — which carries its own unresolved prereq: **check for collision with 008 Convert automation before scoping either.**
 - **2026-08-24 (rev 8.6)** — **#4 DATA INSIGHTS DEFERRED (Lacey). Its premise does not hold on current data, and this was found by probing BEFORE a spec was written — nothing was built.** The batch is period-over-period distribution shifts, and **there are not two comparable periods.** Of 100 live logs, 68 carry `issue_category`, but the recent months run **20→5, 15→1, 11→3**, and **quarterly aggregation does NOT rescue it — checked, not assumed: 2026-Q3 is n=4** against ten categories. The best month in the whole series is 2025-12 at 23 and nothing else exceeds 9; ten category values across 68 logs leave most per-period cells at 0–2. So the spec's own small-n suppression rule would suppress every period anyone wants to compare. **⚠ THE CAUSE IS A QUEUE, NOT A DATA PROBLEM, AND THAT IS THE USEFUL FINDING:** coverage tracks `log_status` almost exactly — **Resolved 54/63 classified (86%) vs Pending Verification 2/33 (6%)** — so classification happens at resolution, and **37 of 100 live logs are unresolved, every one since 2026-06-03.** The recent months are not a distribution shift; they are unclassified work. **An insight built today would read a QUEUE as a TREND** — exactly the failure the batch's own "every insight names its denominator and its date" rule exists to prevent. **UNPARKS ON A REACHABLE TRIGGER: the Pending Verification backlog falls below 10** (~30 newly classified logs, making 06/07/08 comparable). **A "≥25 classified per month" trigger was CONSIDERED AND REJECTED as unreachable** — recent volume is 11–20 logs/month total, so it needs volume to double, and an unreachable trigger reads as actionable and is not, which is how r41's 120,000 ceiling failed. **COUPLING: this is the AI classifier's case restated in data** — the free Rovo-by-hand path has never been tried, and hand-classifying ~35 logs would clear the backlog and supply #4's denominator in one pass; same upstream cause as `root_cause_initial` being empty on 74/83 webhook-created logs. **The buildable-today alternative — an all-time distribution with no period comparison — was offered and NOT taken**, because it is not what the batch was scoped for and shipping it would consume the name. **Sequence head moves to #5, 006 Teams dispatch** (accept-with-edits, no dependencies).
 - **2026-08-24 (rev 8.5)** — **BATCH #3, THE CHANGE LOG WIDGET, SHIPPED + PUSHED + DEPLOYED. Prod `e58cf7b`, run #49.** A read-only panel on `/dashboard/reports` — **not** the matrix page, because G7's standing gate forbids adding a focusable surface there until `role="grid"` is decided, and `CellEditStrip` is E3's seam. Two commits, no migration, no Jenny, no version bump, **430 tests**, and a **`typecheck` script** added. **⚠ KAREN POST-FLIGHT: 2 CRITICAL + 4 HIGH + 11 MEDIUM, ALL FIXED PRE-PUSH — AND BOTH CRITICALs WERE VERIFICATION CLAIMING MORE THAN IT HAD, NOT CODING MISTAKES.** That is the second consecutive batch to produce G5a instances at post-flight, and the QMS review was amended for it. **C1: a FABRICATED 0% PRESENTED AS VERIFIED FACT.** `audit_log`'s only SELECT policy is `is_admin()` and there are three active read-only users; RLS filtered the `count:'exact'` query and the paged read **identically to zero with no error**, so the completeness check PASSED and the panel rendered *"0 of 639 finished cells (0.0%) have an exact resolve date"* with 639 rows reading "no audit trail" — every one of which has one. **Three things the batch was proud of had to line up:** the spec's §6 asserting the panel "shows nothing a Pulse viewer cannot already see" (false — `audit_log` is the one table they cannot see); §4's instruction to make the degraded state *look deliberate rather than like a failure*, which is what hid it; and **a test — "zero rows verified against zero is a valid complete read" — that encoded the bug as intended behaviour.** **NEW STANDING LESSON: "read-only" is NOT "readable by everyone" — ask the permission question per TABLE, not per route**, and a completeness check comparing two numbers from the same filtered source cannot detect that the filter is the problem. **C2: `npm test` IS NOT THE GATE.** Five strict-null errors in the new test file; `tests/` IS typechecked by `next build`, but `npm test` runs under `tsx` **which strips types**, so CI would have gone **green on the test job and red on deploy** — the gate added in the G7 batch does not cover the gate that blocks a push. `typecheck` script added; **CI wiring still OWED** (one line, `.github/**` is in `paths-ignore` so it does not deploy). Deliberately NOT folded into `npm test`: a full-repo `tsc` could not be verified from the authoring environment, and a red `npm test` behind `needs: test` blocks every deploy. **H1 — NEW STANDING LESSON, the most transferable finding: A GUARD ON PRESENTATION IS NOT A GUARD ON CLASSIFICATION.** §4's structural guard made an approximate date unrenderable as exact, and a later **note** edit still became the exact resolve date because it was mislabelled upstream of the guard — real row `ea9cd7c5`, resolved **2026-07-25 by a script**, rendered **"Jul 29, 2026", exact, no qualifier, By: "Manual"**. Wrong date, wrong actor, no marker, inside the module whose own header called that unreachable. **H2** — the UI stated a false cause as fact ("cells resolved before per-cell history existed"); per-cell history began 07-17 and all 252 degraded cells sit in a **0.4-second window on 07-22** — a bulk load that wrote no audit rows, and there is **no trigger** on `directive_brand_status`. **H4 — THE G7 HIGH, REPEATED IN FORM, TEN LINES AFTER THE SPEC WARNED AGAINST IT:** §1.2 said "27 in the last 3 days" when **08-21 alone is 27**, understating the rate ~3×. **A specific, present warning did not prevent it.** **H5** — 252 used for two unrelated quantities in adjacent sections. **SILENT-FAILURE FIXES WORTH KEEPING:** an over-read killed the whole panel on one ordinary mid-load save, with a message describing a *short* read; `count` is **NaN, not null**, when the content-range header is absent, so the fail-closed branch was **dead against the real client** and users saw "the exact count is NaN"; a `head:true` error carries an **empty message**, rendering "count failed — "; the 60vh scroll region had **zero focusables and no tab stop**, leaving hundreds of rows keyboard-unreachable; and the sticky `<th>` lacked the inset-box-shadow header rule the matrix page documents. **NOT COVERED, STATED RATHER THAN IMPLIED:** `readAllVerified` is untested and cannot be unit-tested without a live PostgREST — **C1, the NaN bug and the over-read bug all lived in that one function**, while `actorLabel()`, dead in production, sat in `lib/` with tests around it. **The extraction rule was applied backwards; it caught the trivial half.** Also filed not fixed: `--f92-navy` on a card fails AA in dark at **2.59:1** (pre-existing, three prior instances on the page). **RIDE-ALONG: §0's `Prod right now` stanza was TWO BATCHES STALE at `ab70878`** while G7 and this batch had both shipped — the same stanza, the same defect the 08-23 pass caught. It is the file's self-declared only current-state claim. **FIGURES RE-DERIVED TWICE IN ONE DAY** and both re-derivations are recorded rather than overwritten, because the rate of staleness is itself the finding: `audit_log` 1,690 → **1,743**, done cells 620 → **639**, per-cell coverage → **387 (60.6%)**, degraded path **252 (39.4%)**, and the **`directive`-target count (278) was missing from the first draft entirely** despite being the whole basis of the degraded path.
 - **2026-08-24 (rev 8.4)** — **r41's CEILING DECIDED (Lacey): amend to 150,000 as the WORKING ceiling; the §16 archive-index trade was considered and REJECTED.** 120,000 is **retired as unreachable, not softened** — everything outside §13/§15/§16 totalled **29,798** at `ab70878`, so extracting every remaining section whole still left the file over it, and two passes ran against that figure with both recorded as misses. **A ceiling no permitted remedy can reach is a standing failure report rather than a bound**, and its practical effect was to generate extraction passes instead of limiting growth. 150,000 is the **tool read limit**, so breaching it makes §0's own "read this file completely" inexecutable — the failure the rule actually exists to prevent. **⚠ AND THE AMENDMENT BOUGHT NO ROOM, WHICH CORRECTS WHAT WAS IMPLIED WHEN THE OPTION WAS OFFERED:** 147,921 → **148,205**, so headroom is **~1,795** against G7's **4,744** of doc obligations. **The first draft of the amendment came within 271 chars of tripping the ceiling it was setting** — recorded because it is the cleanest available measurement of the refill problem, and because the fix was to relocate its own rationale here, which is r42 applied to the amendment itself. **THE SPACE PROBLEM IS THEREFORE STILL OPEN AND IS NOW #3's FIRST QUESTION,** with three routes: a third extraction pass before #3 starts; **#3's spec and post-mortem living entirely in `docs/specs/` with §15 carrying pointers only** (r42 applied pre-emptively rather than as cleanup — cheapest, and what G7 should have done, since most of G7's 4,744 was narrative a later pass would relocate anyway); or revisiting the §16 trade. **Refill rate, as a number because it keeps being guessed: the 08-23 pass bought 6,823 chars and the next batch spent 4,744 — a pass buys about one and a half batches.** Also recorded: the rev-8 DRAFT should be **deleted from project knowledge** — four revisions stale and internally wrong (it places the Change Log widget at #7 where every current doc says #3).

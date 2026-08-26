@@ -80,10 +80,10 @@ the bounded middle.
  ✅  G7 TAB-STOPS              auto     —          SHIPPED 08-23 (2ad78bb)
  ✅  CHANGE LOG WIDGET         auto     —          SHIPPED 08-24 (e58cf7b)
  ⏸  DATA INSIGHTS             accept   —          DEFERRED 08-24 (premise fails)
- 5   006 TEAMS DISPATCH        accept   —          ← next up
- 6   010.1 REMAINDER           accept   #5
- 7   CLICKUP PHASE 2/3         manual   #5 · Jenny
- 8   CONVERT DIRECT READ       accept   —          supersedes 012 E2
+ ⛔  006 TEAMS DISPATCH        manual   BLOCKED    mechanism retired 05-22
+ ⛔  010.1 REMAINDER           accept   #5         re-blocked with #5
+ ⛔  CLICKUP PHASE 2/3         manual   #5 · Jenny re-blocked with #5
+ 8   CONVERT DIRECT READ       accept   —          ← next up · supersedes E2
  9   008 CONVERT AUTOMATION    accept   #8 — may fold in
 10   KEEP-BOTH-AND-FLAG        manual   Jenny
 11   012 PHASE C               accept   Jira-permission verify
@@ -1844,7 +1844,17 @@ went 69 → 75 directives when six goals were created through the matrix UI on
 the matrix result count, so read it there. The drift narrative is in
 `docs/claude-archive/CLAUDE-16-2026-08.md` (r42).
 
-### Batch 006 (post-demo) — Teams dispatch (EXPANDED)
+### Batch 006 (post-demo) — Teams dispatch (EXPANDED) — ⛔ BLOCKED 2026-08-25
+> **⚠ DO NOT SCOPE FROM THE LIST BELOW.** Microsoft retired O365 Connectors
+> **2026-05-22**, so the Incoming Webhook this batch assumes cannot be created.
+> **Three locked items are INVALIDATED, not delayed** (Adaptive Cards, 401/403
+> rotation, the rate cap). Workflows is a HYPOTHESIS. Research task and detail:
+> outline rev 8.7. **#6 and #7 re-block with this.**
+>
+> **STANDING — the other half of an existing rule: RE-VERIFY AN UN-BLOCKING, NOT
+> JUST A BLOCKER, AND NAME THE ARTIFACT IT TURNS ON.** The 08-22 un-blocking
+> turned on "a channel exists"; the batch needs "we can POST to it".
+
 Wires `alert_events` rows to actually fire Teams notifications.
 Until this batch ships, alerts accumulate silently in the database.
 Scope EXPANDED 2026-07-03 (`docs/batch-outline-2026-07-03.md`): absorbs
