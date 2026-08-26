@@ -1,6 +1,7 @@
 # CQIP Batch Priority Outline
 
-**Updated:** 2026-08-25 (rev 8.7 — **#5 006 TEAMS DISPATCH RE-BLOCKED: its dispatch mechanism was RETIRED BY MICROSOFT 2026-05-22.** ⚠ The 08-22 un-blocking was recorded against the WRONG ARTIFACT. #6 and #7 re-block with it. Sequence head is now **#8 Convert direct read**)
+**Updated:** 2026-08-25 (rev 8.8 — **#8 CONVERT DIRECT READ BLOCKED TOO: the working Convert auth exists OUTSIDE this repo and nobody knows whose it is.** ⚠ **ONE OWNERSHIP QUESTION NOW GATES #8, #9 AND THE RESOLVER BUG.** #8 is also **Jenny-gated**, not `accept`. Startable today: **#10 or #13 only**)
+**Previous:** rev 8.7 (2026-08-25 — #5 006 re-blocked, dispatch mechanism retired 2026-05-22; the 08-22 un-blocking was recorded against the wrong artifact; #6 and #7 re-blocked)
 **Previous:** rev 8.6 (2026-08-24 — #4 Data insights deferred, its premise does not hold on current data)
 **Previous:** rev 8.5 (2026-08-24 — batch #3 change log widget shipped + deployed, prod `e58cf7b`, run #49; Karen's two CRITICALs were both verification claiming more than it had)
 **Previous:** rev 8.4 (2026-08-24 — r41's ceiling amended to 150,000, §16-index trade rejected; the amendment bought no room)
@@ -354,12 +355,12 @@ The **MODE** column is the agent-autonomy setting, not a difficulty rating.
  ⛔  006 TEAMS DISPATCH        manual   BLOCKED    dispatch mechanism retired 05-22
  ⛔  010.1 REMAINDER           accept   #5         re-blocked with #5
  ⛔  CLICKUP PHASE 2/3         manual   #5 · Jenny re-blocked with #5
- 8   CONVERT DIRECT READ       accept   —          ← HEAD OF THE OPEN SEQUENCE
- 9   008 CONVERT AUTOMATION    accept   #8 — may fold in
-10   KEEP-BOTH-AND-FLAG        manual   Jenny
-11   012 PHASE C               accept   Jira-permission verify
-12   012 PHASE D               manual   #11 · Jenny · public surface
-13   007 JIRA BOARDS           auto     —
+ ⛔  CONVERT DIRECT READ       manual   BLOCKED    auth ownership unknown · +Jenny
+ ⛔  008 CONVERT AUTOMATION    manual   #8         same blocker
+10   KEEP-BOTH-AND-FLAG        manual   Jenny      ← STARTABLE TODAY
+ ⛔  012 PHASE C               accept   BLOCKED    Jira-permission verify (external)
+ ⛔  012 PHASE D               manual   #11
+13   007 JIRA BOARDS           auto     —          ← STARTABLE TODAY
  —   BULK CELL EDIT (backlog)  manual   Jenny
 ```
 
@@ -565,10 +566,85 @@ not a foundation to build on — this is ground-up.
 - **The enum decision is now unilateral.** CQIP defines `issue_type` and severity
   at the source. No mapping negotiation, and no widening migration forced by
   someone else's schema. That is a real simplification, not just a reassignment.
-- **Unresolved:** whether **008 Convert.com automation** folds into this batch or
-  becomes its phase 2. 008 automates against Convert; #4 builds the reader.
-  **Check for collision before scoping either.**
-- Scope after the split's second pass lands.
+- ~~**Unresolved:** whether **008 Convert.com automation** folds into this batch or
+  becomes its phase 2. **Check for collision before scoping either.**~~
+  **✅ COLLISION CHECK DONE 2026-08-25 — AND IT ANSWERS A DIFFERENT QUESTION THAN
+  THE ONE ASKED. See below.**
+
+### ⛔ BLOCKED 2026-08-25 — the collision check ran, and both items share ONE unnamed prerequisite
+
+**Decision: Lacey, 2026-08-25. Nothing scoped, nothing built.** The board asked
+*"does 008 fold into #8 or become its phase 2?"* **Neither. They share a
+prerequisite that neither entry names: a DURABLE CONVERT CREDENTIAL, and nobody
+currently knows who holds the working one.**
+
+**What the repo contains — verified, not assumed:**
+
+- **No Convert API client anywhere.** No `lib/convert/`, no `nonce`, no
+  `api.convert.com`, no `412` handling. `git log --diff-filter=D -- '*convert*'`
+  is **empty**, so nothing was deleted either — it was never here.
+- **No Convert credential.** The only Convert-named env var is
+  `CQIP_CONVERT_MONITORING_TOKEN`, and `docs/env-vars.md` documents it as a Bearer
+  secret **others present TO CQIP** on `POST /api/monitoring/findings`. **It is
+  inbound.** It cannot read Convert.
+- **No brand → Convert project mapping, and no account or project ID at all.**
+  The 08-07 endpoint is recorded with `{acct}` and `{pid}` **left as literal
+  placeholders.**
+- The 07-25 reconciliation was **manual crawl → CSV → Supabase loader.**
+  `batch-012-convert-reconciliation-spec.md` §4: renames were *"executed in
+  Convert itself (or by Xandor), not a CQIP write. Separate, no code."*
+
+**⚠ AND THE DISCREPANCY THAT MATTERS: 008's FIRST DISCOVERY QUESTION WAS ANSWERED
+THREE WEEKS AGO, AND THE ANSWER IS THE WORST ONE.** `docs/specs/batch-008-convert-automation.md`
+— relocated as **live scope authority** on 08-23 — still lists *"Convert.com API
+auth model — service accounts? per-user OAuth? API keys per project?"* as
+**undiscovered**. But the 08-07 handoff records **100 authenticated write calls
+already executed**, with the mechanics: `POST /accounts/{acct}/projects/{pid}/goals/{id}/update`
+and **"Nonce goes stale; re-harvest from a UI XHR on 412."**
+
+**A nonce scraped from a logged-in browser session cannot live in an edge function
+or a cron.** It expires, and recovering it needs a human with a Convert tab open.
+008's entire premise — single-click 4-step deploy, idempotency, rollback — assumes
+durable credentials it does not have.
+
+**TWO BOARD CLAIMS ARE WRONG AND ARE CORRECTED HERE:**
+
+1. **#8 is NOT `accept` and NOT gate-free.** A brand → Convert project mapping
+   needs a new column on `brands` → **a migration → Jenny.** Mode moves to
+   `manual` (Jenny-gated is manual regardless).
+2. **"This is ground-up" is HALF WRONG.** A working authenticated path
+   demonstrably exists — it crawled **13 projects / 1,007 goals** and made **100
+   successful writes**. It is not ground-up; it is **UNDOCUMENTED, and living
+   outside this repo.** Rebuilding from zero when someone already has a working
+   path is a choice, not a necessity, and it should be made knowingly.
+
+### ⚠ ONE OWNERSHIP QUESTION NOW GATES THREE ITEMS — CONSOLIDATED HERE
+
+**Who ran the 2026-08-07 Convert pass, and what auth did they use?** Lacey does
+not currently know (08-25). The repo's only leads: the **Claudette handoff** at
+`docs/convert-reconciliation-2026-08-07/convert-audit-2026-08-07-todos.md:57`, and
+**Xandor** via `batch-012-convert-reconciliation-spec.md:203`.
+
+Answering it closes **all three** of these at once:
+
+- [ ] **#8 Convert direct read** — is there a durable credential, or only a
+      browser nonce?
+- [ ] **#9 008 Convert automation** — same, and it is the harder requirement.
+- [ ] **The reconciliation-resolver bug**, open since 08-22 with
+      `STATUS AT SOURCE: UNKNOWN` — *does the resolver key on `convert_id` rather
+      than name alone?* **Same person, same message.**
+
+**Also owed and cheap:** whoever ran 08-07 has the **account and project IDs**.
+Those were never written into the repo, and they are the single artifact that
+would let any future Convert work start.
+
+**THE BUILDABLE-TODAY ALTERNATIVE, offered and not taken:** nothing. #8 has no
+degraded mode — a reader with no credential reads nothing.
+
+---
+
+### NEW — Convert direct read (ORIGINAL SCOPE, retained — see the block above)
+- Scope after the ownership question is answered.
 
 ### ⏸ DEFERRED 2026-08-24 — Data insights. THE PREMISE DOES NOT HOLD ON CURRENT DATA.
 
@@ -1082,6 +1158,7 @@ than unilateral. Flagged here so it is owed on the record rather than remembered
 
 ## CHANGE LOG
 
+- **2026-08-25 (rev 8.8)** — **#8 CONVERT DIRECT READ BLOCKED. The collision check ran and answered a DIFFERENT question than the one asked.** The board asked *"does 008 fold into #8 or become its phase 2?"* — **neither. Both share a prerequisite neither entry names: a DURABLE CONVERT CREDENTIAL, and nobody currently knows who holds the working one.** Verified in the repo, not assumed: **no Convert API client anywhere** (no `lib/convert/`, no `nonce`, no `api.convert.com`, no `412`; `git log --diff-filter=D -- '*convert*'` is empty, so it was never here rather than deleted); **no Convert credential** — the only Convert-named env var is `CQIP_CONVERT_MONITORING_TOKEN`, documented as a Bearer secret **others present TO CQIP**, i.e. **inbound**, unusable for reading Convert; **no brand→project mapping and no account or project ID at all** — the 08-07 endpoint is recorded with `{acct}`/`{pid}` **left as literal placeholders**; and the 07-25 reconciliation was **manual crawl → CSV → Supabase loader**, with §4 of its spec stating the renames were *"executed in Convert itself (or by Xandor), not a CQIP write. Separate, no code."* **⚠ THE DISCREPANCY THAT MATTERS: 008's FIRST DISCOVERY QUESTION WAS ANSWERED THREE WEEKS AGO AND THE ANSWER IS THE WORST ONE.** `batch-008-convert-automation.md`, relocated as **live scope authority** on 08-23, still lists *"Convert.com API auth model — service accounts? per-user OAuth? API keys?"* as **undiscovered**, while the 08-07 handoff records **100 authenticated write calls already executed** against `POST /accounts/{acct}/projects/{pid}/goals/{id}/update` with **"Nonce goes stale; re-harvest from a UI XHR on 412."** **A nonce scraped from a logged-in browser session cannot live in an edge function or a cron** — it expires and recovery needs a human with a Convert tab open, while 008's premise (single-click 4-step deploy, idempotency, rollback) assumes durable credentials it does not have. **TWO BOARD CLAIMS CORRECTED: (1) #8 is NOT `accept` and NOT gate-free** — a brand→Convert-project mapping needs a new column on `brands` → migration → **Jenny**, so mode moves to `manual`; **(2) "this is ground-up" is HALF WRONG** — a working authenticated path demonstrably crawled **13 projects / 1,007 goals** and made **100 successful writes**, so it is not ground-up, it is **UNDOCUMENTED and living outside this repo**, and rebuilding from zero is a choice to make knowingly rather than a necessity. **⚠ ONE OWNERSHIP QUESTION NOW GATES THREE ITEMS, CONSOLIDATED:** *who ran the 08-07 pass and what auth did they use?* — it closes #8, #9, **and the reconciliation-resolver bug open since 08-22 with `STATUS AT SOURCE: UNKNOWN`** (does the resolver key on `convert_id` rather than name alone). **Same person, same message.** Whoever ran it also holds the **account and project IDs**, never written into the repo and the single artifact any future Convert work needs. Leads: the Claudette handoff at `convert-audit-2026-08-07-todos.md:57`, and Xandor via `batch-012-convert-reconciliation-spec.md:203`. **#8 has NO degraded mode** — a reader with no credential reads nothing — so there was no buildable-today alternative to offer. **⚠ BOARD STATE: the top of the sequence is now blocked on EXTERNAL HUMANS almost end to end** — #4 deferred, #5/#6/#7 blocked (dispatch mechanism retired), #8/#9 blocked (auth ownership), #11/#12 blocked (Jira-permission verify). **Startable today: #10 keep-both-and-flag (Jenny, writes to prod) and #13 007 Jira boards (auto, read-only against a cache).** That is 2 of 13.
 - **2026-08-25 (rev 8.7)** — **#5 006 TEAMS DISPATCH RE-BLOCKED (Lacey): ITS DISPATCH MECHANISM WAS RETIRED BY MICROSOFT ON 2026-05-22.** Office 365 Connectors in Teams completed retirement 05-18 → 05-22, with all connector webhooks required to migrate to **Workflows** before 05-18 — so the `*.webhook.office.com` **Incoming Webhook this batch is specced against cannot be created any more.** That is three months before this entry, and **006's expanded scope was locked 2026-07-03, AFTER the mechanism had already gone.** **⚠ THE 08-22 UN-BLOCKING WAS RECORDED AGAINST THE WRONG ARTIFACT:** it read *"Lacey has a channel cleared for testing, so the block is gone"*, but **the block was never the channel.** Confirmed 08-25 — the sandbox channel exists (`Webhook Sandbox | CRO`) and what was supplied was a `teams.microsoft.com/l/channel/…` **deep link, a client-open link and not an endpoint.** **THIS IS THE THIRD MIS-RECORDED GATE AND THE FIRST OF ITS KIND:** Batch 009's Azure block ran 23 days as fiction, 006's own alerts-channel block ran months as fiction, and now an **UN-blocking** was recorded as real against an artifact that had already stopped existing. **NEW STANDING LESSON — the existing rule was "re-verify a blocker carried past 7 days"; the missing half is RE-VERIFY AN UN-BLOCKING TOO, AND NAME THE ARTIFACT IT TURNS ON.** *"The channel exists"* and *"we can POST to it"* are different claims and only the second unblocks anything. **THREE LOCKED SPEC ITEMS ARE INVALIDATED, NOT DELAYED:** (1) *Adaptive Card / message card formatting per rule type* — Workflows do not support interactive cards with MessageCard payloads and an Adaptive Card through a Workflow behaves differently; **re-decide, do not port**; (2) *Detect 401/403 with rotation grace* — **wrong failure mode**, Workflows fail on SAS signature expiry, a disabled flow, or Power Automate throttling (429); (3) *Global rate cap with self-announcing overflow* — **Power Automate throttles upstream**, outside CQIP's control and uncountable, so an alert can be suppressed by a limiter above ours, which is the silent-swallow this item exists to prevent, relocated out of reach. Also: Workflows **cannot customize bot icon or name**, so posts appear as the flow owner, not as "CQIP". **LACEY'S READ, RECORDED AS A HYPOTHESIS AND NOT A FINDING:** Workflows is probably viable. **A named research task now gates 006** — create a Workflows webhook in the sandbox, POST plain text (the real gate), POST an Adaptive Card, record the failure codes, find the tenant's throttle limits, and decide whether posting as the flow owner is acceptable. **⚠ A Workflows URL IS A SECRET** — it carries its own SAS signature, so it goes in `wrangler secret put` / Supabase env and **never** into the repo, a doc, or a commit message; and `/api/health` reports the **Worker only**, so it will not verify an edge-function dispatch either way. **⚠ KNOCK-ON — TWO MORE ITEMS RE-BLOCK:** rev 8.1 recorded that un-blocking 006 also unblocked **010.1 remainder (#6)** and **ClickUp Phase 2/3 (#7)**; that un-blocking was wrong, so **both return to blocked.** The board lost three items in one correction, and the honest read is that it never had them. **Sequence head moves to #8 Convert direct read** (accept-with-edits, no dependencies) — which carries its own unresolved prereq: **check for collision with 008 Convert automation before scoping either.**
 - **2026-08-24 (rev 8.6)** — **#4 DATA INSIGHTS DEFERRED (Lacey). Its premise does not hold on current data, and this was found by probing BEFORE a spec was written — nothing was built.** The batch is period-over-period distribution shifts, and **there are not two comparable periods.** Of 100 live logs, 68 carry `issue_category`, but the recent months run **20→5, 15→1, 11→3**, and **quarterly aggregation does NOT rescue it — checked, not assumed: 2026-Q3 is n=4** against ten categories. The best month in the whole series is 2025-12 at 23 and nothing else exceeds 9; ten category values across 68 logs leave most per-period cells at 0–2. So the spec's own small-n suppression rule would suppress every period anyone wants to compare. **⚠ THE CAUSE IS A QUEUE, NOT A DATA PROBLEM, AND THAT IS THE USEFUL FINDING:** coverage tracks `log_status` almost exactly — **Resolved 54/63 classified (86%) vs Pending Verification 2/33 (6%)** — so classification happens at resolution, and **37 of 100 live logs are unresolved, every one since 2026-06-03.** The recent months are not a distribution shift; they are unclassified work. **An insight built today would read a QUEUE as a TREND** — exactly the failure the batch's own "every insight names its denominator and its date" rule exists to prevent. **UNPARKS ON A REACHABLE TRIGGER: the Pending Verification backlog falls below 10** (~30 newly classified logs, making 06/07/08 comparable). **A "≥25 classified per month" trigger was CONSIDERED AND REJECTED as unreachable** — recent volume is 11–20 logs/month total, so it needs volume to double, and an unreachable trigger reads as actionable and is not, which is how r41's 120,000 ceiling failed. **COUPLING: this is the AI classifier's case restated in data** — the free Rovo-by-hand path has never been tried, and hand-classifying ~35 logs would clear the backlog and supply #4's denominator in one pass; same upstream cause as `root_cause_initial` being empty on 74/83 webhook-created logs. **The buildable-today alternative — an all-time distribution with no period comparison — was offered and NOT taken**, because it is not what the batch was scoped for and shipping it would consume the name. **Sequence head moves to #5, 006 Teams dispatch** (accept-with-edits, no dependencies).
 - **2026-08-24 (rev 8.5)** — **BATCH #3, THE CHANGE LOG WIDGET, SHIPPED + PUSHED + DEPLOYED. Prod `e58cf7b`, run #49.** A read-only panel on `/dashboard/reports` — **not** the matrix page, because G7's standing gate forbids adding a focusable surface there until `role="grid"` is decided, and `CellEditStrip` is E3's seam. Two commits, no migration, no Jenny, no version bump, **430 tests**, and a **`typecheck` script** added. **⚠ KAREN POST-FLIGHT: 2 CRITICAL + 4 HIGH + 11 MEDIUM, ALL FIXED PRE-PUSH — AND BOTH CRITICALs WERE VERIFICATION CLAIMING MORE THAN IT HAD, NOT CODING MISTAKES.** That is the second consecutive batch to produce G5a instances at post-flight, and the QMS review was amended for it. **C1: a FABRICATED 0% PRESENTED AS VERIFIED FACT.** `audit_log`'s only SELECT policy is `is_admin()` and there are three active read-only users; RLS filtered the `count:'exact'` query and the paged read **identically to zero with no error**, so the completeness check PASSED and the panel rendered *"0 of 639 finished cells (0.0%) have an exact resolve date"* with 639 rows reading "no audit trail" — every one of which has one. **Three things the batch was proud of had to line up:** the spec's §6 asserting the panel "shows nothing a Pulse viewer cannot already see" (false — `audit_log` is the one table they cannot see); §4's instruction to make the degraded state *look deliberate rather than like a failure*, which is what hid it; and **a test — "zero rows verified against zero is a valid complete read" — that encoded the bug as intended behaviour.** **NEW STANDING LESSON: "read-only" is NOT "readable by everyone" — ask the permission question per TABLE, not per route**, and a completeness check comparing two numbers from the same filtered source cannot detect that the filter is the problem. **C2: `npm test` IS NOT THE GATE.** Five strict-null errors in the new test file; `tests/` IS typechecked by `next build`, but `npm test` runs under `tsx` **which strips types**, so CI would have gone **green on the test job and red on deploy** — the gate added in the G7 batch does not cover the gate that blocks a push. `typecheck` script added; **CI wiring still OWED** (one line, `.github/**` is in `paths-ignore` so it does not deploy). Deliberately NOT folded into `npm test`: a full-repo `tsc` could not be verified from the authoring environment, and a red `npm test` behind `needs: test` blocks every deploy. **H1 — NEW STANDING LESSON, the most transferable finding: A GUARD ON PRESENTATION IS NOT A GUARD ON CLASSIFICATION.** §4's structural guard made an approximate date unrenderable as exact, and a later **note** edit still became the exact resolve date because it was mislabelled upstream of the guard — real row `ea9cd7c5`, resolved **2026-07-25 by a script**, rendered **"Jul 29, 2026", exact, no qualifier, By: "Manual"**. Wrong date, wrong actor, no marker, inside the module whose own header called that unreachable. **H2** — the UI stated a false cause as fact ("cells resolved before per-cell history existed"); per-cell history began 07-17 and all 252 degraded cells sit in a **0.4-second window on 07-22** — a bulk load that wrote no audit rows, and there is **no trigger** on `directive_brand_status`. **H4 — THE G7 HIGH, REPEATED IN FORM, TEN LINES AFTER THE SPEC WARNED AGAINST IT:** §1.2 said "27 in the last 3 days" when **08-21 alone is 27**, understating the rate ~3×. **A specific, present warning did not prevent it.** **H5** — 252 used for two unrelated quantities in adjacent sections. **SILENT-FAILURE FIXES WORTH KEEPING:** an over-read killed the whole panel on one ordinary mid-load save, with a message describing a *short* read; `count` is **NaN, not null**, when the content-range header is absent, so the fail-closed branch was **dead against the real client** and users saw "the exact count is NaN"; a `head:true` error carries an **empty message**, rendering "count failed — "; the 60vh scroll region had **zero focusables and no tab stop**, leaving hundreds of rows keyboard-unreachable; and the sticky `<th>` lacked the inset-box-shadow header rule the matrix page documents. **NOT COVERED, STATED RATHER THAN IMPLIED:** `readAllVerified` is untested and cannot be unit-tested without a live PostgREST — **C1, the NaN bug and the over-read bug all lived in that one function**, while `actorLabel()`, dead in production, sat in `lib/` with tests around it. **The extraction rule was applied backwards; it caught the trivial half.** Also filed not fixed: `--f92-navy` on a card fails AA in dark at **2.59:1** (pre-existing, three prior instances on the page). **RIDE-ALONG: §0's `Prod right now` stanza was TWO BATCHES STALE at `ab70878`** while G7 and this batch had both shipped — the same stanza, the same defect the 08-23 pass caught. It is the file's self-declared only current-state claim. **FIGURES RE-DERIVED TWICE IN ONE DAY** and both re-derivations are recorded rather than overwritten, because the rate of staleness is itself the finding: `audit_log` 1,690 → **1,743**, done cells 620 → **639**, per-cell coverage → **387 (60.6%)**, degraded path **252 (39.4%)**, and the **`directive`-target count (278) was missing from the first draft entirely** despite being the whole basis of the degraded path.

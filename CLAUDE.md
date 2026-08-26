@@ -83,12 +83,12 @@ the bounded middle.
  ⛔  006 TEAMS DISPATCH        manual   BLOCKED    mechanism retired 05-22
  ⛔  010.1 REMAINDER           accept   #5         re-blocked with #5
  ⛔  CLICKUP PHASE 2/3         manual   #5 · Jenny re-blocked with #5
- 8   CONVERT DIRECT READ       accept   —          ← next up · supersedes E2
- 9   008 CONVERT AUTOMATION    accept   #8 — may fold in
-10   KEEP-BOTH-AND-FLAG        manual   Jenny
-11   012 PHASE C               accept   Jira-permission verify
-12   012 PHASE D               manual   #11 · Jenny · public surface
-13   007 JIRA BOARDS           auto     —
+ ⛔  CONVERT DIRECT READ       manual   BLOCKED    auth owner unknown · +Jenny
+ ⛔  008 CONVERT AUTOMATION    manual   #8         same blocker
+10   KEEP-BOTH-AND-FLAG        manual   Jenny      ← STARTABLE
+ ⛔  012 PHASE C               accept   BLOCKED    Jira-permission verify
+ ⛔  012 PHASE D               manual   #11
+13   007 JIRA BOARDS           auto     —          ← STARTABLE
  —   BULK CELL EDIT (backlog)  manual   Jenny
 ```
 
