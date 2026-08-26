@@ -151,18 +151,64 @@ OneDrive facts. Same file, same signature, additive.
 `npm test` glob (`tests/*.test.ts`) so CI runs it — the `test` job already gates
 `deploy`.
 
-Must include, as negatives that can actually fail:
+### 3.1 What these tests prove, and what they do not
 
-1. Today's HDCRO row (multi_brand / customfield_12220 / NULL default / 0 brands) returns a blocking finding. **This test fails against `main` as written today** — that is the point of it.
+`brandConfigChecks()` does not exist on `main`, so **none of this can be run red
+against `main` first.** What is broken on `main` is the *system* — HDCRO is
+misconfigured in prod and nothing surfaces it — not an assertion. Saying
+otherwise would repeat G7's "test that could not fail".
+
+The guard against a tautological check is structural instead: all three prod
+fixtures are verbatim copies of real rows, and **two of them must come back
+clean.** A function that degenerated to "always blocking" fails NBLYCRO and
+SPLCRO; one that degenerated to "always ok" fails HDCRO.
+
+### 3.2 Required cases
+
+1. Today's HDCRO row (multi_brand / customfield_12220 / NULL default / 0 brands) is blocking, and the detail names the null-overwrite consequence, not just the misconfiguration.
 2. Today's SPLCRO row returns clean.
 3. Today's NBLYCRO row returns clean.
 4. A single-brand project with NULL `default_brand_id` is blocking.
 5. A fully-configured single-brand project is clean.
 
-Plus route-level validation tests for the three §2.1 rules.
+Plus route-level validation tests for the three §2.1 rules, once §2.1 exists.
 
 `npm run typecheck` in the same pass — `npm test` runs under tsx and strips
 types, so it cannot see strict-null errors.
+
+### 3.3 Delivered 2026-08-26 — steps 1-2 of 5
+
+`lib/onboarding/checks.ts` (202 lines, pure) and
+`tests/onboarding-checks.test.ts` (13 tests). **13 pass, 0 fail; `tsc --noEmit`
+clean** under this repo's compilerOptions. Verified in a Linux sandbox, not via
+`npm test` in the repo — the checked-in `node_modules` carries
+`@esbuild/darwin-arm64`, so tsx cannot run there from a Linux shell. **`npm test`
+on Lacey's Mac is the confirming run.**
+
+Beyond the five required cases it also pins: multi-brand with no Jira field;
+multi-brand with 0 brands but a fallback (not blocked — the fallback is
+sufficient); a default brand belonging to another project, in both models; a
+`default_brand_id` resolving to nothing, in both models; single-brand with extra
+active brands (warning, not blocking); that a clean project returns exactly one
+`ok` finding rather than an empty array, so "clean" is never confused with
+"unchecked"; and that every non-ok finding carries a fix string.
+
+**Step 2** adds `lib/onboarding/project-config.ts` (163 lines, pure),
+`tests/project-config.test.ts` (13 tests) and `app/api/admin/projects/route.ts`
+(389 lines, POST + PATCH). **26 tests pass, 0 fail; full-repo `tsc --noEmit`
+clean**, route included.
+
+Three things in the route are deliberate and worth Karen's attention:
+
+- **`jira_project_key` is immutable after creation**, and a PATCH attempting to change it is rejected rather than ignored. `brands.project_key` and `quality_logs.project_key` join on it with **no FK**, so a rename orphans them silently.
+- **Brand config validates as a unit even on a partial PATCH.** Submitting `brand_model` alone is checked against the `default_brand_id` already stored, so switching an existing project to single-brand cannot half-apply.
+- **Audit rows are written only for fields that actually changed.** A resubmitted identical value produces no audit row. Writing one would be the G5a claim-pattern — a record asserting a change that did not happen.
+
+`tests/project-config.test.ts` closes with the assertion Karen's §4 question needs:
+everything the validator accepts also satisfies the 019:90-93 CHECK, and the test
+counts its own accepted cases so it cannot pass by accepting nothing. The reverse
+direction is deliberately false — the constraint accepts defaulted-not-configured,
+which is the defect.
 
 ---
 
@@ -178,10 +224,13 @@ types, so it cannot see strict-null errors.
 
 **Fix HDCRO's config as part of this batch, or leave it for the new UI to fix?**
 
-Recommend: **leave it, and use it as the acceptance test.** Configuring Heartland
-through the shipped UI proves the path end to end on a real client, and HDCRO has
-0 logs so there is nothing at risk while it waits. Hand-fixing it in SQL first
-would remove the only live proof available.
+**DECIDED 2026-08-26 (Lacey): leave it.** Configuring Heartland through the
+shipped UI is the acceptance test. HDCRO has 0 logs, so nothing is at risk while
+it waits; hand-fixing it in SQL first would remove the only live proof available.
+
+**Consequence to hold:** HDCRO must not be synced before this batch ships, or
+§0.4's null-overwrite runs against real rows. Nothing schedules an HDCRO sync
+today — it is only reachable by a manual Sync with Jira.
 
 ---
 
