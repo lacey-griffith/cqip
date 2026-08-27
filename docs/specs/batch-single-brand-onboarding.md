@@ -123,7 +123,44 @@ the route, and grows:
 The ordering problem is real and is handled in the UI, not the schema: a
 single-brand project needs a brand that needs the project to exist. So —
 
-5. **Create single-brand in two visible steps.** Submitting a single-brand project creates it `multi_brand` (satisfying the CHECK), then the form drops the user straight into the brand form for that project, and on brand creation the project is PATCHed to `single_brand` + `default_brand_id`. If the user abandons after step 1, the project is left multi-brand and shows a **"brand config incomplete"** badge in the project list. No half-state is invisible.
+5. ~~**Create single-brand in two visible steps.** Submitting a single-brand project creates it `multi_brand` (satisfying the CHECK), then the form drops the user straight into the brand form for that project, and on brand creation the project is PATCHed to `single_brand` + `default_brand_id`. If the user abandons after step 1, the project is left multi-brand and shows a **"brand config incomplete"** badge in the project list. No half-state is invisible.~~
+
+   **⚠ STRUCK 2026-08-27. This is what SHIPPED, and Karen K2 falsified its last
+   sentence: brand POST ok + project PATCH failed leaves a state every
+   `brandConfigChecks()` branch reads as clean, so the half-state IS invisible,
+   and the retry 409s.**
+
+   **REPLACED BY (DECIDED 2026-08-27, Lacey): ONE FORM, ONE TRANSACTION.**
+   Project fields and brand fields are collected together and submitted once,
+   through a `create_single_brand_project()` RPC that inserts the project
+   `multi_brand`, inserts the brand, and flips the project to `single_brand`
+   inside a single transaction. The intermediate row is real but never commits.
+
+   **Why not a column instead.** An `intended_brand_model` column was
+   considered and rejected: its only job would be recording what a UI wizard
+   meant — a client concern taking permanent schema surface — and it has no
+   honest backfill, since HDCRO's value is "unknown". It would also leave the
+   failure mode live and merely visible. Unreachable beats visible beats
+   silent.
+
+   **What this deletes, stated so it is not rediscovered as a regression.**
+   The finish panel, its "Step 2 of 2" copy, and its **"Leaving now is safe"**
+   line all go. That sentence is TRUE today (the project exists after step 1)
+   and FALSE under one transaction (nothing exists until submit). It must not
+   survive the change.
+
+   **The ordering problem does not disappear, it moves.** `brands.project_key`
+   has an FK to `projects(jira_project_key)` (`009:14`), so the brand still
+   cannot be inserted first; and `019:90-93` still requires `default_brand_id`
+   on any `single_brand` row. Three statements, one transaction, not two.
+
+   **Not yet built.** The RPC was drafted, Jenny-reviewed and HELD on
+   2026-08-26 with five open fixes (audit rows derived from the committed row
+   rather than the input jsonb; an explicit literal instead of relying on
+   `019:37-38`'s column default; an `auth.uid()` refusal so the grant is not
+   the sole guard; schema-qualification; a `proacl` + anon-curl grant check).
+   It has no migration number. Part 1 (`030_audit_log_project_target.sql`,
+   Karen K1) shipped separately and does not depend on it.
 
 ### 2.3 A completeness check that names misconfiguration
 
