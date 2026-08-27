@@ -290,3 +290,172 @@ reading the column defaults three lines above it. The claim was structurally
 plausible, wrong, and would have sent the fix at the wrong problem — a blocked
 insert instead of a silent misconfiguration. **Read the defaults before
 concluding a constraint blocks anything.**
+
+---
+
+## 9. Karen review 2026-08-26 — 26 findings, DO NOT SHIP
+
+Three independent reviewers (route correctness / UI state machine / claim
+integrity). All three CRITICALs re-verified against prod directly, not taken on
+the reviewers' word.
+
+### 9.1 CRITICAL
+
+**K1. `audit_log` rejects `target_type='project'`, so every project mutation
+commits unaudited and reports success.** Verified in prod:
+`audit_log_target_shape_chk` admits `quality_log, test_milestone, brand,
+alert_event, user, directive, directive_brand_status, monitoring_finding`. Not
+`project`. Both handlers therefore hit their audit-failure branch, which returns
+**HTTP 200** with an `auditError` field — and `callApi()` in the page only tests
+`!res.ok`, so the UI prints a green success message. 100% of creates and edits
+land with zero audit rows. This is the §13 r19 exposure the batch exists to close.
+**Requires migration 030 reproducing 025's full list plus `'project'`, and §4's
+"Jenny — not required" is WRONG and is corrected below.**
+
+**K2. The two-step create can leave a half-state that badges "Configured".**
+If the brand POST succeeds and the PATCH fails, the project is `multi_brand` +
+`brand_jira_field_id` set + 1 active brand. Run that through
+`multiBrandChecks()`: field id present, `activeBrandCount !== 0`, no
+`default_brand_id` — every branch false, so `brandConfigChecks()` returns the
+lone `ok` finding and the findings row is suppressed. **§3.3's "there is no
+half-state that is invisible" is false, and it is a false answer to the exact
+question §4 directed Karen at.** Retry cannot recover it either: the brand POST
+now 409s, and `finish` is never cleared on that path.
+
+**K3. §5's "Nothing schedules an HDCRO sync today" is false.** Verified in prod:
+`cron.job` id 1, schedule `0 */6 * * *`, `active = true`, POSTing to
+`functions/v1/jira-sync`; the function's working set is
+`.not('log_status','in','("Resolved")').eq('is_deleted', false)` with **no project
+predicate**. HDCRO's only protection is having zero logs — re-verified 0 rows
+total on 2026-08-26. The §5 decision to leave HDCRO was taken on this false
+premise and must be re-confirmed knowing the cron is live and unfiltered.
+
+### 9.2 HIGH
+
+**K4.** `getChangedBy()` throws when there is no user, contradicting its own
+header comment ("We never throw"), and is called AFTER the write commits in both
+handlers with no try/catch. Token expiry mid-request → 500 with the project
+already created → the retry gets 409 for a project the admin was told failed.
+
+**K5.** `edit` is snapshotted at `startEdit` and never re-derived, while three
+handlers call `loadProjects()`. `saveEdit` resubmits all six fields
+unconditionally, so an open expander is a full-row overwrite from a snapshot of
+unknown age. Finishing the two-step flow with an expander open and then saving
+wipes the single-brand config and reports success.
+
+**K6.** The closing test in `tests/project-config.test.ts` **cannot fail.** It
+re-derives the validator's own two guards from the validator's own output, so
+`satisfiesCheck` is true for every accepted value; and it never parses or
+executes the actual constraint, so a validator/constraint divergence is
+undetectable. §3.3 cites it as "the assertion Karen's §4 question needs" —
+overclaim, same shape as the G7 defect this spec's own §3.1 warns about. The
+*proposition* is true (verified by reading both `ok` branches); the test is not
+the evidence for it.
+
+**K7.** `message` and `error` render in exactly one place — inside the add-project
+card. Every finish-panel, edit-expander and toggle failure appears there, often
+off-screen. The finish panel's empty-field guard returns before `setSaving(true)`,
+so it shows nothing at all locally and reads as a dead button.
+
+**K8.** Badge contrast fails AA for 12px text: `resolved` 2.28:1, `medium`
+1.92:1, `default` 2.56:1 in dark (`--f92-gray` is theme-swapped, `text-white` is
+not — the standing shape). Only `critical` passes. In the column this batch
+exists to make readable.
+
+### 9.3 MEDIUM
+
+**K9.** `deactivated_at` is written whenever `is_active` is present, without
+comparing to the stored value. Re-submitting `is_active: false` on an
+already-inactive project destroys the real deactivation timestamp and emits an
+audit row asserting a deactivation that did not happen.
+
+**K10.** The `role="alert"` banner asserts one failure mechanism for all five
+blocking checks. For `DEFAULT_BRAND_FOREIGN` sync resolves a brand fine — the
+wrong client's — and writes a non-empty wrong value. The findings row below
+states the truth, so the banner contradicts the check it summarises.
+
+**K11.** The findings list is gated on `!isEditing`, so the fix instructions
+disappear the moment the fixing tool opens, and cannot be re-read without
+cancelling and losing typed changes.
+
+**K12.** `asTrimmedString` coerces any non-string to null, so a garbage
+`default_brand_id` is treated as "clear the fallback" and 200s. Same class:
+`brand_model: null` becomes a silent multi-brand create on POST, and
+`is_active: "false"` becomes `true` — both correctly 400 on PATCH.
+
+**K13.** A single-brand PATCH submitting only `brand_jira_field_id` has it
+force-nulled, matches the stored null, and returns `200 {unchanged: true}` — the
+input is silently discarded with no `field` naming it.
+
+**K14.** `projects.jira_project_key` IS `UNIQUE` (`001:5`), so the non-atomic
+duplicate check cannot create a duplicate — but the losing racer gets **500**
+with `duplicate key value violates unique constraint …` rendered verbatim into
+the UI, against `project-config.ts`'s own promise that user-facing errors are
+never constraint strings.
+
+**K15.** None of the three loads uses `.range()`, against the rule in
+`lib/client-library/paged-fetch.ts` that this repo has been bitten by three
+times. Nothing is wrong today (101 live logs). Past 1,000 the log count
+under-reports **and so does `activeBrandCount`, which drives the badges** — and
+heap order drops the most-recently-updated rows first.
+
+**K16.** The default-brand Select lists only that project's active brands, so a
+foreign or inactive stored value renders as the "Pick a brand" placeholder —
+indistinguishable from unset — while still being submitted.
+
+**K17.** `toggleActive` rebuilds from the `projects` value in its own closure
+instead of a functional updater. Two quick toggles revert each other on screen
+while both writes land.
+
+### 9.4 LOW / claim defects in this spec (all mine)
+
+**K18.** §0.2's "verified" rows are false as of §3.3, same document, same date.
+Needs an as-of-batch-opening stamp.
+**K19.** §6.4 requires "test 1 verified red against `main` first", which §3.1
+says is impossible. Unsignable acceptance item.
+**K20.** `jira-sync/index.ts:630` is `jira_summary`; `client_brand` is **:631**.
+Wrong pointer copied into `checks.ts:7`, `checks.ts:134` and `013:110`.
+**K21.** §8's "the column defaults three lines above it" is **52 lines** (`019:37-38`
+vs `019:90-93`), in a different section. The wrong figure inverts the lesson: the
+hazard is that defaults and the constraint depending on them sit far apart.
+**K22.** `013 §5.4` still names the nonexistent cycle as its migration step. The
+§1.3 correction did not propagate to the step the wrong diagnosis created.
+**K23.** `checks.ts` is **203** lines, not 202.
+**K24.** "Mirrors `app/api/admin/brands/route.ts` exactly" — that route is POST
+only. PATCH, `deactivated_at`, immutability rejection and the changed-only audit
+filter have nothing to mirror.
+**K25.** "One audit row per submitted field" — POST maps `Object.keys(newRow)`,
+always 8 rows, including nulls the caller never sent.
+**K26.** §0.4 frames the null-overwrite as multi-brand-only. It also reaches a
+single-brand project whose `default_brand_id` points at a deleted brand
+(`jira-sync:419-424`).
+
+### 9.5 Claims Karen checked and confirmed accurate
+
+`019:36-39`, `019:46-53`, `019:84-87`, `019:90-93`, `jira-sync:412-465`,
+`jira-sync:417-425`, `add-brand-drawer:190-202`. **§0.4's central claim holds** —
+`SYNC_GUARDED_FIELDS` (`jira-sync:198-208`) is exactly seven columns and
+`client_brand` is not among them; the file's own comment at `:194-197` says
+`client_brand` "MUST stay unconditional". **§0.1's correction is itself correct.**
+Test counts (13 + 13 = 26) match. All five §3.2 required cases exist and map to
+real branches, and §3.1's structural anti-tautology argument holds for
+`onboarding-checks.test.ts`. The `<Fragment key>` fix is real. Both §3.3
+deviations are accurate. Partial-PATCH-vs-CHECK is clean: the validator is
+strictly stricter than the constraint and every fallback-to-stored path fails
+closed with a 400. `__empty__` cannot be submitted (Radix excludes disabled
+items). React keys and hook rules are clean. The `focus:bg-<literal>` shape does
+not recur anywhere in the new code.
+
+### 9.6 §4 corrected
+
+**Jenny IS required.** K1 needs migration 030. §4's "no schema change, no
+migration, no constraint touched" was true when written and is false now.
+
+### 9.7 Fix order
+
+1. **K1** — migration 030 (Jenny gates it), and make the page surface `auditError` instead of swallowing it.
+2. **K2** — the badge must catch the PATCH-failed shape. Needs a real signal for intended-single-brand, not an inference from column state.
+3. **K3** — re-confirm the §5 HDCRO decision against the live cron.
+4. **K4, K5, K6, K7, K8** — HIGHs.
+5. **K9-K17** — MEDIUMs.
+6. **K18-K26** — spec and comment corrections, same commit as whatever they describe.
