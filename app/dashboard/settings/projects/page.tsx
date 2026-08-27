@@ -121,12 +121,26 @@ const NO_BRAND = '__none__';
 interface ApiError {
   error?: string;
   field?: string;
+  auditError?: string;
 }
 
+type ApiResult =
+  | { ok: true; data: Record<string, unknown>; auditError: string | null }
+  | { ok: false; error: string };
+
+// Karen K1. Both route handlers return HTTP 200 with an `auditError` field when
+// the write commits but its audit rows do not. This function used to test only
+// `!res.ok`, so that response was indistinguishable from a clean success and the
+// page printed green. Every project create and edit landed unaudited and said so
+// to nobody.
+//
+// The write DID commit, so this is not an error state — it is a success with a
+// missing record, and it must read as exactly that. Callers surface it alongside
+// their success message rather than instead of it.
 async function callApi(
   method: 'POST' | 'PATCH',
   body: Record<string, unknown>,
-): Promise<{ ok: true; data: Record<string, unknown> } | { ok: false; error: string }> {
+): Promise<ApiResult> {
   const res = await fetch('/api/admin/projects', {
     method,
     headers: { 'Content-Type': 'application/json' },
@@ -141,7 +155,19 @@ async function callApi(
   if (!res.ok) {
     return { ok: false, error: parsed.error ?? `Request failed (${res.status})` };
   }
-  return { ok: true, data: parsed };
+  return { ok: true, data: parsed, auditError: parsed.auditError ?? null };
+}
+
+/**
+ * The sentence shown when a write succeeded but its audit rows did not.
+ *
+ * Names the consequence, not the mechanism: audit_log has no UPDATE or DELETE
+ * policy (014:22-23), so a missing row cannot be backfilled through the app and
+ * the gap is permanent. Saying "audit failed" alone invites the reader to assume
+ * it will be retried.
+ */
+function auditWarning(detail: string): string {
+  return `Saved, but the change was NOT recorded in the audit log: ${detail} — this gap is permanent and cannot be backfilled from the app. Tell whoever owns the schema before making more changes.`;
 }
 
 export default function ProjectsSettingsPage() {
@@ -156,6 +182,12 @@ export default function ProjectsSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // K1. Deliberately NOT folded into `error`: the write succeeded, so this is
+  // not an error, and `error` renders only inside the add-project card (K7) —
+  // an audit-gap warning that appears off-screen for an edit or a toggle is
+  // barely better than the green success it replaces. This gets a page-level
+  // banner of its own.
+  const [auditGap, setAuditGap] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
 
   const loadProjects = useCallback(async () => {
@@ -283,6 +315,7 @@ export default function ProjectsSettingsPage() {
     setSaving(true);
     setMessage(null);
     setError(null);
+    setAuditGap(null);
 
     // Always created multi_brand. A single-brand project needs a brand that
     // cannot exist yet (§2.2.5); step 2 flips it.
@@ -304,6 +337,9 @@ export default function ProjectsSettingsPage() {
 
     const created = result.data.project as ProjectRow | undefined;
     const wantsSingleBrand = add.brandModel === 'single_brand';
+
+    // K1: the project exists either way. Say so, and say the record does not.
+    if (result.auditError) setAuditGap(auditWarning(result.auditError));
 
     setAdd(EMPTY_ADD);
     await loadProjects();
@@ -339,6 +375,7 @@ export default function ProjectsSettingsPage() {
     setSaving(true);
     setError(null);
     setMessage(null);
+    setAuditGap(null);
 
     const brandRes = await fetch('/api/admin/brands', {
       method: 'POST',
@@ -386,6 +423,8 @@ export default function ProjectsSettingsPage() {
       return;
     }
 
+    if (patch.auditError) setAuditGap(auditWarning(patch.auditError));
+
     setFinish(null);
     setMessage(`${finish.projectKey} is configured as single-brand.`);
     await loadProjects();
@@ -419,6 +458,7 @@ export default function ProjectsSettingsPage() {
     setSaving(true);
     setError(null);
     setMessage(null);
+    setAuditGap(null);
 
     const result = await callApi('PATCH', {
       id: project.id,
@@ -437,6 +477,8 @@ export default function ProjectsSettingsPage() {
       return;
     }
 
+    if (result.auditError) setAuditGap(auditWarning(result.auditError));
+
     cancelEdit();
     setMessage(`${project.jira_project_key} updated.`);
     await loadProjects();
@@ -445,11 +487,13 @@ export default function ProjectsSettingsPage() {
   async function toggleActive(project: ProjectRow, isActive: boolean) {
     setMessage(null);
     setError(null);
+    setAuditGap(null);
     const result = await callApi('PATCH', { id: project.id, is_active: isActive });
     if (!result.ok) {
       setError(result.error);
       return;
     }
+    if (result.auditError) setAuditGap(auditWarning(result.auditError));
     setProjects(projects.map(p => (p.id === project.id ? { ...p, is_active: isActive } : p)));
   }
 
@@ -472,6 +516,18 @@ export default function ProjectsSettingsPage() {
           Manage Jira project integrations, brand resolution config, and review log volume by project.
         </p>
       </div>
+
+      {auditGap && (
+        <div
+          role="alert"
+          className="rounded-3xl border border-[color:var(--severity-critical)] bg-white p-6 shadow-sm"
+        >
+          <h2 className="text-lg font-semibold text-[color:var(--f92-dark)]">
+            The change saved. The audit record did not.
+          </h2>
+          <p className="mt-2 text-sm text-[color:var(--f92-gray)]">{auditGap}</p>
+        </div>
+      )}
 
       {blockingCount > 0 && (
         <div
