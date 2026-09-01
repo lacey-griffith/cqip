@@ -276,10 +276,25 @@ K15   None of the three loads uses .range(), against lib/client-library/
 
 ## Two unexplained figures — do not let these go quiet
 
-1. **The test count moved 443 → 456.** The 08-26 handoff recorded 443/443; the
-   08-27 run reports 456. **Nobody in this session added a test.** Either the 443
-   was stale when written or thirteen tests landed from somewhere else. Cheap to
-   settle: `git log` on `tests/`.
+1. **The test count: SETTLED 2026-09-01. 456 is correct; 443 was wrong when
+   written.** `git log --stat -- tests/` shows the last commit touching `tests/`
+   is `cfc9d7c` (08-26, +404 lines across `onboarding-checks.test.ts` and
+   `project-config.test.ts`). **No test file changed between the two reported
+   counts**, so no tests "landed from somewhere else". 443 was measured before
+   those two files existed and then transcribed into a handoff describing the
+   state *after* they were pushed — a figure carried across a state change,
+   which is r43's shape rather than a new defect. 443's exact provenance is not
+   recoverable and is not worth chasing.
+   **Re-derived 2026-09-01: `# tests 456 / # pass 456 / # fail 0`** — quantity is
+   *`node:test` cases in the repo at that commit*, not "tests added by this
+   batch".
+   > **⚠ THIS COUNT WILL GO DOWN IN THE AUTO PASS, AND THAT IS CORRECT.** K6
+   > deletes the tautological test. A drop is the fix landing, not a regression —
+   > written here so a future session does not hunt for missing tests.
+   > **Also true and worth stating plainly:** the 855-line `page.tsx` rewrite
+   > shipped with **zero** new tests. That matches the repo's pattern (pure
+   > `lib/` files get tests, React components do not), but it means the batch's
+   > largest surface is covered by hand-run acceptance only.
 2. **L4 — the allowed set is now hand-copied SIX times**, protected only by a
    comment claiming fidelity. That is §13 r38's exact shape: the comment
    asserting parity IS the tell. Two further values are already named in unbuilt
