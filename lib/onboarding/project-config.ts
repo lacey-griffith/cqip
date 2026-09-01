@@ -161,3 +161,14 @@ export const DEFAULT_BRAND_FIELD_ID = 'customfield_12220';
  * catch it.
  */
 export const PROJECT_KEY_PATTERN = /^[A-Z][A-Z0-9]{1,29}$/;
+
+/**
+ * Brand codes are uppercase alphanumeric plus hyphens (e.g. "SPL", "MRR-CA").
+ *
+ * Moved here from `app/api/admin/brands/route.ts` by the Part 2 batch
+ * (`docs/specs/batch-single-brand-part2-rpc.md` §4), where the single-brand
+ * create path needs the same rule. It is a definition, not a copy: the brands
+ * route imports this one. A second literal held together by a comment claiming
+ * parity is §13 r38's exact shape.
+ */
+export const BRAND_CODE_PATTERN = /^[A-Z0-9-]{1,32}$/;

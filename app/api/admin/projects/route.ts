@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseRouteClient, supabaseAdmin } from '@/lib/supabase/server';
 import { getChangedBy } from '@/lib/audit/get-changed-by';
 import {
+  BRAND_CODE_PATTERN,
   PROJECT_KEY_PATTERN,
   isBrandModel,
   validateBrandConfig,
@@ -41,7 +42,19 @@ interface ProjectBody {
   brand_model?: unknown;
   brand_jira_field_id?: unknown;
   default_brand_id?: unknown;
+  brand?: unknown;
   changed_by?: unknown;
+}
+
+/**
+ * The one brand a single-brand project is created WITH, in the same request.
+ * `project_key` is deliberately absent: the RPC takes it from the project row it
+ * just inserted rather than trusting the caller (part-2 spec §2).
+ */
+interface SingleBrandPayload {
+  brand_code?: unknown;
+  jira_value?: unknown;
+  display_name?: unknown;
 }
 
 function asTrimmedString(value: unknown): string | null {
@@ -91,6 +104,146 @@ async function resolveDefaultBrandProjectKey(defaultBrandId: string | null): Pro
 
 const SELECT_COLS =
   'id, jira_project_key, client_name, display_name, jira_project_url, is_active, deactivated_at, brand_model, brand_jira_field_id, default_brand_id, created_at';
+
+const SINGLE_BRAND_CREATE_NOTE = 'Project created via admin UI (single-brand, atomic)';
+
+/**
+ * Single-brand create — ONE FORM, ONE TRANSACTION.
+ * Spec: docs/specs/batch-single-brand-part2-rpc.md, Karen K2.
+ *
+ * WHY THIS IS NOT THE ORDINARY INSERT PATH. A single-brand project needs a
+ * default_brand_id, and its brand cannot exist until the project does
+ * (brands.project_key → projects.jira_project_key, 009:14). The shipped wizard
+ * did that in two requests, so a failed second step left a row that is
+ * multi_brand + brand_jira_field_id set + 1 active brand — which every
+ * multiBrandChecks() branch reads as VALID, so the badge said "Configured" and
+ * retry could not recover (the brand POST 409s). Migration 031 does all three
+ * statements in one transaction, so the half-state is unreachable rather than
+ * merely visible.
+ *
+ * VALIDATION LIVES HERE, NOT IN plpgsql (§3.2). The function is for atomicity
+ * only. Everything below is the TypeScript half, and it is the only half.
+ *
+ * TWO BEHAVIOURAL DIFFERENCES FROM THE MULTI-BRAND PATH, both consequences of
+ * atomicity rather than oversights:
+ *   · There is no `auditError` response. The audit rows are written inside the
+ *     transaction, so an audit failure rolls the project and brand back with it.
+ *     The caller cannot be told "saved but unrecorded" because that state cannot
+ *     occur here.
+ *   · changed_by is derived BEFORE the call and passed in. The function runs as
+ *     service_role and has no auth.uid() to derive from — it refuses any caller
+ *     that does have one (§1.3). Deriving it here, from the cookie-bound client,
+ *     keeps §13 r19 intact.
+ */
+async function createSingleBrandProject(
+  supabase: Awaited<ReturnType<typeof createSupabaseRouteClient>>,
+  projectKey: string,
+  project: {
+    client_name: string;
+    display_name: string;
+    jira_project_url: string | null;
+    is_active: boolean;
+  },
+  rawBrand: unknown,
+) {
+  if (typeof rawBrand !== 'object' || rawBrand === null || Array.isArray(rawBrand)) {
+    return NextResponse.json(
+      {
+        error:
+          'A single-brand project must be created together with its one brand. Send a `brand` object with brand_code, jira_value, and display_name.',
+        field: 'brand',
+      },
+      { status: 400 },
+    );
+  }
+  const brand = rawBrand as SingleBrandPayload;
+
+  const brandCodeRaw = asTrimmedString(brand.brand_code);
+  if (!brandCodeRaw) {
+    return NextResponse.json({ error: 'brand.brand_code is required', field: 'brand_code' }, { status: 400 });
+  }
+  const brandCode = brandCodeRaw.toUpperCase();
+  if (!BRAND_CODE_PATTERN.test(brandCode)) {
+    return NextResponse.json(
+      { error: 'brand_code must be 1-32 chars: uppercase letters, digits, hyphens only', field: 'brand_code' },
+      { status: 400 },
+    );
+  }
+
+  const jiraValue = asTrimmedString(brand.jira_value);
+  if (!jiraValue) {
+    return NextResponse.json({ error: 'brand.jira_value is required', field: 'jira_value' }, { status: 400 });
+  }
+
+  const brandDisplayName = asTrimmedString(brand.display_name);
+  if (!brandDisplayName) {
+    return NextResponse.json({ error: 'brand.display_name is required', field: 'display_name' }, { status: 400 });
+  }
+
+  // brands.jira_value is UNIQUE instance-wide (009:15). Checked here so the user
+  // gets the sentence the brands route would have given them, rather than a
+  // rolled-back transaction reported as a raw constraint name. The RPC still
+  // fails safe if the row is created between this check and the call.
+  const { data: jiraValueClash } = await supabaseAdmin
+    .from('brands')
+    .select('project_key, brand_code')
+    .eq('jira_value', jiraValue)
+    .maybeSingle();
+  if (jiraValueClash) {
+    return NextResponse.json(
+      {
+        error: `jira_value "${jiraValue}" is already in use by ${jiraValueClash.project_key}/${jiraValueClash.brand_code}. Brand jira_value must be unique across all projects.`,
+        field: 'jira_value',
+      },
+      { status: 409 },
+    );
+  }
+
+  const changedBy = await getChangedBy(supabase);
+
+  const { data: created, error: rpcErr } = await supabaseAdmin.rpc('create_single_brand_project', {
+    p_project: {
+      jira_project_key: projectKey,
+      client_name: project.client_name,
+      display_name: project.display_name,
+      jira_project_url: project.jira_project_url,
+      is_active: project.is_active,
+    },
+    p_brand: {
+      brand_code: brandCode,
+      jira_value: jiraValue,
+      display_name: brandDisplayName,
+    },
+    p_changed_by: changedBy,
+  });
+
+  if (rpcErr || !created) {
+    console.error('[admin/projects POST] single-brand rpc failed', rpcErr);
+    // Nothing was written — that is the point of the batch. Every branch below
+    // may say so without qualification.
+    if (rpcErr?.code === '23505') {
+      return NextResponse.json(
+        { error: `${rpcErr.message} — nothing was created; fix the duplicate and submit again.` },
+        { status: 409 },
+      );
+    }
+    if (rpcErr?.code === '42501') {
+      // The migration 031 guard fired: this route reached the function with an
+      // authenticated session, which means it stopped using the service-role
+      // client. A bug in this file, not bad input.
+      return NextResponse.json(
+        { error: 'Single-brand create was refused by the database guard. This is a server misconfiguration, not a problem with what you entered.' },
+        { status: 500 },
+      );
+    }
+    return NextResponse.json(
+      { error: `${rpcErr?.message ?? 'Failed to create single-brand project'} — nothing was created.` },
+      { status: 500 },
+    );
+  }
+
+  return NextResponse.json({ ok: true, project: created, note: SINGLE_BRAND_CREATE_NOTE }, { status: 201 });
+}
 
 // -------------------------------------------------------------------------
 // POST — create
@@ -157,6 +310,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Project "${projectKey}" already exists` }, { status: 409 });
   }
 
+  const isActive = typeof body.is_active === 'boolean' ? body.is_active : true;
+
+  // §4. Single-brand creates go through migration 031's transaction. There is no
+  // other single-brand create path, and there never was a working one: this
+  // branch used to be unreachable, because validateBrandConfig() requires a
+  // default_brand_id whose brand belongs to the project, and no such brand can
+  // exist before the project does.
+  if (brandModel === 'single_brand') {
+    return createSingleBrandProject(
+      supabase,
+      projectKey,
+      {
+        client_name: clientName,
+        display_name: displayName,
+        jira_project_url: asTrimmedString(body.jira_project_url),
+        is_active: isActive,
+      },
+      body.brand,
+    );
+  }
+
   const defaultBrandId = asTrimmedString(body.default_brand_id);
   const config = validateBrandConfig(
     {
@@ -178,7 +352,7 @@ export async function POST(req: NextRequest) {
     client_name: clientName,
     display_name: displayName,
     jira_project_url: asTrimmedString(body.jira_project_url),
-    is_active: typeof body.is_active === 'boolean' ? body.is_active : true,
+    is_active: isActive,
     brand_model: config.value.brand_model,
     brand_jira_field_id: config.value.brand_jira_field_id,
     default_brand_id: config.value.default_brand_id,

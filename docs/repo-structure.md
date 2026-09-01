@@ -231,8 +231,16 @@ cqip/
 │   │   │                                  (026's REVOKE FROM PUBLIC was insufficient)
 │   │   ├── 028_ai_review_pending.sql   # Batch classifier-1: ai_review_pending +
 │   │   │                                  ai_confidence_band
-│   │   └── 029_directives_unique_title.sql # Batch 012 CRUD: UNIQUE (project_key,title)
-│   │                                        spanning archived rows. APPLIED TO PROD.
+│   │   ├── 029_directives_unique_title.sql # Batch 012 CRUD: UNIQUE (project_key,title)
+│   │   │                                    spanning archived rows. APPLIED TO PROD.
+│   │   ├── 030_audit_log_project_target.sql # single-brand onboarding K1: the
+│   │   │                                  target-shape CHECK admits 'project', so
+│   │   │                                  project writes are audited. APPLIED TO PROD.
+│   │   └── 031_create_single_brand_project.sql # single-brand onboarding K2:
+│   │                                      create_single_brand_project() — project +
+│   │                                      brand + audit in ONE transaction, so the
+│   │                                      half-state that badged "Configured" is
+│   │                                      unreachable. service_role only.
 │   └── functions/               # Deno Edge Functions
 │       ├── jira-webhook/index.ts       # Receives Jira webhook events. Two branches:
 │       │                                 (1) milestone branch — first-time entry into

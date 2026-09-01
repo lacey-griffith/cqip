@@ -87,6 +87,11 @@ interface AddForm {
   jiraProjectUrl: string;
   brandModel: BrandModel;
   brandFieldId: string;
+  // The one brand a single-brand project is created WITH, in the same request
+  // and the same transaction (part-2 spec §0.1). Unused when multi-brand.
+  brandCode: string;
+  brandJiraValue: string;
+  brandDisplayName: string;
 }
 
 const EMPTY_ADD: AddForm = {
@@ -96,6 +101,9 @@ const EMPTY_ADD: AddForm = {
   jiraProjectUrl: '',
   brandModel: 'multi_brand',
   brandFieldId: DEFAULT_BRAND_FIELD_ID,
+  brandCode: '',
+  brandJiraValue: '',
+  brandDisplayName: '',
 };
 
 interface EditForm {
@@ -105,14 +113,6 @@ interface EditForm {
   brandModel: BrandModel;
   brandFieldId: string;
   defaultBrandId: string;
-}
-
-interface FinishSetup {
-  projectId: string;
-  projectKey: string;
-  brandCode: string;
-  jiraValue: string;
-  displayName: string;
 }
 
 /** Sentinel for "no fallback brand" in a Select, which cannot hold an empty value. */
@@ -177,7 +177,6 @@ export default function ProjectsSettingsPage() {
   const [add, setAdd] = useState<AddForm>(EMPTY_ADD);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [edit, setEdit] = useState<EditForm | null>(null);
-  const [finish, setFinish] = useState<FinishSetup | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -312,122 +311,74 @@ export default function ProjectsSettingsPage() {
       return;
     }
 
+    const singleBrand = add.brandModel === 'single_brand';
+    if (
+      singleBrand &&
+      (!add.brandCode.trim() || !add.brandJiraValue.trim() || !add.brandDisplayName.trim())
+    ) {
+      setMessage('A single-brand project needs its brand: code, Jira value, and display name.');
+      return;
+    }
+
     setSaving(true);
     setMessage(null);
     setError(null);
     setAuditGap(null);
 
-    // Always created multi_brand. A single-brand project needs a brand that
-    // cannot exist yet (§2.2.5); step 2 flips it.
-    const result = await callApi('POST', {
-      jira_project_key: add.projectKey.trim().toUpperCase(),
-      client_name: add.clientName.trim(),
-      display_name: add.displayName.trim(),
-      jira_project_url: add.jiraProjectUrl.trim() || null,
-      brand_model: 'multi_brand',
-      brand_jira_field_id: add.brandFieldId.trim() || DEFAULT_BRAND_FIELD_ID,
-    });
+    // ONE FORM, ONE TRANSACTION (part-2 spec §0). This used to create the project
+    // as multi_brand and flip it in a second request, which is Karen K2: a failed
+    // second step left a row that badged "Configured" and could not be retried.
+    // The single-brand branch of the route now runs all three statements inside
+    // migration 031's transaction, so a failure creates nothing at all.
+    const result = await callApi(
+      'POST',
+      singleBrand
+        ? {
+            jira_project_key: add.projectKey.trim().toUpperCase(),
+            client_name: add.clientName.trim(),
+            display_name: add.displayName.trim(),
+            jira_project_url: add.jiraProjectUrl.trim() || null,
+            brand_model: 'single_brand',
+            brand: {
+              brand_code: add.brandCode.trim().toUpperCase(),
+              jira_value: add.brandJiraValue.trim(),
+              display_name: add.brandDisplayName.trim(),
+            },
+          }
+        : {
+            jira_project_key: add.projectKey.trim().toUpperCase(),
+            client_name: add.clientName.trim(),
+            display_name: add.displayName.trim(),
+            jira_project_url: add.jiraProjectUrl.trim() || null,
+            brand_model: 'multi_brand',
+            brand_jira_field_id: add.brandFieldId.trim() || DEFAULT_BRAND_FIELD_ID,
+          },
+    );
 
     setSaving(false);
 
     if (!result.ok) {
+      // Nothing partial to report on either path: the multi-brand insert is one
+      // statement, and the single-brand create is one transaction.
       setError(result.error);
       return;
     }
 
     const created = result.data.project as ProjectRow | undefined;
-    const wantsSingleBrand = add.brandModel === 'single_brand';
 
-    // K1: the project exists either way. Say so, and say the record does not.
+    // K1: the write landed. Say so, and say if the record did not. The
+    // single-brand path can never set this — its audit rows are inside the
+    // transaction, so an audit failure would have rolled the whole create back.
     if (result.auditError) setAuditGap(auditWarning(result.auditError));
 
     setAdd(EMPTY_ADD);
     await loadProjects();
 
-    if (wantsSingleBrand && created) {
-      setFinish({
-        projectId: created.id,
-        projectKey: created.jira_project_key,
-        brandCode: '',
-        jiraValue: '',
-        displayName: '',
-      });
-      setMessage(
-        `${created.jira_project_key} created. Step 2 of 2: add its brand below to finish the single-brand setup.`,
-      );
-      return;
-    }
-
-    setMessage(`${created?.jira_project_key ?? 'Project'} added. Add its brands from Coverage.`);
-  }
-
-  // -----------------------------------------------------------------------
-  // Step 2 of the single-brand create: make the brand, then flip the project.
-  // -----------------------------------------------------------------------
-
-  async function finishSingleBrand() {
-    if (!finish) return;
-    if (!finish.brandCode.trim() || !finish.jiraValue.trim() || !finish.displayName.trim()) {
-      setError('Brand code, Jira value, and display name are all required.');
-      return;
-    }
-
-    setSaving(true);
-    setError(null);
-    setMessage(null);
-    setAuditGap(null);
-
-    const brandRes = await fetch('/api/admin/brands', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        project_key: finish.projectKey,
-        brand_code: finish.brandCode.trim().toUpperCase(),
-        jira_value: finish.jiraValue.trim(),
-        display_name: finish.displayName.trim(),
-      }),
-    });
-
-    let brandBody: { brand?: { id?: string }; error?: string };
-    try {
-      brandBody = await brandRes.json();
-    } catch {
-      setSaving(false);
-      setError(`Brand creation failed (${brandRes.status}).`);
-      return;
-    }
-    if (!brandRes.ok || !brandBody.brand?.id) {
-      setSaving(false);
-      // The project still exists and is multi_brand. Its row will carry the
-      // incomplete badge, so nothing is silently half-done.
-      setError(
-        `${brandBody.error ?? 'Brand creation failed'} — ${finish.projectKey} is still set to multi-brand. Fix the brand, then switch it with Edit config.`,
-      );
-      await loadProjects();
-      return;
-    }
-
-    const patch = await callApi('PATCH', {
-      id: finish.projectId,
-      brand_model: 'single_brand',
-      default_brand_id: brandBody.brand.id,
-    });
-
-    setSaving(false);
-
-    if (!patch.ok) {
-      setError(
-        `Brand created, but switching ${finish.projectKey} to single-brand failed: ${patch.error}. Use Edit config on its row.`,
-      );
-      await loadProjects();
-      return;
-    }
-
-    if (patch.auditError) setAuditGap(auditWarning(patch.auditError));
-
-    setFinish(null);
-    setMessage(`${finish.projectKey} is configured as single-brand.`);
-    await loadProjects();
+    setMessage(
+      singleBrand
+        ? `${created?.jira_project_key ?? 'Project'} created as single-brand with its brand. Nothing else to finish.`
+        : `${created?.jira_project_key ?? 'Project'} added. Add its brands from Coverage.`,
+    );
   }
 
   // -----------------------------------------------------------------------
@@ -609,7 +560,7 @@ export default function ProjectsSettingsPage() {
             <p className="mt-1 text-xs text-[color:var(--f92-gray)]">
               {add.brandModel === 'multi_brand'
                 ? 'Brands are read from a Jira field on each ticket. Add the brands from Coverage after this.'
-                : 'Two steps: the project is created first, then you add its one brand here to finish.'}
+                : 'The project is the brand. Enter it below — it is created with the project, in one step.'}
             </p>
           </div>
           {add.brandModel === 'multi_brand' && (
@@ -629,65 +580,55 @@ export default function ProjectsSettingsPage() {
           )}
         </div>
 
+        {add.brandModel === 'single_brand' && (
+          <div className="mt-4 rounded-md border border-[color:var(--f92-border)] p-4">
+            <p className="mb-3 text-sm font-medium text-[color:var(--f92-navy)]">
+              Its brand
+            </p>
+            <div className="grid gap-4 lg:grid-cols-3">
+              <div>
+                <Label htmlFor="addBrandCode">Brand code</Label>
+                <Input
+                  id="addBrandCode"
+                  value={add.brandCode}
+                  onChange={e => setAdd({ ...add, brandCode: e.target.value })}
+                  placeholder="e.g. SPL"
+                />
+              </div>
+              <div>
+                <Label htmlFor="addBrandJiraValue">Jira value</Label>
+                <Input
+                  id="addBrandJiraValue"
+                  value={add.brandJiraValue}
+                  onChange={e => setAdd({ ...add, brandJiraValue: e.target.value })}
+                  placeholder="e.g. SPL - Spotloan"
+                />
+              </div>
+              <div>
+                <Label htmlFor="addBrandDisplayName">Brand display name</Label>
+                <Input
+                  id="addBrandDisplayName"
+                  value={add.brandDisplayName}
+                  onChange={e => setAdd({ ...add, brandDisplayName: e.target.value })}
+                  placeholder="e.g. Spotloan"
+                />
+              </div>
+            </div>
+            <p className="mt-3 text-xs text-[color:var(--f92-gray)]">
+              The project and its brand are created together, in one transaction. If any part
+              fails, nothing is created — there is no half-configured row to clean up.
+            </p>
+          </div>
+        )}
+
         <div className="mt-6 flex items-center gap-3">
           <Button onClick={addProject} disabled={saving}>
-            {saving ? 'Saving...' : add.brandModel === 'single_brand' ? 'Create project (step 1 of 2)' : 'Add project'}
+            {saving ? 'Saving...' : 'Add project'}
           </Button>
           {message && <p className="text-sm text-[color:var(--f92-dark)]">{message}</p>}
           {error && <p className="text-sm text-red-600">{error}</p>}
         </div>
       </Card>
-
-      {finish && (
-        <Card className="border-[color:var(--f92-navy)] bg-white p-6 shadow-sm">
-          <div className="mb-4">
-            <h2 className="text-lg font-semibold text-[color:var(--f92-navy)]">
-              Step 2 of 2 — add {finish.projectKey}&apos;s brand
-            </h2>
-            <p className="text-sm text-[color:var(--f92-gray)]">
-              {finish.projectKey} exists but is still set to multi-brand. Adding its brand switches it
-              to single-brand. Leaving now is safe — the row will be flagged until it is finished.
-            </p>
-          </div>
-          <div className="grid gap-4 lg:grid-cols-3">
-            <div>
-              <Label htmlFor="finishBrandCode">Brand code</Label>
-              <Input
-                id="finishBrandCode"
-                value={finish.brandCode}
-                onChange={e => setFinish({ ...finish, brandCode: e.target.value })}
-                placeholder="e.g. SPL"
-              />
-            </div>
-            <div>
-              <Label htmlFor="finishJiraValue">Jira value</Label>
-              <Input
-                id="finishJiraValue"
-                value={finish.jiraValue}
-                onChange={e => setFinish({ ...finish, jiraValue: e.target.value })}
-                placeholder="e.g. SPL - Spotloan"
-              />
-            </div>
-            <div>
-              <Label htmlFor="finishBrandName">Brand display name</Label>
-              <Input
-                id="finishBrandName"
-                value={finish.displayName}
-                onChange={e => setFinish({ ...finish, displayName: e.target.value })}
-                placeholder="e.g. Spotloan"
-              />
-            </div>
-          </div>
-          <div className="mt-6 flex items-center gap-3">
-            <Button onClick={finishSingleBrand} disabled={saving}>
-              {saving ? 'Saving...' : 'Finish single-brand setup'}
-            </Button>
-            <Button variant="outline" onClick={() => setFinish(null)} disabled={saving}>
-              Finish later
-            </Button>
-          </div>
-        </Card>
-      )}
 
       <Card className="border-[color:var(--f92-border)] bg-white p-6 shadow-sm">
         <div className="mb-4 flex items-center justify-between">

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseRouteClient, supabaseAdmin } from '@/lib/supabase/server';
 import { getChangedBy } from '@/lib/audit/get-changed-by';
+import { BRAND_CODE_PATTERN } from '@/lib/onboarding/project-config';
 
 // Admin-only: create a new brand row. Closes audit Q1 from
 // docs/multi-client-readiness.md §10 / §6.5 — brand seeding has been
@@ -18,7 +19,8 @@ import { getChangedBy } from '@/lib/audit/get-changed-by';
 // new_value=<serialized value>. old_value is null since the row didn't
 // exist before.
 
-const BRAND_CODE_PATTERN = /^[A-Z0-9-]{1,32}$/;
+// BRAND_CODE_PATTERN moved to lib/onboarding/project-config.ts — the Part 2
+// single-brand create needs the same rule, and two literals would drift.
 
 interface CreateBrandBody {
   project_key?: unknown;

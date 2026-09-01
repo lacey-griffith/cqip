@@ -306,7 +306,17 @@ today — it is only reachable by a manual Sync with Jira.
 1. A Spotloan-shaped client can be created start to finish in Settings → Projects with no SQL.
 2. HDCRO is switched to its correct config through that UI, and the resulting row is verified in prod.
 3. An incompletely configured project is visibly flagged, with text that names what is wrong.
-4. `tests/onboarding-checks.test.ts` green in CI; test 1 verified red against `main` first.
+4. `tests/onboarding-checks.test.ts` green in CI. **AMENDED 2026-09-01 (K19) —
+   the "test 1 verified red against `main` first" clause is STRUCK, not softened.**
+   It was unsignable: `brandConfigChecks()` does not exist on `main`, so test 1
+   cannot be run there at all, and §3.1 said so in the same document. An
+   acceptance item nobody can honestly tick is worse than none — it gets ticked
+   anyway. **What replaces it is §3.1's structural guard, which is a real check
+   and already holds:** all three prod fixtures are verbatim copies of real rows
+   and **two of them must come back clean**, so a function that degenerated to
+   "always blocking" fails NBLYCRO and SPLCRO, and one that degenerated to
+   "always ok" fails HDCRO. That is what a red-first run would have bought, and
+   it is reachable.
 5. `npm run typecheck` clean.
 
 ---
@@ -448,8 +458,12 @@ while both writes land.
 
 **K18.** §0.2's "verified" rows are false as of §3.3, same document, same date.
 Needs an as-of-batch-opening stamp.
-**K19.** §6.4 requires "test 1 verified red against `main` first", which §3.1
-says is impossible. Unsignable acceptance item.
+**K19.** ✅ **CLOSED 2026-09-01** — struck in §6.4 and replaced with §3.1's
+structural guard, in the commit that built migration 031
+(`docs/specs/batch-single-brand-part2-rpc.md` §9's standing requirement that the
+amendment land in the same commit). Was: §6.4 requires "test 1 verified red
+against `main` first", which §3.1 says is impossible. Unsignable acceptance
+item.
 **K20.** `jira-sync/index.ts:630` is `jira_summary`; `client_brand` is **:631**.
 Wrong pointer copied into `checks.ts:7`, `checks.ts:134` and `013:110`.
 **K21.** §8's "the column defaults three lines above it" is **52 lines** (`019:37-38`
