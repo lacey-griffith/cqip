@@ -38,13 +38,21 @@ import { DEFAULT_BRAND_FIELD_ID, type BrandModel } from '@/lib/onboarding/projec
 // /api/admin/projects, which is admin-gated, audited, and validates the brand
 // config as a unit.
 //
-// THE ORDERING PROBLEM (§2.2.5). A single-brand project needs a default brand;
-// a brand needs the project to exist. That is handled here in two VISIBLE steps
-// rather than in the schema: the project is created multi_brand, the user is
-// dropped straight into the brand form, and on brand creation the project is
-// PATCHed to single_brand. If they abandon after step 1 the project is left
-// multi_brand and the row carries a "brand config incomplete" badge — the
-// half-state is never invisible.
+// THE ORDERING PROBLEM — SOLVED IN ONE TRANSACTION, NOT IN TWO VISIBLE STEPS.
+// See docs/specs/batch-single-brand-part2-rpc.md §0 and §3. A single-brand
+// project needs a default brand; a brand needs the project to exist. Migration
+// 031's create_single_brand_project() does all three statements — insert
+// project, insert brand, update project to single_brand — inside one
+// transaction, so a failure creates nothing at all.
+//
+// ⚠ THIS BLOCK USED TO DESCRIBE A TWO-STEP FLOW AND TO CLAIM "the half-state is
+// never invisible". THAT CLAIM WAS FALSE, and it is what Karen K2 found: if the
+// second step failed, the row landed multi_brand + brand_jira_field_id set + 1
+// active brand, which every multiBrandChecks() branch reads as VALID — so the
+// badge said "Configured" and retry could not recover (the brand POST 409s).
+// Rewritten rather than deleted so the superseded design is not reintroduced by
+// someone reading the old text as current. The parent spec's §2.2.5, which the
+// old text cited, was STRUCK for the same reason.
 //
 // Brand model is a Select rather than the radio the spec sketched: this repo has
 // no radio-group component and adding one for two options is not worth the

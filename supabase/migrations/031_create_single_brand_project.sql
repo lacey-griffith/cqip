@@ -127,7 +127,7 @@ BEGIN
     p_project->>'jira_project_url',
     v_is_active,
     -- §3.1 (M5). The route writes deactivated_at on every is_active change
-    -- (route.ts:296-298); an RPC that created an inactive project without it
+    -- (route.ts:470-472); an RPC that created an inactive project without it
     -- would reopen the gap that closed.
     CASE WHEN v_is_active THEN NULL ELSE now() END,
     'multi_brand',
@@ -187,7 +187,7 @@ BEGIN
   -- values, not statement 1's transient ones. The transient sentinel is audited
   -- nowhere because it never committed.
   --
-  -- Field list mirrors route.ts POST's 8 (route.ts:200-201) so the two create
+  -- Field list mirrors route.ts POST's 8 (route.ts:350-359) so the two create
   -- paths produce the same audit shape. deactivated_at is written above but not
   -- audited, matching that route.
   -- -----------------------------------------------------------------------
@@ -279,19 +279,31 @@ GRANT EXECUTE ON FUNCTION public.create_single_brand_project(JSONB, JSONB, TEXT)
 --    and items 1-2 leave the grant as the sole guard — the thing §1.3 exists to
 --    stop being true.
 --
+--    ⚠ ASSERT ON THE MESSAGE, NEVER ON SQLSTATE. `permission denied for
+--    function` and the guard's own RAISE BOTH return 42501, so an operator
+--    checking the code records a PASS on a grant denial having never reached the
+--    predicate. Same instrument confusion item 1 exists to prevent.
+--
+--    ⚠ RUN AS postgres. DO NOT SET ROLE: line 251 above revokes EXECUTE from
+--    authenticated, so SET LOCAL ROLE authenticated is denied before this body
+--    runs, every time. The owner keeps EXECUTE through the REVOKEs, and
+--    request.jwt.claims is all auth.uid() reads.
+--
 --   BEGIN;
---   SET LOCAL ROLE authenticated;
 --   SET LOCAL request.jwt.claims = '{"sub":"<a real admin user uuid>","role":"authenticated"}';
 --   SELECT public.create_single_brand_project('{}'::jsonb, '{}'::jsonb, 'probe@fusion92.com');
 --   ROLLBACK;
 --
---    Expect the 42501 RAISE from the guard — not a permission-denied on the
---    function, and not a 23502. If auth.uid() still returns NULL, the installed
---    helper reads a different GUC than the one set above:
+--    PASS is one thing only: an error reading
+--      refusing in-session caller <that uuid>
+--    Everything else FAILS, including a bare 42501 whose message is
+--    'permission denied for function'. If the call instead proceeds to a 23502
+--    (not-null violation on the empty payloads), auth.uid() returned NULL and
+--    the installed helper reads a different GUC than the one set above:
 --      SELECT pg_get_functiondef('auth.uid'::regproc);
---    and set whichever it reads. A permission error instead means the role
---    cannot reach the function at all, which proves item 1 and leaves this item
---    unproven — run it as postgres with SET LOCAL request.jwt.claims alone.
+--    and set whichever it reads.
+--
+--    The SET LOCAL ROLE authenticated form proves item 1, not this item.
 --
 -- 4. Happy path through the UI: a Spotloan-shaped client, start to finish, then
 --    the row verified in prod. THIS IS ALSO THE POSITIVE CONTROL FOR ITEMS 1-2 —

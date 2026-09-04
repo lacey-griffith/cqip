@@ -1,6 +1,16 @@
 # Spec — single-brand onboarding, Part 2: `create_single_brand_project()`
 
-**Status:** DRAFT, awaiting Lacey review → Jenny pre-flight → build
+**Status:** Settled 2026-09-01 → **BUILT and committed, NOT pushed; migration
+031 is NOT applied to prod (030 IS)** → **Jenny pre-flight OWED** — §6 requires
+it and no verdict on 031 is findable in the repo; Karen running later does not
+absorb it → Karen post-flight → Lacey pushes, applies the migration, smoke-tests.
+*(Corrected 2026-09-04. It read "DRAFT, awaiting Lacey review → Jenny pre-flight
+→ build" while the build was committed and this file's own header said the spec
+was settled — the batch-012 §2.6 defect class: a status line contradicted by the
+document carrying it. **Deliberately no SHA here:** this file is inside the
+commit a SHA would name, so any SHA written here is falsified by the next amend
+— r43's self-reference trap. `git log --oneline -- docs/specs/batch-single-brand-part2-rpc.md`
+is the live answer.)*
 **Opened:** 2026-08-31
 **Closes:** Karen **K2** (CRITICAL) — the two-step create can leave a half-state
 that badges "Configured"
@@ -334,21 +344,36 @@ when item 3 was added — there were five items, and item 4 was the forced failu
    returns 0. Shape per `027:36-39`.
 3. **The §1.3 H2 guard — WITHOUT THIS ITEM THE PREDICATE IS NEVER EXERCISED AT
    ALL**, and items 1–2 leave the grant as the sole guard, which is what §1.3
-   exists to stop being true. In the SQL editor:
+   exists to stop being true.
+
+   **⚠ ASSERT ON THE MESSAGE, NEVER ON SQLSTATE. `permission denied for function`
+   and the guard's own `RAISE` BOTH return `42501`** — so an operator checking
+   "did I get 42501?" records a PASS on a grant denial having never reached the
+   predicate. That is the same instrument confusion item 1 exists to prevent, on
+   the one item that decides whether the predicate is verified or the grant is
+   the sole guard.
+
+   **Run as `postgres`. Do NOT `SET ROLE`** — this file revokes EXECUTE from
+   `authenticated`, so `SET LOCAL ROLE authenticated` is denied before the body
+   runs, every time. The owner keeps EXECUTE through the REVOKEs, and
+   `request.jwt.claims` is all `auth.uid()` reads.
    ```sql
    BEGIN;
-   SET LOCAL ROLE authenticated;
    SET LOCAL request.jwt.claims = '{"sub":"<a real admin user uuid>","role":"authenticated"}';
    SELECT public.create_single_brand_project('{}'::jsonb, '{}'::jsonb, 'probe@fusion92.com');
    ROLLBACK;
    ```
-   Expect the **`42501` RAISE from the guard** — not a permission-denied on the
-   function, and not a `23502`. If `auth.uid()` still returns NULL, the installed
-   helper reads a different GUC than the one set above: check it with
-   `SELECT pg_get_functiondef('auth.uid'::regproc);` and set whichever it reads.
-   Getting a permission error instead means the role cannot reach the function at
-   all, which proves item 1 and leaves this item unproven — run it as `postgres`
-   with `SET LOCAL request.jwt.claims` alone in that case.
+   **PASS is one thing only: an error whose message reads
+   `refusing in-session caller <that uuid>`.** Everything else FAILS, including a
+   bare `42501` whose message is `permission denied for function`. If the call
+   instead proceeds to a `23502` (not-null violation on the empty payloads),
+   `auth.uid()` returned NULL and the installed helper reads a different GUC than
+   the one set above: check with `SELECT pg_get_functiondef('auth.uid'::regproc);`
+   and set whichever it reads.
+
+   The `SET LOCAL ROLE authenticated` form proves **item 1**, not this item. Run
+   it there for a second confirmation of the revoke, expecting
+   `permission denied for function`.
 4. Happy path through the UI: a Spotloan-shaped client created start to finish,
    then the row verified in prod. **This is also the POSITIVE CONTROL for items
    1–2** — a REVOKE that clipped `service_role`'s own grant looks identical to a
