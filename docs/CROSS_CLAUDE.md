@@ -123,7 +123,14 @@ Active and planned API contracts between the two projects.
 > *(Added 2026-08-08: AC built against §6 believing it was the designated
 > contract source. See the 2026-08-08 event-log entry.)*
 
-### `/api/telemetry/ac` — BUILT, NOT LIVE (Batch telemetry-ac, 2026-08-07)
+### `/api/telemetry/ac` — DROPPED (no producer as of 2026-10-28)
+- **Status (2026-10-28):** **no producer.** AC dropped telemetry (decided
+  2026-10-15); the emitter is deleted in AC `ea66d6a`, which is live on dev and
+  prod. AC's last emit attempt on prod was at 13:16:13Z, before the prod
+  deploy at 2026-10-28T13:17:33Z (it timed out). The route can be retired
+  with the Worker. The token is
+  retired in §4. Everything below is the contract as it stood; it is kept for
+  the record and no longer has a sender.
 - **Owner:** DC
 - **Producer:** AC (Forge QA-automation app) — **AC WRITES, DC reads.**
   This is the FIRST reverse-direction surface: every other contract
@@ -195,17 +202,24 @@ Active and planned API contracts between the two projects.
   `.sql` file, which `paths-ignore` does not cover, so it rebuilt; no
   app-code change between it and `4a85869`, which is the sha the batch
   itself deployed at). Migrations 026 applied; **027 pending** (an EXECUTE-grant tightening on the prune function; no effect
-  on this contract). **Token NOT minted**, so the route answers
-  `500 not_configured` — the intended inert state. AC emitter not yet
-  built.
+  on this contract). *(Superseded: the token WAS minted on 2026-08-07 and
+  seeded on the Worker + Forge dev + Forge prod; AC's emitter went live the
+  same day and its dev proof landed `env='dev'` rows. This line was never
+  updated after the mint. See §4 + the 2026-10-28 §6 entry.)* As first
+  written: **Token NOT minted**, so the route answers `500 not_configured` —
+  the intended inert state. AC emitter not yet built.
 - **Last verified:** 2026-08-07 — route live and returning `500
   not_configured` pre-mint; RLS verified with a probe row (anon read
   `[]`, anon write refused `42501`); `ts` handling verified against the
   shipped validator across five input forms.
 
-### `/api/brands/[projectKey]/[brandCode]` — LIVE
+### `/api/brands/[projectKey]/[brandCode]` — LIVE, NEVER CONSUMED (retire with the Worker)
+- **Status (2026-10-28):** **AC never called this route**, in any version. It
+  never carried AC traffic, dev or prod. After the Graph port (AC `ea66d6a`)
+  AC has no DC dependency at all, so this route can be retired with the
+  Worker. `CQIP_BRANDS_API_TOKEN` has been removed from Forge dev + prod.
 - **Owner:** DC
-- **Consumer:** AC (Forge consumer integration)
+- **Consumer:** none. Planned as AC (Forge consumer integration).
 - **Shape:** brand_code, project_key, display_name, live_url_base,
   default_local_sub_areas[], client_contact_name,
   client_contact_jira_account_id, url_pattern, notes
@@ -220,10 +234,18 @@ Active and planned API contracts between the two projects.
   CQIP_BRANDS_API_TOKEN installed on Forge dev + prod, never
   exercised in production)
 
-### `/api/sharepoint/*` — LIVE (Batch 009, SHIPPED 2026-05-29)
+### `/api/sharepoint/*` — LIVE, NO CONSUMER as of 2026-10-28 (Worker retirement pending)
+- **Status (2026-10-28):** **no consumer.** AC reads SharePoint through
+  Microsoft Graph directly (app-only, same Azure app) as of AC `ea66d6a`. That
+  build is deployed and the install upgraded on dev (v5.0.0) and on prod
+  (major 6, 2026-10-28T13:17:33Z). The prod smoke post at 13:19:36Z made no
+  Worker call. The routes stay up until the Worker is retired. AC now owns the
+  parsing and filtering rules (AC `SPEC_phase2b.md` §8, captured from DC at
+  `758a175`). `CQIP_SHAREPOINT_API_TOKEN` has been removed from Forge dev +
+  prod. Everything below is the contract as it stood.
 - **Owner:** DC
-- **Consumer:** AC (Phase 2 of Forge consumer) — **unblocked
-  as of 2026-05-29**
+- **Consumer:** none since 2026-10-28. Previously AC (Phase 2 of the Forge
+  consumer), from 2026-05-29.
 - **Shape:** Three read-only GET routes (all Bearer-gated):
   - `GET /api/sharepoint/folder?url=<folder-url>` → enumerate
     folder. Returns `{folder:{url,name}, xlsx:{ref,name},
@@ -265,7 +287,17 @@ Active and planned API contracts between the two projects.
 Mirrored from DC §15 + AC §15. Status here is authoritative for
 both sides.
 
-- [ ] **Mint + seed `CQIP_TELEMETRY_TOKEN`** — NEW token, not yet
+- [ ] **Retire `CQIP_TELEMETRY_TOKEN` on the Worker** — **minted
+      2026-08-07, now removed from Forge; retire it on the Worker.** AC
+      dropped telemetry (decided 2026-10-15; emitter deleted in AC
+      `ea66d6a`, live 2026-10-28), so the token has no sender. Remaining
+      step: `wrangler secret delete` on the Worker, or let it go when the
+      Worker retires. Forge dev + prod copies are already deleted.
+      *(Corrected 2026-10-28: this item previously said "not yet minted".
+      That wording was stale. The token was minted and seeded on all three
+      surfaces on 2026-08-07, and AC's dev proof landed events with it. The
+      original item text follows for the record.)*
+      Original (2026-08-07): NEW token, not yet
       minted (Batch telemetry-ac, DC side built 2026-08-07). Lives on
       THREE surfaces and must be set atomically per DC §13 r27:
         - Worker secret (`wrangler secret put`)
@@ -277,6 +309,12 @@ both sides.
       Claudia builds the AC emitter → dev-side proof → AC prod.
 
 - [ ] **Rotate Azure client secret** —
+      **Status (2026-10-28):** AC now authenticates to Graph itself, with
+      the same Azure app (client_id `6aa464c1-…`) but a **new secret from
+      Carl**, held only in Forge dev + prod (`AZURE_CLIENT_SECRET`,
+      encrypted). **The old, exposed secret stays live on the Worker only,
+      until the Worker is turned off. Then Carl deletes it**, and this item
+      closes. AC never held the old value.
       **Status (2026-06-01):** rotated by Carl 2026-06-01. The
       rotated-to value was saved to `.env.local`, deployed to
       the Worker via `wrangler secret put`, then accidentally
@@ -299,7 +337,10 @@ both sides.
       Surfaces: Worker secret (single surface).
       **Last verified:** 2026-06-01 (prod 200 on
       `/api/sharepoint/folder`)
-- [ ] **Rotate CQIP_BRANDS_API_TOKEN** —
+- [x] **Rotate CQIP_BRANDS_API_TOKEN** — **MOOT (2026-10-28).** The token
+      was removed from Forge dev + prod on 2026-10-27, and AC never called the
+      brands route. The Worker copy retires with the Worker. No rotation is
+      needed. Original item follows for the record.
       Hygiene rotation. Not known compromised. In circulation
       since brands API initial setup (Batch 005.13-005.14
       timeframe). Untouched since pre-positioning on Forge
@@ -309,7 +350,11 @@ both sides.
       all four required.
       **Last verified:** 2026-05-12 (installed on Forge dev
       + prod, never exercised)
-- [ ] **CQIP_SHAREPOINT_API_TOKEN rotation drill** (planned) —
+- [x] **CQIP_SHAREPOINT_API_TOKEN rotation drill** — **MOOT (2026-10-28).**
+      The token was removed from Forge dev + prod on 2026-10-27. AC now reads
+      SharePoint through Microsoft Graph (AC `ea66d6a`), so there is no AC↔DC
+      shared secret left to drill. The Worker copy retires with the Worker.
+      Original item follows for the record. (planned) —
       Post-Batch-009-ship no-op rotation drill across all
       four surfaces (Worker · Forge dev · Forge prod · DC
       `.env.local`). Validates the §13 r27 / r9 rotation
@@ -440,6 +485,59 @@ Cross-project events worth durable record. Newest at top.
 Covers events from 2026-04-23 forward (start of the drift-
 prevention era). Project-internal events stay in each
 project's CLAUDE.md §16.
+
+### 2026-10-28 — AC severed from DC: Graph port live on dev + prod; three §3 surfaces flip (AC)
+
+**CC8 entry: several surface flips.** AC now reads SharePoint through
+Microsoft Graph directly (app-only, the existing Azure app) and has removed
+telemetry. AC depends on no DC surface.
+
+- **Commit:** AC `ea66d6a` on `main` (per CC9: AC repo
+  `cqip-qa-automation`, `/blob/ea66d6a/`). It is a faithful port of DC's Batch
+  009 SharePoint code at DC `758a175`. The parsing and filtering rules are now
+  AC-owned, in AC `SPEC_phase2b.md` §8.
+- **Dev:** v5.0.0 deployed and the install upgraded. Smoke passed: a draft, a
+  post, and an oversized image that errored as designed with nothing posted
+  (all-or-nothing held).
+- **Prod:** major 6 deployed 2026-10-28T13:17:33Z, egress going from 1 entry
+  to 3 (`login.microsoftonline.com`, `graph.microsoft.com`,
+  `*.sharepoint.com`; the Worker host is removed). The install was upgraded.
+  Smoke passed: a post at 13:19:36Z embedding 24 images, with **no Worker or
+  telemetry calls**. AC-side logs agree: the last `[telemetry]` line on prod
+  is 13:16:13Z, before the deploy.
+- **The 2026-10-27 attempt never landed.** The deploy was blocked waiting for
+  approval of Forge's `MAJOR_VERSION_RULE` (egress change), so both installs
+  stayed on the old majors and prod kept calling the Worker and telemetry
+  through 10-27. Fixed with `--approve`.
+
+**§3 flips:**
+- `/api/sharepoint/*` → **no consumer** as of 2026-10-28. Worker retirement is
+  pending.
+- `/api/telemetry/ac` → **dropped** (decided 2026-10-15). No producer.
+- `/api/brands/*` → **never consumed by AC**. Retire it with the Worker.
+
+**§4:**
+- `CQIP_TELEMETRY_TOKEN`: minted 2026-08-07 and now removed from Forge; retire
+  it on the Worker. The stale "NOT minted" wording in §3 and §4 is corrected
+  in place.
+- Azure secret: AC uses a new secret from Carl. The old, exposed secret stays
+  on the Worker until it is off, then Carl deletes it.
+- Forge dev + prod now hold only `AZURE_TENANT_ID`, `AZURE_CLIENT_ID` and
+  `AZURE_CLIENT_SECRET`. All DC tokens and AC telemetry variables are gone
+  (removed 2026-10-27).
+- `CQIP_BRANDS_API_TOKEN` rotation and `CQIP_SHAREPOINT_API_TOKEN` drill:
+  **MOOT**. The tokens were removed from Forge on 2026-10-27, and the Worker
+  side retires with the Worker.
+
+**Retirement order (DC):** both AC installs are upgraded, so nothing calls the
+Worker's SharePoint or telemetry routes. It can be retired once DC confirms
+no traffic. Then Carl deletes the old Azure secret.
+
+**Advisor credit (CC4):** Karen (agent) audited the port before commit:
+PASS-WITH-CONDITIONS, with all conditions closed. Her differential test ran
+DC's own code at `758a175` against the port on 6,055 checks with 0
+differences. She also found the one error-kind deviation, which was resolved
+by matching DC.
 
 ### 2026-08-08 — `ts` relay: correcting the root cause, and §6-vs-§3 authority (DC)
 
@@ -1108,7 +1206,17 @@ Shareable Screenshots/ folder.
 
 ---
 
-*Last updated: 2026-07-17 | §6: Batch 012 Phase B (monitoring ingest)
+*Last updated: 2026-10-28 | §6: AC severed from DC — AC `ea66d6a` reads
+SharePoint via Microsoft Graph directly and drops telemetry; live on dev
+(v5.0.0) + prod (major 6, 2026-10-28T13:17:33Z, installs upgraded, smokes
+passed). §3: `/api/sharepoint/*` no consumer (Worker retirement pending),
+`/api/telemetry/ac` dropped (no producer), `/api/brands/*` never consumed
+(retire with the Worker). §4: telemetry token minted 2026-08-07, removed from
+Forge, retire on the Worker (stale "NOT minted" wording fixed); old Azure
+secret stays on the Worker until it's off, then Carl deletes it.
+`CQIP_BRANDS_API_TOKEN` rotation and `CQIP_SHAREPOINT_API_TOKEN` drill marked
+MOOT (tokens removed from Forge 2026-10-27; Worker side retires with the
+Worker). Prior (2026-07-17): §6: Batch 012 Phase B (monitoring ingest)
 shipped + pushed (`7c9fec3`); the ingest surface is LIVE for Pulse/008
 to consume — external Bearer `POST /api/monitoring/findings`, inbound
 brand field is `brand` (code or jira value); post through it, don't
