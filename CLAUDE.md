@@ -1315,6 +1315,45 @@ moved out of Planned. See §16.)
 ## 15. Pending / Active TODOs
 
 
+### Single-brand onboarding follow-up (uncommitted work, recorded 2026-10-28)
+
+- [ ] **Single-brand onboarding follow-up: uncommitted work in 5 files since
+      ≤2026-10-28 (files last modified 2026-09-09), status per summary, owner
+      Lacey.** These edits respond to the after-the-fact Jenny review of
+      migration 031 (APPROVE-WITH-FINDINGS, DO-NOT-APPLY-YET; cited as HIGH-1,
+      HIGH-2, HIGH-4, MEDIUM-1, C1). They build on, but are NOT part of, Karen
+      round 1 (`321a2a8`); Karen round 2 is still HELD. Summary per file:
+      - `supabase/migrations/031_create_single_brand_project.sql` — the **only
+        behavior change**. Adds a pre-apply `DO` block that refuses to install
+        unless migration 030's `audit_log_target_shape_chk` admits
+        `'project'` (Jenny MEDIUM-1). Also rewords the item-5 verification
+        comment: the old duplicate-`jira_value` probe is rejected by
+        `route.ts:187-200` with a 409 before the RPC runs. Reads as finished.
+        031 is still unapplied.
+      - `docs/specs/batch-single-brand-part2-rpc.md` — status header now
+        "PUSHED, 031 not applied, Jenny gate MISSED then reviewed". This
+        corrects 321a2a8's own "NOT pushed" fix. §5 item 5 is rewritten as an
+        SQL-editor probe with the PASS criteria spelled out, keeping the
+        `ROLLBACK` wrapper (decided by Lacey 2026-09-04). §6 item 4 now checks
+        the guard by MESSAGE, not SQLSTATE (HIGH-2). Reads as finished.
+      - `docs/specs/batch-single-brand-onboarding.md` — §9.7 K2 step corrected
+        to the one-transaction design (the rejected `intended_brand_model`
+        column is recorded as rejected). Says K2 is NOT closed until part-2 §5
+        items 4-6 pass. One line; finished.
+      - `app/api/admin/projects/route.ts` — **comment only**. The `42501`
+        handler now names both causes: the §1.3 guard, or a missing
+        `service_role` EXECUTE grant (HIGH-4). Finished.
+      - `app/dashboard/settings/projects/page.tsx` — **comment only**. Adds a
+        warning that single-brand create FAILS in prod until 031 is applied,
+        to be deleted once 031 is applied and §5 item 4 passes. Finished as a
+        comment; its claim is a point-in-time one (2026-09-09).
+
+      **Finished as edits, not verified:** no test or `tsc` run is recorded,
+      and nothing here is committed. Not visible in this diff: whether the
+      review's CRITICAL and its other HIGHs are handled elsewhere. **Next:**
+      Lacey reviews and commits; then Karen round 2; then apply 031 and run
+      part-2 §5 items 1-6.
+
 ### Awaiting external action
 
 **Forge integration**
