@@ -441,8 +441,10 @@ CREATE INDEX idx_brands_qa_automation_enabled
   ON brands(qa_automation_enabled) WHERE qa_automation_enabled = TRUE;
 ```
 
-`qa_automation_enabled` gates API exposure: `/api/brands/*` returns 404
-for any row where it is FALSE, even if the row exists. GUY and RBW are
+`qa_automation_enabled` gated exposure on the Bearer `/api/brands/*` routes
+(404 for any row where it was FALSE). **Those routes were retired 2026-10-30**
+(no consumer — AC never called them); the column and its partial index stay,
+unused by any external reader. GUY and RBW are
 seeded with `qa_automation_enabled = TRUE`, `url_pattern =
 'convert-preview'`, and a `live_url_base`. The remaining 14 NBLY
 brands stay at the FALSE default until Lacey enables them via the
@@ -513,6 +515,12 @@ milestone. The webhook's duplicate-check SELECT also filters on
 `is_deleted = FALSE` before inserting.
 
 ### ac_telemetry / ac_version_seen / ac_telemetry_rejects (migration 026 — Batch telemetry-ac)
+**NO WRITER since 2026-10-30.** The ingest route `/api/telemetry/ac`, its Bearer
+helper and the System Info AC section were deleted (AC dropped telemetry, live
+2026-10-28). The three tables and `prune_ac_telemetry()` are **kept, no
+migration** — existing rows are history and age out only if something calls the
+prune function, which nothing now does. The description below is as built.
+
 AC (the Forge QA-automation app) runs only inside Jira and exposes no pollable
 surface, so it PUSHES events to `POST /api/telemetry/ac` and DC renders them on
 Settings → System Info. First AC-authored WRITE into DC storage; every prior

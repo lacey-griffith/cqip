@@ -4,7 +4,7 @@
 // as completed by §13.7 (which model, which transport, which secret).
 //
 // TRANSPORT: plain fetch, NO SDK. Every external call in this repo already works
-// that way (lib/sharepoint/graph-client.ts, lib/jira/search.ts); adding an SDK
+// that way (e.g. lib/jira/search.ts); adding an SDK
 // changes the Worker bundle and the OpenNext build for one endpoint. "Add the
 // SDK" is the default assumption and it is the wrong one here.
 //

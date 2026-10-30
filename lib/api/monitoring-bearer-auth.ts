@@ -2,9 +2,9 @@ import { timingSafeEqual } from 'node:crypto';
 
 // Validates an incoming `Authorization: Bearer <token>` header against the
 // CQIP_CONVERT_MONITORING_TOKEN env var using a length-tolerant timing-safe
-// compare. Mirrors lib/api/bearer-auth.ts (brands API) and
-// lib/api/sharepoint-bearer-auth.ts. Separate secret per §13 rule 27 — blast
-// radius stays bounded if one of the tokens leaks or rotates. Consumed by the
+// compare. Separate secret per §13 rule 27 — blast radius stays bounded if one
+// of the tokens leaks or rotates. (The brands, SharePoint and telemetry Bearer
+// helpers it was modelled on were removed 2026-10-29.) Consumed by the
 // external monitoring feed (Batch 008 Convert posts through the same route).
 
 export type BearerAuthFailure =

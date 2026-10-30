@@ -1,7 +1,7 @@
 'use client';
 
 // Batch 012 — Phase E1 (Pulse shell). Deep-linkable per-brand page. URL mirrors
-// /api/brands/[projectKey]/[brandCode] so brand pages are project-safe
+// the retired /api/brands/[projectKey]/[brandCode] so brand pages are project-safe
 // (brand_code isn't unique across projects). All read-only in E1:
 //   - header: brand name / code / project / paused badge
 //   - directives: this brand's status + note per active directive, filtered

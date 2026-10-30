@@ -25,8 +25,8 @@ name: Deploy to Cloudflare Workers
 #                                   (`wrangler secret put`)
 #
 # Runtime-only Worker secrets (NOT needed in this workflow):
-#   JIRA_API_TOKEN, CQIP_SYNC_AUTH_KEY, CQIP_BRANDS_API_TOKEN,
-#   CQIP_DROUGHT_AUTH_KEY — set via `wrangler secret put`.
+#   JIRA_API_TOKEN, CQIP_SYNC_AUTH_KEY, CQIP_DROUGHT_AUTH_KEY — set via
+#   `wrangler secret put`.
 
 on:
   push:

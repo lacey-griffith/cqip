@@ -27,21 +27,42 @@ TEAMS_WEBHOOK_URL=               # Incoming webhook URL for #cqip-alerts channel
 # App
 WEBHOOK_SECRET=                  # Random secret to validate Jira webhook payloads
 CQIP_SYNC_AUTH_KEY=              # Shared secret between Worker and jira-sync edge function. Can be any random string — generate with `openssl rand -hex 32`. Not a JWT.
-CQIP_BRANDS_API_TOKEN=           # Shared secret for the read-only /api/brands endpoints (consumed by the Forge QA-automation app). Same value must be set as an encrypted Forge variable on the Forge side. Generate with `openssl rand -hex 32`. Not a JWT.
 CQIP_DROUGHT_AUTH_KEY=           # Shared secret between the daily pg_cron job and the drought-evaluator edge function. Generate with `openssl rand -hex 32`. Not a JWT. Set on Supabase Edge Functions secrets only — Worker does not need this one.
 CQIP_CONVERT_MONITORING_TOKEN=   # Batch 012 Phase B — Bearer secret for the external POST /api/monitoring/findings ingest (Convert 008 + any monitoring tool post through it). Timing-safe compare in lib/api/monitoring-bearer-auth.ts. Separate blast radius from the other tokens per §13 rule 27. Generate with `openssl rand -hex 32`. Not a JWT. Set on the Worker via `wrangler secret put` and wherever the monitoring tool runs.
-CQIP_TELEMETRY_TOKEN=            # Batch telemetry-ac — Bearer secret for the external POST /api/telemetry/ac ingest (the AC Forge QA-automation app pushes draft/post events; DC renders them on Settings → System Info). Timing-safe compare in lib/api/telemetry-bearer-auth.ts. Separate blast radius per §13 rule 27 — rotating this cannot break drafting (SharePoint) or config reads (brands). Generate with `openssl rand -hex 32`. Not a JWT. Rotates atomically across THREE surfaces: Worker (`wrangler secret put`), Forge dev + Forge prod (`forge variables set --encrypt`). Until minted the route answers 500 not_configured — deployable and inert.
 
-CQIP_ANTHROPIC_API_KEY=          # Batch classifier-1 — Anthropic API key for the AI root-cause classifier route (POST /api/admin/logs/classify). Model is `claude-opus-5`, called over plain `fetch` (no SDK — every external call in this repo already works that way, and adding one would change the Worker bundle for a single endpoint). Read INSIDE the handler, never at module scope, so `next build`'s page-data collection cannot break on it. Worker-only rotation surface — one surface per §13 r27, unlike CQIP_SHAREPOINT_API_TOKEN's four — so rotating it cannot break sync, drafting, or config reads. **Until it is minted the route answers 500 `not_configured`: deployable and inert, the Batch telemetry-ac precedent.** Not a JWT.
+CQIP_ANTHROPIC_API_KEY=          # Batch classifier-1 — Anthropic API key for the AI root-cause classifier route (POST /api/admin/logs/classify). Model is `claude-opus-5`, called over plain `fetch` (no SDK — every external call in this repo already works that way, and adding one would change the Worker bundle for a single endpoint). Read INSIDE the handler, never at module scope, so `next build`'s page-data collection cannot break on it. Worker-only rotation surface — one surface per §13 r27, so rotating it cannot break sync. **Until it is minted the route answers 500 `not_configured`: deployable and inert, the Batch telemetry-ac precedent.** Not a JWT.
 
-# SharePoint (Batch 009 — Microsoft Graph proxy)
-CQIP_SHAREPOINT_API_TOKEN=       # AC (Forge) ↔ Worker bearer for /api/sharepoint/* (timing-safe compare). Separate blast radius from CQIP_BRANDS_API_TOKEN — NOT shared. Generate with `openssl rand -hex 32`. Not a JWT. Rotates atomically across four surfaces (Worker · Forge dev · Forge prod · DC .env.local) per §13 rule 27.
-AZURE_CLIENT_ID=                 # Azure app registration "CQIP Dashboard - SharePoint Integration" (6aa464c1-4eb9-4d94-b087-6eebe4fa8cb6). Worker only.
-AZURE_CLIENT_SECRET=             # Azure app client secret (client-credentials flow). Worker only. Hygiene rotation pending (Worker-only; Carl-executable; non-blocking).
-AZURE_TENANT_ID=                 # Fusion92 Azure AD tenant. Worker only.
-SHAREPOINT_SITE_HOSTNAME=fusion92.sharepoint.com   # CRO SharePoint site host.
-SHAREPOINT_SITE_PATH=/sites/CRO  # CRO SharePoint site server-relative path.
+# Retired 2026-10-30 (branch retire-ac-surfaces) — the AC-facing surfaces
+# /api/sharepoint/*, /api/brands/* and /api/telemetry/ac were deleted, so DC no
+# longer reads CQIP_BRANDS_API_TOKEN, CQIP_SHAREPOINT_API_TOKEN,
+# CQIP_TELEMETRY_TOKEN, AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET,
+# SHAREPOINT_SITE_HOSTNAME or SHAREPOINT_SITE_PATH. Remove them from .env.local.
+# The Worker copies survive deploys (wrangler.toml keep_vars = true) until
+# deleted by hand — see "Retired AC-facing keys" below.
 ```
+
+### Retired AC-facing keys (2026-10-30)
+
+**The Azure app registration `6aa464c1-4eb9-4d94-b087-6eebe4fa8cb6`
+("CQIP Dashboard - SharePoint Integration") is now AC's.** AC (the Forge
+QA-automation app) authenticates to Microsoft Graph with it directly, from Forge
+dev and Forge prod, since 2026-10-28. DC no longer uses it.
+
+- **Two client secrets exist on that one app.** In October 2026 Carl issued AC
+  a NEW client secret, held only in Forge dev + prod (`AZURE_CLIENT_SECRET`,
+  encrypted). The OLD secret — the one exposed in 2026-06-01's chat paste — is
+  the **Worker's**, and is now dead weight.
+- **Never rotate or delete AC's secret without AC.** Doing so breaks
+  SharePoint drafting and posting in production. Coordinate through
+  CROSS_CLAUDE §4.
+- **Deleting the OLD secret is pending Carl:** he confirms from the Azure
+  sign-in logs, by key ID, that the old key has stopped authenticating, then
+  deletes that key only.
+- **Worker cleanup:** after this branch deploys, `wrangler secret delete` each
+  retired key (`CQIP_BRANDS_API_TOKEN`, `CQIP_SHAREPOINT_API_TOKEN`,
+  `CQIP_TELEMETRY_TOKEN`, the three `AZURE_*`) and remove the
+  `SHAREPOINT_SITE_*` dashboard vars. `keep_vars = true` keeps them otherwise.
+  Deleting the Worker's `AZURE_*` copies does not touch AC.
 
 ### Where they're set
 - **Local dev:** `.env.local` at repo root (gitignored)

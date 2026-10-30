@@ -13,8 +13,8 @@ import {
 } from '@/lib/client-library/monitoring';
 
 // Batch 012 — Client Library, Phase B. External Bearer-authed ingest for the
-// monitoring feed (spec §2). Mirrors the /api/brands Bearer pattern (NOT the
-// session pattern): validate Authorization: Bearer against
+// monitoring feed (spec §2). Bearer pattern, NOT the session pattern
+// (modelled on the since-removed /api/brands routes): validate Authorization: Bearer against
 // CQIP_CONVERT_MONITORING_TOKEN; 401 on mismatch. Writes via supabaseAdmin
 // (service role, bypasses RLS). /api/monitoring/* is carved out of the
 // middleware matcher so this never hits the session cookie.

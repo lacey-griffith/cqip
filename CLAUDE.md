@@ -718,7 +718,7 @@ r40 does not apply to it.
 27. **Custom auth keys must rotate atomically across both sides.**
     Any function using a custom shared secret
     (`CQIP_SYNC_AUTH_KEY`, `CQIP_DROUGHT_AUTH_KEY`,
-    `CQIP_BRANDS_API_TOKEN`, future ones) has the secret set in
+    `CQIP_CONVERT_MONITORING_TOKEN`, future ones) has the secret set in
     two places: the consumer (Worker, pg_cron command, or external
     integration) and the producer (Supabase Edge Functions
     secrets). When rotating, BOTH sides must change in the same
@@ -804,7 +804,12 @@ r40 does not apply to it.
     a CI bundle with **zero** baked `CQIP_*`/Azure values served
     `/api/sharepoint/folder` (live Microsoft Graph call) and
     `/api/brands` correctly, because Worker secret bindings supply
-    everything at runtime.
+    everything at runtime. **⚠ Both routes were RETIRED 2026-10-30 and
+    now 404 — do not re-run that proof, a 404 there is not a broken
+    deploy.** To re-prove secret bindings on a CI bundle, `POST
+    /api/monitoring/findings` with a WRONG Bearer: **401** means
+    `CQIP_CONVERT_MONITORING_TOKEN` is bound; **500** (`Monitoring ingest
+    not configured`) means the binding is missing.
 
     **`keep_vars = true` is set in `wrangler.toml` and must stay set.**
     Wrangler's default treats the config file as the source of truth and
@@ -975,7 +980,8 @@ r40 does not apply to it.
 36. **Request-path retention (inline prune) is a legitimate pattern here, and
     it is the DEFAULT for small machine-fed tables.** `ac_telemetry` prunes by
     calling `public.prune_ac_telemetry()` fire-and-forget from the ingest route
-    after each insert, rather than from pg_cron or an edge function. **Why:** a
+    after each insert (that route was retired 2026-10-30 and the table has no
+    writer now; the pattern stands), rather than from pg_cron or an edge function. **Why:** a
     cron is an ops step someone must create and can forget, and this project
     has already paid for a silent cron failure once (the 2026-05-01 → 05-07
     drought-evaluator incident, §13 r27) — pg_cron logs an HTTP 4xx as
@@ -1356,40 +1362,24 @@ moved out of Planned. See §16.)
 
 ### Awaiting external action
 
-**Forge integration**
-- [ ] **Forge consumer integration** — dashboard side of the
-      brands API is shipped; Forge app (separate repo,
-      Atlassian Forge platform) drafting v0.0.4 SPEC_phase1.
-      CQIP_BRANDS_API_TOKEN installed on Forge dev + prod
-      variables 2026-05-12. No production traffic on
-      `/api/brands/*` until Forge consumer goes live. Tracked
-      cross-project; not actionable on dashboard side.
-
-**Pending rotations (live, both sides)**
-- [ ] **Rotate Azure client secret** — Hygiene rotation.
-      Current secret was visible in 2026-05-02/03 verification
-      screenshots and in the 2026-05-26 verification curl.
-      Carl-executable (Worker-only rotation per
-      `docs/batch-009-sharepoint-spec.md` §7). Batch 009 has
-      now SHIPPED on the current value (functional, admin
-      consent in place), so this stays a pure hygiene rotation
-      per §13 rule 27 (secret rotation atomicity). Target
-      window: Fri 2026-05-29 / Mon 2026-06-01. Worker-only —
-      no Forge surface holds this value (only
-      CQIP_SHAREPOINT_API_TOKEN does), so no AC coordination.
-- [ ] **Rotate CQIP_BRANDS_API_TOKEN** — In circulation since
-      brands API initial setup (Batch 005.13-005.14 timeframe).
-      Never rotated. Not known to be compromised — rotation
-      is hygiene per §13 rule 27 (secret rotation atomicity).
-      Lives on three surfaces:
-        - Worker secret (set via `wrangler secret put`)
-        - DC local .env on Dashboard repo
-        - Forge variables (dev + prod, installed 2026-05-12)
-      Atomic rotation required: all three surfaces within a
-      single window. Lacey kicks off; DC + AC walk their
-      respective sides. AC mirror tracked under AC §15
-      "Pending rotations (live, both sides)" — relay
-      2026-05-12.
+**AC-facing surfaces — retired 2026-10-30 (branch `retire-ac-surfaces`)**
+- [ ] **Delete the dead Worker secrets after the branch deploys.**
+      `wrangler secret delete` `CQIP_BRANDS_API_TOKEN`,
+      `CQIP_SHAREPOINT_API_TOKEN`, `CQIP_TELEMETRY_TOKEN`, `AZURE_TENANT_ID`,
+      `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, and remove the
+      `SHAREPOINT_SITE_*` dashboard vars. `keep_vars = true` keeps them
+      alive otherwise. Run `wrangler secret list` first and delete by name;
+      the list in docs/env-vars.md was taken from docs, not from a live list.
+- [ ] **Old Azure client secret — Carl deletes it; DC does NOT rotate.**
+      The Azure app `6aa464c1-…` is **AC's** now (Graph port, 2026-10-28).
+      Carl issued AC a NEW secret in Oct 2026 (Forge dev + prod only). The
+      OLD, exposed secret is the Worker's. Deletion is pending Carl's
+      sign-in-log check by key ID. **Never rotate or delete AC's secret
+      without AC** — it breaks prod drafting. Authoritative item:
+      CROSS_CLAUDE §4. (Replaces the old "Rotate Azure client secret"
+      hygiene item; the `CQIP_BRANDS_API_TOKEN` rotation and the "Forge
+      consumer integration" item are MOOT — AC never called the brands
+      routes, and they are deleted.)
 
 
 ### Batch 005 (post-demo) — Backlog cleanup, scope-locked
@@ -2342,6 +2332,43 @@ whole §15 subsections that were closed and archived by the same batch. Both liv
 in the month files, so both are indexed — the count is of items in the archive,
 not of shipped batches.
 
+### Batch retire-ac-surfaces — AC-facing routes deleted — 2026-10-30 (branch, NOT merged, NOT deployed)
+
+**What:** deleted every DC surface AC used to touch, now that AC reads
+SharePoint via Microsoft Graph itself and has dropped telemetry (AC `ea66d6a`,
+live on dev + prod 2026-10-28; CROSS_CLAUDE §6 2026-10-28).
+- **Routes:** `/api/sharepoint/{folder,xlsx,image}`, `/api/telemetry/ac`,
+  `/api/brands`, `/api/brands/[projectKey]/[brandCode]`.
+- **Lib:** `lib/sharepoint/*` (6 files), `lib/api/{bearer-auth,sharepoint-bearer-auth,telemetry-bearer-auth}.ts`,
+  `lib/telemetry/ac-telemetry.ts`; 5 test files; `scripts/smoke-graph-token.ts`.
+- **UI:** the "Jira QA Automation (AC)" card on Settings → System Info. The DC
+  build-info card is byte-identical to before.
+- **Middleware:** the matcher now carves out `api/monitoring` only.
+- **Kept:** `/api/monitoring/findings` + `monitoring-bearer-auth.ts`; the
+  `ac_telemetry*` tables and `prune_ac_telemetry()` (no migration; no writer);
+  `xlsx-js-style` (still used by `lib/export/branded-xlsx.ts`).
+- **Docs:** `.env.example`, `deploy.yml` comment, `docs/env-vars.md`,
+  `docs/repo-structure.md`, `docs/schema.md`, this file (§13 r27 + r36, the
+  deploy-proof note, §15) and CROSS_CLAUDE §3/§4/§6.
+
+**Azure ownership (recorded in env-vars + CROSS_CLAUDE §4):** the app
+`6aa464c1-…` is AC's. AC holds a NEW secret from Carl (Oct 2026); the old,
+exposed secret is the Worker's and is deleted by Carl after a sign-in-log check
+by key ID. Never rotate AC's secret without AC.
+
+**Gates:** build 0 (no retired route in the route list) · tsc 0 · tests
+**403/403** · lint: the scoped run (`app lib components tests scripts
+middleware.ts`) shows the same 29 distinct findings as `78369c7`, 0 new; the
+6 changed source files lint clean. Bare `npm run lint` runs out of memory on
+the gitignored `.open-next/`, `.wrangler`, `supabase/.temp` — pre-existing.
+**Karen PASS-WITH-CONDITIONS:** no dangling imports; `api/monitoring` still
+skips middleware (tested with Next's matcher compiler and the built manifest).
+Conditions: docs in the same commit (this commit), commit by explicit path (the
+uncommitted single-brand files in §15 are NOT in it), delete the Worker secrets
+after deploy (§15).
+
+**Not done:** no merge, no push, no deploy, no `wrangler secret delete`.
+
 ### Archive index
 
 **[`CLAUDE-16-2026-pre-04.md`](docs/claude-archive/CLAUDE-16-2026-pre-04.md)** — 1 item
@@ -2450,4 +2477,4 @@ not of shipped batches.
 - Batch 012 — Pulse: restyle core (batch 2 of 4) — 2026-08-02
 ---
 
-*Last updated: 2026-08-24 | CQIP v3.0 — **BATCH 012 PULSE DIRECTIVE CRUD (edit · soft-delete · archive) — SHIPPED + PUSHED + DEPLOYED 2026-08-18; prod `/api/health` now reports `version: d5e5703`** — the docs-only rev-7 outline commit. **No application code changed** (no `.ts`/`.tsx` moved from `e518624`), but the bundle is NOT identical: `package.json` is a build input as well as a deploy trigger, so `gen-build-info.js` stamped the bump into `NEXT_PUBLIC_APP_VERSION` and **v3.0 IS live — Settings → System Info renders `3.0.0`**, which retires the entry's own "declared ≠ deployed" framing rather than patching it. **The §16 entry's ⚠ 0 predicted the SHA would hold at `e518624` and that was WRONG**: `deploy.yml`'s `paths-ignore` is `**.md` / `docs/**` / `.github/**` and does NOT cover `package.json`, so the version bump itself triggered CI, which stamped the pushed tip — struck in place there, not deleted. Migration 029 (`idx_directives_project_title`, UNIQUE `(project_key, title)`, spanning archived rows) is **APPLIED TO PRODUCTION**, verified by direct query in the prod Supabase SQL editor 2026-08-18 — stated with its environment and method because *deployed* and *migrated* are independent facts and `/api/health` reports the **Worker only**. **Jenny pre-flight ×2** (rev 1 DO-NOT-BUILD-YET: 1 CRITICAL · 3 HIGH · 6 MEDIUM · 10 LOW → rev 2 APPROVE-WITH-FINDINGS: 1 HIGH · 10 MEDIUM · 4 LOW), **FIVE Karen rounds** (2H/7M/5L → 2H/1M/4L → 0/2M/2L → 0/1M/2L → 0/0/3L). **Read that progression, not the total:** the original build's HIGHs were found in round one and never recurred, **every HIGH in round two was in a FIX**, and rounds three-to-five found nothing above MEDIUM — the core machinery was re-confirmed three times against three different trees, while what kept failing was the *claims*. Jenny's CRITICAL changed the design: the `project_key` block was specified only as a render-layer lock, so ordinary two-admin concurrency would have destroyed 16 cells including notes **with no `old_value` anywhere in the trail** (§13 r37's shape); the route now re-runs the **same shared predicate** against freshly-read cells. The predicate is a **three-clause conjunction** — the two-clause version would have wrongly allowed moving **5 of its 6 "movable"** directives, because `n_a` is not machine-only and **620 prod cells** that looked like fan-out output had in fact been written. It is kept fail-safe **by construction**: every clause can only SHRINK the movable set, so `project_key` being editable on **1 of 89** directives is the predicate working, not failing — and every directive created from now on is movable until someone works it. **⚠ My own audit caused a HIGH:** COMMIT 7 claimed "exactly ONE `setEditingDirectiveId(null)` remains" on a grep for that **literal string**, which cannot match the **ternary** form the row's Edit/Close toggle uses — §13 r38 mechanism (a), a count stated on an instrument that could not see the case. Karen later re-derived it by **AST**. Three defects in this chain were created **by** the fix before them, and each was closed with a **mechanism rather than a longer list**: clear-on-unmount over a ninth enumeration entry, then its prop-identity dependency **removed** rather than documented, and a prompt that fires only when the click would actually drop the edited row — because a dialog that is usually wrong trains the user to click through, which is how a guard stops working without breaking. **Same-shape duplication removed THREE times in one batch** (`CELL_STATUS_LABEL`, the duplicate-title message whose drift mutation *survived*, `visibleForLifecycle`) — recorded as a rule CANDIDATE, **not promoted**: *the comment is the tell*, since all three carried a comment asserting parity and one was demonstrably false with every gate green. **Directive count re-derived 2026-08-18 grouped by `project_key` AND `status`:** NBLYCRO active **87** · archived **1** · SPLCRO active **1** · global active **88** · all rows **89**. The apparent three-way conflict was **one stale figure plus one MISLABELLED comparison** — "NBLYCRO active" = 87 (matrix header, correct) versus "directives holding cell work" = 88 of 89 (the runbook's, a *different quantity*); rev 6's 86/87 was stale 08-14 data. **The label is the fix.** Gates at five trees: tsc 0 · ESLint 0 · **376/376** (from 333) · build 0 · **44 mutations run, 42 caught**, both survivors verified equivalent mutants. **⚠ NOT VERIFIED, carried forward: there is NO route-level test harness** — Lacey's Scenario A result (`a059d078`, 409 with `blocking_cells: 16`, hash `a2808d54…`, SPLCRO 0, still `NBLYCRO`, zero audit rows) is a **HAND-RUN OBSERVATION, NOT COVERAGE**; **the guard has been observed REFUSING but never PERMITTING**, since the positive case was deliberately skipped (it writes a permanent prod directive and archiving does not free the title) — **the batch's oldest open item**; the `splitShownByLifecycle` **caller remains UNCOVERED** (one call expression, one surviving mutation, all gates green — the extraction narrowed the surface, it did not close the caller); and **`clearAllFilters` is correct BY ACCIDENT**, resetting `statusFilter` to `'all'` which strictly widens — nothing pins that, and a "restore defaults" edit to `'open'` reinstates the silent-loss path in one line.*
+*Last updated: 2026-10-30 | CQIP v3.0 — **AC-facing surfaces retired on branch `retire-ac-surfaces` (not merged, not deployed)** — see §16. Prior (2026-08-24): **BATCH 012 PULSE DIRECTIVE CRUD (edit · soft-delete · archive) — SHIPPED + PUSHED + DEPLOYED 2026-08-18; prod `/api/health` now reports `version: d5e5703`** — the docs-only rev-7 outline commit. **No application code changed** (no `.ts`/`.tsx` moved from `e518624`), but the bundle is NOT identical: `package.json` is a build input as well as a deploy trigger, so `gen-build-info.js` stamped the bump into `NEXT_PUBLIC_APP_VERSION` and **v3.0 IS live — Settings → System Info renders `3.0.0`**, which retires the entry's own "declared ≠ deployed" framing rather than patching it. **The §16 entry's ⚠ 0 predicted the SHA would hold at `e518624` and that was WRONG**: `deploy.yml`'s `paths-ignore` is `**.md` / `docs/**` / `.github/**` and does NOT cover `package.json`, so the version bump itself triggered CI, which stamped the pushed tip — struck in place there, not deleted. Migration 029 (`idx_directives_project_title`, UNIQUE `(project_key, title)`, spanning archived rows) is **APPLIED TO PRODUCTION**, verified by direct query in the prod Supabase SQL editor 2026-08-18 — stated with its environment and method because *deployed* and *migrated* are independent facts and `/api/health` reports the **Worker only**. **Jenny pre-flight ×2** (rev 1 DO-NOT-BUILD-YET: 1 CRITICAL · 3 HIGH · 6 MEDIUM · 10 LOW → rev 2 APPROVE-WITH-FINDINGS: 1 HIGH · 10 MEDIUM · 4 LOW), **FIVE Karen rounds** (2H/7M/5L → 2H/1M/4L → 0/2M/2L → 0/1M/2L → 0/0/3L). **Read that progression, not the total:** the original build's HIGHs were found in round one and never recurred, **every HIGH in round two was in a FIX**, and rounds three-to-five found nothing above MEDIUM — the core machinery was re-confirmed three times against three different trees, while what kept failing was the *claims*. Jenny's CRITICAL changed the design: the `project_key` block was specified only as a render-layer lock, so ordinary two-admin concurrency would have destroyed 16 cells including notes **with no `old_value` anywhere in the trail** (§13 r37's shape); the route now re-runs the **same shared predicate** against freshly-read cells. The predicate is a **three-clause conjunction** — the two-clause version would have wrongly allowed moving **5 of its 6 "movable"** directives, because `n_a` is not machine-only and **620 prod cells** that looked like fan-out output had in fact been written. It is kept fail-safe **by construction**: every clause can only SHRINK the movable set, so `project_key` being editable on **1 of 89** directives is the predicate working, not failing — and every directive created from now on is movable until someone works it. **⚠ My own audit caused a HIGH:** COMMIT 7 claimed "exactly ONE `setEditingDirectiveId(null)` remains" on a grep for that **literal string**, which cannot match the **ternary** form the row's Edit/Close toggle uses — §13 r38 mechanism (a), a count stated on an instrument that could not see the case. Karen later re-derived it by **AST**. Three defects in this chain were created **by** the fix before them, and each was closed with a **mechanism rather than a longer list**: clear-on-unmount over a ninth enumeration entry, then its prop-identity dependency **removed** rather than documented, and a prompt that fires only when the click would actually drop the edited row — because a dialog that is usually wrong trains the user to click through, which is how a guard stops working without breaking. **Same-shape duplication removed THREE times in one batch** (`CELL_STATUS_LABEL`, the duplicate-title message whose drift mutation *survived*, `visibleForLifecycle`) — recorded as a rule CANDIDATE, **not promoted**: *the comment is the tell*, since all three carried a comment asserting parity and one was demonstrably false with every gate green. **Directive count re-derived 2026-08-18 grouped by `project_key` AND `status`:** NBLYCRO active **87** · archived **1** · SPLCRO active **1** · global active **88** · all rows **89**. The apparent three-way conflict was **one stale figure plus one MISLABELLED comparison** — "NBLYCRO active" = 87 (matrix header, correct) versus "directives holding cell work" = 88 of 89 (the runbook's, a *different quantity*); rev 6's 86/87 was stale 08-14 data. **The label is the fix.** Gates at five trees: tsc 0 · ESLint 0 · **376/376** (from 333) · build 0 · **44 mutations run, 42 caught**, both survivors verified equivalent mutants. **⚠ NOT VERIFIED, carried forward: there is NO route-level test harness** — Lacey's Scenario A result (`a059d078`, 409 with `blocking_cells: 16`, hash `a2808d54…`, SPLCRO 0, still `NBLYCRO`, zero audit rows) is a **HAND-RUN OBSERVATION, NOT COVERAGE**; **the guard has been observed REFUSING but never PERMITTING**, since the positive case was deliberately skipped (it writes a permanent prod directive and archiving does not free the title) — **the batch's oldest open item**; the `splitShownByLifecycle` **caller remains UNCOVERED** (one call expression, one surviving mutation, all gates green — the extraction narrowed the surface, it did not close the caller); and **`clearAllFilters` is correct BY ACCIDENT**, resetting `statusFilter` to `'all'` which strictly widens — nothing pins that, and a "restore defaults" edit to `'open'` reinstates the silent-loss path in one line.*

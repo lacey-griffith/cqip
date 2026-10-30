@@ -69,9 +69,6 @@ cqip/
 │       │   │   ├── route.ts                # Batch 004.3: create + restore-soft-deleted
 │       │   │   └── [id]/route.ts           # Batch 004.3: edit + soft-delete
 │       │   └── users/route.ts              # Admin user create/manage (server-only)
-│       ├── brands/
-│       │   ├── [projectKey]/[brandCode]/route.ts # Batch 004.5: Bearer-auth, single-brand read
-│       │   └── route.ts                    # Batch 004.5: Bearer-auth, list-by-project
 │       ├── coverage/
 │       │   └── pipeline/route.ts           # Batch 010: GET, cookie-bound session (any authed
 │       │                                     user). LIVE JQL per active project → per-brand,
@@ -84,16 +81,13 @@ cqip/
 │       │                                     no DB; deploy.yml smoke check hits this
 │       ├── logs/edit/route.ts              # Server-side edit endpoint
 │       ├── jira/sync/route.ts              # Proxy to jira-sync edge function (forwards CQIP_SYNC_AUTH_KEY)
-│       ├── telemetry/
-│       │   └── ac/route.ts                # Batch telemetry-ac: POST, Bearer
-│       │                                     (CQIP_TELEMETRY_TOKEN). AC pushes draft/post
-│       │                                     events; DC stores + renders on System Info.
-│       │                                     Middleware-carved-out. 202/401/400/500.
-│       └── sharepoint/                     # Batch 009: read-only Microsoft Graph proxy
-│           ├── folder/route.ts             # GET ?url= → enumerate folder (single xlsx + Shareable
-│           │                                 Screenshots/); share-id resolution; 60s cache
-│           ├── xlsx/route.ts               # GET ?ref= → parse Preview Links sheet → structured rows; 60s cache
-│           └── image/route.ts             # GET ?ref= → stream image bytes (25 MB cap; no cache)
+│       ├── monitoring/
+│       │   └── findings/route.ts           # Batch 012 B: POST, Bearer
+│       │                                     (CQIP_CONVERT_MONITORING_TOKEN). External
+│       │                                     monitoring ingest. Middleware-carved-out.
+│       # RETIRED 2026-10-30: brands/ (Bearer brand reads), sharepoint/
+│       #   (Batch 009 Graph proxy) and telemetry/ac/ (AC event ingest). AC
+│       #   stopped calling DC 2026-10-28 (Graph port); none had a consumer.
 │
 ├── components/
 │   ├── ui/                      # shadcn components + SplitButton (Batch 003)
@@ -154,21 +148,11 @@ cqip/
 │   │   └── get-changed-by.ts    # Batch 004.3: canonical helper for server-side
 │   │                              `changed_by` derivation (see §13 rule 19)
 │   ├── api/
-│   │   ├── bearer-auth.ts       # Batch 004.5: timing-safe Bearer compare for
-│   │   │                          /api/brands/* routes (CQIP_BRANDS_API_TOKEN)
-│   │   └── sharepoint-bearer-auth.ts # Batch 009: timing-safe Bearer compare for
-│   │                              /api/sharepoint/* routes (CQIP_SHAREPOINT_API_TOKEN —
-│   │                              separate blast radius from the brands token)
-│   ├── sharepoint/              # Batch 009: Microsoft Graph proxy helpers
-│   │   ├── graph-client.ts      # Fresh Azure AD token per logical request + Graph
-│   │   │                          fetch wrapper (1 retry on 5xx; token reused across sub-calls)
-│   │   ├── site-resolver.ts     # SharePoint web URL → Graph driveItem via share-id
-│   │   │                          (u!base64url); config-driven site/drive resolve; URL normalize
-│   │   ├── folder-filter.ts     # single-xlsx-at-root + Shareable Screenshots/ logic;
-│   │   │                          ignores assets/ and bugs/
-│   │   ├── xlsx-parser.ts       # Preview Links sheet → structured rows (xlsx-js-style)
-│   │   ├── cache.ts             # Per-Worker-instance Map + 60s TTL
-│   │   └── errors.ts            # Error envelope builders + code→HTTP map
+│   │   └── monitoring-bearer-auth.ts # Batch 012 B: timing-safe Bearer compare for
+│   │                              /api/monitoring/findings (CQIP_CONVERT_MONITORING_TOKEN)
+│   # lib/sharepoint/ (Graph client, folder filter, xlsx parser, cache,
+│   #   errors) and lib/telemetry/ac-telemetry.ts RETIRED 2026-10-30 with
+│   #   the routes above. AC owns that logic now (AC SPEC_phase2b §8).
 │   ├── easter-eggs/
 │   │   ├── use-konami-code.ts
 │   │   ├── use-loading-message.ts
@@ -227,6 +211,7 @@ cqip/
 │   │   ├── 025_monitoring_findings.sql # Batch 012 B: external monitoring ingest
 │   │   ├── 026_ac_telemetry.sql        # Batch telemetry-ac: ac_telemetry +
 │   │   │                                  ac_version_seen + ac_telemetry_rejects
+│   │   │                                  (tables kept; no writer since 2026-10-30)
 │   │   ├── 027_prune_grant_fix.sql     # revoke EXECUTE from anon/authenticated BY NAME
 │   │   │                                  (026's REVOKE FROM PUBLIC was insufficient)
 │   │   ├── 028_ai_review_pending.sql   # Batch classifier-1: ai_review_pending +
@@ -286,7 +271,6 @@ cqip/
 │   ├── load-nbly-goal-directives.ts  # One-shot (2026-07-22): the 65-directive goal load
 │   ├── normalize-client-brand.ts     # One-shot (Batch 005.25): client_brand → canonical
 │   │                                   brands.jira_value ("CODE - Display Name")
-│   ├── smoke-graph-token.ts          # Ad-hoc: Azure AD client-credentials smoke check
 │   ├── gen-build-info.js             # Prebuild: stamps build metadata + warns on the
 │   │                                   CLAUDE.md size ceiling (§13 r41)
 │   └── gen-archive-index.js          # Regenerates CLAUDE.md §16's archive index
@@ -301,7 +285,7 @@ cqip/
 │   │   ├── CLAUDE-critical-history.md # the old CRITICAL deployed-state paragraph
 │   │   └── CLAUDE-16-2026-{pre-04,04,05,06,07,08}.md   # §16 entries by ship date
 │   ├── multi-client-readiness.md      # Batch 004.99: multi-client audit + SPL onboarding/offboarding playbooks
-│   ├── batch-009-sharepoint-spec.md   # Batch 009: SharePoint integration SPEC (DESIGN locked 2026-05-13)
+│   ├── batch-009-sharepoint-spec.md   # Batch 009: SharePoint integration SPEC (RETIRED 2026-10-30 — history)
 │   ├── CROSS_CLAUDE.md                # Joint coordination doc for DC + AC (Batch 005.24)
 │   ├── root-cause-audit-2026-05-20.md # Batch 005.28 audit findings + Option A/B/C recommendation
 │   ├── root-cause-taxonomy-mapping.md # Batch 005.28: variant→canonical map (drives normalize script)
