@@ -123,7 +123,7 @@ Active and planned API contracts between the two projects.
 > *(Added 2026-08-08: AC built against §6 believing it was the designated
 > contract source. See the 2026-08-08 event-log entry.)*
 
-### `/api/telemetry/ac` — RETIRED (code deleted on DC branch `retire-ac-surfaces`, 2026-10-30; still served by the Worker until that branch deploys)
+### `/api/telemetry/ac` — RETIRED (code deleted 2026-10-30, `d44cc49`; deployed 2026-11-02, the Worker returns 404)
 - **Status (2026-10-30):** **RETIRED.** The route, `telemetry-bearer-auth.ts`,
   `lib/telemetry/ac-telemetry.ts` and the System Info AC section are deleted in
   DC (branch `retire-ac-surfaces`, not merged or deployed at time of writing).
@@ -217,7 +217,7 @@ Active and planned API contracts between the two projects.
   `[]`, anon write refused `42501`); `ts` handling verified against the
   shipped validator across five input forms.
 
-### `/api/brands/[projectKey]/[brandCode]` — RETIRED (code deleted on DC branch `retire-ac-surfaces`, 2026-10-30; still served by the Worker until that branch deploys)
+### `/api/brands/[projectKey]/[brandCode]` — RETIRED (code deleted 2026-10-30, `d44cc49`; deployed 2026-11-02, the Worker returns 404, as does the `/api/brands` list route)
 - **Status (2026-10-30):** **RETIRED.** Both brands routes and
   `lib/api/bearer-auth.ts` are deleted in DC (branch `retire-ac-surfaces`). The
   admin session routes under `/api/admin/brands*` are unrelated and stay.
@@ -241,7 +241,7 @@ Active and planned API contracts between the two projects.
   CQIP_BRANDS_API_TOKEN installed on Forge dev + prod, never
   exercised in production)
 
-### `/api/sharepoint/*` — RETIRED (code deleted on DC branch `retire-ac-surfaces`, 2026-10-30; still served by the Worker until that branch deploys)
+### `/api/sharepoint/*` — RETIRED (code deleted 2026-10-30, `d44cc49`; deployed 2026-11-02, `folder`, `xlsx` and `image` all return 404)
 - **Status (2026-10-30):** **RETIRED.** The three routes, `lib/sharepoint/*`
   and `sharepoint-bearer-auth.ts` are deleted in DC (branch
   `retire-ac-surfaces`). The rules live on in AC `SPEC_phase2b.md` §8.
@@ -297,12 +297,16 @@ Active and planned API contracts between the two projects.
 Mirrored from DC §15 + AC §15. Status here is authoritative for
 both sides.
 
-- [ ] **Retire `CQIP_TELEMETRY_TOKEN` on the Worker** — **(2026-10-30) DC no
-      longer reads it** (route deleted, branch `retire-ac-surfaces`). Remaining
-      step: `wrangler secret delete` after that branch deploys — `keep_vars =
-      true` keeps it otherwise. Same step for the Worker copies of
-      `CQIP_BRANDS_API_TOKEN`, `CQIP_SHAREPOINT_API_TOKEN` and the three
-      `AZURE_*` (DC §15). **Minted
+- [x] **Retire `CQIP_TELEMETRY_TOKEN` on the Worker** — **DONE 2026-11-02.**
+      `retire-ac-surfaces` deployed (`d44cc49`), then `wrangler secret delete`
+      removed it from the Worker, along with `CQIP_BRANDS_API_TOKEN`,
+      `CQIP_SHAREPOINT_API_TOKEN`, `AZURE_TENANT_ID`, `AZURE_CLIENT_ID` and
+      `AZURE_CLIENT_SECRET`. `SHAREPOINT_SITE_HOSTNAME` and
+      `SHAREPOINT_SITE_PATH` (Worker secrets, not `wrangler.toml` vars) were
+      deleted too. No DC code read any of the eight at `d44cc49`. Earlier
+      status text follows for the record.
+      (2026-10-30) DC no longer reads it (route deleted, branch
+      `retire-ac-surfaces`). **Minted
       2026-08-07, now removed from Forge; retire it on the Worker.** AC
       dropped telemetry (decided 2026-10-15; emitter deleted in AC
       `ea66d6a`, live 2026-10-28), so the token has no sender. Remaining
@@ -326,7 +330,8 @@ both sides.
 - [ ] **Delete the OLD Azure client secret (Worker's); AC owns the app** —
       **Status (2026-10-30):** the Azure app registration
       `6aa464c1-4eb9-4d94-b087-6eebe4fa8cb6` is **AC's**: AC is its only
-      user once DC's branch `retire-ac-surfaces` deploys. It carries **two
+      user (DC's `retire-ac-surfaces` deployed 2026-11-02, `d44cc49`; the
+      Worker's `AZURE_*` secrets were deleted the same day). It carries **two
       secrets**: AC's NEW one (issued by Carl, Oct 2026, held only in Forge
       dev + prod) and the Worker's OLD, exposed one.
       - **Never rotate or delete AC's secret without AC.** It breaks
@@ -334,9 +339,11 @@ both sides.
         AC §13 rule 9.
       - **Old-secret deletion is pending Carl:** he checks the Azure sign-in
         logs **by key ID** to confirm the old key has stopped authenticating,
-        then deletes that key only. This item then closes.
-      - Deleting the Worker's `AZURE_*` secrets is safe at any point after the
-        deploy; it does not touch AC.
+        then deletes that key only. Since 2026-11-02 the Worker no longer
+        holds it, so nothing on DC's side can still use it. This item then closes.
+      - The Worker's `AZURE_*` secrets were **deleted 2026-11-02**. This doesn't
+        touch AC, and it didn't touch Azure: the old key still exists in the
+        app registration until Carl deletes it.
       **Status (2026-10-28):** AC now authenticates to Graph itself, with
       the same Azure app (client_id `6aa464c1-…`) but a **new secret from
       Carl**, held only in Forge dev + prod (`AZURE_CLIENT_SECRET`,
@@ -513,6 +520,31 @@ Cross-project events worth durable record. Newest at top.
 Covers events from 2026-04-23 forward (start of the drift-
 prevention era). Project-internal events stay in each
 project's CLAUDE.md §16.
+
+### 2026-11-02 — `retire-ac-surfaces` deployed; Worker's AC-era secrets deleted (DC)
+
+**CC8 entry: the three §3 RETIRED surfaces are now gone from the live Worker,
+and the §4 Worker-secret item is closed.**
+
+- **Deploy:** `main` fast-forwarded `78369c7` → `d44cc49` and pushed, and
+  `deploy.yml` ran. `/api/health` reports `d44cc49`.
+- **Live checks:** `/api/sharepoint/{folder,xlsx,image}`, `/api/brands`,
+  `/api/brands/NBLYCRO/GUY` and `POST /api/telemetry/ac` all return 404. Before
+  the deploy they returned 401 or 405. `POST /api/monitoring/findings` without
+  auth still returns 401 JSON with no `Set-Cookie`, so the middleware carve-out
+  is intact.
+- **Secrets:** a grep of `d44cc49` (excluding docs) found no reader of
+  `CQIP_TELEMETRY_TOKEN`, `CQIP_BRANDS_API_TOKEN`, `CQIP_SHAREPOINT_API_TOKEN`,
+  `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET` or
+  `SHAREPOINT_SITE_*`. Lacey then deleted all eight from the Worker with
+  `wrangler secret delete`. The two `SHAREPOINT_SITE_*` were Worker secrets,
+  not `wrangler.toml` vars. Health and monitoring were re-checked afterwards
+  and are unchanged.
+- **Not touched:** Azure. The old, exposed client secret still exists in the
+  app registration, and Carl deletes it after his key-ID sign-in-log check.
+  §4's Azure item stays open for that alone.
+- **DC severance from AC is complete** on DC's side: no route, secret or var
+  for an AC surface remains on the Worker.
 
 ### 2026-10-30 — DC deletes the three AC-facing surfaces; §3 → RETIRED; Azure app is AC's (DC)
 
@@ -1264,7 +1296,7 @@ Shareable Screenshots/ folder.
 
 ---
 
-*Last updated: 2026-10-30 | §3: `/api/sharepoint/*`, `/api/telemetry/ac`, `/api/brands/*` → RETIRED (deleted on DC branch `retire-ac-surfaces`, not yet deployed). §4: Azure app is AC's; AC holds a new secret, the old exposed one is the Worker's and Carl deletes it after a key-ID sign-in-log check; Worker secret deletion follows the deploy. Prior (2026-10-28): §6: AC severed from DC — AC `ea66d6a` reads
+*Last updated: 2026-11-02 | §3: `/api/sharepoint/*`, `/api/telemetry/ac`, `/api/brands/*` RETIRED **and deployed** (`d44cc49`; all 404 live). §4: the Worker's AC-era secrets (the three `CQIP_*` tokens, the three `AZURE_*` and both `SHAREPOINT_SITE_*`) were deleted; only Carl's deletion of the old Azure key remains. §6: deploy + deletion entry (CC8). Prior (2026-10-30): §3: `/api/sharepoint/*`, `/api/telemetry/ac`, `/api/brands/*` → RETIRED (deleted on DC branch `retire-ac-surfaces`, not yet deployed). §4: Azure app is AC's; AC holds a new secret, the old exposed one is the Worker's and Carl deletes it after a key-ID sign-in-log check; Worker secret deletion follows the deploy. Prior (2026-10-28): §6: AC severed from DC — AC `ea66d6a` reads
 SharePoint via Microsoft Graph directly and drops telemetry; live on dev
 (v5.0.0) + prod (major 6, 2026-10-28T13:17:33Z, installs upgraded, smokes
 passed). §3: `/api/sharepoint/*` no consumer (Worker retirement pending),
